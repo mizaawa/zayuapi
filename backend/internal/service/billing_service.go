@@ -840,6 +840,8 @@ func (s *BillingService) CalculateCostUnified(input CostInput) (*CostBreakdown, 
 	switch resolved.Mode {
 	case BillingModePerRequest, BillingModeImage:
 		breakdown, err = s.calculatePerRequestCost(resolved, input)
+	case BillingModeVideo:
+		breakdown, err = s.calculateVideoCost(resolved, input)
 	default: // BillingModeToken
 		breakdown, err = s.calculateTokenCost(resolved, input)
 	}
@@ -1007,6 +1009,38 @@ func (s *BillingService) calculatePerRequestCost(resolved *ResolvedPricing, inpu
 	}
 
 	totalCost := unitPrice * float64(count)
+	actualCost := totalCost * input.RateMultiplier
+
+	return &CostBreakdown{
+		TotalCost:  totalCost,
+		ActualCost: actualCost,
+	}, nil
+}
+
+// calculateVideoCost 视频按秒计费（支持阶梯定价）
+func (s *BillingService) calculateVideoCost(resolved *ResolvedPricing, input CostInput) (*CostBreakdown, error) {
+	seconds := input.VideoSeconds
+	if seconds < 0 {
+		seconds = 0
+	}
+	
+	var unitPrice float64
+	
+	// 尝试从阶梯定价获取价格
+	if len(resolved.RequestTiers) > 0 {
+		unitPrice = input.Resolver.GetRequestTierPriceByContext(resolved, seconds)
+	}
+	
+	// 回退到默认按秒价格
+	if unitPrice == 0 {
+		unitPrice = resolved.DefaultVideoPerSecPrice
+	}
+	
+	if unitPrice == 0 {
+		return nil, fmt.Errorf("video per-second price not configured")
+	}
+
+	totalCost := unitPrice * float64(seconds)
 	actualCost := totalCost * input.RateMultiplier
 
 	return &CostBreakdown{

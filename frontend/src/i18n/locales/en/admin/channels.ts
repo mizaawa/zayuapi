@@ -92,7 +92,8 @@ export default {
       billingMode: {
         token: 'Token',
         perRequest: 'Per Request',
-        image: 'Image (Per Request)'
+        image: 'Image (Per Request)',
+        video: 'Video (Per Second)'
       },
       form: {
         name: 'Name',
@@ -117,6 +118,7 @@ export default {
         cacheReadPriceShort: 'Cache R',
         imageTokenPrice: 'Image Output',
         imageOutputPrice: 'Image Output Price',
+        videoPerSecPrice: 'Video Per Second Price',
         pricePlaceholder: 'Default',
         intervals: 'Context Intervals (optional)',
         minTokens: 'Min',
@@ -125,6 +127,12 @@ export default {
         addInterval: 'Add Interval',
         requestTiers: 'Request Tiers',
         imageTiers: 'Image Tiers (Per Request)',
+        videoTiers: 'Video Tiers (Per Second)',
+        secondsThreshold: 'Seconds Threshold',
+        pricePerSecond: 'Price per Second',
+        minSeconds: 'Min Seconds',
+        maxSeconds: 'Max Seconds',
+        defaultVideoPrice: 'Default Price per Second',
         addTier: 'Add Tier',
         noTiersYet: 'No tiers yet. Click add to configure per-request pricing.',
         noPricingRules: 'No pricing rules yet. Click "Add" to create one.',

@@ -92,7 +92,8 @@ export default {
       billingMode: {
         token: 'Token',
         perRequest: '按次',
-        image: '图片（按次）'
+        image: '图片（按次）',
+        video: '视频（按秒）'
       },
       form: {
         name: '名称',
@@ -125,6 +126,13 @@ export default {
         addInterval: '添加区间',
         requestTiers: '按次计费层级',
         imageTiers: '图片计费层级（按次）',
+        videoPerSecPrice: '视频每秒价格',
+        videoTiers: '视频阶梯定价',
+        secondsThreshold: '秒数阈值',
+        pricePerSecond: '每秒价格',
+        minSeconds: '最小秒数',
+        maxSeconds: '最大秒数',
+        defaultVideoPrice: '默认每秒价格',
         addTier: '添加层级',
         noTiersYet: '暂无层级，点击添加配置按次计费价格',
         noPricingRules: '暂无定价规则，点击"添加"创建',

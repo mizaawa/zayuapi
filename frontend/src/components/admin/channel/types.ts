@@ -11,6 +11,7 @@ export interface IntervalFormEntry {
   cache_write_price: number | string | null
   cache_read_price: number | string | null
   per_request_price: number | string | null
+  video_per_sec_price: number | string | null
   sort_order: number
 }
 
@@ -23,6 +24,7 @@ export interface PricingFormEntry {
   cache_read_price: number | string | null
   image_output_price: number | string | null
   per_request_price: number | string | null
+  video_per_sec_price: number | string | null
   intervals: IntervalFormEntry[]
 }
 

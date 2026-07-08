@@ -1,4 +1,4 @@
-# Sub2API
+# Sub2API (mizaawa 定制版本)
 
 <div align="center">
 
@@ -12,9 +12,42 @@
 
 **AI API Gateway Platform for Subscription Quota Distribution**
 
+**基于官方版本的增强定制版 | 移除限制 | 新增视频按秒计费**
+
 English | [中文](README_CN.md) | [日本語](README_JA.md)
 
 </div>
+
+## 🎯 mizaawa 版本特性
+
+本版本基于 [Wei-Shaw/sub2api](https://github.com/Wei-Shaw/sub2api) 官方版本进行定制增强，主要改进：
+
+### ✨ 新增功能
+
+- **🎬 视频按秒计费模式**
+  - 在渠道定价管理中新增"视频（按秒）"计费选项
+  - 支持阶梯定价：根据视频秒数范围设置不同单价
+  - 自动从请求体中读取 `seconds` 参数进行计费
+  - 示例：5秒视频 × 3元/秒 = 扣费15元
+
+### 🔓 移除限制
+
+- **请求头覆写全面开放**
+  - 官方版本仅允许 Claude/OpenAI 平台使用
+  - **现已支持所有平台**的 API Key 账号类型
+  - 移除了大部分请求头黑名单限制
+  - 仅保留最基本的 HTTP 传输控制头（`content-length`、`transfer-encoding`、`connection`）
+
+### 🔄 数据库兼容性
+
+- 完全兼容官方版本数据库结构
+- 可无缝切换回官方版本
+- 迁移文件采用 `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` 确保安全性
+
+### 🐳 Docker 部署
+
+- 所有 Docker 镜像已更新为 `ghcr.io/mizaawa/zayuapi`
+- 支持官方版本的所有部署方式
 
 ## ⚠️ Important Notice
 
@@ -224,7 +257,7 @@ One-click installation script that downloads pre-built binaries from GitHub Rele
 #### Installation Steps
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/Wei-Shaw/sub2api/main/deploy/install.sh | sudo bash
+curl -sSL https://raw.githubusercontent.com/mizaawa/zayuapi/main/deploy/install.sh | sudo bash
 ```
 
 The script will:
@@ -274,7 +307,7 @@ sudo journalctl -u sub2api -f
 sudo systemctl restart sub2api
 
 # Uninstall
-curl -sSL https://raw.githubusercontent.com/Wei-Shaw/sub2api/main/deploy/install.sh | sudo bash -s -- uninstall -y
+curl -sSL https://raw.githubusercontent.com/mizaawa/zayuapi/main/deploy/install.sh | sudo bash -s -- uninstall -y
 ```
 
 ---
@@ -297,7 +330,7 @@ Use the automated deployment script for easy setup:
 mkdir -p sub2api-deploy && cd sub2api-deploy
 
 # Download and run deployment preparation script
-curl -sSL https://raw.githubusercontent.com/Wei-Shaw/sub2api/main/deploy/docker-deploy.sh | bash
+curl -sSL https://raw.githubusercontent.com/mizaawa/zayuapi/main/deploy/docker-deploy.sh | bash
 
 # Start services
 docker compose up -d
@@ -319,8 +352,8 @@ If you prefer manual setup:
 
 ```bash
 # 1. Clone the repository
-git clone https://github.com/Wei-Shaw/sub2api.git
-cd sub2api/deploy
+git clone https://github.com/mizaawa/zayuapi.git
+cd zayuapi/deploy
 
 # 2. Copy environment configuration
 cp .env.example .env
@@ -458,8 +491,8 @@ Build and run from source code for development or customization.
 
 ```bash
 # 1. Clone the repository
-git clone https://github.com/Wei-Shaw/sub2api.git
-cd sub2api
+git clone https://github.com/mizaawa/zayuapi.git
+cd zayuapi
 
 # 2. Install pnpm (if not already installed)
 npm install -g pnpm

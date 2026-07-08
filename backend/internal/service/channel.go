@@ -19,7 +19,7 @@ const (
 // IsValid 检查 BillingMode 是否为合法值
 func (m BillingMode) IsValid() bool {
 	switch m {
-	case BillingModeToken, BillingModePerRequest, BillingModeImage, "":
+	case BillingModeToken, BillingModePerRequest, BillingModeImage, BillingModeVideo, "":
 		return true
 	}
 	return false
@@ -84,23 +84,25 @@ type ChannelModelPricing struct {
 	CacheReadPrice   *float64          // 缓存读取价格
 	ImageOutputPrice *float64          // 图片输出价格（向后兼容）
 	PerRequestPrice  *float64          // 默认按次计费价格（USD）
+	VideoPerSecPrice *float64          // 视频按秒计费价格（USD/秒）
 	Intervals        []PricingInterval // 区间定价列表
 	CreatedAt        time.Time
 	UpdatedAt        time.Time
 }
 
-// PricingInterval 定价区间（token 区间 / 按次分层 / 图片分辨率分层）
+// PricingInterval 定价区间（token 区间 / 按次分层 / 图片分辨率分层 / 视频按秒分层）
 type PricingInterval struct {
 	ID              int64
 	PricingID       int64
 	MinTokens       int      // 区间下界（含）
 	MaxTokens       *int     // 区间上界（不含），nil = 无上限
-	TierLabel       string   // 层级标签（按次/图片模式：1K, 2K, 4K, HD 等）
+	TierLabel       string   // 层级标签（按次/图片模式：1K, 2K, 4K, HD 等；视频模式：秒数阈值标签）
 	InputPrice      *float64 // token 模式：每 token 输入价
 	OutputPrice     *float64 // token 模式：每 token 输出价
 	CacheWritePrice *float64 // token 模式：缓存写入价
 	CacheReadPrice  *float64 // token 模式：缓存读取价
 	PerRequestPrice *float64 // 按次/图片模式：每次请求价格
+	VideoPerSecPrice *float64 // 视频模式：每秒价格
 	SortOrder       int
 	CreatedAt       time.Time
 	UpdatedAt       time.Time

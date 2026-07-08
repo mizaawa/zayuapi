@@ -28,6 +28,9 @@ type ResolvedPricing struct {
 
 	// 按次/图片模式：默认价格（未命中层级时使用）
 	DefaultPerRequestPrice float64
+	
+	// 视频模式：默认按秒价格
+	DefaultVideoPerSecPrice float64
 
 	// 来源标识
 	Source string // "channel", "litellm", "fallback"
@@ -136,6 +139,8 @@ func (r *ModelPricingResolver) applyChannelOverrides(ctx context.Context, groupI
 		r.applyTokenOverrides(chPricing, resolved)
 	case BillingModePerRequest, BillingModeImage:
 		r.applyRequestTierOverrides(chPricing, resolved)
+	case BillingModeVideo:
+		r.applyVideoOverrides(chPricing, resolved)
 	}
 }
 
@@ -199,6 +204,28 @@ func (r *ModelPricingResolver) applyRequestTierOverrides(chPricing *ChannelModel
 	}
 }
 
+// applyVideoOverrides 应用视频按秒计费模式的渠道覆盖
+func (r *ModelPricingResolver) applyVideoOverrides(chPricing *ChannelModelPricing, resolved *ResolvedPricing) {
+	// 设置阶梯定价（如果有）
+	resolved.RequestTiers = filterValidIntervalsForVideo(chPricing.Intervals)
+	
+	// 设置默认按秒价格
+	if chPricing.VideoPerSecPrice != nil {
+		resolved.DefaultVideoPerSecPrice = *chPricing.VideoPerSecPrice
+	}
+}
+
+// filterValidIntervalsForVideo 过滤视频按秒计费的有效区间
+func filterValidIntervalsForVideo(intervals []PricingInterval) []PricingInterval {
+	var valid []PricingInterval
+	for _, iv := range intervals {
+		if iv.VideoPerSecPrice != nil {
+			valid = append(valid, iv)
+		}
+	}
+	return valid
+}
+
 // filterValidIntervals 过滤掉所有价格字段都为空的无效 interval。
 // 前端可能创建了只有 min/max 但无价格的空 interval。
 func filterValidIntervals(intervals []PricingInterval) []PricingInterval {
@@ -206,7 +233,7 @@ func filterValidIntervals(intervals []PricingInterval) []PricingInterval {
 	for _, iv := range intervals {
 		if iv.InputPrice != nil || iv.OutputPrice != nil ||
 			iv.CacheWritePrice != nil || iv.CacheReadPrice != nil ||
-			iv.PerRequestPrice != nil {
+			iv.PerRequestPrice != nil || iv.VideoPerSecPrice != nil {
 			valid = append(valid, iv)
 		}
 	}
@@ -270,11 +297,18 @@ func (r *ModelPricingResolver) GetRequestTierPrice(resolved *ResolvedPricing, ti
 	return 0
 }
 
-// GetRequestTierPriceByContext 根据 context token 数获取按次价格
-func (r *ModelPricingResolver) GetRequestTierPriceByContext(resolved *ResolvedPricing, totalContextTokens int) float64 {
-	iv := FindMatchingInterval(resolved.RequestTiers, totalContextTokens)
-	if iv != nil && iv.PerRequestPrice != nil {
-		return *iv.PerRequestPrice
+// GetRequestTierPriceByContext 根据 context token 数或秒数获取按次/按秒价格
+func (r *ModelPricingResolver) GetRequestTierPriceByContext(resolved *ResolvedPricing, totalContextTokensOrSeconds int) float64 {
+	iv := FindMatchingInterval(resolved.RequestTiers, totalContextTokensOrSeconds)
+	if iv != nil {
+		// 视频模式：返回按秒价格
+		if resolved.Mode == BillingModeVideo && iv.VideoPerSecPrice != nil {
+			return *iv.VideoPerSecPrice
+		}
+		// 按次/图片模式：返回按次价格
+		if iv.PerRequestPrice != nil {
+			return *iv.PerRequestPrice
+		}
 	}
 	return 0
 }
