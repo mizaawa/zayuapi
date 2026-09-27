@@ -92,7 +92,7 @@ describe('ModelPlazaContent', () => {
     const filters = wrapper.getComponent(PlazaFilterBar)
 
     expect(filters.props('platforms')).toEqual(['composite', 'openai'])
-    const customPlatform = filters.findAll('button').find((button) => button.text() === 'composite')!
+    const customPlatform = filters.findAll('button').find((button) => button.text() === 'Custom')!
     expect(customPlatform.attributes('disabled')).toBeUndefined()
     await customPlatform.trigger('click')
 
