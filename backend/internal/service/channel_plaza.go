@@ -17,7 +17,7 @@ type PlazaOfficialPricing struct {
 	CacheReadPrice    *float64
 }
 
-// PlazaModel 模型广场中单个模型条目：渠道定价 + 官方参考价。
+// PlazaModel 模型广场中单个模型条目：分组/渠道定价 + 官方参考价。
 type PlazaModel struct {
 	Name            string
 	Platform        string
@@ -27,9 +27,9 @@ type PlazaModel struct {
 
 // PlazaGroup 模型广场中以分组为顶层的条目。
 //
-// 与 AvailableGroupRef 相比多了 Description 与 Models；Models 来自该分组关联渠道的
-// 支持模型（普通分组按分组平台隔离；持久化为 Composite 的 Custom 分组仅
-// 展示 Custom 平台定价），与「可用渠道」页口径一致。
+// 与 AvailableGroupRef 相比多了 Description 与 Models；Models 来自分组自定义定价及
+// 关联渠道的支持模型（普通分组按分组平台隔离；持久化为 Composite 的 Custom 分组仅
+// 展示 Custom 平台定价）。
 type PlazaGroup struct {
 	ID                 int64
 	Name               string
@@ -58,6 +58,7 @@ type PlazaGroup struct {
 // 平台隔离），仅把顶层从渠道换成分组：
 //   - 渠道按 lower(name) 排序后遍历，保证同名模型去重结果确定；
 //   - 同分组同名模型「先见者胜」，仅当已存条目无定价而新条目有定价时升级替换；
+//   - 分组模型定价优先于渠道定价，分组中单独定价的具体模型无需绑定渠道即可展示；
 //   - 图片计费模型的档位价按实收口径合成（分组图片价 > 渠道档位价 > 渠道默认按次价，
 //     见 plazaImageDisplayPricing）；
 //   - 每个模型附带 LiteLLM 官方参考价（查不到为 nil）；
@@ -108,8 +109,25 @@ func (s *ChannelService) ListPlazaGroups(ctx context.Context) ([]PlazaGroup, err
 		platform string
 		name     string
 	}
-	// modelIdx[groupID][platform+modelName] = index into byGroup[groupID].Models
+	// modelIdx[groupID][platform+lowercase(modelName)] = index into byGroup[groupID].Models
 	modelIdx := make(map[int64]map[modelKey]int, len(groups))
+	groupModels := make(map[int64][]SupportedModel, len(groups))
+	for _, gid := range order {
+		g := groupEnt[gid]
+		platform := matchingPlatforms(g.Platform)[0]
+		for _, pricing := range g.ModelPricing {
+			if pricing.Platform != "" && !isPlatformPricingMatch(g.Platform, pricing.Platform) {
+				continue
+			}
+			for _, name := range pricing.Models {
+				name = strings.TrimSpace(name)
+				if name == "" || strings.HasSuffix(name, wildcardSuffix) {
+					continue
+				}
+				groupModels[gid] = append(groupModels[gid], SupportedModel{Name: name, Platform: platform})
+			}
+		}
+	}
 	for i := range channels {
 		ch := &channels[i]
 		if ch.Status != StatusActive {
@@ -129,8 +147,19 @@ func (s *ChannelService) ListPlazaGroups(ctx context.Context) ([]PlazaGroup, err
 				idx = make(map[modelKey]int, len(supported))
 				modelIdx[gid] = idx
 			}
-			for j := range supported {
-				m := supported[j]
+			g := groupEnt[gid]
+			candidates := make([]SupportedModel, 0, len(supported)+len(groupModels[gid]))
+			candidates = append(candidates, supported...)
+			candidates = append(candidates, groupModels[gid]...)
+			var lookup *channelCache
+			if len(g.ModelPricing) > 0 {
+				lookup = newEmptyChannelCache()
+				expandPricingToCache(lookup, ch, gid, pg.Platform)
+				if ch.BillingModelSource != BillingModelSourceRequested {
+					expandMappingToCache(lookup, ch, gid, pg.Platform)
+				}
+			}
+			for _, m := range candidates {
 				if pg.Platform == PlatformComposite {
 					if m.Platform != PlatformCustom {
 						continue
@@ -138,8 +167,29 @@ func (s *ChannelService) ListPlazaGroups(ctx context.Context) ([]PlazaGroup, err
 				} else if m.Platform != pg.Platform {
 					continue
 				}
-				pricing := plazaImageDisplayPricing(m.Pricing, groupEnt[gid])
-				key := modelKey{platform: m.Platform, name: m.Name}
+				pricing := m.Pricing
+				billingModel := m.Name
+				if lookup != nil {
+					// Upstream names are unavailable here; use the channel-mapped
+					// model, as SupportedModels does for channel display prices.
+					mapped := lookupMappingAcrossPlatforms(lookup, gid, pg.Platform, strings.ToLower(m.Name))
+					if mapped != "" && !strings.HasSuffix(mapped, wildcardSuffix) {
+						billingModel = mapped
+					}
+				}
+				if override := g.GetModelPricing(billingModel); override != nil {
+					pricing = override
+				} else if pricing == nil && lookup != nil {
+					if matched := lookupPricingAcrossPlatforms(lookup, gid, pg.Platform, billingModel); matched != nil {
+						cloned := matched.Clone()
+						pricing = &cloned
+					}
+					fallback := []SupportedModel{{Name: billingModel, Platform: m.Platform, Pricing: pricing}}
+					s.fillGlobalPricingFallback(fallback)
+					pricing = fallback[0].Pricing
+				}
+				pricing = plazaImageDisplayPricing(pricing, g)
+				key := modelKey{platform: m.Platform, name: strings.ToLower(m.Name)}
 				if at, seen := idx[key]; seen {
 					// 先见者胜；仅当已存条目无定价而新条目有定价时升级。
 					if pg.Models[at].Pricing == nil && pricing != nil {
@@ -161,6 +211,23 @@ func (s *ChannelService) ListPlazaGroups(ctx context.Context) ([]PlazaGroup, err
 	out := make([]PlazaGroup, 0, len(order))
 	for _, gid := range order {
 		pg := byGroup[gid]
+		g := groupEnt[gid]
+		idx := modelIdx[gid]
+		if idx == nil {
+			idx = make(map[modelKey]int)
+		}
+		for _, m := range groupModels[gid] {
+			key := modelKey{platform: m.Platform, name: strings.ToLower(m.Name)}
+			if _, seen := idx[key]; seen {
+				continue
+			}
+			idx[key] = len(pg.Models)
+			pg.Models = append(pg.Models, PlazaModel{
+				Name:     m.Name,
+				Platform: m.Platform,
+				Pricing:  plazaImageDisplayPricing(g.GetModelPricing(m.Name), g),
+			})
+		}
 		if len(pg.Models) == 0 {
 			continue
 		}

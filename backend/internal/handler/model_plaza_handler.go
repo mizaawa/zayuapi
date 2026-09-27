@@ -55,7 +55,7 @@ type modelPlazaOfficialPricing struct {
 	CacheReadPrice    *float64 `json:"cache_read_price"`
 }
 
-// modelPlazaModel 广场模型条目：渠道定价（白名单形态）+ 官方参考价。
+// modelPlazaModel 广场模型条目：分组/渠道定价（白名单形态）+ 官方参考价。
 type modelPlazaModel struct {
 	Name            string                     `json:"name"`
 	Platform        string                     `json:"platform"`
@@ -166,9 +166,8 @@ func (h *ModelPlazaHandler) Get(c *gin.Context) {
 }
 
 // filterGroupsByAccountModels keeps the plaza catalogue aligned with what an API
-// key bound to the group can discover from /v1/models. Channel configuration
-// remains the pricing source, but cannot introduce models that no account in the
-// group exposes.
+// key bound to the group can discover from /v1/models. Group and channel pricing
+// cannot introduce models that no account in the group exposes.
 func (h *ModelPlazaHandler) filterGroupsByAccountModels(ctx context.Context, groups []service.PlazaGroup) []service.PlazaGroup {
 	if h == nil || h.modelAvailability == nil {
 		return groups
@@ -183,46 +182,18 @@ func (h *ModelPlazaHandler) filterGroupsByAccountModels(ctx context.Context, gro
 			continue
 		}
 
-		allowedByPlatform := make(map[string][]string)
-		if group.Platform == service.PlatformComposite {
-			merged := make([]string, 0)
-			seen := make(map[string]struct{})
-			for _, platform := range []string{
-				service.PlatformAnthropic,
-				service.PlatformGemini,
-				service.PlatformOpenAI,
-				service.PlatformAntigravity,
-				service.PlatformGrok,
-			} {
-				if _, ok := schedulablePlatforms[platform]; !ok {
-					continue
-				}
-				models := h.modelsForGroupPlatform(ctx, &groupID, platform, service.GroupModelsListConfig{})
-				allowedByPlatform[platform] = models
-				for _, model := range models {
-					if _, ok := seen[model]; ok {
-						continue
-					}
-					seen[model] = struct{}{}
-					merged = append(merged, model)
-				}
-			}
-			if group.ModelsListConfig.Enabled && len(group.ModelsListConfig.Models) > 0 {
-				merged = filterModelsByCustomList(merged, defaultModelIDsForPlatform(service.PlatformComposite), group.ModelsListConfig.Models)
-				for platform, models := range allowedByPlatform {
-					allowedByPlatform[platform] = filterModelIDs(models, merged)
-				}
-			}
-		} else {
-			if _, ok := schedulablePlatforms[group.Platform]; !ok {
-				continue
-			}
-			allowedByPlatform[group.Platform] = h.modelsForGroupPlatform(ctx, &groupID, group.Platform, group.ModelsListConfig)
+		platform := group.Platform
+		if platform == service.PlatformComposite {
+			platform = service.PlatformCustom
 		}
+		if _, ok := schedulablePlatforms[platform]; !ok {
+			continue
+		}
+		allowedModels := h.modelsForGroupPlatform(ctx, &groupID, platform, group.ModelsListConfig)
 
 		models := make([]service.PlazaModel, 0, len(group.Models))
 		for _, model := range group.Models {
-			if modelIDAllowed(allowedByPlatform[model.Platform], model.Name) {
+			if model.Platform == platform && modelIDAllowed(allowedModels, model.Name) {
 				models = append(models, model)
 			}
 		}
@@ -250,16 +221,6 @@ func (h *ModelPlazaHandler) modelsForGroupPlatform(
 		return fallback
 	}
 	return models
-}
-
-func filterModelIDs(models, allowed []string) []string {
-	filtered := make([]string, 0, len(models))
-	for _, model := range models {
-		if modelIDAllowed(allowed, model) {
-			filtered = append(filtered, model)
-		}
-	}
-	return filtered
 }
 
 func modelIDAllowed(patterns []string, model string) bool {

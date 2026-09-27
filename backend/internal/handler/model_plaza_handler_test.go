@@ -92,6 +92,94 @@ func TestFilterGroupsByAccountModels_UsesBoundAccountMappings(t *testing.T) {
 	require.Equal(t, []service.PlazaModel{{Name: "gpt-5.6-sol", Platform: service.PlatformOpenAI}}, got[0].Models)
 }
 
+func TestFilterGroupsByAccountModels_CompositeIncludesCustomPricing(t *testing.T) {
+	h := &ModelPlazaHandler{modelAvailability: &plazaModelAvailabilityStub{
+		models:    map[string][]string{service.PlatformCustom: {"vendor-model"}},
+		platforms: map[string]struct{}{service.PlatformCustom: {}},
+	}}
+	groups := []service.PlazaGroup{{
+		ID:       1,
+		Platform: service.PlatformComposite,
+		Models: []service.PlazaModel{{
+			Name:     "vendor-model",
+			Platform: service.PlatformCustom,
+			Pricing:  &service.ChannelModelPricing{BillingMode: service.BillingModeToken, InputPrice: testPtr(1e-6)},
+		}},
+	}}
+
+	got := h.filterGroupsByAccountModels(context.Background(), groups)
+
+	require.Len(t, got, 1)
+	require.Equal(t, groups[0].Models, got[0].Models)
+	dto := toModelPlazaGroupDTO(&got[0], nil)
+	require.Len(t, dto.Models, 1)
+	require.NotNil(t, dto.Models[0].Pricing)
+	require.Equal(t, testPtr(1e-6), dto.Models[0].Pricing.InputPrice)
+}
+
+func TestFilterGroupsByAccountModels_CompositeCustomRespectsModelList(t *testing.T) {
+	h := &ModelPlazaHandler{modelAvailability: &plazaModelAvailabilityStub{
+		models:    map[string][]string{service.PlatformCustom: {"vendor-*"}},
+		platforms: map[string]struct{}{service.PlatformCustom: {}},
+	}}
+	groups := []service.PlazaGroup{{
+		ID:       1,
+		Platform: service.PlatformComposite,
+		ModelsListConfig: service.GroupModelsListConfig{
+			Enabled: true,
+			Models:  []string{"vendor-selected", "unavailable-model"},
+		},
+		Models: []service.PlazaModel{
+			{Name: "vendor-selected", Platform: service.PlatformCustom},
+			{Name: "vendor-hidden", Platform: service.PlatformCustom},
+			{Name: "unavailable-model", Platform: service.PlatformCustom},
+		},
+	}}
+
+	got := h.filterGroupsByAccountModels(context.Background(), groups)
+
+	require.Len(t, got, 1)
+	require.Equal(t, []service.PlazaModel{groups[0].Models[0]}, got[0].Models)
+}
+
+func TestFilterGroupsByAccountModels_CompositeCustomRequiresExposedModels(t *testing.T) {
+	for _, tt := range []struct {
+		name         string
+		availability plazaModelAvailabilityStub
+	}{
+		{
+			name: "no custom account",
+			availability: plazaModelAvailabilityStub{
+				models:    map[string][]string{service.PlatformOpenAI: {"vendor-model"}},
+				platforms: map[string]struct{}{service.PlatformOpenAI: {}},
+			},
+		},
+		{
+			name: "no explicit custom model mapping",
+			availability: plazaModelAvailabilityStub{
+				platforms: map[string]struct{}{service.PlatformCustom: {}},
+			},
+		},
+		{
+			name: "model absent from account mapping",
+			availability: plazaModelAvailabilityStub{
+				models:    map[string][]string{service.PlatformCustom: {"other-model"}},
+				platforms: map[string]struct{}{service.PlatformCustom: {}},
+			},
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			h := &ModelPlazaHandler{modelAvailability: &tt.availability}
+			groups := []service.PlazaGroup{{
+				ID:       1,
+				Platform: service.PlatformComposite,
+				Models:   []service.PlazaModel{{Name: "vendor-model", Platform: service.PlatformCustom}},
+			}}
+			require.Empty(t, h.filterGroupsByAccountModels(context.Background(), groups))
+		})
+	}
+}
+
 func TestFilterGroupsByAccountModels_UsesAPIKeyFallbackAndCustomList(t *testing.T) {
 	stub := &plazaModelAvailabilityStub{
 		models:    map[string][]string{}, // no account mapping: /v1/models uses platform defaults
