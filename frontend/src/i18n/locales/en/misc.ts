@@ -88,6 +88,7 @@ export default {
   // Announcements Page
   announcements: {
     title: 'Announcements',
+    pinned: 'Pinned',
     description: 'View system announcements',
     unreadOnly: 'Show unread only',
     markRead: 'Mark as read',

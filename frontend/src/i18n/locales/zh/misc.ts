@@ -86,6 +86,7 @@ export default {
   // Announcements Page
   announcements: {
     title: '公告',
+    pinned: '置顶',
     description: '查看系统公告',
     unreadOnly: '仅显示未读',
     markRead: '标记已读',

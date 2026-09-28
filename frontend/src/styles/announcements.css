@@ -1,0 +1,26 @@
+.announcement-surface {
+  background: var(--md-sys-color-surface);
+  color: var(--md-sys-color-on-surface);
+}
+
+.announcement-header {
+  border-bottom: 1px solid var(--md-sys-color-outline);
+  background: var(--md-sys-color-surface-container);
+}
+
+.announcement-icon,
+.announcement-accent {
+  background: var(--md-sys-color-primary);
+  color: var(--md-sys-color-on-primary);
+}
+
+.announcement-badge {
+  @apply inline-flex shrink-0 items-center gap-1 rounded-md px-2 py-0.5 text-xs font-medium;
+  background: var(--md-sys-color-surface-container-high);
+  color: var(--md-sys-color-on-surface);
+}
+
+.announcement-footer {
+  border-top: 1px solid var(--md-sys-color-outline);
+  background: var(--md-sys-color-background);
+}

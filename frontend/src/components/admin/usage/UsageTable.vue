@@ -191,15 +191,12 @@
         <template #cell-cache_hit_rate="{ row }">
           <span
             data-testid="cache-hit-rate"
-            class="whitespace-nowrap text-sm font-medium tabular-nums"
-            :class="[
-              getCacheHitRateClass(row),
-              { 'flex h-5 w-full min-w-[3.5rem] items-center justify-center': getCacheHitRate(row) === null },
-            ]"
+            class="flex h-5 w-full min-w-[3.5rem] items-center justify-center whitespace-nowrap text-sm font-medium tabular-nums"
+            :class="getCacheHitRateClass(row)"
           >
             <template v-if="getCacheHitRate(row) !== null">{{ formatCacheHitRate(row) }}</template>
             <template v-else>
-              <span class="h-px w-8 rounded-full bg-current" aria-hidden="true"></span>
+              <span class="cache-hit-empty-mark" aria-hidden="true"></span>
               <span class="sr-only">-</span>
             </template>
           </span>
@@ -739,6 +736,15 @@ const hideTokenTooltip = () => {
 </script>
 
 <style scoped>
+.cache-hit-empty-mark {
+  width: 1.5rem;
+  height: 0.25rem;
+  flex: none;
+  border-radius: 9999px;
+  background: #b6beb9;
+  box-shadow: inset 0 1px 1px rgb(61 74 66 / 10%);
+}
+
 .usage-table-frame {
   overflow: hidden;
   border: 1px solid transparent;

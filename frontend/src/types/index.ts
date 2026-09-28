@@ -347,6 +347,7 @@ export interface Announcement {
   content: string
   status: AnnouncementStatus
   notify_mode: AnnouncementNotifyMode
+  is_pinned?: boolean
   targeting: AnnouncementTargeting
   starts_at?: string
   ends_at?: string
@@ -361,6 +362,7 @@ export interface UserAnnouncement {
   title: string
   content: string
   notify_mode: AnnouncementNotifyMode
+  is_pinned?: boolean
   starts_at?: string
   ends_at?: string
   read_at?: string
@@ -1764,6 +1766,11 @@ export interface DashboardStats {
   hourly_active_users: number // 当前小时活跃用户数（UTC）
   stats_updated_at: string // 统计更新时间（UTC RFC3339）
   stats_stale: boolean // 统计是否过期
+
+  // 全站资金统计，不随图表时间范围变化
+  total_consumption: number // 历史实际消费
+  total_balance: number // 所有现存用户的可用余额
+  total_recharged: number // 历史累计充值到账金额
 
   // API Key 统计
   total_api_keys: number

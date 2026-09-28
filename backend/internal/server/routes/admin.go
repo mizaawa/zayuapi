@@ -422,6 +422,7 @@ func registerAnnouncementRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 		announcements.POST("", h.Admin.Announcement.Create)
 		announcements.GET("/:id", h.Admin.Announcement.GetByID)
 		announcements.PUT("/:id", h.Admin.Announcement.Update)
+		announcements.POST("/:id/pin", h.Admin.Announcement.TogglePin)
 		announcements.DELETE("/:id", h.Admin.Announcement.Delete)
 		announcements.GET("/:id/read-status", h.Admin.Announcement.ListReadStatus)
 	}

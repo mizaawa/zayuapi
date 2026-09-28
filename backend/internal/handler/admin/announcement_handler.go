@@ -220,6 +220,29 @@ func (h *AnnouncementHandler) Delete(c *gin.Context) {
 	response.Success(c, gin.H{"message": "Announcement deleted successfully"})
 }
 
+// TogglePin toggles the pinned announcement, replacing any previous pin.
+// POST /api/v1/admin/announcements/:id/pin
+func (h *AnnouncementHandler) TogglePin(c *gin.Context) {
+	announcementID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil || announcementID <= 0 {
+		response.BadRequest(c, "Invalid announcement ID")
+		return
+	}
+
+	result, err := h.announcementService.TogglePin(c.Request.Context(), announcementID)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, struct {
+		Announcement           *dto.Announcement `json:"announcement"`
+		ReplacedAnnouncementID *int64            `json:"replaced_announcement_id,omitempty"`
+	}{
+		Announcement:           dto.AnnouncementFromService(result.Announcement),
+		ReplacedAnnouncementID: result.ReplacedAnnouncementID,
+	})
+}
+
 // ListReadStatus handles listing users read status for an announcement
 // GET /api/v1/admin/announcements/:id/read-status
 func (h *AnnouncementHandler) ListReadStatus(c *gin.Context) {

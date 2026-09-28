@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"time"
 
@@ -10,6 +11,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/pkg/pagination"
 	"github.com/Wei-Shaw/sub2api/internal/service"
 
+	"entgo.io/ent/dialect"
 	entsql "entgo.io/ent/dialect/sql"
 )
 
@@ -98,7 +100,65 @@ func (r *announcementRepository) Update(ctx context.Context, a *service.Announce
 	}
 
 	a.UpdatedAt = updated.UpdatedAt
+	a.IsPinned = updated.IsPinned
 	return nil
+}
+
+func (r *announcementRepository) TogglePin(ctx context.Context, id int64) (*service.AnnouncementPinResult, error) {
+	tx, err := r.client.Tx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = tx.Rollback() }()
+	client := tx.Client()
+
+	// Serialize replacements even when no announcement is currently pinned.
+	if client.Driver().Dialect() == dialect.Postgres {
+		rows, err := client.QueryContext(ctx, "SELECT pg_advisory_xact_lock($1)", advisoryLockHash("announcements:pin"))
+		if err != nil {
+			return nil, fmt.Errorf("lock announcement pin: %w", err)
+		}
+		if err := rows.Close(); err != nil {
+			return nil, err
+		}
+	}
+
+	item, err := client.Announcement.Get(ctx, id)
+	if err != nil {
+		return nil, translatePersistenceError(err, service.ErrAnnouncementNotFound, nil)
+	}
+	result := &service.AnnouncementPinResult{}
+	if !item.IsPinned {
+		previous, err := client.Announcement.Query().Where(announcement.IsPinnedEQ(true)).Only(ctx)
+		if err != nil && !dbent.IsNotFound(err) {
+			return nil, err
+		}
+		if previous != nil {
+			result.ReplacedAnnouncementID = &previous.ID
+			if _, err := client.ExecContext(ctx, "UPDATE announcements SET is_pinned = FALSE WHERE id = $1", previous.ID); err != nil {
+				return nil, err
+			}
+		}
+	}
+
+	// A pin change must not make the announcement content appear newly edited.
+	updated, err := client.ExecContext(ctx, "UPDATE announcements SET is_pinned = $1 WHERE id = $2", !item.IsPinned, id)
+	if err != nil {
+		return nil, err
+	}
+	rowsAffected, err := updated.RowsAffected()
+	if err != nil {
+		return nil, err
+	}
+	if rowsAffected == 0 {
+		return nil, service.ErrAnnouncementNotFound
+	}
+	item.IsPinned = !item.IsPinned
+	result.Announcement = announcementEntityToService(item)
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+	return result, nil
 }
 
 func (r *announcementRepository) Delete(ctx context.Context, id int64) error {
@@ -132,6 +192,7 @@ func (r *announcementRepository) List(
 	}
 
 	itemsQuery := q.
+		Order(dbent.Desc(announcement.FieldIsPinned)).
 		Offset(params.Offset()).
 		Limit(params.Limit())
 	for _, order := range announcementListOrders(params) {
@@ -204,7 +265,7 @@ func (r *announcementRepository) ListActive(ctx context.Context, now time.Time) 
 			announcement.Or(announcement.StartsAtIsNil(), announcement.StartsAtLTE(now)),
 			announcement.Or(announcement.EndsAtIsNil(), announcement.EndsAtGT(now)),
 		).
-		Order(dbent.Desc(announcement.FieldID)).
+		Order(dbent.Desc(announcement.FieldIsPinned), dbent.Desc(announcement.FieldID)).
 		Limit(200)
 
 	items, err := q.All(ctx)
@@ -221,6 +282,7 @@ func applyAnnouncementEntityToService(dst *service.Announcement, src *dbent.Anno
 	dst.ID = src.ID
 	dst.CreatedAt = src.CreatedAt
 	dst.UpdatedAt = src.UpdatedAt
+	dst.IsPinned = src.IsPinned
 }
 
 func announcementEntityToService(m *dbent.Announcement) *service.Announcement {
@@ -233,6 +295,7 @@ func announcementEntityToService(m *dbent.Announcement) *service.Announcement {
 		Content:    m.Content,
 		Status:     m.Status,
 		NotifyMode: m.NotifyMode,
+		IsPinned:   m.IsPinned,
 		Targeting:  m.Targeting,
 		StartsAt:   m.StartsAt,
 		EndsAt:     m.EndsAt,

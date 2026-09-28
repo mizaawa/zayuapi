@@ -52,6 +52,9 @@
             <div class="min-w-0">
               <div class="flex items-center gap-2">
                 <span class="truncate font-medium text-gray-900 dark:text-white">{{ value }}</span>
+                <span v-if="row.is_pinned" class="badge flex-shrink-0 bg-primary-100 text-primary-700 dark:bg-primary-900/30 dark:text-primary-300">
+                  {{ t('admin.announcements.pinned') }}
+                </span>
               </div>
               <div class="mt-1 flex items-center gap-2 text-xs text-gray-500 dark:text-dark-400">
                 <span>#{{ row.id }}</span>
@@ -114,6 +117,23 @@
 
           <template #cell-actions="{ row }">
             <div class="flex items-center space-x-1">
+              <button
+                type="button"
+                @click="togglePin(row)"
+                :disabled="pinningId !== null"
+                :aria-pressed="!!row.is_pinned"
+                :aria-label="row.is_pinned ? t('admin.announcements.unpin') : t('admin.announcements.pin')"
+                :title="row.is_pinned ? t('admin.announcements.unpin') : t('admin.announcements.pin')"
+                :data-testid="`announcement-pin-${row.id}`"
+                :class="[
+                  'flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg transition-colors disabled:cursor-wait disabled:opacity-50',
+                  row.is_pinned
+                    ? 'bg-primary-100 text-primary-700 hover:bg-primary-200 dark:bg-primary-900/30 dark:text-primary-300 dark:hover:bg-primary-900/50'
+                    : 'text-gray-500 hover:bg-primary-50 hover:text-primary-600 dark:hover:bg-primary-900/20 dark:hover:text-primary-400'
+                ]"
+              >
+                <Icon :name="pinningId === row.id ? 'refresh' : 'pin'" size="sm" :class="pinningId === row.id ? 'animate-spin' : ''" />
+              </button>
               <button
                 @click="openPreview(row)"
                 class="flex flex-col items-center gap-0.5 rounded-lg p-1.5 text-gray-500 transition-colors hover:bg-blue-50 hover:text-blue-600 dark:hover:bg-blue-900/20 dark:hover:text-blue-400"
@@ -285,6 +305,7 @@ const appStore = useAppStore()
 
 const announcements = ref<Announcement[]>([])
 const loading = ref(false)
+const pinningId = ref<number | null>(null)
 
 const filters = reactive({
   status: '',
@@ -385,6 +406,31 @@ async function loadAnnouncements() {
       loading.value = false
       currentController = null
     }
+  }
+}
+
+async function togglePin(row: Announcement) {
+  if (pinningId.value !== null) return
+
+  pinningId.value = row.id
+  try {
+    const result = await adminAPI.announcements.togglePin(row.id)
+    announcements.value = announcements.value.map((item) => {
+      if (item.id === result.announcement.id) return result.announcement
+      return result.announcement.is_pinned ? { ...item, is_pinned: false } : item
+    })
+    const message = !result.announcement.is_pinned
+      ? 'admin.announcements.unpinSuccess'
+      : result.replaced_announcement_id
+        ? 'admin.announcements.pinReplaced'
+        : 'admin.announcements.pinSuccess'
+    appStore.showSuccess(t(message))
+    await loadAnnouncements()
+  } catch (error: any) {
+    console.error('Failed to toggle announcement pin:', error)
+    appStore.showError(error.response?.data?.detail || t('admin.announcements.failedToPin'))
+  } finally {
+    pinningId.value = null
   }
 }
 

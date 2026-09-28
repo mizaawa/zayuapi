@@ -67,10 +67,16 @@ type AnnouncementListFilters struct {
 	Search string
 }
 
+type AnnouncementPinResult struct {
+	Announcement           *Announcement
+	ReplacedAnnouncementID *int64
+}
+
 type AnnouncementRepository interface {
 	Create(ctx context.Context, a *Announcement) error
 	GetByID(ctx context.Context, id int64) (*Announcement, error)
 	Update(ctx context.Context, a *Announcement) error
+	TogglePin(ctx context.Context, id int64) (*AnnouncementPinResult, error)
 	Delete(ctx context.Context, id int64) error
 
 	List(ctx context.Context, params pagination.PaginationParams, filters AnnouncementListFilters) ([]Announcement, *pagination.PaginationResult, error)

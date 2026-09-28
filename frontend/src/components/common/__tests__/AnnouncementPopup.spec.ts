@@ -110,6 +110,21 @@ describe('AnnouncementPopup', () => {
     wrapper.unmount()
   })
 
+  it('labels pinned announcements in both automatic popups and admin previews', async () => {
+    const store = useAnnouncementStore()
+    store.currentPopup = { ...announcement, is_pinned: true }
+    const wrapper = mount(AnnouncementPopup)
+
+    expect(document.body.querySelector('[data-testid="announcement-pinned"]')?.textContent).toContain('announcements.pinned')
+
+    await wrapper.setProps({ preview: true, announcement: { ...announcement, is_pinned: false } })
+    expect(document.body.querySelector('[data-testid="announcement-pinned"]')).toBeNull()
+
+    await wrapper.setProps({ announcement: { ...announcement, is_pinned: true } })
+    expect(document.body.querySelector('[data-testid="announcement-pinned"]')).not.toBeNull()
+    wrapper.unmount()
+  })
+
   it('keeps the existing user popup dismissal behavior', async () => {
     const store = useAnnouncementStore()
     store.currentPopup = announcement
@@ -124,6 +139,26 @@ describe('AnnouncementPopup', () => {
 
     expect(dismissPopup).toHaveBeenCalledTimes(1)
     expect(wrapper.emitted('close')).toBeUndefined()
+    wrapper.unmount()
+  })
+
+  it('restores scrolling after a global popup closes without an announcement bell', async () => {
+    const store = useAnnouncementStore()
+    store.currentPopup = announcement
+    const wrapper = mount(AnnouncementPopup)
+    expect(document.body.style.overflow).toBe('hidden')
+
+    store.currentPopup = null
+    await wrapper.vm.$nextTick()
+    expect(document.body.style.overflow).toBe('')
+    wrapper.unmount()
+  })
+
+  it('preserves the scroll lock of a dialog underneath the announcement', async () => {
+    document.body.style.overflow = 'hidden'
+    const wrapper = mount(AnnouncementPopup, { props: { announcement, preview: true } })
+    await wrapper.setProps({ announcement: null })
+    expect(document.body.style.overflow).toBe('hidden')
     wrapper.unmount()
   })
 })

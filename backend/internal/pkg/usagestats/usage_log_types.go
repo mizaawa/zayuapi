@@ -34,6 +34,11 @@ type DashboardStats struct {
 	// 小时活跃用户数（UTC 当前小时）
 	HourlyActiveUsers int64 `json:"hourly_active_users"`
 
+	// Site-wide financial totals, independent of the usage statistics range.
+	TotalBalance     float64 `json:"total_balance"`
+	TotalRecharged   float64 `json:"total_recharged"`
+	TotalConsumption float64 `json:"total_consumption"`
+
 	// 预聚合新鲜度
 	StatsUpdatedAt string `json:"stats_updated_at"`
 	StatsStale     bool   `json:"stats_stale"`

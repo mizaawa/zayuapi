@@ -89,6 +89,7 @@ func (r *usageLogRepository) GetDashboardStats(ctx context.Context) (*DashboardS
 	if err := r.fillDashboardUsageStatsAggregated(ctx, stats, todayStart, now); err != nil {
 		return nil, err
 	}
+	stats.TotalConsumption = stats.TotalActualCost
 
 	rpm, tpm, err := r.getPerformanceStats(ctx, 0)
 	if err != nil {
@@ -117,6 +118,12 @@ func (r *usageLogRepository) GetDashboardStatsWithRange(ctx context.Context, sta
 	if err := r.fillDashboardUsageStatsFromUsageLogs(ctx, stats, startUTC, endUTC, todayStart, now); err != nil {
 		return nil, err
 	}
+	// The fallback window limits token statistics, but not cumulative spending.
+	if err := scanSingleRow(ctx, r.sql,
+		`SELECT COALESCE(SUM(actual_cost), 0) FROM usage_logs`, nil,
+		&stats.TotalConsumption); err != nil {
+		return nil, err
+	}
 
 	rpm, tpm, err := r.getPerformanceStats(ctx, 0)
 	if err != nil {
@@ -132,7 +139,8 @@ func (r *usageLogRepository) fillDashboardEntityStats(ctx context.Context, stats
 	userStatsQuery := `
 		SELECT
 			COUNT(*) as total_users,
-			COUNT(CASE WHEN created_at >= $1 THEN 1 END) as today_new_users
+			COUNT(CASE WHEN created_at >= $1 THEN 1 END) as today_new_users,
+			COALESCE(SUM(balance), 0) as total_balance
 		FROM users
 		WHERE deleted_at IS NULL
 	`
@@ -143,7 +151,22 @@ func (r *usageLogRepository) fillDashboardEntityStats(ctx context.Context, stats
 		[]any{todayUTC},
 		&stats.TotalUsers,
 		&stats.TodayNewUsers,
+		&stats.TotalBalance,
 	); err != nil {
+		return err
+	}
+
+	// Successful online payments redeem a balance code. Count the credited records
+	// once, including positive admin adjustments and historically deleted users.
+	rechargeStatsQuery := `
+		SELECT COALESCE(SUM(value), 0)
+		FROM redeem_codes
+		WHERE status = $1 AND used_by IS NOT NULL
+			AND type IN ($2, $3) AND value > 0
+	`
+	if err := scanSingleRow(ctx, r.sql, rechargeStatsQuery,
+		[]any{service.StatusUsed, service.RedeemTypeBalance, service.AdjustmentTypeAdminBalance},
+		&stats.TotalRecharged); err != nil {
 		return err
 	}
 

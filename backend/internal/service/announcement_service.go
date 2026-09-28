@@ -207,6 +207,14 @@ func (s *AnnouncementService) Delete(ctx context.Context, id int64) error {
 	return nil
 }
 
+func (s *AnnouncementService) TogglePin(ctx context.Context, id int64) (*AnnouncementPinResult, error) {
+	result, err := s.announcementRepo.TogglePin(ctx, id)
+	if err != nil {
+		return nil, fmt.Errorf("toggle announcement pin: %w", err)
+	}
+	return result, nil
+}
+
 func (s *AnnouncementService) GetByID(ctx context.Context, id int64) (*Announcement, error) {
 	return s.announcementRepo.GetByID(ctx, id)
 }
@@ -277,9 +285,12 @@ func (s *AnnouncementService) ListForUser(ctx context.Context, userID int64, unr
 		})
 	}
 
-	// 未读优先、同状态按创建时间倒序
+	// 置顶优先，再按未读状态和创建时间倒序。
 	sort.Slice(out, func(i, j int) bool {
 		ai, aj := out[i], out[j]
+		if ai.Announcement.IsPinned != aj.Announcement.IsPinned {
+			return ai.Announcement.IsPinned
+		}
 		if (ai.ReadAt == nil) != (aj.ReadAt == nil) {
 			return ai.ReadAt == nil
 		}

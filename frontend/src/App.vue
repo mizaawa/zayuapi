@@ -64,9 +64,17 @@ function onAdminComplianceRequired(event: Event) {
   adminComplianceStore.requireAcknowledgement(detail)
 }
 
+let announcementLoginTimer: ReturnType<typeof setTimeout> | null = null
+
+function cancelAnnouncementLoginTimer() {
+  if (announcementLoginTimer !== null) clearTimeout(announcementLoginTimer)
+  announcementLoginTimer = null
+}
+
 watch(
-  () => authStore.isAuthenticated,
-  (isAuthenticated, oldValue) => {
+  [() => authStore.isAuthenticated, () => authStore.user?.id],
+  ([isAuthenticated, userId], oldValue) => {
+    cancelAnnouncementLoginTimer()
     if (isAuthenticated) {
       if (authStore.isAdmin) {
         adminComplianceStore.fetchStatus().catch((error) => {
@@ -81,9 +89,14 @@ watch(
       subscriptionStore.startPolling()
 
       // Announcements: new login vs page refresh restore
-      if (oldValue === false) {
+      if (oldValue?.[0] === false) {
         // New login: delay 3s then force fetch
-        setTimeout(() => announcementStore.fetchAnnouncements(true), 3000)
+        announcementLoginTimer = setTimeout(() => {
+          announcementLoginTimer = null
+          if (authStore.isAuthenticated && authStore.user?.id === userId) {
+            announcementStore.fetchAnnouncements(true)
+          }
+        }, 3000)
       } else {
         // Page refresh restore (oldValue was undefined)
         announcementStore.fetchAnnouncements()
@@ -110,6 +123,7 @@ router.afterEach(() => {
 })
 
 onBeforeUnmount(() => {
+  cancelAnnouncementLoginTimer()
   document.removeEventListener('visibilitychange', onVisibilityChange)
   window.removeEventListener('admin-compliance-required', onAdminComplianceRequired)
 })

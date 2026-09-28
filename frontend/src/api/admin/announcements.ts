@@ -51,6 +51,16 @@ export async function deleteAnnouncement(id: number): Promise<{ message: string 
   return data
 }
 
+export interface PinAnnouncementResponse {
+  announcement: Announcement
+  replaced_announcement_id?: number
+}
+
+export async function togglePin(id: number): Promise<PinAnnouncementResponse> {
+  const { data } = await apiClient.post<PinAnnouncementResponse>(`/admin/announcements/${id}/pin`)
+  return data
+}
+
 export async function getReadStatus(
   id: number,
   page: number = 1,
@@ -80,6 +90,7 @@ const announcementsAPI = {
   create,
   update,
   delete: deleteAnnouncement,
+  togglePin,
   getReadStatus
 }
 
