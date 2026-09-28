@@ -1,30 +1,9 @@
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed } from 'vue'
 
 export function useChartTheme() {
-  const isDark = ref(
-    typeof document !== 'undefined' && document.documentElement.classList.contains('dark')
-  )
-  let observer: MutationObserver | null = null
-
-  const syncTheme = () => {
-    isDark.value = document.documentElement.classList.contains('dark')
-  }
-
-  onMounted(() => {
-    syncTheme()
-    observer = new MutationObserver(syncTheme)
-    observer.observe(document.documentElement, {
-      attributes: true,
-      attributeFilter: ['class']
-    })
-  })
-
-  onBeforeUnmount(() => {
-    observer?.disconnect()
-  })
-
+  // Match the app's light-only brand palette, including stale dark preferences.
   return {
-    distributionBorderColor: computed(() => (isDark.value ? '#82dfd8' : '#39c5bb')),
-    distributionHoverBorderColor: computed(() => (isDark.value ? '#b5eee9' : '#177f79'))
+    distributionBorderColor: computed(() => '#e9b824'),
+    distributionHoverBorderColor: computed(() => '#976800')
   }
 }

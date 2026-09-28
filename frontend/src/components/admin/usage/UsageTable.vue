@@ -188,6 +188,14 @@
           </div>
         </template>
 
+        <template #cell-cache_hit_rate="{ row }">
+          <span
+            data-testid="cache-hit-rate"
+            class="whitespace-nowrap text-sm font-medium tabular-nums"
+            :class="getCacheHitRateClass(row)"
+          >{{ formatCacheHitRate(row) }}</span>
+        </template>
+
         <template #cell-cost="{ row }">
           <div class="text-sm">
             <div class="flex items-center gap-1.5">
@@ -503,6 +511,7 @@ import { useAppStore } from '@/stores/app'
 import { formatDateTime, formatReasoningEffort } from '@/utils/format'
 import { formatCacheTokens, formatMultiplier } from '@/utils/formatters'
 import { formatTokenPricePerMillion } from '@/utils/usagePricing'
+import { formatCacheHitRate, getCacheHitRateClass } from '@/utils/cacheHitRate'
 import { getUsageServiceTierLabel } from '@/utils/usageServiceTier'
 import { resolveUsageRequestType } from '@/utils/usageRequestType'
 import {

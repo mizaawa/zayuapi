@@ -14,6 +14,9 @@ const {
   showWarning,
   showSuccess,
   showInfo,
+  aoaToSheet,
+  saveAs,
+  xlsxWrite,
 } = vi.hoisted(() => ({
   query: vi.fn(),
   getStats: vi.fn(),
@@ -25,6 +28,9 @@ const {
   showWarning: vi.fn(),
   showSuccess: vi.fn(),
   showInfo: vi.fn(),
+  aoaToSheet: vi.fn((data: (string | number)[][]) => ({ data })),
+  saveAs: vi.fn(),
+  xlsxWrite: vi.fn(() => new Uint8Array([1, 2, 3])),
 }))
 
 const messages: Record<string, string> = {
@@ -55,6 +61,8 @@ const messages: Record<string, string> = {
   'usage.sync': 'Sync',
   'usage.exporting': 'Exporting',
   'usage.exportCsv': 'Export CSV',
+  'usage.exportExcel': 'Export Excel',
+  'usage.cacheHitRate': 'Cache hit rate',
   'usage.failedToLoad': 'Failed to load',
   'usage.noDataToExport': 'No data',
   'usage.preparingExport': 'Preparing export',
@@ -81,6 +89,17 @@ vi.mock('@/api', () => ({
 
 vi.mock('@/stores/app', () => ({
   useAppStore: () => ({ showError, showWarning, showSuccess, showInfo }),
+}))
+
+vi.mock('file-saver', () => ({ saveAs }))
+
+vi.mock('xlsx', () => ({
+  utils: {
+    aoa_to_sheet: aoaToSheet,
+    book_new: vi.fn(() => ({})),
+    book_append_sheet: vi.fn(),
+  },
+  write: xlsxWrite,
 }))
 
 vi.mock('vue-i18n', async () => {
@@ -159,6 +178,10 @@ describe('user UsageView', () => {
     showWarning.mockReset()
     showSuccess.mockReset()
     showInfo.mockReset()
+    aoaToSheet.mockClear()
+    saveAs.mockClear()
+    xlsxWrite.mockClear()
+    localStorage.clear()
 
     query.mockResolvedValue({ items: [usageLog], total: 1, pages: 1 })
     getStats.mockResolvedValue({
@@ -189,6 +212,31 @@ describe('user UsageView', () => {
     })
     list.mockResolvedValue({ items: [{ id: 1, name: 'demo-key' }] })
     getAvailable.mockResolvedValue([{ id: 1, name: 'default' }])
+  })
+
+  it('shows cache hit rate between tokens and cost and persists its column setting', async () => {
+    localStorage.setItem('user-usage-hidden-columns', JSON.stringify(['model']))
+    const wrapper = mountUsageView()
+    await flushPromises()
+
+    const vm = wrapper.vm as any
+    const columnKeys = vm.visibleColumns.map((column: { key: string }) => column.key)
+    const tokensIndex = columnKeys.indexOf('tokens')
+    expect(columnKeys.slice(tokensIndex, tokensIndex + 3)).toEqual(['tokens', 'cache_hit_rate', 'cost'])
+
+    await wrapper.get('button[title="Columns"]').trigger('click')
+    const cacheHitRateButton = wrapper.findAll('button').find((button) => button.text() === 'Cache hit rate')
+    expect(cacheHitRateButton).toBeDefined()
+    await cacheHitRateButton!.trigger('click')
+
+    expect(vm.visibleColumns.map((column: { key: string }) => column.key)).not.toContain('cache_hit_rate')
+    expect(JSON.parse(localStorage.getItem('user-usage-hidden-columns')!)).toContain('cache_hit_rate')
+    wrapper.unmount()
+
+    const restored = mountUsageView()
+    await flushPromises()
+    expect((restored.vm as any).visibleColumns.map((column: { key: string }) => column.key)).not.toContain('cache_hit_rate')
+    restored.unmount()
   })
 
   it('loads logs, stats, model stats, and snapshot on first render', async () => {
@@ -239,8 +287,8 @@ describe('user UsageView', () => {
     expect(showSuccess).toHaveBeenCalled()
     expect(csvContent.startsWith('\uFEFF')).toBe(true)
     expect(csvContent.slice(1)).toBe([
-      'Time,API Key Name,Model,Reasoning Effort,Inbound Endpoint,IP Address,Type,Billing Mode,Input Tokens,Output Tokens,Cache Read Tokens,Cache Creation Tokens,Rate Multiplier,Billed Cost,Original Cost,First Token (ms),Duration (ms)',
-      '2026-03-08T00:00:00Z,demo-key,gpt-5.4,"\'-",,203.0.113.10,Sync,Token,4057,101,278272,4,1,0.09288300,0.09288300,12,345',
+      'Time,API Key Name,Model,Reasoning Effort,Inbound Endpoint,IP Address,Type,Billing Mode,Input Tokens,Output Tokens,Cache Read Tokens,Cache Creation Tokens,Cache Hit Rate,Rate Multiplier,Billed Cost,Original Cost,First Token (ms),Duration (ms)',
+      '2026-03-08T00:00:00Z,demo-key,gpt-5.4,-,,203.0.113.10,Sync,Token,4057,101,278272,4,98.6%,1,0.09288300,0.09288300,12,345',
     ].join('\n'))
     expect(csvContent).toContain('IP Address')
     expect(csvContent).toContain('203.0.113.10')
@@ -301,11 +349,58 @@ describe('user UsageView', () => {
 
     expect(csvContent).toContain('Billing Mode')
     expect(csvContent).toContain('Image')
+    expect(csvContent).toContain(',Image,0,0,0,0,-,')
     expect(csvContent).not.toContain(',Token,0,0,0,0,')
 
     window.URL.createObjectURL = originalCreateObjectURL
     window.URL.revokeObjectURL = originalRevokeObjectURL
     vi.unstubAllGlobals()
     clickSpy.mockRestore()
+  })
+
+  it('exports Excel across filtered pages with formatted cache hit rates and missing-cache placeholders', async () => {
+    query.mockResolvedValue({ items: [usageLog], total: 101, pages: 2 })
+    const wrapper = mountUsageView()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.filters.api_key_id = 1
+    vm.filters.model = 'gpt-5.4'
+    vm.toggleColumn('cache_hit_rate')
+
+    query.mockReset()
+    query.mockResolvedValueOnce({ items: Array.from({ length: 100 }, () => usageLog), total: 101, pages: 2 })
+    query.mockResolvedValueOnce({
+      items: [{ ...usageLog, cache_read_tokens: 0, cache_creation_tokens: 25 }],
+      total: 101,
+      pages: 2,
+    })
+
+    const excelButton = wrapper.findAll('button').find((button) => button.text() === 'Export Excel')
+    expect(excelButton).toBeDefined()
+    await excelButton!.trigger('click')
+    await flushPromises()
+
+    expect(query).toHaveBeenCalledTimes(2)
+    for (let page = 1; page <= 2; page++) {
+      expect(query).toHaveBeenNthCalledWith(page, expect.objectContaining({
+        page,
+        page_size: 100,
+        api_key_id: 1,
+        model: 'gpt-5.4',
+        sort_by: 'created_at',
+        sort_order: 'desc',
+      }))
+    }
+    const data = aoaToSheet.mock.calls[0]![0] as (string | number)[][]
+    const cacheHitRateIndex = data[0]!.indexOf('Cache Hit Rate')
+    expect(cacheHitRateIndex).toBeGreaterThan(-1)
+    expect(data).toHaveLength(102)
+    expect(data[1]![cacheHitRateIndex]).toBe('98.6%')
+    expect(data[101]![cacheHitRateIndex]).toBe('-')
+    expect(data[0]).not.toContain('Upstream Endpoint')
+    expect(xlsxWrite).toHaveBeenCalledWith(expect.anything(), { bookType: 'xlsx', type: 'array' })
+    expect(saveAs).toHaveBeenCalledWith(expect.any(Blob), expect.stringMatching(/^usage_.*\.xlsx$/))
+    expect(showSuccess).toHaveBeenCalledWith('Export success')
+    wrapper.unmount()
   })
 })

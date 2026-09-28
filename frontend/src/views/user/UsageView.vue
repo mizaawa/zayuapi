@@ -154,8 +154,12 @@
                 </button>
               </div>
             </div>
-            <button v-if="activeTab !== 'errors'" type="button" @click="exportToCSV" :disabled="exporting" class="btn btn-primary">
+            <button v-if="activeTab !== 'errors'" type="button" @click="exportToCSV" :disabled="exporting" class="btn btn-secondary">
               {{ exporting ? t('usage.exporting') : t('usage.exportCsv') }}
+            </button>
+            <button v-if="activeTab !== 'errors'" type="button" @click="exportToExcel" :disabled="exporting" class="btn btn-primary">
+              <Icon name="download" size="sm" />
+              {{ exporting ? t('usage.exporting') : t('usage.exportExcel') }}
             </button>
           </div>
         </div>
@@ -215,6 +219,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { saveAs } from 'file-saver'
 import { useAppStore } from '@/stores/app'
 import { keysAPI, usageAPI, userGroupsAPI } from '@/api'
 import AppLayout from '@/components/layout/AppLayout.vue'
@@ -231,6 +236,7 @@ import Icon from '@/components/icons/Icon.vue'
 import UserErrorRequestsTable from '@/components/user/UserErrorRequestsTable.vue'
 import { getPersistedPageSize } from '@/composables/usePersistedPageSize'
 import { formatReasoningEffort } from '@/utils/format'
+import { formatCacheHitRate } from '@/utils/cacheHitRate'
 import { BILLING_MODE_IMAGE, getBillingModeLabel } from '@/utils/billingMode'
 import { resolveUsageRequestType, requestTypeToLegacyStream } from '@/utils/usageRequestType'
 import type {
@@ -614,13 +620,15 @@ const getDisplayBillingMode = (
 const escapeCSVValue = (value: unknown): string => {
   if (value == null) return ''
   const str = String(value)
+  if (str === '-') return str
   const escaped = str.replace(/"/g, '""')
   if (/^[=+\-@\t\r]/.test(str)) return `"\'${escaped}"`
   if (/[,"\n\r]/.test(str)) return `"${escaped}"`
   return str
 }
 
-const exportToCSV = async () => {
+const exportUsage = async (format: 'csv' | 'xlsx') => {
+  if (exporting.value) return
   if (pagination.total === 0) {
     appStore.showWarning(t('usage.noDataToExport'))
     return
@@ -652,6 +660,7 @@ const exportToCSV = async () => {
       'Output Tokens',
       'Cache Read Tokens',
       'Cache Creation Tokens',
+      'Cache Hit Rate',
       'Rate Multiplier',
       'Billed Cost',
       'Original Cost',
@@ -671,31 +680,45 @@ const exportToCSV = async () => {
       log.output_tokens,
       log.cache_read_tokens,
       log.cache_creation_tokens,
+      formatCacheHitRate(log),
       log.rate_multiplier,
       log.actual_cost.toFixed(8),
       log.total_cost.toFixed(8),
       log.first_token_ms ?? '',
       log.duration_ms ?? '',
-    ].map(escapeCSVValue))
-    const csvContent = [
-      headers.map(escapeCSVValue).join(','),
-      ...rows.map((row) => row.join(',')),
-    ].join('\n')
-    const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' })
-    const url = window.URL.createObjectURL(blob)
-    const link = document.createElement('a')
-    link.href = url
-    link.download = `usage_${startDate.value}_to_${endDate.value}.csv`
-    link.click()
-    window.URL.revokeObjectURL(url)
+    ])
+    const filename = `usage_${startDate.value}_to_${endDate.value}`
+    if (format === 'xlsx') {
+      const XLSX = await import('xlsx')
+      const worksheet = XLSX.utils.aoa_to_sheet([headers, ...rows])
+      const workbook = XLSX.utils.book_new()
+      XLSX.utils.book_append_sheet(workbook, worksheet, 'Usage')
+      saveAs(new Blob([XLSX.write(workbook, { bookType: 'xlsx', type: 'array' })], {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      }), `${filename}.xlsx`)
+    } else {
+      const csvContent = [headers, ...rows]
+        .map((row) => row.map(escapeCSVValue).join(','))
+        .join('\n')
+      const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' })
+      const url = window.URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `${filename}.csv`
+      link.click()
+      window.URL.revokeObjectURL(url)
+    }
     appStore.showSuccess(t('usage.exportSuccess'))
   } catch (error) {
-    console.error('CSV Export failed:', error)
+    console.error('Usage export failed:', error)
     appStore.showError(t('usage.exportFailed'))
   } finally {
     exporting.value = false
   }
 }
+
+const exportToCSV = () => exportUsage('csv')
+const exportToExcel = () => exportUsage('xlsx')
 
 const ALWAYS_VISIBLE = ['created_at']
 const DEFAULT_HIDDEN_COLUMNS = ['user_agent']
@@ -711,6 +734,7 @@ const allColumns = computed<Column[]>(() => [
   { key: 'stream', label: t('usage.type'), sortable: false },
   { key: 'billing_mode', label: t('admin.usage.billingMode'), sortable: false },
   { key: 'tokens', label: t('usage.tokens'), sortable: false },
+  { key: 'cache_hit_rate', label: t('usage.cacheHitRate'), sortable: false },
   { key: 'cost', label: t('usage.cost'), sortable: false },
   { key: 'latency', label: t('usage.latency'), sortable: false },
   { key: 'created_at', label: t('usage.time'), sortable: true },

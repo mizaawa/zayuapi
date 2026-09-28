@@ -9,8 +9,13 @@ vi.mock('@/utils/ipGeoLookup', () => ipGeoMocks)
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { nextTick } from 'vue'
+import { createPinia, setActivePinia } from 'pinia'
 
 import UsageTable from '../UsageTable.vue'
+
+beforeEach(() => {
+  setActivePinia(createPinia())
+})
 
 const messages: Record<string, string> = {
   'admin.usage.userDeletedBadge': 'Deleted',
@@ -76,6 +81,7 @@ const DataTableStub = {
         <slot name="cell-model" :row="row" :value="row.model" />
         <slot name="cell-billing_mode" :row="row" />
         <slot name="cell-tokens" :row="row" />
+        <slot name="cell-cache_hit_rate" :row="row" />
         <slot name="cell-cost" :row="row" />
       </div>
     </div>
@@ -111,6 +117,29 @@ const baseImageRow = {
 }
 
 describe('admin UsageTable tooltip', () => {
+  it('renders cache hit percentages and a neutral dash when there are no cache reads', () => {
+    const wrapper = mount(UsageTable, {
+      props: {
+        data: [75, 20, 5, 0].map((rate) => ({
+          ...baseImageRow,
+          request_id: `req-cache-${rate}`,
+          input_tokens: 100 - rate,
+          cache_read_tokens: rate,
+        })),
+        columns: [{ key: 'cache_hit_rate', label: 'Cache hit rate' }],
+      },
+      global: { stubs: { DataTable: DataTableStub, Icon: true, Teleport: true } },
+    })
+
+    const cells = wrapper.findAll('[data-testid="cache-hit-rate"]')
+    expect(cells.map((cell) => cell.text())).toEqual(['75.0%', '20.0%', '5.0%', '-'])
+    expect(cells[0].classes()).toContain('text-green-600')
+    expect(cells[1].classes()).toContain('text-yellow-600')
+    expect(cells[2].classes()).toContain('text-red-600')
+    expect(cells[3].classes()).toContain('text-gray-400')
+    wrapper.unmount()
+  })
+
   beforeEach(() => {
     vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({
       x: 0,

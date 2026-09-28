@@ -32,6 +32,7 @@ const messages: Record<string, string> = {
   'admin.dashboard.day': 'Day',
   'admin.dashboard.hour': 'Hour',
   'admin.usage.failedToLoadUser': 'Failed to load user',
+  'usage.cacheHitRate': 'Cache hit rate',
 	'usage.requestedModel': 'Requested model',
 	'usage.sentUpstreamModel': 'Sent upstream model',
 	'usage.upstreamResponseModel': 'Upstream response model',
@@ -563,7 +564,7 @@ describe('admin UsageView ranking tab', () => {
   })
 })
 
-describe('admin UsageView model audit export', () => {
+describe('admin UsageView columns and export', () => {
 	beforeEach(() => {
 		vi.useFakeTimers()
 		list.mockReset().mockResolvedValue({ items: [], total: 0, pages: 0 })
@@ -620,4 +621,49 @@ describe('admin UsageView model audit export', () => {
 		expect(row.slice(4, 8)).toEqual(['gpt-5.6-sol', 'gpt-5.5', 'gpt-5.4', 'Yes'])
 		expect(saveAs).toHaveBeenCalledTimes(1)
 	})
+
+  it('shows the cache hit rate between tokens and cost and allows toggling it', async () => {
+    const wrapper = mountRouteFilteredUsageView()
+    await flushPromises()
+
+    const columnKeys = () => (wrapper.vm as any).visibleColumns.map((column: { key: string }) => column.key)
+    const tokensIndex = columnKeys().indexOf('tokens')
+    expect(columnKeys().slice(tokensIndex, tokensIndex + 3)).toEqual(['tokens', 'cache_hit_rate', 'cost'])
+
+    await wrapper.get('button[title="admin.users.columnSettings"]').trigger('click')
+    const cacheHitRateToggle = wrapper.findAll('button').find(button => button.text() === 'Cache hit rate')!
+    expect(cacheHitRateToggle.exists()).toBe(true)
+
+    await cacheHitRateToggle.trigger('click')
+    expect(columnKeys()).not.toContain('cache_hit_rate')
+    expect(localStorage.setItem).toHaveBeenCalledWith('usage-hidden-columns', expect.stringContaining('cache_hit_rate'))
+
+    await cacheHitRateToggle.trigger('click')
+    expect(columnKeys()).toContain('cache_hit_rate')
+    wrapper.unmount()
+  })
+
+  it.each([
+    { input: 25, cached: 75, expected: '75.0%' },
+    { input: 99, cached: 1, expected: '1.0%' },
+    { input: 100, cached: 0, expected: '-' },
+  ])('exports cache hit rate as $expected for $cached cached tokens', async ({ input, cached, expected }) => {
+    exportList.mockResolvedValue({
+      items: [{ input_tokens: input, cache_read_tokens: cached, cache_creation_tokens: 0 }],
+      total: 1,
+      pages: 1,
+    })
+    const wrapper = mountRouteFilteredUsageView()
+    await flushPromises()
+
+    await (wrapper.vm as any).exportToExcel()
+
+    const headers = aoaToSheet.mock.calls[0][0][0]
+    const hitRateIndex = headers.indexOf('Cache hit rate')
+    expect(hitRateIndex).toBeGreaterThan(-1)
+    expect(headers[hitRateIndex - 1]).toBe('admin.usage.cacheCreationTokens')
+    expect(headers[hitRateIndex + 1]).toBe('admin.usage.inputCost')
+    expect(sheetAddAoa.mock.calls[0][1][0][hitRateIndex]).toBe(expected)
+    wrapper.unmount()
+  })
 })
