@@ -192,8 +192,17 @@
           <span
             data-testid="cache-hit-rate"
             class="whitespace-nowrap text-sm font-medium tabular-nums"
-            :class="getCacheHitRateClass(row)"
-          >{{ formatCacheHitRate(row) }}</span>
+            :class="[
+              getCacheHitRateClass(row),
+              { 'flex h-5 w-full min-w-[3.5rem] items-center justify-center': getCacheHitRate(row) === null },
+            ]"
+          >
+            <template v-if="getCacheHitRate(row) !== null">{{ formatCacheHitRate(row) }}</template>
+            <template v-else>
+              <span class="h-px w-8 rounded-full bg-current" aria-hidden="true"></span>
+              <span class="sr-only">-</span>
+            </template>
+          </span>
         </template>
 
         <template #cell-cost="{ row }">
@@ -511,7 +520,7 @@ import { useAppStore } from '@/stores/app'
 import { formatDateTime, formatReasoningEffort } from '@/utils/format'
 import { formatCacheTokens, formatMultiplier } from '@/utils/formatters'
 import { formatTokenPricePerMillion } from '@/utils/usagePricing'
-import { formatCacheHitRate, getCacheHitRateClass } from '@/utils/cacheHitRate'
+import { formatCacheHitRate, getCacheHitRate, getCacheHitRateClass } from '@/utils/cacheHitRate'
 import { getUsageServiceTierLabel } from '@/utils/usageServiceTier'
 import { resolveUsageRequestType } from '@/utils/usageRequestType'
 import {
