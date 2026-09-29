@@ -260,7 +260,7 @@ func ExtractResponsesReasoningEffortFromBody(body []byte) *string {
 	if raw == "" {
 		return nil
 	}
-	normalized := normalizeOpenAIReasoningEffort(raw)
+	normalized := normalizeRecordedOpenAIReasoningEffort(raw)
 	if normalized == "" {
 		return nil
 	}

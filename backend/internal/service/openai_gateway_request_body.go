@@ -448,13 +448,13 @@ func getOpenAIReasoningEffortFromReqBody(reqBody map[string]any, requestedModel 
 	// Primary: reasoning.effort
 	if reasoning, ok := reqBody["reasoning"].(map[string]any); ok {
 		if effort, ok := reasoning["effort"].(string); ok {
-			return normalizeOpenAIReasoningEffortForModel(effort, requestedModel), true
+			return normalizeRecordedOpenAIReasoningEffort(effort), true
 		}
 	}
 
 	// Fallback: some clients may use a flat field.
 	if effort, ok := reqBody["reasoning_effort"].(string); ok {
-		return normalizeOpenAIReasoningEffortForModel(effort, requestedModel), true
+		return normalizeRecordedOpenAIReasoningEffort(effort), true
 	}
 
 	return "", false
@@ -483,7 +483,7 @@ func deriveOpenAIReasoningEffortFromModel(model string) string {
 		return ""
 	}
 
-	return normalizeOpenAIReasoningEffortForModel(parts[len(parts)-1], modelID)
+	return normalizeRecordedOpenAIReasoningEffort(parts[len(parts)-1])
 }
 
 // deriveOpenAIReasoningEffortFromModelCandidates 依次对每个候选模型做后缀推导，
@@ -820,7 +820,7 @@ func extractOpenAIReasoningEffortFromBody(body []byte, modelCandidates ...string
 		reasoningEffort = strings.TrimSpace(gjson.GetBytes(body, "reasoning_effort").String())
 	}
 	if reasoningEffort != "" {
-		normalized := normalizeOpenAIReasoningEffortForModel(reasoningEffort, firstNonEmpty(modelCandidates...))
+		normalized := normalizeRecordedOpenAIReasoningEffort(reasoningEffort)
 		if normalized == "" {
 			return nil
 		}
@@ -1470,6 +1470,28 @@ func normalizeOpenAIReasoningEffort(raw string) string {
 		return "xhigh"
 	default:
 		// Only store known effort levels for now to keep UI consistent.
+		return ""
+	}
+}
+
+// normalizeRecordedOpenAIReasoningEffort preserves the effort explicitly sent
+// by the client. Protocol adapters may translate max to xhigh for an upstream
+// that does not support max, but usage records should reflect the request.
+func normalizeRecordedOpenAIReasoningEffort(raw string) string {
+	value := strings.ToLower(strings.TrimSpace(raw))
+	if value == "" {
+		return ""
+	}
+	value = strings.NewReplacer("-", "", "_", "", " ", "").Replace(value)
+	switch value {
+	case "none", "minimal":
+		return ""
+	case "low", "medium", "high", "xhigh", "extrahigh", "max":
+		if value == "extrahigh" {
+			return "xhigh"
+		}
+		return value
+	default:
 		return ""
 	}
 }
