@@ -57,11 +57,11 @@ func TestForwardAsAnthropic_ForceChatCompletionsPreservesFinalModelReasoningEffo
 		maxPolicy  string
 	}{
 		{
-			name:       "policy caps converted effort",
+			name:       "legacy policy preserves converted effort",
 			model:      "gpt-5.6-luna",
 			mapped:     "gpt-5.6-luna",
 			effortJSON: `,"output_config":{"effort":"max"}`,
-			wantEffort: "medium",
+			wantEffort: "max",
 			maxPolicy:  "medium",
 		},
 		{
@@ -76,7 +76,15 @@ func TestForwardAsAnthropic_ForceChatCompletionsPreservesFinalModelReasoningEffo
 			model:      "gpt-5.5",
 			mapped:     "gpt-5.5",
 			effortJSON: `,"output_config":{"effort":"max"}`,
-			wantEffort: "xhigh",
+			wantEffort: "max",
+		},
+		{
+			name:       "future effort on future model",
+			model:      "future-model",
+			mapped:     "future-model",
+			effortJSON: `,"output_config":{"effort":"future-effort"}`,
+			wantEffort: "future-effort",
+			maxPolicy:  "low",
 		},
 		{
 			name:       "high remains high",
@@ -469,9 +477,9 @@ func TestForwardAsAnthropic_ResponsesSupportedAccountStillUsesResponsesEndpoint(
 	require.True(t, strings.HasSuffix(upstream.lastReq.URL.Path, "/responses"),
 		"responses-capable account must stay on /v1/responses, got %s", upstream.lastReq.URL.String())
 	require.True(t, gjson.GetBytes(upstream.lastBody, "input").Exists())
-	require.Equal(t, "medium", gjson.GetBytes(upstream.lastBody, "reasoning.effort").String())
+	require.Equal(t, "high", gjson.GetBytes(upstream.lastBody, "reasoning.effort").String())
 	require.NotNil(t, result.ReasoningEffort)
-	require.Equal(t, "medium", *result.ReasoningEffort)
+	require.Equal(t, "high", *result.ReasoningEffort)
 	require.False(t, gjson.GetBytes(upstream.lastBody, "messages").Exists())
 	require.Equal(t, "third-party-client/1.0.0", upstream.lastReq.Header.Get("User-Agent"))
 	require.Equal(t, "opencode", upstream.lastReq.Header.Get("originator"))

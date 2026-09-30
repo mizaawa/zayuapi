@@ -32,8 +32,10 @@ func TestConvertClaudeMessagesToGemini_PreservesExplicitEffort(t *testing.T) {
 			require.NoError(t, err)
 			var req map[string]any
 			require.NoError(t, json.Unmarshal(converted, &req))
-			config := req["generationConfig"].(map[string]any)
-			thinking := config["thinkingConfig"].(map[string]any)
+			config, ok := req["generationConfig"].(map[string]any)
+			require.True(t, ok)
+			thinking, ok := config["thinkingConfig"].(map[string]any)
+			require.True(t, ok)
 			require.Equal(t, effort, thinking["thinkingLevel"])
 			require.NotContains(t, thinking, "thinkingBudget")
 		})

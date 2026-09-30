@@ -97,7 +97,7 @@ type Group struct {
 	// 一旦设置即接管该分组用户的限流（覆盖用户级 rpm_limit），可被 user-group rpm_override 进一步覆盖。
 	RPMLimit int
 
-	// Deprecated: legacy policy fields are ignored; client effort is forwarded.
+	// Legacy policy fields are ignored; client effort is forwarded.
 	MaxReasoningEffort      string
 	ReasoningEffortMappings []ReasoningEffortMapping
 
