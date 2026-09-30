@@ -627,8 +627,13 @@ func buildGenerationConfig(req *ClaudeRequest) *GeminiGenerationConfig {
 		config.MaxOutputTokens = req.MaxTokens
 	}
 
-	// Thinking 配置
-	if req.Thinking != nil && (req.Thinking.Type == "enabled" || req.Thinking.Type == "adaptive") {
+	// An explicit effort uses the native level field, without a generated budget.
+	if req.OutputConfig != nil && req.OutputConfig.Effort != "" {
+		config.ThinkingConfig = &GeminiThinkingConfig{
+			IncludeThoughts: true,
+			ThinkingLevel:   req.OutputConfig.Effort,
+		}
+	} else if req.Thinking != nil && (req.Thinking.Type == "enabled" || req.Thinking.Type == "adaptive") {
 		config.ThinkingConfig = &GeminiThinkingConfig{
 			IncludeThoughts: true,
 		}

@@ -120,7 +120,6 @@ func (s *groupRepoStubForAdmin) ListActive(_ context.Context) ([]Group, error) {
 	panic("unexpected ListActive call")
 }
 
-
 func (s *groupRepoStubForAdmin) ListActiveByPlatform(_ context.Context, platform string) ([]Group, error) {
 	if s.listActiveByPlatformFn != nil {
 		return s.listActiveByPlatformFn(platform)
@@ -771,16 +770,16 @@ func TestAdminService_UpdateGroup_InvalidatesAuthCacheOnRPMLimitChange(t *testin
 	require.Equal(t, []int64{1}, invalidator.groupIDs, "分组 RPMLimit 写入 auth snapshot，变更后必须失效 API Key 认证缓存")
 }
 
-func TestAdminService_UpdateGroup_ReasoningEffortMappingsTriState(t *testing.T) {
+func TestAdminService_UpdateGroup_IgnoresLegacyReasoningEffortMappings(t *testing.T) {
 	tests := []struct {
 		name  string
 		input *UpdateGroupInput
 		want  []ReasoningEffortMapping
 	}{
 		{
-			name:  "nil preserves existing mappings",
+			name:  "nil clears existing mappings",
 			input: &UpdateGroupInput{},
-			want:  []ReasoningEffortMapping{{From: "max", To: "xhigh"}},
+			want:  []ReasoningEffortMapping{},
 		},
 		{
 			name: "empty array clears mappings",
@@ -791,12 +790,12 @@ func TestAdminService_UpdateGroup_ReasoningEffortMappingsTriState(t *testing.T) 
 			want: []ReasoningEffortMapping{},
 		},
 		{
-			name: "non empty array replaces and canonicalizes mappings",
+			name: "non empty array is ignored",
 			input: func() *UpdateGroupInput {
 				replacement := []ReasoningEffortMapping{{From: " X-HIGH ", To: " high "}}
 				return &UpdateGroupInput{ReasoningEffortMappings: &replacement}
 			}(),
-			want: []ReasoningEffortMapping{{From: "xhigh", To: "high"}},
+			want: []ReasoningEffortMapping{},
 		},
 	}
 
@@ -820,7 +819,7 @@ func TestAdminService_UpdateGroup_ReasoningEffortMappingsTriState(t *testing.T) 
 	}
 }
 
-func TestAdminService_UpdateGroup_RejectsInvalidReasoningEffortMappings(t *testing.T) {
+func TestAdminService_UpdateGroup_IgnoresInvalidLegacyReasoningEffortMappings(t *testing.T) {
 	existing := &Group{
 		ID:               1,
 		Name:             "openai",
@@ -840,9 +839,9 @@ func TestAdminService_UpdateGroup_RejectsInvalidReasoningEffortMappings(t *testi
 		ReasoningEffortMappings: &invalid,
 	})
 
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "duplicate reasoning effort mapping source")
-	require.Nil(t, repo.updated)
+	require.NoError(t, err)
+	require.NotNil(t, repo.updated)
+	require.Empty(t, repo.updated.ReasoningEffortMappings)
 }
 
 func TestAdminService_UpdateGroup_ClearsReasoningPolicyForUnsupportedPlatform(t *testing.T) {

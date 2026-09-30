@@ -99,7 +99,7 @@ func AnthropicToChatCompletionsRequest(req *AnthropicRequest) (*ChatCompletionsR
 		}
 	}
 
-	// Reasoning effort: output_config.effort maps 1:1 (max→xhigh). thinking.type
+	// Reasoning effort: output_config.effort is preserved. thinking.type
 	// itself is ignored (the Responses bridge behaves identically).
 	effort := "medium"
 	if req.OutputConfig != nil && req.OutputConfig.Effort != "" {

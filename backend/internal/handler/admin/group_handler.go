@@ -148,9 +148,8 @@ type CreateGroupRequest struct {
 	ModelsListConfig            service.GroupModelsListConfig             `json:"models_list_config"`
 	// 分组 RPM 上限（0 = 不限制）
 	RPMLimit int `json:"rpm_limit"`
-	// OpenAI/Codex 请求推理强度上限，空字符串表示不限制。
-	MaxReasoningEffort string `json:"max_reasoning_effort"`
-	// OpenAI/Codex 推理强度精确映射。
+	// Deprecated: legacy policy fields are accepted but ignored.
+	MaxReasoningEffort      string                           `json:"max_reasoning_effort"`
 	ReasoningEffortMappings []service.ReasoningEffortMapping `json:"reasoning_effort_mappings"`
 	// 从指定分组复制账号（创建后自动绑定）
 	CopyAccountsFromGroupIDs []int64 `json:"copy_accounts_from_group_ids"`
@@ -211,9 +210,8 @@ type UpdateGroupRequest struct {
 	ModelsListConfig            *service.GroupModelsListConfig             `json:"models_list_config"`
 	// 分组 RPM 上限（0 = 不限制）；nil 表示未提供不改动
 	RPMLimit *int `json:"rpm_limit"`
-	// OpenAI/Codex 请求推理强度上限；空字符串清除，nil 不修改。
-	MaxReasoningEffort *string `json:"max_reasoning_effort"`
-	// nil 不修改，空数组清空，非空数组替换。
+	// Deprecated: legacy policy fields are accepted but ignored.
+	MaxReasoningEffort      *string                           `json:"max_reasoning_effort"`
 	ReasoningEffortMappings *[]service.ReasoningEffortMapping `json:"reasoning_effort_mappings"`
 	// 从指定分组复制账号（同步操作：先清空当前分组的账号绑定，再绑定源分组的账号）
 	CopyAccountsFromGroupIDs []int64 `json:"copy_accounts_from_group_ids"`

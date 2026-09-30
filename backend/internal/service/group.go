@@ -97,10 +97,8 @@ type Group struct {
 	// 一旦设置即接管该分组用户的限流（覆盖用户级 rpm_limit），可被 user-group rpm_override 进一步覆盖。
 	RPMLimit int
 
-	// MaxReasoningEffort limits the effective OpenAI/Codex reasoning effort.
-	// Empty means unlimited; supported values are minimal/low/medium/high/xhigh/max.
-	MaxReasoningEffort string
-	// ReasoningEffortMappings rewrites explicit request values before applying the ceiling.
+	// Deprecated: legacy policy fields are ignored; client effort is forwarded.
+	MaxReasoningEffort      string
 	ReasoningEffortMappings []ReasoningEffortMapping
 
 	// 分组利润控制（五个 token 计费平台可启用）。

@@ -8,6 +8,26 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestTransformClaudeToGemini_PreservesExplicitEffort(t *testing.T) {
+	for _, effort := range []string{"max", "xhigh", "future-effort", "UnannouncedLevel"} {
+		t.Run(effort, func(t *testing.T) {
+			var req ClaudeRequest
+			body := `{"model":"future-model","messages":[{"role":"user","content":"hello"}],"output_config":{"effort":"` + effort + `"},"thinking":{"type":"adaptive","budget_tokens":20000}}`
+			require.NoError(t, json.Unmarshal([]byte(body), &req))
+
+			transformed, err := TransformClaudeToGemini(&req, "project", "future-model")
+			require.NoError(t, err)
+			var out V1InternalRequest
+			require.NoError(t, json.Unmarshal(transformed, &out))
+			thinking := out.Request.GenerationConfig.ThinkingConfig
+			require.NotNil(t, thinking)
+			require.Equal(t, effort, thinking.ThinkingLevel)
+			require.Zero(t, thinking.ThinkingBudget)
+			require.NotContains(t, string(transformed), `"thinkingBudget"`)
+		})
+	}
+}
+
 // TestBuildParts_ThinkingBlockWithoutSignature 测试thinking block无signature时的处理
 func TestBuildParts_ThinkingBlockWithoutSignature(t *testing.T) {
 	tests := []struct {

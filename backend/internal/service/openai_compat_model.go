@@ -92,26 +92,13 @@ func splitOpenAICompatReasoningModel(model string) (normalizedModel string, reas
 }
 
 func openAIReasoningEffortToClaudeOutputEffort(effort string) string {
-	switch strings.TrimSpace(effort) {
-	case "low", "medium", "high":
-		return effort
-	case "xhigh":
-		return "max"
-	default:
-		return ""
-	}
+	return effort
 }
 
-// openAICompatAnthropicReasoningEffort resolves the effort emitted by the
-// Anthropic bridge after the final upstream model is known. Anthropic's max is
-// normally translated to OpenAI xhigh, but GPT-5.6 accepts the original max
-// value on Responses and Chat Completions.
+// Preserve explicit client effort regardless of the mapped upstream model.
 func openAICompatAnthropicReasoningEffort(req *apicompat.AnthropicRequest, upstreamModel, convertedEffort string) string {
-	if req == nil || req.OutputConfig == nil || !strings.EqualFold(strings.TrimSpace(req.OutputConfig.Effort), "max") {
+	if req == nil || req.OutputConfig == nil || strings.TrimSpace(req.OutputConfig.Effort) == "" {
 		return convertedEffort
 	}
-	if normalized := normalizeOpenAIReasoningEffortForModel(req.OutputConfig.Effort, upstreamModel); normalized != "" {
-		return normalized
-	}
-	return convertedEffort
+	return req.OutputConfig.Effort
 }

@@ -1236,18 +1236,13 @@ func filterThinkingBlocksInternal(body []byte, _ bool) []byte {
 }
 
 // NormalizeClaudeOutputEffort normalizes Claude's output_config.effort value.
-// Returns nil for empty or unrecognized values.
+// Keep future effort levels available for usage logging.
 func NormalizeClaudeOutputEffort(raw string) *string {
 	value := strings.ToLower(strings.TrimSpace(raw))
 	if value == "" {
 		return nil
 	}
-	switch value {
-	case "low", "medium", "high", "xhigh", "max":
-		return &value
-	default:
-		return nil
-	}
+	return &value
 }
 
 // DefaultEffortForThinkingEnabled 给"开启了 thinking 但协议层没有 effort 档位概念"
@@ -1315,51 +1310,9 @@ func ApplyThinkingEnabledFallback(effort *string, body []byte, mappedModel strin
 	return DefaultEffortForThinkingEnabled(mappedModel)
 }
 
-// NormalizeGLMOpenAIReasoningEffort rewrites OpenAI Chat Completions
-// reasoning_effort values to the GLM native scale used by z.ai: high/max.
-// It only applies to glm-* mapped models and leaves all other providers untouched.
+// Client effort values are forwarded unchanged, including future GLM levels.
 func NormalizeGLMOpenAIReasoningEffort(body []byte, mappedModel string) ([]byte, bool) {
-	if !strings.HasPrefix(strings.ToLower(strings.TrimSpace(mappedModel)), "glm-") {
-		return body, false
-	}
-
-	path := "reasoning.effort"
-	raw := strings.TrimSpace(gjson.GetBytes(body, path).String())
-	if raw == "" {
-		path = "reasoning_effort"
-		raw = strings.TrimSpace(gjson.GetBytes(body, path).String())
-	}
-	if raw == "" {
-		return body, false
-	}
-
-	mapped := normalizeGLMOpenAIReasoningEffort(raw)
-	if mapped == "" || mapped == raw {
-		return body, false
-	}
-
-	modified, err := sjson.SetBytes(body, path, mapped)
-	if err != nil {
-		return body, false
-	}
-	return modified, true
-}
-
-func normalizeGLMOpenAIReasoningEffort(raw string) string {
-	value := strings.ToLower(strings.TrimSpace(raw))
-	if value == "" {
-		return ""
-	}
-	value = strings.NewReplacer("-", "", "_", "", " ", "").Replace(value)
-
-	switch value {
-	case "low", "medium", "high":
-		return "high"
-	case "xhigh", "extrahigh", "max", "ultracode":
-		return "max"
-	default:
-		return ""
-	}
+	return body, false
 }
 
 // =========================

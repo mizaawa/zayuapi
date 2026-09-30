@@ -55,7 +55,7 @@ func ResponsesToAnthropicRequest(req *ResponsesRequest) (*AnthropicRequest, erro
 	if req.Reasoning != nil && req.Reasoning.Effort != "" {
 		effort := mapResponsesEffortToAnthropic(req.Reasoning.Effort)
 		out.OutputConfig = &AnthropicOutputConfig{Effort: effort}
-		// Enable thinking for non-low efforts
+		// Preserve the existing thinking configuration independently of the effort value.
 		if effort != "low" {
 			out.Thinking = &AnthropicThinking{
 				Type:         "enabled",
@@ -67,7 +67,6 @@ func ResponsesToAnthropicRequest(req *ResponsesRequest) (*AnthropicRequest, erro
 	return out, nil
 }
 
-// defaultThinkingBudget returns a sensible thinking budget based on effort level.
 func defaultThinkingBudget(effort string) int {
 	switch effort {
 	case "low":
@@ -83,18 +82,9 @@ func defaultThinkingBudget(effort string) int {
 	}
 }
 
-// mapResponsesEffortToAnthropic converts OpenAI Responses reasoning effort to
-// Anthropic effort levels. Reverse of mapAnthropicEffortToResponses.
-//
-//	low    → low
-//	medium → medium
-//	high   → high
-//	xhigh  → max
+// mapResponsesEffortToAnthropic preserves the client value across API formats.
 func mapResponsesEffortToAnthropic(effort string) string {
-	if effort == "xhigh" {
-		return "max"
-	}
-	return effort // low→low, medium→medium, high→high, unknown→passthrough
+	return effort
 }
 
 // convertResponsesInputToAnthropic extracts system prompt and messages from

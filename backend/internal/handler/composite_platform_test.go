@@ -94,13 +94,13 @@ func TestOpenAIReasoningEffortPolicyForCompositeTarget(t *testing.T) {
 	openAICtx.Request = httptest.NewRequest("POST", "/v1/responses", nil)
 	openAICtx.Request = openAICtx.Request.WithContext(service.WithResolvedTargetPlatform(openAICtx.Request.Context(), service.PlatformOpenAI))
 	got, changed := applyOpenAIReasoningEffortPolicyForRequest(openAICtx, apiKey, body)
-	require.True(t, changed)
-	require.JSONEq(t, `{"reasoning":{"effort":"medium"}}`, string(got))
+	require.False(t, changed)
+	require.Equal(t, body, got)
 
 	bindOpenAIReasoningEffortPolicyForMessagesRequest(openAICtx, apiKey, []byte(`{"output_config":{"effort":"max"}}`))
 	bound, changed := service.ApplyOpenAIReasoningEffortPolicyFromContext(openAICtx.Request.Context(), body)
-	require.True(t, changed)
-	require.JSONEq(t, `{"reasoning":{"effort":"medium"}}`, string(bound))
+	require.False(t, changed)
+	require.Equal(t, body, bound)
 
 	omittedCtx, _ := gin.CreateTestContext(httptest.NewRecorder())
 	omittedCtx.Request = httptest.NewRequest("POST", "/v1/messages", nil)

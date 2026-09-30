@@ -330,29 +330,11 @@ func normalizeOpenAICompactRequestBody(body []byte) ([]byte, bool, error) {
 }
 
 func normalizeOpenAICodexCompactReasoningEffortForAccount(c *gin.Context, account *Account, body []byte) ([]byte, bool, error) {
-	if account == nil || !account.IsOpenAIOAuth() || !isOpenAIResponsesCompactPath(c) {
-		return body, false, nil
-	}
-
-	requestedModel := strings.TrimSpace(gjson.GetBytes(body, "model").String())
-	effectiveModel := account.GetMappedModel(requestedModel)
-	return normalizeOpenAICodexCompactReasoningEffort(body, effectiveModel)
+	return body, false, nil
 }
 
 func normalizeOpenAICodexCompactReasoningEffort(body []byte, effectiveModel string) ([]byte, bool, error) {
-	if !isOpenAIGPT56Model(effectiveModel) ||
-		!strings.EqualFold(strings.TrimSpace(gjson.GetBytes(body, "reasoning.effort").String()), "max") {
-		return body, false, nil
-	}
-
-	// Codex Ultra 在客户端编排层会下发 max；ChatGPT compact 端点目前只接受到
-	// xhigh。这里只降级 OpenAI OAuth 的 GPT-5.6 compact 子请求，普通 Responses、
-	// API Key 请求和其他平台的 OAuth 请求保留 max。
-	normalized, err := sjson.SetBytes(body, "reasoning.effort", "xhigh")
-	if err != nil {
-		return body, false, fmt.Errorf("normalize codex compact reasoning effort: %w", err)
-	}
-	return normalized, true, nil
+	return body, false, nil
 }
 
 func resolveOpenAICompactSessionID(c *gin.Context) string {
@@ -483,7 +465,13 @@ func deriveOpenAIReasoningEffortFromModel(model string) string {
 		return ""
 	}
 
-	return normalizeRecordedOpenAIReasoningEffort(parts[len(parts)-1])
+	// Only infer known suffixes; arbitrary model names are not effort levels.
+	switch suffix := parts[len(parts)-1]; suffix {
+	case "low", "medium", "high", "xhigh", "extrahigh", "max":
+		return normalizeRecordedOpenAIReasoningEffort(suffix)
+	default:
+		return ""
+	}
 }
 
 // deriveOpenAIReasoningEffortFromModelCandidates 依次对每个候选模型做后缀推导，
@@ -810,10 +798,8 @@ func isOpenAICodexModel(model string) bool {
 	return strings.Contains(strings.ToLower(strings.TrimSpace(model)), "codex")
 }
 
-// extractOpenAIReasoningEffortFromBody 按优先级传入模型候选（如 upstreamModel,
-// billingModel, originalModel）：显式 effort 的模型归一化（max 保留判定）用第一个
-// 非空候选；body 未携带 effort 时的模型后缀推导依次尝试每个候选——OAuth 的
-// normalizeCodexModel 会剥掉 upstreamModel 的 effort 后缀，只有原始模型名还留着。
+// Explicit effort values are independent of the model. If omitted, try known
+// suffixes on each model candidate, including the original pre-mapping model.
 func extractOpenAIReasoningEffortFromBody(body []byte, modelCandidates ...string) *string {
 	reasoningEffort := strings.TrimSpace(gjson.GetBytes(body, "reasoning.effort").String())
 	if reasoningEffort == "" {
@@ -1453,30 +1439,10 @@ func extractOpenAIReasoningEffort(reqBody map[string]any, modelCandidates ...str
 }
 
 func normalizeOpenAIReasoningEffort(raw string) string {
-	value := strings.ToLower(strings.TrimSpace(raw))
-	if value == "" {
-		return ""
-	}
-
-	// Normalize separators for "x-high"/"x_high" variants.
-	value = strings.NewReplacer("-", "", "_", "", " ", "").Replace(value)
-
-	switch value {
-	case "none", "minimal":
-		return ""
-	case "low", "medium", "high":
-		return value
-	case "xhigh", "extrahigh", "max":
-		return "xhigh"
-	default:
-		// Only store known effort levels for now to keep UI consistent.
-		return ""
-	}
+	return normalizeRecordedOpenAIReasoningEffort(raw)
 }
 
-// normalizeRecordedOpenAIReasoningEffort preserves the effort explicitly sent
-// by the client. Protocol adapters may translate max to xhigh for an upstream
-// that does not support max, but usage records should reflect the request.
+// Canonicalize known display aliases while retaining future upstream values.
 func normalizeRecordedOpenAIReasoningEffort(raw string) string {
 	value := strings.ToLower(strings.TrimSpace(raw))
 	if value == "" {
@@ -1492,13 +1458,10 @@ func normalizeRecordedOpenAIReasoningEffort(raw string) string {
 		}
 		return value
 	default:
-		return ""
+		return strings.TrimSpace(raw)
 	}
 }
 
 func normalizeOpenAIReasoningEffortForModel(raw, model string) string {
-	if strings.EqualFold(strings.TrimSpace(raw), "max") && isOpenAIGPT56Model(model) {
-		return "max"
-	}
 	return normalizeOpenAIReasoningEffort(raw)
 }

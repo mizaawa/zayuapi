@@ -3657,6 +3657,11 @@ func convertClaudeGenerationConfig(req map[string]any) map[string]any {
 	if stopSeq, ok := req["stop_sequences"].([]any); ok && len(stopSeq) > 0 {
 		out["stopSequences"] = stopSeq
 	}
+	if outputConfig, ok := req["output_config"].(map[string]any); ok {
+		if effort, ok := outputConfig["effort"].(string); ok && effort != "" {
+			out["thinkingConfig"] = map[string]any{"thinkingLevel": effort}
+		}
+	}
 	if len(out) == 0 {
 		return nil
 	}

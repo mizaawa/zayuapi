@@ -39,11 +39,14 @@ func TestOpenAIGatewayForwardReasoningEffortUsageMatchesWire(t *testing.T) {
 		name        string
 		accountType string
 		ceiling     string
+		effort      string
 		want        string
 	}{
 		{name: "api_key_max", accountType: AccountTypeAPIKey, want: "max"},
 		{name: "oauth_max", accountType: AccountTypeOAuth, want: "max"},
-		{name: "group_cap_is_recorded", accountType: AccountTypeAPIKey, ceiling: "xhigh", want: "xhigh"},
+		{name: "legacy_group_cap_is_ignored", accountType: AccountTypeAPIKey, ceiling: "xhigh", want: "max"},
+		{name: "api_key_future_effort", accountType: AccountTypeAPIKey, effort: "future-level", ceiling: "low", want: "future-level"},
+		{name: "oauth_future_effort", accountType: AccountTypeOAuth, effort: "future-level", ceiling: "low", want: "future-level"},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			upstream := &httpUpstreamRecorder{resp: &http.Response{
@@ -66,7 +69,12 @@ func TestOpenAIGatewayForwardReasoningEffortUsageMatchesWire(t *testing.T) {
 			c, _ := gin.CreateTestContext(httptest.NewRecorder())
 			c.Request = httptest.NewRequest(http.MethodPost, "/openai/v1/responses", nil)
 			SetOpenAIClientTransport(c, OpenAIClientTransportHTTP)
-			body := []byte(`{"model":"gpt-6-astra","stream":false,"instructions":"test","input":"hello","reasoning":{"effort":"max"}}`)
+			effort := tt.effort
+			if effort == "" {
+				effort = "max"
+			}
+			body, err := json.Marshal(map[string]any{"model": "gpt-6-astra", "stream": false, "instructions": "test", "input": "hello", "reasoning": map[string]any{"effort": effort}})
+			require.NoError(t, err)
 			body, _ = ApplyOpenAIReasoningEffortPolicy(body, tt.ceiling, nil)
 
 			result, err := svc.Forward(context.Background(), c, account, body)

@@ -105,9 +105,8 @@ type APIKeyAuthGroupSnapshot struct {
 	// RPMLimit 分组级每分钟请求数上限（0 = 不限制）；用于 billing_cache_service.checkRPM 级联判断。
 	RPMLimit int `json:"rpm_limit"`
 
-	// MaxReasoningEffort OpenAI/Codex 请求的推理强度上限，空字符串表示不限制。
-	MaxReasoningEffort string `json:"max_reasoning_effort,omitempty"`
-	// ReasoningEffortMappings rewrites explicit effort values before the ceiling.
+	// Deprecated: retained for old snapshots, ignored when forwarding.
+	MaxReasoningEffort      string                   `json:"max_reasoning_effort,omitempty"`
 	ReasoningEffortMappings []ReasoningEffortMapping `json:"reasoning_effort_mappings"`
 
 	// 高峰时段倍率：PeakRateEnabled 为 true 且请求时刻处于 [PeakStart, PeakEnd) 时，

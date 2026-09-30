@@ -43,19 +43,19 @@ func TestPatchGrokResponsesBodySetsMappedModelAndDropsUnsupportedFields(t *testi
 	require.Equal(t, "high", gjson.GetBytes(patched, "reasoning.effort").String())
 }
 
-func TestPatchGrokResponsesBodySanitizesComposerReasoningParameters(t *testing.T) {
+func TestPatchGrokResponsesBodyPreservesComposerReasoningParameters(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
 		name          string
 		upstreamModel string
-		wantReasoning bool
 	}{
 		{name: "composer fast", upstreamModel: "grok-composer-2.5-fast"},
 		{name: "composer shorthand", upstreamModel: "grok-composer"},
 		{name: "composer legacy alias", upstreamModel: "composer-2.5"},
 		{name: "provider-prefixed composer", upstreamModel: "xai/grok-composer-2.5-fast"},
-		{name: "grok 4.5", upstreamModel: "grok-4.5", wantReasoning: true},
+		{name: "grok 4.5", upstreamModel: "grok-4.5"},
+		{name: "future model", upstreamModel: "grok-future"},
 	}
 
 	body := []byte(`{
@@ -73,16 +73,10 @@ func TestPatchGrokResponsesBodySanitizesComposerReasoningParameters(t *testing.T
 			require.True(t, json.Valid(patched))
 			require.Equal(t, tt.upstreamModel, gjson.GetBytes(patched, "model").String())
 
-			if tt.wantReasoning {
-				require.Equal(t, "medium", gjson.GetBytes(patched, "reasoning.effort").String())
-				require.Equal(t, "medium", gjson.GetBytes(patched, "reasoning_effort").String())
-				require.Equal(t, "medium", gjson.GetBytes(patched, "reasoningEffort").String())
-				return
-			}
-
-			require.False(t, gjson.GetBytes(patched, "reasoning").Exists())
-			require.False(t, gjson.GetBytes(patched, "reasoning_effort").Exists())
-			require.False(t, gjson.GetBytes(patched, "reasoningEffort").Exists())
+			require.Equal(t, "medium", gjson.GetBytes(patched, "reasoning.effort").String())
+			require.Equal(t, "auto", gjson.GetBytes(patched, "reasoning.summary").String())
+			require.Equal(t, "medium", gjson.GetBytes(patched, "reasoning_effort").String())
+			require.Equal(t, "medium", gjson.GetBytes(patched, "reasoningEffort").String())
 		})
 	}
 }

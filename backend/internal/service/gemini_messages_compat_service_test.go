@@ -18,6 +18,28 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestConvertClaudeMessagesToGemini_PreservesExplicitEffort(t *testing.T) {
+	for _, effort := range []string{"max", "xhigh", "future-effort", "UnannouncedLevel"} {
+		t.Run(effort, func(t *testing.T) {
+			body, err := json.Marshal(map[string]any{
+				"model":         "future-model",
+				"messages":      []map[string]any{{"role": "user", "content": "hello"}},
+				"output_config": map[string]any{"effort": effort},
+				"thinking":      map[string]any{"type": "enabled", "budget_tokens": 10000},
+			})
+			require.NoError(t, err)
+			converted, err := convertClaudeMessagesToGeminiGenerateContent(body)
+			require.NoError(t, err)
+			var req map[string]any
+			require.NoError(t, json.Unmarshal(converted, &req))
+			config := req["generationConfig"].(map[string]any)
+			thinking := config["thinkingConfig"].(map[string]any)
+			require.Equal(t, effort, thinking["thinkingLevel"])
+			require.NotContains(t, thinking, "thinkingBudget")
+		})
+	}
+}
+
 type geminiCompatHTTPUpstreamStub struct {
 	response *http.Response
 	err      error

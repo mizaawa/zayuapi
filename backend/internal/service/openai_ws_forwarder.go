@@ -215,9 +215,8 @@ type OpenAIWSIngressHooks struct {
 	// before channel or account mapping. Ingress modes preserve it for usage
 	// attribution while MapRequestModel determines the upstream model.
 	InitialRequestModel string
-	// MaxReasoningEffort limits explicit reasoning effort values for this WS session.
-	MaxReasoningEffort string
-	// ReasoningEffortMappings rewrites explicit effort values for this WS session.
+	// Deprecated: legacy policy hooks are ignored when forwarding.
+	MaxReasoningEffort      string
 	ReasoningEffortMappings []ReasoningEffortMapping
 	BeforeTurn              func(turn int) error
 	BeforeRequest           func(turn int, payload []byte, originalModel string) error

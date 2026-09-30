@@ -100,7 +100,7 @@ func TestApplyOpenAICompatModelNormalization(t *testing.T) {
 
 		require.Equal(t, "gpt-5.4", req.Model)
 		require.NotNil(t, req.OutputConfig)
-		require.Equal(t, "max", req.OutputConfig.Effort)
+		require.Equal(t, "xhigh", req.OutputConfig.Effort)
 	})
 
 	t.Run("explicit output config wins over model suffix", func(t *testing.T) {
@@ -266,12 +266,12 @@ func TestForwardAsAnthropic_PreservesMaxForFinalGPT56ResponsesModel(t *testing.T
 			wantEffort:    "max",
 		},
 		{
-			name:       "old model still maps max to xhigh",
+			name:       "old model preserves max",
 			account:    rawGPT56ResponsesAPIKeyAccount("gpt-5.5", "gpt-5.5"),
 			model:      "gpt-5.5",
 			effort:     "max",
 			wantModel:  "gpt-5.5",
-			wantEffort: "xhigh",
+			wantEffort: "max",
 		},
 		{
 			name:       "GPT56 default remains medium",

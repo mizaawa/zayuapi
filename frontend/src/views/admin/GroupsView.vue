@@ -609,14 +609,6 @@
           />
           <p class="input-hint">{{ t("admin.groups.form.rpmLimitHint") }}</p>
         </div>
-        <ReasoningEffortPolicyFields
-          v-if="supportsReasoningEffortPolicyPlatform(createForm.platform)"
-          ref="createReasoningEffortPolicyRef"
-          id-prefix="create-group-reasoning"
-          :platform="createForm.platform"
-          v-model:max-effort="createForm.max_reasoning_effort"
-          v-model:mappings="createForm.reasoning_effort_mappings"
-        />
         <div
           v-if="createForm.subscription_type !== 'subscription'"
           data-tour="group-form-exclusive"
@@ -2231,14 +2223,6 @@
           />
           <p class="input-hint">{{ t("admin.groups.form.rpmLimitHint") }}</p>
         </div>
-        <ReasoningEffortPolicyFields
-          v-if="supportsReasoningEffortPolicyPlatform(editForm.platform)"
-          ref="editReasoningEffortPolicyRef"
-          id-prefix="edit-group-reasoning"
-          :platform="editForm.platform"
-          v-model:max-effort="editForm.max_reasoning_effort"
-          v-model:mappings="editForm.reasoning_effort_mappings"
-        />
         <div v-if="editForm.subscription_type !== 'subscription'">
           <div class="mb-1.5 flex items-center gap-1">
             <label class="text-sm font-medium text-gray-700 dark:text-gray-300">
@@ -4210,7 +4194,6 @@ import Icon from "@/components/icons/Icon.vue";
 import GroupRateMultipliersModal from "@/components/admin/group/GroupRateMultipliersModal.vue";
 import GroupRPMOverridesModal from "@/components/admin/group/GroupRPMOverridesModal.vue";
 import GroupCapacityBadge from "@/components/common/GroupCapacityBadge.vue";
-import ReasoningEffortPolicyFields from "@/components/admin/group/ReasoningEffortPolicyFields.vue";
 import PricingEntryCard from "@/components/admin/channel/PricingEntryCard.vue";
 import type { PricingFormEntry } from "@/components/admin/channel/types";
 import {
@@ -4251,13 +4234,6 @@ import {
   validateProfitControlFormState,
   type ProfitControlFormState,
 } from "./groupsProfitControl";
-import {
-  normalizeReasoningEffortForPlatform,
-  reasoningEffortMappingsToAPI,
-  reasoningEffortMappingsToRows,
-  supportsReasoningEffortPolicyPlatform,
-  type ReasoningEffortMappingRow,
-} from "./groupsReasoningEffort";
 import {
   getDefaultImagePreviewPrice,
   getDefaultVideoPreviewPrice,
@@ -4787,12 +4763,6 @@ const createModelsListState = reactive(createInitialModelsListState());
 const editModelsListState = reactive(createInitialModelsListState());
 const createModelsListLoading = ref(false);
 const editModelsListLoading = ref(false);
-type ReasoningEffortPolicyFieldsExpose = {
-  validate: () => boolean;
-  resetValidation: () => void;
-};
-const createReasoningEffortPolicyRef = ref<ReasoningEffortPolicyFieldsExpose | null>(null);
-const editReasoningEffortPolicyRef = ref<ReasoningEffortPolicyFieldsExpose | null>(null);
 const modelsListCandidatesTracker = createModelsListCandidatesTracker();
 const createModelsListSelectedCount = computed(
   () => createModelsListState.items.filter((item) => item.selected).length,
@@ -4865,8 +4835,6 @@ const createForm = reactive({
   copy_accounts_from_group_ids: [] as number[],
   // 分组级 RPM 限制（每用户每分钟最大请求数；0 = 不限制）
   rpm_limit: 0 as number,
-  max_reasoning_effort: "",
-  reasoning_effort_mappings: [] as ReasoningEffortMappingRow[],
 });
 
 // 简单账号类型（用于模型路由选择）
@@ -5223,8 +5191,6 @@ const editForm = reactive({
   copy_accounts_from_group_ids: [] as number[],
   // 分组级 RPM 限制（每用户每分钟最大请求数；0 = 不限制）
   rpm_limit: 0 as number,
-  max_reasoning_effort: "",
-  reasoning_effort_mappings: [] as ReasoningEffortMappingRow[],
 });
 
 type ImagePricingFormState = {
@@ -5659,9 +5625,6 @@ const closeCreateModal = () => {
   createForm.mcp_xml_inject = true;
   createForm.copy_accounts_from_group_ids = [];
   createForm.rpm_limit = 0;
-  createForm.max_reasoning_effort = "";
-  createForm.reasoning_effort_mappings = [];
-  createReasoningEffortPolicyRef.value?.resetValidation();
   resetModelsListState(createModelsListState);
   createModelRoutingRules.value = [];
 };
@@ -5713,13 +5676,6 @@ const handleCreateGroup = async () => {
     appStore.showError(t("admin.groups.nameRequired"));
     return;
   }
-  if (
-    supportsReasoningEffortPolicyPlatform(createForm.platform) &&
-    createReasoningEffortPolicyRef.value &&
-    !createReasoningEffortPolicyRef.value.validate()
-  ) {
-    return;
-  }
   if (!validateProfitControlForm(createForm)) {
     return;
   }
@@ -5759,9 +5715,6 @@ const handleCreateGroup = async () => {
               exact_model_mappings: createForm.exact_model_mappings,
             })
           : undefined,
-      reasoning_effort_mappings: reasoningEffortMappingsToAPI(
-        createForm.reasoning_effort_mappings,
-      ),
       // 利润控制：界面百分比转小数提交；仅五个 token 平台可启用
       profit_control_enabled:
         isProfitControlPlatform(createForm.platform) &&
@@ -5897,14 +5850,6 @@ const handleEdit = async (group: AdminGroup) => {
   editForm.mcp_xml_inject = group.mcp_xml_inject ?? true;
   editForm.copy_accounts_from_group_ids = []; // 复制账号字段每次编辑时重置为空
   editForm.rpm_limit = group.rpm_limit ?? 0;
-  editForm.max_reasoning_effort = normalizeReasoningEffortForPlatform(
-    group.platform,
-    group.max_reasoning_effort,
-  );
-  editForm.reasoning_effort_mappings = reasoningEffortMappingsToRows(
-    group.reasoning_effort_mappings,
-    group.platform,
-  );
   resetModelsListState(editModelsListState, group.models_list_config);
   // 加载模型路由规则（异步加载账号名称）
   editModelRoutingRules.value = await convertApiFormatToRoutingRules(
@@ -5921,9 +5866,6 @@ const closeEditModal = () => {
   clearAllAccountSearchState();
   showEditModal.value = false;
   editingGroup.value = null;
-  editForm.max_reasoning_effort = "";
-  editForm.reasoning_effort_mappings = [];
-  editReasoningEffortPolicyRef.value?.resetValidation();
   editModelRoutingRules.value = [];
   editForm.copy_accounts_from_group_ids = [];
   editForm.peak_rate_enabled = false;
@@ -5951,13 +5893,6 @@ const handleUpdateGroup = async () => {
   if (!editingGroup.value) return;
   if (!editForm.name.trim()) {
     appStore.showError(t("admin.groups.nameRequired"));
-    return;
-  }
-  if (
-    supportsReasoningEffortPolicyPlatform(editForm.platform) &&
-    editReasoningEffortPolicyRef.value &&
-    !editReasoningEffortPolicyRef.value.validate()
-  ) {
     return;
   }
   if (!validateProfitControlForm(editForm)) {
@@ -6006,9 +5941,6 @@ const handleUpdateGroup = async () => {
               exact_model_mappings: editForm.exact_model_mappings,
             })
           : undefined,
-      reasoning_effort_mappings: reasoningEffortMappingsToAPI(
-        editForm.reasoning_effort_mappings,
-      ),
       // 利润控制：界面百分比转小数提交；仅五个 token 平台可启用
       profit_control_enabled:
         isProfitControlPlatform(editForm.platform) &&
@@ -6364,15 +6296,6 @@ watch(
       createForm.profit_min_margin_percent = 0;
       createForm.profit_safety_buffer_percent = 0;
     }
-    createForm.max_reasoning_effort = normalizeReasoningEffortForPlatform(
-      newVal,
-      createForm.max_reasoning_effort,
-    );
-    createForm.reasoning_effort_mappings = reasoningEffortMappingsToRows(
-      reasoningEffortMappingsToAPI(createForm.reasoning_effort_mappings),
-      newVal,
-    );
-    createReasoningEffortPolicyRef.value?.resetValidation();
     if (!["openai", "antigravity", "anthropic", "gemini"].includes(newVal)) {
       createForm.require_oauth_only = false;
       createForm.require_privacy_set = false;
@@ -6414,15 +6337,6 @@ watch(
       editForm.profit_min_margin_percent = 0;
       editForm.profit_safety_buffer_percent = 0;
     }
-    editForm.max_reasoning_effort = normalizeReasoningEffortForPlatform(
-      newVal,
-      editForm.max_reasoning_effort,
-    );
-    editForm.reasoning_effort_mappings = reasoningEffortMappingsToRows(
-      reasoningEffortMappingsToAPI(editForm.reasoning_effort_mappings),
-      newVal,
-    );
-    editReasoningEffortPolicyRef.value?.resetValidation();
     if (!["openai", "antigravity", "anthropic", "gemini"].includes(newVal)) {
       editForm.require_oauth_only = false;
       editForm.require_privacy_set = false;

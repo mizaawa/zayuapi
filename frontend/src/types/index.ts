@@ -548,8 +548,8 @@ export interface Group {
   platform: GroupPlatform
   rate_multiplier: number
   rpm_limit?: number // Group-level RPM cap (0 = unlimited); overrides user-level rpm_limit when set
-  max_reasoning_effort?: string // OpenAI/Codex reasoning ceiling; empty means unlimited
-  reasoning_effort_mappings?: ReasoningEffortMapping[]
+  max_reasoning_effort?: string // Deprecated: ignored; client reasoning effort is forwarded unchanged
+  reasoning_effort_mappings?: ReasoningEffortMapping[] // Deprecated: ignored
   is_exclusive: boolean
   status: 'active' | 'inactive'
   /** Present on user API-key selector options when an admin blocked this group. */
@@ -799,8 +799,8 @@ export interface CreateGroupRequest {
   model_routing?: Record<string, number[]> | null
   model_routing_enabled?: boolean
   rpm_limit?: number
-  max_reasoning_effort?: string
-  reasoning_effort_mappings?: ReasoningEffortMapping[]
+  max_reasoning_effort?: string // Deprecated: ignored
+  reasoning_effort_mappings?: ReasoningEffortMapping[] // Deprecated: ignored
   require_oauth_only?: boolean
   require_privacy_set?: boolean
   // 从指定分组复制账号
@@ -856,8 +856,8 @@ export interface UpdateGroupRequest {
   model_routing?: Record<string, number[]> | null
   model_routing_enabled?: boolean
   rpm_limit?: number
-  max_reasoning_effort?: string
-  reasoning_effort_mappings?: ReasoningEffortMapping[]
+  max_reasoning_effort?: string // Deprecated: ignored
+  reasoning_effort_mappings?: ReasoningEffortMapping[] // Deprecated: ignored
   require_oauth_only?: boolean
   require_privacy_set?: boolean
   copy_accounts_from_group_ids?: number[]
