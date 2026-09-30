@@ -6821,6 +6821,51 @@
                 data-testid="disable-temp-unschedulable-toggle"
               />
             </div>
+
+            <div class="flex items-center justify-between gap-4 border-t border-gray-100 pt-5 dark:border-dark-700">
+              <div class="min-w-0 flex-1">
+                <label class="text-sm font-medium text-gray-700 dark:text-gray-300">
+                  {{ localText('强制自定义菜单新页面打开', 'Always open custom menus in a new tab') }}
+                </label>
+                <p class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+                  {{ localText('开启后，自定义菜单直接在新页面打开，保留原有页面参数。', 'When enabled, custom menus open directly in a new tab with their existing page parameters.') }}
+                </p>
+              </div>
+              <Toggle
+                v-model="form.custom_menu_force_new_tab"
+                class="shrink-0"
+                data-testid="custom-menu-force-new-tab-toggle"
+              />
+            </div>
+
+            <div class="border-t border-gray-100 pt-5 dark:border-dark-700">
+              <div class="flex items-center justify-between gap-4">
+                <div>
+                  <label class="text-sm font-medium text-gray-700 dark:text-gray-300">
+                    {{ t('admin.settings.features.registrationAnnouncement.enabled') }}
+                  </label>
+                  <p class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+                    {{ t('admin.settings.features.registrationAnnouncement.enabledHint') }}
+                  </p>
+                </div>
+                <Toggle
+                  v-model="form.registration_announcement_enabled"
+                  data-testid="registration-announcement-toggle"
+                />
+              </div>
+              <div v-if="form.registration_announcement_enabled" class="mt-4">
+                <label class="input-label" for="registration-announcement-content">
+                  {{ t('admin.settings.features.registrationAnnouncement.content') }}
+                </label>
+                <textarea
+                  id="registration-announcement-content"
+                  v-model="form.registration_announcement_content"
+                  rows="4"
+                  class="input min-h-24 resize-y"
+                  :placeholder="t('admin.settings.features.registrationAnnouncement.contentPlaceholder')"
+                ></textarea>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -9293,6 +9338,8 @@ type SettingsForm = Omit<
 
 const form = reactive<SettingsForm>({
   registration_enabled: true,
+  registration_announcement_enabled: false,
+  registration_announcement_content: "",
   email_verify_enabled: false,
   registration_email_suffix_whitelist: [],
   promo_code_enabled: true,
@@ -9360,6 +9407,7 @@ const form = reactive<SettingsForm>({
   payment_alipay_mobile_precreate_deep_link: false,
   table_default_page_size: tablePageSizeDefault,
   table_page_size_options: [10, 20, 50, 100],
+  custom_menu_force_new_tab: false,
   custom_menu_items: [] as Array<{
     id: string;
     label: string;
@@ -10542,6 +10590,8 @@ async function loadSettings() {
         (form as Record<string, unknown>)[key] = value;
       }
     }
+    form.registration_announcement_enabled = settings.registration_announcement_enabled ?? false;
+    form.registration_announcement_content = settings.registration_announcement_content ?? "";
     syncCaptchaProviderSelection();
     if (!form.claude_oauth_system_prompt_blocks?.trim()) {
       form.claude_oauth_system_prompt_blocks =
@@ -10911,6 +10961,8 @@ async function saveSettings() {
 
     const payload: UpdateSettingsRequest = {
       registration_enabled: form.registration_enabled,
+      registration_announcement_enabled: form.registration_announcement_enabled,
+      registration_announcement_content: form.registration_announcement_content.trim(),
       email_verify_enabled: form.email_verify_enabled,
       registration_email_suffix_whitelist:
         registrationEmailSuffixWhitelistTags.value.map((suffix) =>
@@ -10958,6 +11010,7 @@ async function saveSettings() {
       table_default_page_size: form.table_default_page_size,
       table_page_size_options: form.table_page_size_options,
       custom_menu_items: form.custom_menu_items,
+      custom_menu_force_new_tab: form.custom_menu_force_new_tab,
       custom_endpoints: form.custom_endpoints,
       frontend_url: form.frontend_url,
       smtp_host: form.smtp_host,

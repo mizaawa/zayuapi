@@ -110,3 +110,47 @@ describe('RegisterView invitation layout', () => {
     expect(wrapper.get('#invitation_code').exists()).toBe(true)
   })
 })
+
+describe('RegisterView registration announcement', () => {
+  beforeEach(() => {
+    getPublicSettingsMock.mockReset()
+    getPublicSettingsMock.mockResolvedValue(publicSettings)
+  })
+
+  it('shows enabled plain-text content between the title and email field', async () => {
+    const content = 'Welcome to Sub2API.\n<img src=x onerror=alert(1)>'
+    getPublicSettingsMock.mockResolvedValueOnce({
+      ...publicSettings,
+      registration_announcement_enabled: true,
+      registration_announcement_content: content
+    })
+
+    const wrapper = mountRegister()
+    await flushPromises()
+
+    const announcement = wrapper.get('[data-testid="registration-announcement"]')
+    expect(announcement.get('p.mt-1').text()).toBe(content)
+    expect(announcement.find('img').exists()).toBe(false)
+    expect(
+      wrapper.get('h2').element.compareDocumentPosition(announcement.element) &
+        Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy()
+    expect(
+      announcement.element.compareDocumentPosition(wrapper.get('#email').element) &
+        Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy()
+  })
+
+  it.each([
+    { registration_announcement_enabled: false, registration_announcement_content: 'Saved notice' },
+    { registration_announcement_enabled: true, registration_announcement_content: ' \n\t ' },
+    {}
+  ])('hides disabled, blank, or missing announcements: %j', async (settings) => {
+    getPublicSettingsMock.mockResolvedValueOnce({ ...publicSettings, ...settings })
+
+    const wrapper = mountRegister()
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="registration-announcement"]').exists()).toBe(false)
+  })
+})

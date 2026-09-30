@@ -1,8 +1,8 @@
 <template>
   <div class="grid grid-cols-2 gap-4 lg:grid-cols-4" data-testid="dashboard-financial-stats">
     <div v-for="metric in metrics" :key="metric.key" class="card min-w-0 p-4" :data-metric="metric.key">
-      <div class="flex h-full flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
-        <div class="w-fit shrink-0 rounded-lg p-2" :class="metric.color">
+      <div class="flex items-center gap-3">
+        <div class="shrink-0 rounded-lg p-2" :class="metric.color">
           <svg
             class="h-5 w-5"
             viewBox="0 0 24 24"
@@ -16,12 +16,13 @@
             <path :d="metric.icon" />
           </svg>
         </div>
-        <div class="min-w-0">
+        <div class="min-w-0 flex-1 [container-type:inline-size]">
           <p class="text-xs font-medium text-gray-500 dark:text-gray-400">
             {{ t(`admin.dashboard.${metric.label}`) }}
           </p>
           <p
-            class="break-all text-xl font-bold tabular-nums text-gray-900 dark:text-white"
+            class="whitespace-nowrap text-xl font-bold tabular-nums text-gray-900 dark:text-white"
+            :style="{ fontSize: `min(1.25rem, calc(100cqw / ${formatAmount(stats[metric.key], true).length * 0.6}))` }"
             :title="formatAmount(stats[metric.key], false)"
             :aria-label="formatAmount(stats[metric.key], false)"
           >

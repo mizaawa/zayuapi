@@ -14,6 +14,12 @@ export default {
         payment: 'Payment',
       },
       features: {
+        registrationAnnouncement: {
+          enabled: 'Registration page announcement',
+          enabledHint: 'Show an announcement above the registration form when enabled.',
+          content: 'Announcement content',
+          contentPlaceholder: 'Enter the announcement shown on the registration page',
+        },
         channelMonitor: {
           title: 'Channel Monitor',
           description: 'Periodically probe configured channels and surface availability / latency to users. Turning it off stops the scheduler and returns an empty list on the user page.',

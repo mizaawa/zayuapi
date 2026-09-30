@@ -79,6 +79,7 @@ export default {
     requests: 'Requests',
     tokens: 'Tokens',
     loadFailed: 'Failed to load leaderboard',
+    updating: 'Updating...',
   },
 
   // Groups (shared)

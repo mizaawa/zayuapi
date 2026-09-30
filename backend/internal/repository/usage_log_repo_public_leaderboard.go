@@ -43,17 +43,19 @@ func (r *usageLogRepository) GetPublicUserSpendingRanking(ctx context.Context, s
 			LIMIT $3
 		)
 		SELECT
-			user_id,
-			email,
-			username,
-			actual_cost,
-			requests,
-			tokens,
-			total_actual_cost,
-			total_requests,
-			total_tokens
+			ranked.user_id,
+			ranked.email,
+			ranked.username,
+			COALESCE(avatar.url, '') AS avatar_url,
+			ranked.actual_cost,
+			ranked.requests,
+			ranked.tokens,
+			ranked.total_actual_cost,
+			ranked.total_requests,
+			ranked.total_tokens
 		FROM ranked
-		ORDER BY actual_cost DESC, tokens DESC, user_id ASC
+		LEFT JOIN user_avatars avatar ON avatar.user_id = ranked.user_id
+		ORDER BY ranked.actual_cost DESC, ranked.tokens DESC, ranked.user_id ASC
 	`
 
 	rows, err := r.sql.QueryContext(ctx, query, startTime, endTime, limit)
@@ -73,7 +75,7 @@ func (r *usageLogRepository) GetPublicUserSpendingRanking(ctx context.Context, s
 	totalTokens := int64(0)
 	for rows.Next() {
 		var row UserSpendingRankingItem
-		if err = rows.Scan(&row.UserID, &row.Email, &row.Username, &row.ActualCost, &row.Requests, &row.Tokens, &totalActualCost, &totalRequests, &totalTokens); err != nil {
+		if err = rows.Scan(&row.UserID, &row.Email, &row.Username, &row.AvatarURL, &row.ActualCost, &row.Requests, &row.Tokens, &totalActualCost, &totalRequests, &totalTokens); err != nil {
 			return nil, err
 		}
 		ranking = append(ranking, row)

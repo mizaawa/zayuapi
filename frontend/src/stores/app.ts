@@ -327,6 +327,8 @@ export const useAppStore = defineStore('app', () => {
       }
       return Promise.resolve({
         registration_enabled: false,
+        registration_announcement_enabled: false,
+        registration_announcement_content: '',
         email_verify_enabled: false,
         force_email_on_third_party_signup: false,
         registration_email_suffix_whitelist: [],
@@ -351,6 +353,7 @@ export const useAppStore = defineStore('app', () => {
         payment_enabled: false,
         table_default_page_size: 20,
         table_page_size_options: [10, 20, 50, 100],
+        custom_menu_force_new_tab: false,
         custom_menu_items: [],
         custom_endpoints: [],
         linuxdo_oauth_enabled: false,

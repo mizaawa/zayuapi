@@ -740,6 +740,62 @@ describe("admin SettingsView payment visible method controls", () => {
     );
   });
 
+  it("defaults the registration announcement to disabled and preserves content when switched off", async () => {
+    const wrapper = mountView();
+    await flushPromises();
+    await openFeaturesTab(wrapper);
+
+    const toggle = wrapper.get('[data-testid="registration-announcement-toggle"]');
+    expect((toggle.element as HTMLInputElement).checked).toBe(false);
+    expect(wrapper.find("#registration-announcement-content").exists()).toBe(false);
+
+    await toggle.setValue(true);
+    const announcement = wrapper.get("#registration-announcement-content");
+    expect((announcement.element as HTMLTextAreaElement).value).toBe("");
+    await announcement.setValue("Registration notice\nSecond line");
+    await toggle.setValue(false);
+    expect(wrapper.find("#registration-announcement-content").exists()).toBe(false);
+
+    await wrapper.find("form").trigger("submit.prevent");
+    await flushPromises();
+    expect(updateSettings).toHaveBeenCalledWith(
+      expect.objectContaining({
+        registration_announcement_enabled: false,
+        registration_announcement_content: "Registration notice\nSecond line",
+      }),
+    );
+
+    await toggle.setValue(true);
+    expect((wrapper.get("#registration-announcement-content").element as HTMLTextAreaElement).value)
+      .toBe("Registration notice\nSecond line");
+  });
+
+  it("loads and saves an enabled registration announcement", async () => {
+    getSettings.mockResolvedValue({
+      ...baseSettingsResponse,
+      registration_announcement_enabled: true,
+      registration_announcement_content: "Existing registration notice",
+    });
+    const wrapper = mountView();
+    await flushPromises();
+    await openFeaturesTab(wrapper);
+
+    expect((wrapper.get('[data-testid="registration-announcement-toggle"]').element as HTMLInputElement).checked)
+      .toBe(true);
+    const announcement = wrapper.get("#registration-announcement-content");
+    expect((announcement.element as HTMLTextAreaElement).value).toBe("Existing registration notice");
+
+    await announcement.setValue("  Updated registration notice  ");
+    await wrapper.find("form").trigger("submit.prevent");
+    await flushPromises();
+    expect(updateSettings).toHaveBeenCalledWith(
+      expect.objectContaining({
+        registration_announcement_enabled: true,
+        registration_announcement_content: "Updated registration notice",
+      }),
+    );
+  });
+
   it("renders and persists the extended temporary scheduling switch", async () => {
     const wrapper = mountView();
     await flushPromises();
@@ -755,6 +811,48 @@ describe("admin SettingsView payment visible method controls", () => {
     expect(updateSettings).toHaveBeenCalledWith(
       expect.objectContaining({ disable_temp_unschedulable: true }),
     );
+  });
+
+  it("defaults custom menus to embedded pages and saves the new-tab setting in both states", async () => {
+    const wrapper = mountView();
+    await flushPromises();
+    await openFeaturesTab(wrapper);
+
+    expect(wrapper.text()).toContain("强制自定义菜单新页面打开");
+    const toggle = wrapper.get('[data-testid="custom-menu-force-new-tab-toggle"]');
+    expect((toggle.element as HTMLInputElement).checked).toBe(false);
+
+    await toggle.setValue(true);
+    await wrapper.find("form").trigger("submit.prevent");
+    await flushPromises();
+
+    expect(updateSettings).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({ custom_menu_force_new_tab: true }),
+    );
+    expect((toggle.element as HTMLInputElement).checked).toBe(true);
+
+    await toggle.setValue(false);
+    await wrapper.find("form").trigger("submit.prevent");
+    await flushPromises();
+
+    expect(updateSettings).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ custom_menu_force_new_tab: false }),
+    );
+    expect((toggle.element as HTMLInputElement).checked).toBe(false);
+  });
+
+  it("loads the enabled custom menu new-tab setting", async () => {
+    getSettings.mockResolvedValue({
+      ...baseSettingsResponse,
+      custom_menu_force_new_tab: true,
+    });
+    const wrapper = mountView();
+    await flushPromises();
+
+    const toggle = wrapper.get('[data-testid="custom-menu-force-new-tab-toggle"]');
+    expect((toggle.element as HTMLInputElement).checked).toBe(true);
   });
 
   it("renders panel rate limit card and saves settings", async () => {

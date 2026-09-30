@@ -13,6 +13,8 @@ func firstNonEmpty(values ...string) string {
 
 type SystemSettings struct {
 	RegistrationEnabled              bool
+	RegistrationAnnouncementEnabled  bool
+	RegistrationAnnouncementContent  string
 	EmailVerifyEnabled               bool
 	RegistrationEmailSuffixWhitelist []string
 	PromoCodeEnabled                 bool
@@ -162,6 +164,7 @@ type SystemSettings struct {
 	TableDefaultPageSize        int
 	TablePageSizeOptions        []int
 	CustomMenuItems             string // JSON array of custom menu items
+	CustomMenuForceNewTab       bool
 	CustomEndpoints             string // JSON array of custom endpoints
 
 	DefaultConcurrency          int
@@ -309,6 +312,8 @@ type DefaultSubscriptionSetting struct {
 
 type PublicSettings struct {
 	RegistrationEnabled              bool
+	RegistrationAnnouncementEnabled  bool
+	RegistrationAnnouncementContent  string
 	EmailVerifyEnabled               bool
 	ForceEmailOnThirdPartySignup     bool
 	RegistrationEmailSuffixWhitelist []string
@@ -346,6 +351,7 @@ type PublicSettings struct {
 	TableDefaultPageSize        int
 	TablePageSizeOptions        []int
 	CustomMenuItems             string // JSON array of custom menu items
+	CustomMenuForceNewTab       bool
 	CustomEndpoints             string // JSON array of custom endpoints
 
 	LinuxDoOAuthEnabled      bool

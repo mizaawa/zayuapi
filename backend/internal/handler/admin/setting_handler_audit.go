@@ -35,6 +35,12 @@ func diffSettings(before *service.SystemSettings, after *service.SystemSettings,
 	if before.RegistrationEnabled != after.RegistrationEnabled {
 		changed = append(changed, "registration_enabled")
 	}
+	if before.RegistrationAnnouncementEnabled != after.RegistrationAnnouncementEnabled {
+		changed = append(changed, "registration_announcement_enabled")
+	}
+	if before.RegistrationAnnouncementContent != after.RegistrationAnnouncementContent {
+		changed = append(changed, "registration_announcement_content")
+	}
 	if before.EmailVerifyEnabled != after.EmailVerifyEnabled {
 		changed = append(changed, "email_verify_enabled")
 	}
@@ -442,6 +448,9 @@ func diffSettings(before *service.SystemSettings, after *service.SystemSettings,
 	}
 	if before.CustomMenuItems != after.CustomMenuItems {
 		changed = append(changed, "custom_menu_items")
+	}
+	if before.CustomMenuForceNewTab != after.CustomMenuForceNewTab {
+		changed = append(changed, "custom_menu_force_new_tab")
 	}
 	if before.CustomEndpoints != after.CustomEndpoints {
 		changed = append(changed, "custom_endpoints")

@@ -48,6 +48,8 @@ func (h *SettingHandler) GetPublicSettings(c *gin.Context) {
 
 	response.Success(c, dto.PublicSettings{
 		RegistrationEnabled:              settings.RegistrationEnabled,
+		RegistrationAnnouncementEnabled:  settings.RegistrationAnnouncementEnabled,
+		RegistrationAnnouncementContent:  settings.RegistrationAnnouncementContent,
 		EmailVerifyEnabled:               settings.EmailVerifyEnabled,
 		ForceEmailOnThirdPartySignup:     settings.ForceEmailOnThirdPartySignup,
 		RegistrationEmailSuffixWhitelist: settings.RegistrationEmailSuffixWhitelist,
@@ -84,6 +86,7 @@ func (h *SettingHandler) GetPublicSettings(c *gin.Context) {
 		TableDefaultPageSize:             settings.TableDefaultPageSize,
 		TablePageSizeOptions:             settings.TablePageSizeOptions,
 		CustomMenuItems:                  dto.ParseUserVisibleMenuItems(settings.CustomMenuItems),
+		CustomMenuForceNewTab:            settings.CustomMenuForceNewTab,
 		CustomEndpoints:                  dto.ParseCustomEndpoints(settings.CustomEndpoints),
 		DingTalkOAuthEnabled:             settings.DingTalkOAuthEnabled,
 		LinuxDoOAuthEnabled:              settings.LinuxDoOAuthEnabled,

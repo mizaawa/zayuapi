@@ -73,7 +73,21 @@
                     {{ entry.rank }}
                   </span>
                 </td>
-                <td class="truncate px-3 py-3 font-medium sm:px-5" :title="entry.display_name">{{ entry.display_name }}</td>
+                <td class="px-3 py-3 font-medium sm:px-5" :title="entry.display_name">
+                  <div class="flex min-w-0 items-center gap-2">
+                    <div class="user-avatar flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-lg text-xs font-semibold" aria-hidden="true">
+                      <img
+                        v-if="avatarUrl(entry)"
+                        :src="avatarUrl(entry)"
+                        alt=""
+                        class="h-full w-full object-cover"
+                        @error="markAvatarFailed(entry)"
+                      />
+                      <span v-else>{{ avatarInitial(entry.display_name) }}</span>
+                    </div>
+                    <span class="min-w-0 truncate">{{ entry.display_name }}</span>
+                  </div>
+                </td>
                 <td class="px-3 py-3 text-right tabular-nums sm:px-5">${{ entry.actual_cost.toFixed(2) }}</td>
                 <td class="hidden px-3 py-3 text-right tabular-nums sm:table-cell sm:px-5">{{ formatNumber(entry.requests) }}</td>
                 <td class="hidden px-3 py-3 text-right tabular-nums sm:table-cell sm:px-5">{{ formatNumber(entry.tokens) }}</td>
@@ -108,6 +122,7 @@ const loading = ref(false)
 const error = ref('')
 const participating = ref(false)
 const participationLoading = ref(false)
+const failedAvatarUrls = ref(new Set<string>())
 const nextUpdateTime = ref<number>(0)
 const countdown = ref<number>(0)
 
@@ -117,7 +132,7 @@ let countdownTimer: number | null = null
 const myRankLabel = computed(() => data.value?.my_rank ? `#${data.value.my_rank}` : t('leaderboard.unranked'))
 
 const countdownText = computed(() => {
-  if (countdown.value <= 0) return t('leaderboard.updating')
+  if (loading.value || countdown.value <= 0) return t('leaderboard.updating')
   const minutes = Math.floor(countdown.value / 60)
   const seconds = countdown.value % 60
   return `${minutes}:${seconds.toString().padStart(2, '0')}`
@@ -125,6 +140,20 @@ const countdownText = computed(() => {
 
 function formatNumber(value: number): string {
   return new Intl.NumberFormat().format(value)
+}
+
+function avatarUrl(entry: LeaderboardEntry): string {
+  const url = entry.avatar_url?.trim() || ''
+  return failedAvatarUrls.value.has(url) ? '' : url
+}
+
+function markAvatarFailed(entry: LeaderboardEntry): void {
+  const url = entry.avatar_url?.trim()
+  if (url) failedAvatarUrls.value.add(url)
+}
+
+function avatarInitial(displayName: string): string {
+  return Array.from(displayName.trim())[0]?.toUpperCase() || 'U'
 }
 
 function rankClass(rank: number): string {
@@ -312,6 +341,10 @@ onUnmounted(() => {
 .user-column { width: 34%; }
 .metric-column { width: 20%; }
 .rank-badge { border-color: transparent; }
+.user-avatar {
+  background: color-mix(in srgb, var(--md-sys-color-secondary) 16%, var(--md-sys-color-surface));
+  color: var(--md-sys-color-secondary);
+}
 .rank-regular { background: color-mix(in srgb, var(--md-sys-color-primary) 10%, transparent); color: var(--md-sys-color-primary); }
 
 .rank-gold { border-color: #c7a34a; background: color-mix(in srgb, #e0bd63 26%, var(--md-sys-color-surface)); color: color-mix(in srgb, #9a7212 72%, var(--md-sys-color-on-surface)); }

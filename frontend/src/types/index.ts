@@ -207,6 +207,8 @@ export interface LoginAgreementDocument {
 
 export interface PublicSettings {
   registration_enabled: boolean
+  registration_announcement_enabled?: boolean
+  registration_announcement_content?: string
   email_verify_enabled: boolean
   force_email_on_third_party_signup: boolean
   registration_email_suffix_whitelist: string[]
@@ -241,6 +243,7 @@ export interface PublicSettings {
   risk_control_enabled: boolean
   table_default_page_size: number
   table_page_size_options: number[]
+  custom_menu_force_new_tab?: boolean
   custom_menu_items: CustomMenuItem[]
   custom_endpoints: CustomEndpoint[]
   linuxdo_oauth_enabled: boolean

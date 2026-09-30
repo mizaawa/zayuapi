@@ -134,6 +134,8 @@ func (h *SettingHandler) GetSettings(c *gin.Context) {
 
 	payload := dto.SystemSettings{
 		RegistrationEnabled:                                    settings.RegistrationEnabled,
+		RegistrationAnnouncementEnabled:                        settings.RegistrationAnnouncementEnabled,
+		RegistrationAnnouncementContent:                        settings.RegistrationAnnouncementContent,
 		EmailVerifyEnabled:                                     settings.EmailVerifyEnabled,
 		RegistrationEmailSuffixWhitelist:                       settings.RegistrationEmailSuffixWhitelist,
 		PromoCodeEnabled:                                       settings.PromoCodeEnabled,
@@ -259,6 +261,7 @@ func (h *SettingHandler) GetSettings(c *gin.Context) {
 		TableDefaultPageSize:                                   settings.TableDefaultPageSize,
 		TablePageSizeOptions:                                   settings.TablePageSizeOptions,
 		CustomMenuItems:                                        dto.ParseCustomMenuItems(settings.CustomMenuItems),
+		CustomMenuForceNewTab:                                  settings.CustomMenuForceNewTab,
 		CustomEndpoints:                                        dto.ParseCustomEndpoints(settings.CustomEndpoints),
 		DefaultConcurrency:                                     settings.DefaultConcurrency,
 		DefaultBalance:                                         settings.DefaultBalance,

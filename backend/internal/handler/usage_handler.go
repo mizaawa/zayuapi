@@ -20,6 +20,7 @@ import (
 type leaderboardEntryResponse struct {
 	Rank        int64   `json:"rank"`
 	DisplayName string  `json:"display_name"`
+	AvatarURL   string  `json:"avatar_url,omitempty"`
 	ActualCost  float64 `json:"actual_cost"`
 	Requests    int64   `json:"requests"`
 	Tokens      int64   `json:"tokens"`
@@ -516,6 +517,7 @@ func (h *UsageHandler) GetLeaderboard(c *gin.Context) {
 	for i, item := range data.Ranking {
 		entries = append(entries, leaderboardEntryResponse{
 			Rank: int64(i + 1), DisplayName: maskLeaderboardIdentity(item.Username, item.Email),
+			AvatarURL:  strings.TrimSpace(item.AvatarURL),
 			ActualCost: item.ActualCost, Requests: item.Requests, Tokens: item.Tokens,
 		})
 	}

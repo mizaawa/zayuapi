@@ -28,6 +28,8 @@ type CustomEndpoint struct {
 // SystemSettings represents the admin settings API response payload.
 type SystemSettings struct {
 	RegistrationEnabled              bool                     `json:"registration_enabled"`
+	RegistrationAnnouncementEnabled  bool                     `json:"registration_announcement_enabled"`
+	RegistrationAnnouncementContent  string                   `json:"registration_announcement_content"`
 	EmailVerifyEnabled               bool                     `json:"email_verify_enabled"`
 	RegistrationEmailSuffixWhitelist []string                 `json:"registration_email_suffix_whitelist"`
 	PromoCodeEnabled                 bool                     `json:"promo_code_enabled"`
@@ -161,6 +163,7 @@ type SystemSettings struct {
 	TableDefaultPageSize        int              `json:"table_default_page_size"`
 	TablePageSizeOptions        []int            `json:"table_page_size_options"`
 	CustomMenuItems             []CustomMenuItem `json:"custom_menu_items"`
+	CustomMenuForceNewTab       bool             `json:"custom_menu_force_new_tab"`
 	CustomEndpoints             []CustomEndpoint `json:"custom_endpoints"`
 
 	DefaultConcurrency           int                          `json:"default_concurrency"`
@@ -342,6 +345,8 @@ type DefaultSubscriptionSetting struct {
 
 type PublicSettings struct {
 	RegistrationEnabled              bool                     `json:"registration_enabled"`
+	RegistrationAnnouncementEnabled  bool                     `json:"registration_announcement_enabled"`
+	RegistrationAnnouncementContent  string                   `json:"registration_announcement_content"`
 	EmailVerifyEnabled               bool                     `json:"email_verify_enabled"`
 	ForceEmailOnThirdPartySignup     bool                     `json:"force_email_on_third_party_signup"`
 	RegistrationEmailSuffixWhitelist []string                 `json:"registration_email_suffix_whitelist"`
@@ -378,6 +383,7 @@ type PublicSettings struct {
 	TableDefaultPageSize             int                      `json:"table_default_page_size"`
 	TablePageSizeOptions             []int                    `json:"table_page_size_options"`
 	CustomMenuItems                  []CustomMenuItem         `json:"custom_menu_items"`
+	CustomMenuForceNewTab            bool                     `json:"custom_menu_force_new_tab"`
 	CustomEndpoints                  []CustomEndpoint         `json:"custom_endpoints"`
 	DingTalkOAuthEnabled             bool                     `json:"dingtalk_oauth_enabled"`
 	LinuxDoOAuthEnabled              bool                     `json:"linuxdo_oauth_enabled"`

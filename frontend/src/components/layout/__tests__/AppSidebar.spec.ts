@@ -97,7 +97,7 @@ describe('Model Plaza navigation', () => {
   it('opens the standalone page in a new tab behind the model plaza feature flag', () => {
     expect(componentSource).toContain('const flagModelPlaza = makeSidebarFlag(FeatureFlags.modelPlaza)')
     expect(componentSource).toContain("path: '/model-plaza', label: t('nav.modelPlaza'), icon: ModelPlazaIcon, openInNewWindow: true, featureFlag: flagModelPlaza")
-    expect(componentSource).toContain(":href=\"item.openInNewWindow ? resolveNavHref(item.path) : undefined\"")
+    expect(componentSource).toContain(":href=\"item.openInNewWindow ? resolveNavHref(item.path, item.externalUrl) : undefined\"")
     expect(componentSource).toContain(":target=\"item.openInNewWindow ? '_blank' : undefined\"")
     expect(componentSource).toContain(":rel=\"item.openInNewWindow ? 'noopener noreferrer' : undefined\"")
   })

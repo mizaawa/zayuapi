@@ -131,6 +131,8 @@ const DingTalkConnectSyntheticEmailDomain = "@dingtalk-connect.invalid"
 const (
 	// 注册设置
 	SettingKeyRegistrationEnabled              = "registration_enabled"                // 是否开放注册
+	SettingKeyRegistrationAnnouncementEnabled  = "registration_announcement_enabled"
+	SettingKeyRegistrationAnnouncementContent  = "registration_announcement_content"
 	SettingKeyEmailVerifyEnabled               = "email_verify_enabled"                // 是否开启邮件验证
 	SettingKeyRegistrationEmailSuffixWhitelist = "registration_email_suffix_whitelist" // 注册邮箱后缀白名单（JSON 数组）
 	SettingKeyPromoCodeEnabled                 = "promo_code_enabled"                  // 是否启用优惠码功能
@@ -297,6 +299,7 @@ const (
 	SettingKeyTableDefaultPageSize        = "table_default_page_size"       // 表格默认每页条数
 	SettingKeyTablePageSizeOptions        = "table_page_size_options"       // 表格可选每页条数（JSON 数组）
 	SettingKeyCustomMenuItems             = "custom_menu_items"             // 自定义菜单项（JSON 数组）
+	SettingKeyCustomMenuForceNewTab       = "custom_menu_force_new_tab"     // 自定义菜单强制在新标签页打开
 	SettingKeyCustomEndpoints             = "custom_endpoints"              // 自定义端点列表（JSON 数组）
 
 	// 默认配置

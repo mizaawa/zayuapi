@@ -79,6 +79,7 @@ export default {
     requests: '请求数',
     tokens: 'Token',
     loadFailed: '排行榜加载失败',
+    updating: '更新中...',
   },
 
   // Groups (shared)

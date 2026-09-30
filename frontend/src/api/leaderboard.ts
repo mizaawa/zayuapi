@@ -3,6 +3,7 @@ import { apiClient } from './client'
 export interface LeaderboardEntry {
   rank: number
   display_name: string
+  avatar_url?: string | null
   actual_cost: number
   requests: number
   tokens: number

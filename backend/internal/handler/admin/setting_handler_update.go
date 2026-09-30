@@ -27,6 +27,8 @@ const maxChannelMonitorAnnouncementRunes = 4000
 type UpdateSettingsRequest struct {
 	// 注册设置
 	RegistrationEnabled              bool                         `json:"registration_enabled"`
+	RegistrationAnnouncementEnabled  *bool                        `json:"registration_announcement_enabled"`
+	RegistrationAnnouncementContent  *string                      `json:"registration_announcement_content"`
 	EmailVerifyEnabled               bool                         `json:"email_verify_enabled"`
 	RegistrationEmailSuffixWhitelist []string                     `json:"registration_email_suffix_whitelist"`
 	PromoCodeEnabled                 bool                         `json:"promo_code_enabled"`
@@ -169,6 +171,7 @@ type UpdateSettingsRequest struct {
 	TableDefaultPageSize        int                   `json:"table_default_page_size"`
 	TablePageSizeOptions        []int                 `json:"table_page_size_options"`
 	CustomMenuItems             *[]dto.CustomMenuItem `json:"custom_menu_items"`
+	CustomMenuForceNewTab       *bool                 `json:"custom_menu_force_new_tab"`
 	CustomEndpoints             *[]dto.CustomEndpoint `json:"custom_endpoints"`
 
 	// 默认配置
@@ -501,6 +504,15 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 			response.BadRequest(c, "Channel monitor announcement is too long (max 4000 Unicode characters)")
 			return
 		}
+	}
+
+	registrationAnnouncementEnabled := previousSettings.RegistrationAnnouncementEnabled
+	if req.RegistrationAnnouncementEnabled != nil {
+		registrationAnnouncementEnabled = *req.RegistrationAnnouncementEnabled
+	}
+	registrationAnnouncementContent := previousSettings.RegistrationAnnouncementContent
+	if req.RegistrationAnnouncementContent != nil {
+		registrationAnnouncementContent = strings.TrimSpace(*req.RegistrationAnnouncementContent)
 	}
 
 	// 两个安全开关的请求字段为指针：省略字段=保持现值，避免旧客户端/脚本
@@ -1494,6 +1506,8 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		DefaultPlatformQuotas: req.DefaultPlatformQuotas,
 
 		RegistrationEnabled:              req.RegistrationEnabled,
+		RegistrationAnnouncementEnabled:  registrationAnnouncementEnabled,
+		RegistrationAnnouncementContent:  registrationAnnouncementContent,
 		EmailVerifyEnabled:               req.EmailVerifyEnabled,
 		RegistrationEmailSuffixWhitelist: req.RegistrationEmailSuffixWhitelist,
 		PromoCodeEnabled:                 req.PromoCodeEnabled,
@@ -1620,6 +1634,7 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		TableDefaultPageSize:                   req.TableDefaultPageSize,
 		TablePageSizeOptions:                   req.TablePageSizeOptions,
 		CustomMenuItems:                        customMenuJSON,
+		CustomMenuForceNewTab:                  boolValueOrDefault(req.CustomMenuForceNewTab, previousSettings.CustomMenuForceNewTab),
 		CustomEndpoints:                        customEndpointsJSON,
 		DefaultConcurrency:                     req.DefaultConcurrency,
 		DefaultBalance:                         req.DefaultBalance,
@@ -2093,6 +2108,8 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 
 	payload := dto.SystemSettings{
 		RegistrationEnabled:                                    updatedSettings.RegistrationEnabled,
+		RegistrationAnnouncementEnabled:                        updatedSettings.RegistrationAnnouncementEnabled,
+		RegistrationAnnouncementContent:                        updatedSettings.RegistrationAnnouncementContent,
 		EmailVerifyEnabled:                                     updatedSettings.EmailVerifyEnabled,
 		RegistrationEmailSuffixWhitelist:                       updatedSettings.RegistrationEmailSuffixWhitelist,
 		PromoCodeEnabled:                                       updatedSettings.PromoCodeEnabled,
@@ -2218,6 +2235,7 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		TableDefaultPageSize:                                   updatedSettings.TableDefaultPageSize,
 		TablePageSizeOptions:                                   updatedSettings.TablePageSizeOptions,
 		CustomMenuItems:                                        dto.ParseCustomMenuItems(updatedSettings.CustomMenuItems),
+		CustomMenuForceNewTab:                                  updatedSettings.CustomMenuForceNewTab,
 		CustomEndpoints:                                        dto.ParseCustomEndpoints(updatedSettings.CustomEndpoints),
 		DefaultConcurrency:                                     updatedSettings.DefaultConcurrency,
 		DefaultBalance:                                         updatedSettings.DefaultBalance,

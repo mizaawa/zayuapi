@@ -216,6 +216,7 @@ export default {
     passkeyFailed: 'Passkey 登录失败，请重试。',
     createAccount: '创建账户',
     signUpToStart: '注册以开始使用 {siteName}',
+    registrationAnnouncement: '注册公告',
     signUp: '注册',
     processing: '处理中...',
     continue: '继续',

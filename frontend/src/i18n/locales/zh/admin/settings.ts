@@ -14,6 +14,12 @@ export default {
         payment: '支付设置',
       },
       features: {
+        registrationAnnouncement: {
+          enabled: '注册页面公告',
+          enabledHint: '开启后在注册页面表单上方显示公告。',
+          content: '公告内容',
+          contentPlaceholder: '输入要在注册页面展示的公告内容',
+        },
         channelMonitor: {
           title: '渠道监控',
           description: '定期对配置的渠道发起健康检查，向用户展示可用性与延迟。关闭后调度器停止扫描，用户端列表为空。',

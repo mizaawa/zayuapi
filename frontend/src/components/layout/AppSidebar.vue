@@ -106,7 +106,7 @@
               :is="item.openInNewWindow ? 'a' : 'router-link'"
               v-else
               :to="item.openInNewWindow ? undefined : item.path"
-              :href="item.openInNewWindow ? resolveNavHref(item.path) : undefined"
+              :href="item.openInNewWindow ? resolveNavHref(item.path, item.externalUrl) : undefined"
               :target="item.openInNewWindow ? '_blank' : undefined"
               :rel="item.openInNewWindow ? 'noopener noreferrer' : undefined"
               class="sidebar-link mb-1"
@@ -143,7 +143,7 @@
             v-for="item in personalNavItems"
             :key="item.path"
             :to="item.openInNewWindow ? undefined : item.path"
-            :href="item.openInNewWindow ? resolveNavHref(item.path) : undefined"
+            :href="item.openInNewWindow ? resolveNavHref(item.path, item.externalUrl) : undefined"
             :target="item.openInNewWindow ? '_blank' : undefined"
             :rel="item.openInNewWindow ? 'noopener noreferrer' : undefined"
             class="sidebar-link mb-1"
@@ -167,7 +167,7 @@
             v-for="item in userNavItems"
             :key="item.path"
             :to="item.openInNewWindow ? undefined : item.path"
-            :href="item.openInNewWindow ? resolveNavHref(item.path) : undefined"
+            :href="item.openInNewWindow ? resolveNavHref(item.path, item.externalUrl) : undefined"
             :target="item.openInNewWindow ? '_blank' : undefined"
             :rel="item.openInNewWindow ? 'noopener noreferrer' : undefined"
             class="sidebar-link mb-1"
@@ -221,6 +221,8 @@ import { useAdminSettingsStore, useAppStore, useAuthStore, useOnboardingStore } 
 import VersionBadge from '@/components/common/VersionBadge.vue'
 import { sanitizeSvg } from '@/utils/sanitize'
 import { sanitizeUrl } from '@/utils/url'
+import { buildEmbeddedUrl, detectTheme } from '@/utils/embedded-url'
+import type { CustomMenuItem } from '@/types'
 import { FeatureFlags, makeSidebarFlag } from '@/utils/featureFlags'
 import { useBatchImageAccess } from '@/composables/useBatchImageAccess'
 
@@ -231,6 +233,7 @@ interface NavItem {
   iconSvg?: string
   hideInSimpleMode?: boolean
   openInNewWindow?: boolean
+  externalUrl?: string
   children?: NavItem[]
   /**
    * When true, the parent item only toggles the expand/collapse state and
@@ -261,7 +264,7 @@ function applyFeatureFlags(items: NavItem[]): NavItem[] {
   return out
 }
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
 
 const route = useRoute()
 const router = useRouter()
@@ -721,6 +724,18 @@ const flagOpsMonitoring = () => adminSettingsStore.opsMonitoringEnabled
 const flagAdminPayment = () => adminSettingsStore.paymentEnabled
 const flagBatchImageAccess = () => canUseBatchImage.value
 
+function buildCustomNavItem(item: CustomMenuItem): NavItem {
+  const openInNewWindow = appStore.cachedPublicSettings?.custom_menu_force_new_tab === true
+  return {
+    path: `/custom/${item.id}`,
+    label: item.label,
+    icon: null,
+    iconSvg: item.icon_svg,
+    openInNewWindow,
+    externalUrl: openInNewWindow && !item.page_slug ? sanitizeUrl(item.url) : undefined,
+  }
+}
+
 // buildSelfNavItems 构造用户自己的导航项（用户端主菜单和管理员的"我的账户"子菜单共享这组声明）。
 // withDashboard=true 时包含仪表盘（用户端），false 时不含（管理员的个人区已经有独立仪表盘入口）。
 //
@@ -745,12 +760,7 @@ function buildSelfNavItems(withDashboard: boolean): NavItem[] {
     { path: '/leaderboard', label: t('nav.leaderboard'), icon: LeaderboardIcon, hideInSimpleMode: true, featureFlag: flagLeaderboard },
     { path: '/affiliate', label: t('nav.affiliate'), icon: UsersIcon, hideInSimpleMode: true, featureFlag: flagAffiliate },
     { path: '/profile', label: t('nav.profile'), icon: UserIcon },
-    ...customMenuItemsForUser.value.map((item): NavItem => ({
-      path: `/custom/${item.id}`,
-      label: item.label,
-      icon: null,
-      iconSvg: item.icon_svg,
-    })),
+    ...customMenuItemsForUser.value.map(buildCustomNavItem),
   )
   return items
 }
@@ -856,14 +866,14 @@ const adminNavItems = computed((): NavItem[] => {
     filtered.push({ path: '/keys', label: t('nav.apiKeys'), icon: KeyIcon })
     filtered.push({ path: '/admin/settings', label: t('nav.settings'), icon: CogIcon })
     for (const cm of customMenuItemsForAdmin.value) {
-      filtered.push({ path: `/custom/${cm.id}`, label: cm.label, icon: null, iconSvg: cm.icon_svg })
+      filtered.push(buildCustomNavItem(cm))
     }
     return filtered
   }
 
   visible.push({ path: '/admin/settings', label: t('nav.settings'), icon: CogIcon })
   for (const cm of customMenuItemsForAdmin.value) {
-    visible.push({ path: `/custom/${cm.id}`, label: cm.label, icon: null, iconSvg: cm.icon_svg })
+    visible.push(buildCustomNavItem(cm))
   }
   return visible
 })
@@ -905,7 +915,10 @@ function isActive(path: string): boolean {
   return route.path === path || route.path.startsWith(path + '/')
 }
 
-function resolveNavHref(path: string): string {
+function resolveNavHref(path: string, externalUrl?: string): string {
+  if (externalUrl) {
+    return buildEmbeddedUrl(externalUrl, authStore.user?.id, authStore.token, detectTheme(), locale.value)
+  }
   return router.resolve(path).href
 }
 

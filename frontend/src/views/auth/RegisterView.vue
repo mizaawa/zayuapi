@@ -11,6 +11,22 @@
         </p>
       </div>
 
+      <aside
+        v-if="registrationAnnouncement"
+        role="note"
+        aria-labelledby="registration-announcement-title"
+        data-testid="registration-announcement"
+        class="registration-announcement flex items-start gap-3 rounded-r-lg px-4 py-3"
+      >
+        <Icon name="bell" size="md" class="mt-0.5 shrink-0 text-primary-700" aria-hidden="true" />
+        <div class="min-w-0 flex-1">
+          <p id="registration-announcement-title" class="text-sm font-semibold text-gray-900">
+            {{ t('auth.registrationAnnouncement') }}
+          </p>
+          <p class="mt-1 whitespace-pre-wrap text-sm leading-6 [overflow-wrap:anywhere]">{{ registrationAnnouncement }}</p>
+        </div>
+      </aside>
+
       <!-- Registration Disabled Message -->
       <div
         v-if="!registrationEnabled && settingsLoaded"
@@ -385,6 +401,11 @@ const showPassword = ref<boolean>(false)
 
 // Public settings
 const registrationEnabled = ref<boolean>(true)
+const registrationAnnouncementEnabled = ref<boolean>(false)
+const registrationAnnouncementContent = ref<string>('')
+const registrationAnnouncement = computed(() =>
+  registrationAnnouncementEnabled.value ? registrationAnnouncementContent.value.trim() : ''
+)
 const emailVerifyEnabled = ref<boolean>(false)
 const promoCodeEnabled = ref<boolean>(true)
 const invitationCodeEnabled = ref<boolean>(false)
@@ -518,6 +539,8 @@ onMounted(async () => {
   try {
     const settings = await getPublicSettings()
     registrationEnabled.value = settings.registration_enabled
+    registrationAnnouncementEnabled.value = settings.registration_announcement_enabled === true
+    registrationAnnouncementContent.value = settings.registration_announcement_content || ''
     emailVerifyEnabled.value = settings.email_verify_enabled
     promoCodeEnabled.value = settings.promo_code_enabled
     invitationCodeEnabled.value = settings.invitation_code_enabled
@@ -1053,6 +1076,12 @@ async function handleRegister(): Promise<void> {
 </script>
 
 <style scoped>
+.registration-announcement {
+  border-left: 3px solid var(--md-sys-color-primary);
+  background: color-mix(in srgb, var(--md-sys-color-surface) 70%, transparent);
+  color: var(--md-sys-color-on-surface-variant);
+}
+
 .fade-enter-active,
 .fade-leave-active {
   transition: all 0.3s ease;

@@ -216,6 +216,7 @@ export default {
     passkeyFailed: 'Passkey sign-in failed. Please try again.',
     createAccount: 'Create Account',
     signUpToStart: 'Sign up to start using {siteName}',
+    registrationAnnouncement: 'Registration Notice',
     signUp: 'Sign up',
     processing: 'Processing...',
     continue: 'Continue',
