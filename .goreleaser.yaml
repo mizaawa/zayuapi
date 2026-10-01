@@ -44,8 +44,15 @@ archives:
     files:
       - LICENSE*
       - README*
-      - deploy/*
-      - '!deploy/.env'
+      - deploy/*.md
+      - deploy/*.sh
+      - deploy/*.yml
+      - deploy/*.yaml
+      - deploy/*.service
+      - deploy/Caddyfile
+      - deploy/Dockerfile
+      - deploy/Makefile
+      - deploy/.env.example
 
 checksum:
   name_template: 'checksums.txt'
