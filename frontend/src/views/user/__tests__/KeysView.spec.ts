@@ -48,9 +48,10 @@ const messages: Record<string, string> = {
   'keys.group': 'Group',
   'keys.id': 'ID',
   'keys.currentConcurrency': 'Current Concurrency',
-  'keys.failover.group': 'Failover Group',
+  'keys.failover.group': 'Fallback Group',
+  'keys.failover.disabled': 'Disabled',
   'keys.failover.healthy': 'Primary Group Healthy',
-  'keys.failover.active': 'Failover Group Active',
+  'keys.failover.active': 'Fallback Group Active',
   'keys.lastUsedAt': 'Last Used',
   'keys.lastUsedIP': 'Last Used IP',
   'keys.rateLimitColumn': 'Rate Limit',
@@ -536,6 +537,8 @@ describe('user KeysView column settings', () => {
     setKey(key, [group(1, platform), group(2, platform)])
     const wrapper = await mountView()
     expect((wrapper.get('[data-test="failover-status-1"]').element as HTMLButtonElement).disabled).toBe(true)
+    expect(wrapper.get('[data-test="failover-status-1"]').text()).toBe('Disabled')
+    expect(wrapper.get('[data-test="failover-status-1"]').classes()).toContain('text-gray-500')
     await getButtonByText(wrapper, 'common.edit').trigger('click')
     expect(wrapper.find('[data-test="failover-toggle"]').exists()).toBe(false)
   })
@@ -549,7 +552,7 @@ describe('user KeysView column settings', () => {
     }
     setKey(key, [group(1), group(2)])
     const wrapper = await mountView()
-    expect(wrapper.get('[data-test="failover-status-1"]').text()).toBe('Failover Group Active')
+    expect(wrapper.get('[data-test="failover-status-1"]').text()).toBe('Fallback Group Active')
     expect(wrapper.get('[data-test="failover-status-1"]').classes()).toContain('dark:text-red-300')
     await vi.advanceTimersByTimeAsync(2000)
     expect(wrapper.get('[data-test="failover-status-1"]').text()).toBe('Primary Group Healthy')
@@ -564,6 +567,9 @@ describe('user KeysView column settings', () => {
       group(6, 'openai', { status: 'inactive' }), group(7, 'custom')
     ])
     const wrapper = await mountView()
+    expect(wrapper.get('[data-test="failover-status-1"]').text()).toBe('Disabled')
+    expect(wrapper.get('[data-test="failover-status-1"]').classes()).toContain('text-gray-500')
+    expect(wrapper.get('[data-test="failover-status-1"]').classes()).toContain('dark:text-dark-400')
     await wrapper.get('[data-test="failover-status-1"]').trigger('click')
     await wrapper.get('[data-test="failover-toggle"]').trigger('click')
     const selector = wrapper.findAllComponents({ name: 'Select' }).find((select) => select.attributes('data-test') === 'failover-group')!
@@ -665,7 +671,7 @@ describe('user KeysView column settings', () => {
     const coolingKey = { ...key, failover_cooldown_until: new Date(Date.now() + 300000).toISOString() }
     listKeys.mockResolvedValue({ items: [coolingKey], total: 1, page: 1, page_size: 20, pages: 1 })
     await vi.advanceTimersByTimeAsync(15000)
-    expect(wrapper.get('[data-test="failover-status-1"]').text()).toBe('Failover Group Active')
+    expect(wrapper.get('[data-test="failover-status-1"]').text()).toBe('Fallback Group Active')
     expect(wrapper.get('[data-test="failover-max-retries"]').element).toHaveProperty('value', '8')
   })
 

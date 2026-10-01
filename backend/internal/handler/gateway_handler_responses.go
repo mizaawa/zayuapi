@@ -310,7 +310,9 @@ func (h *GatewayHandler) Responses(c *gin.Context) {
 				zap.Bool("upstream_error_response_already_written", upstreamErrorAlreadyCommunicated),
 				zap.Error(err),
 			)
-			return
+			if !gatewayCompatibilityHasBillablePartialUsage(c, result, err, writerSizeBeforeForward) {
+				return
+			}
 		}
 
 		// 6. Record usage
@@ -350,8 +352,20 @@ func (h *GatewayHandler) Responses(c *gin.Context) {
 	}
 }
 
+func gatewayCompatibilityHasBillablePartialUsage(c *gin.Context, result *service.ForwardResult, err error, writerSizeBeforeForward int) bool {
+	var failoverErr *service.UpstreamFailoverError
+	if err == nil || result == nil || !result.Stream || c == nil || c.Writer == nil ||
+		c.Writer.Status() >= http.StatusBadRequest || c.Writer.Size() == writerSizeBeforeForward || errors.As(err, &failoverErr) {
+		return false
+	}
+	usage := result.Usage
+	return usage.InputTokens > 0 || usage.OutputTokens > 0 || usage.CacheCreationInputTokens > 0 ||
+		usage.CacheReadInputTokens > 0 || usage.CacheCreation5mTokens > 0 || usage.CacheCreation1hTokens > 0 || usage.ImageOutputTokens > 0
+}
+
 // responsesErrorResponse writes an error in OpenAI Responses API format.
 func (h *GatewayHandler) responsesErrorResponse(c *gin.Context, status int, code, message string) {
+	c.Writer.Header().Set("Content-Type", "application/json; charset=utf-8")
 	c.JSON(status, gin.H{
 		"error": gin.H{
 			"code":    code,

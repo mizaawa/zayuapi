@@ -687,10 +687,16 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 			service.SetOpsLatencyMs(c, service.OpsTimeToFirstTokenMsKey, int64(*result.FirstTokenMs))
 		}
 		if err != nil {
-			if result != nil && result.ImageCount > 0 {
-				reqLog.Warn("openai.forward_partial_error_with_image_result",
+			if result != nil && (result.ImageCount > 0 || openAIForwardHasBillablePartialUsage(c, result, err, writerSizeBeforeForward)) {
+				service.RecordAPIKeyFailoverUpstreamFailure(c.Request.Context(), http.StatusBadGateway, []byte(err.Error()))
+				if !openAIForwardErrorAlreadyCommunicated(c, writerSizeBeforeForward, err) {
+					h.ensureForwardErrorResponse(c, streamStarted)
+				}
+				reqLog.Warn("openai.forward_partial_error_with_usage",
 					zap.Int64("account_id", account.ID),
 					zap.Int("image_count", result.ImageCount),
+					zap.Int("input_tokens", result.Usage.InputTokens),
+					zap.Int("output_tokens", result.Usage.OutputTokens),
 					zap.Error(err),
 				)
 			} else {
@@ -797,7 +803,7 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 			if account.Type == service.AccountTypeOAuth && !account.IsShadow() {
 				h.gatewayService.UpdateCodexUsageSnapshotFromHeaders(c.Request.Context(), account.ID, result.ResponseHeaders)
 			}
-			h.gatewayService.ReportOpenAIAccountScheduleResult(account.ID, account.GetMappedModel(selectionModel), openAIForwardSucceededForScheduling(result), result.FirstTokenMs)
+			h.gatewayService.ReportOpenAIAccountScheduleResult(account.ID, account.GetMappedModel(selectionModel), err == nil && openAIForwardSucceededForScheduling(result), result.FirstTokenMs)
 		} else {
 			h.gatewayService.ReportOpenAIAccountScheduleResult(account.ID, account.GetMappedModel(selectionModel), openAIForwardSucceededForScheduling(result), nil)
 		}
@@ -1253,10 +1259,16 @@ func (h *OpenAIGatewayHandler) Messages(c *gin.Context) {
 			service.SetOpsLatencyMs(c, service.OpsTimeToFirstTokenMsKey, int64(*result.FirstTokenMs))
 		}
 		if err != nil {
-			if result != nil && result.ImageCount > 0 {
-				reqLog.Warn("openai_messages.forward_partial_error_with_image_result",
+			if result != nil && (result.ImageCount > 0 || openAIForwardHasBillablePartialUsage(c, result, err, writerSizeBeforeForward)) {
+				service.RecordAPIKeyFailoverUpstreamFailure(c.Request.Context(), http.StatusBadGateway, []byte(err.Error()))
+				if !openAIForwardErrorAlreadyCommunicated(c, writerSizeBeforeForward, err) {
+					h.ensureAnthropicErrorResponse(c, streamStarted)
+				}
+				reqLog.Warn("openai_messages.forward_partial_error_with_usage",
 					zap.Int64("account_id", account.ID),
 					zap.Int("image_count", result.ImageCount),
+					zap.Int("input_tokens", result.Usage.InputTokens),
+					zap.Int("output_tokens", result.Usage.OutputTokens),
 					zap.Error(err),
 				)
 			} else {
@@ -1338,7 +1350,7 @@ func (h *OpenAIGatewayHandler) Messages(c *gin.Context) {
 			}
 		}
 		if result != nil {
-			h.gatewayService.ReportOpenAIAccountScheduleResult(account.ID, account.GetMappedModel(currentRoutingModel), true, result.FirstTokenMs)
+			h.gatewayService.ReportOpenAIAccountScheduleResult(account.ID, account.GetMappedModel(currentRoutingModel), err == nil, result.FirstTokenMs)
 		} else {
 			h.gatewayService.ReportOpenAIAccountScheduleResult(account.ID, account.GetMappedModel(currentRoutingModel), true, nil)
 		}
@@ -3370,6 +3382,16 @@ func shouldLogOpenAIForwardFailureAsWarn(c *gin.Context, wroteFallback bool) boo
 		return false
 	}
 	return c.Writer.Written()
+}
+
+// Failed attempts with buffered error responses can still be replayed by group
+// failover. Only retain token usage after successful streaming output commits.
+func openAIForwardHasBillablePartialUsage(c *gin.Context, result *service.OpenAIForwardResult, err error, writerSizeBeforeForward int) bool {
+	var failoverErr *service.UpstreamFailoverError
+	return err != nil && c != nil && c.Writer != nil && c.Writer.Status() < 400 &&
+		result != nil && result.Stream && result.Usage.HasTokens() &&
+		service.OpenAICompactKeepaliveAdjustedWrittenSize(c) > writerSizeBeforeForward && service.GetOpsCyberPolicy(c) == nil &&
+		!errors.As(err, &failoverErr)
 }
 
 // openAIForwardErrorAlreadyCommunicated reports whether Forward returned an

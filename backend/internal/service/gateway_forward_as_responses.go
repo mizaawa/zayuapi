@@ -5,7 +5,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -305,6 +304,70 @@ func parseAnthropicSSEField(line, field string) (string, bool) {
 	return strings.TrimSpace(strings.TrimPrefix(line, prefix)), true
 }
 
+func (s *GatewayService) anthropicCompatibilityStreamFailure(c *gin.Context, resp *http.Response, payload []byte, cause error) (*UpstreamFailoverError, string) {
+	status := http.StatusBadGateway
+	message := strings.TrimSpace(extractUpstreamErrorMessage(payload))
+	switch gjson.GetBytes(payload, "error.type").String() {
+	case "overloaded_error":
+		status = 529
+	case "rate_limit_error":
+		status = http.StatusTooManyRequests
+	case "authentication_error":
+		status = http.StatusUnauthorized
+	case "permission_error":
+		status = http.StatusForbidden
+	case "invalid_request_error":
+		status = http.StatusBadRequest
+	case "not_found_error":
+		status = http.StatusNotFound
+	}
+	if message == "" && cause != nil {
+		message = cause.Error()
+	}
+	if message == "" {
+		message = "Upstream stream ended without a terminal event"
+	}
+	message = sanitizeUpstreamErrorMessage(message)
+	if len(payload) == 0 {
+		payload, _ = json.Marshal(gin.H{"error": gin.H{"type": "upstream_error", "message": message}})
+	}
+	RecordAPIKeyFailoverUpstreamFailure(ginRequestContext(c), status, payload)
+	setOpsUpstreamError(c, status, message, string(payload))
+	failure := &UpstreamFailoverError{StatusCode: status, ResponseBody: payload, ResponseHeaders: resp.Header.Clone()}
+	if !s.shouldFailoverUpstreamError(status) || APIKeyFailoverModelUnavailable(status, payload) {
+		failure.NextAccountAction = NextAccountStop
+	}
+	return failure, message
+}
+
+func writeAnthropicCompatibilityStreamFailure(c *gin.Context, responses bool, responseID, model, message string, status int) {
+	MarkOpsStreamError(c, "upstream_error", message, status)
+	MarkResponseCommitted(c)
+	if responses {
+		payload, _ := json.Marshal(gin.H{
+			"type": "response.failed",
+			"response": gin.H{
+				"id": responseID, "object": "response", "model": model, "status": "failed", "output": []any{},
+				"error": gin.H{"code": "upstream_error", "message": message},
+			},
+		})
+		_, _ = fmt.Fprintf(c.Writer, "event: response.failed\ndata: %s\n\n", payload)
+	} else {
+		payload, _ := json.Marshal(gin.H{"error": gin.H{"type": "upstream_error", "message": message}})
+		_, _ = fmt.Fprintf(c.Writer, "data: %s\n\ndata: [DONE]\n\n", payload)
+	}
+	c.Writer.Flush()
+}
+
+func anthropicCompatibilityEventIsError(eventName, payload string) bool {
+	return eventName == "error" || gjson.Get(payload, "type").String() == "error"
+}
+
+// Some compatible providers omit message_stop after the final stop_reason.
+func anthropicCompatibilityEventIsTerminal(event *apicompat.AnthropicStreamEvent) bool {
+	return event.Type == "message_stop" || event.Type == "message_delta" && event.Delta != nil && event.Delta.StopReason != ""
+}
+
 // handleResponsesBufferedStreamingResponse reads all Anthropic SSE events from
 // the upstream streaming response, assembles them into a complete Anthropic
 // response, converts to Responses API JSON format, and writes it to the client.
@@ -329,6 +392,7 @@ func (s *GatewayService) handleResponsesBufferedStreamingResponse(
 	// Accumulate the final Anthropic response from streaming events
 	var finalResp *apicompat.AnthropicResponse
 	var usage ClaudeUsage
+	sawTerminalEvent := false
 
 	for scanner.Scan() {
 		line := scanner.Text()
@@ -346,6 +410,14 @@ func (s *GatewayService) handleResponsesBufferedStreamingResponse(
 		if !ok {
 			continue
 		}
+		if anthropicCompatibilityEventIsError(eventType, payload) {
+			failure, message := s.anthropicCompatibilityStreamFailure(c, resp, []byte(payload), nil)
+			if !failure.ShouldRetryNextAccount() && !APIKeyFailoverAttemptEnabled(ginRequestContext(c)) {
+				writeResponsesError(c, mapUpstreamStatusCode(failure.StatusCode), "upstream_error", message)
+				return nil, fmt.Errorf("upstream response failed: %s", message)
+			}
+			return nil, failure
+		}
 
 		var event apicompat.AnthropicStreamEvent
 		if err := json.Unmarshal([]byte(payload), &event); err != nil {
@@ -356,6 +428,7 @@ func (s *GatewayService) handleResponsesBufferedStreamingResponse(
 			)
 			continue
 		}
+		sawTerminalEvent = sawTerminalEvent || anthropicCompatibilityEventIsTerminal(&event)
 
 		// message_start carries the initial response structure
 		if event.Type == "message_start" && event.Message != nil {
@@ -392,18 +465,9 @@ func (s *GatewayService) handleResponsesBufferedStreamingResponse(
 		}
 	}
 
-	if err := scanner.Err(); err != nil {
-		if !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
-			logger.L().Warn("forward_as_responses buffered: read error",
-				zap.Error(err),
-				zap.String("request_id", requestID),
-			)
-		}
-	}
-
-	if finalResp == nil {
-		writeResponsesError(c, http.StatusBadGateway, "server_error", "Upstream stream ended without a response")
-		return nil, fmt.Errorf("upstream stream ended without response")
+	if finalResp == nil || !sawTerminalEvent {
+		failure, _ := s.anthropicCompatibilityStreamFailure(c, resp, nil, scanner.Err())
+		return nil, failure
 	}
 
 	// Update usage from accumulated delta
@@ -468,6 +532,7 @@ func (s *GatewayService) handleResponsesStreamingResponse(
 	clientToolMapping apicompat.ResponsesClientToolMapping,
 ) (*ForwardResult, error) {
 	requestID := resp.Header.Get("x-request-id")
+	writerSizeBeforeStream := c.Writer.Size()
 
 	if s.responseHeaderFilter != nil {
 		responseheaders.WriteFilteredHeaders(c.Writer.Header(), resp.Header, s.responseHeaderFilter)
@@ -484,6 +549,7 @@ func (s *GatewayService) handleResponsesStreamingResponse(
 	var usage ClaudeUsage
 	var firstTokenMs *int
 	firstChunk := true
+	sawTerminalEvent := false
 
 	scanner := bufio.NewScanner(resp.Body)
 	maxLineSize := defaultMaxLineSize
@@ -503,6 +569,18 @@ func (s *GatewayService) handleResponsesStreamingResponse(
 			Duration:        time.Since(startTime),
 			FirstTokenMs:    firstTokenMs,
 		}
+	}
+	handleFailure := func(payload []byte, cause error) (*ForwardResult, error) {
+		failure, message := s.anthropicCompatibilityStreamFailure(c, resp, payload, cause)
+		if c.Writer.Size() == writerSizeBeforeStream {
+			if !failure.ShouldRetryNextAccount() && !APIKeyFailoverAttemptEnabled(ginRequestContext(c)) {
+				writeResponsesError(c, mapUpstreamStatusCode(failure.StatusCode), "upstream_error", message)
+				return nil, fmt.Errorf("upstream response failed: %s", message)
+			}
+			return nil, failure
+		}
+		writeAnthropicCompatibilityStreamFailure(c, true, state.ResponseID, state.Model, message, failure.StatusCode)
+		return resultWithUsage(), fmt.Errorf("upstream response failed: %s", message)
 	}
 
 	// processEvent handles a single parsed Anthropic SSE event.
@@ -590,6 +668,9 @@ func (s *GatewayService) handleResponsesStreamingResponse(
 		if !ok {
 			continue
 		}
+		if anthropicCompatibilityEventIsError(eventType, payload) {
+			return handleFailure([]byte(payload), nil)
+		}
 
 		var event apicompat.AnthropicStreamEvent
 		if err := json.Unmarshal([]byte(payload), &event); err != nil {
@@ -600,19 +681,15 @@ func (s *GatewayService) handleResponsesStreamingResponse(
 			)
 			continue
 		}
+		sawTerminalEvent = sawTerminalEvent || anthropicCompatibilityEventIsTerminal(&event)
 
 		if processEvent(&event) {
 			return resultWithUsage(), nil
 		}
 	}
 
-	if err := scanner.Err(); err != nil {
-		if !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
-			logger.L().Warn("forward_as_responses stream: read error",
-				zap.Error(err),
-				zap.String("request_id", requestID),
-			)
-		}
+	if !sawTerminalEvent {
+		return handleFailure(nil, scanner.Err())
 	}
 
 	return finalizeStream()
@@ -629,6 +706,7 @@ func appendRawJSON(existing json.RawMessage, fragment string) json.RawMessage {
 // writeResponsesError writes an error response in OpenAI Responses API format.
 func writeResponsesError(c *gin.Context, statusCode int, code, message string) {
 	MarkResponseCommitted(c)
+	c.Writer.Header().Set("Content-Type", "application/json; charset=utf-8")
 	c.JSON(statusCode, gin.H{
 		"error": gin.H{
 			"code":    code,

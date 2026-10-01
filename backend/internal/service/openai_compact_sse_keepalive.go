@@ -14,6 +14,11 @@ import (
 // openAICompactSSEKeepaliveKey 存放 body-signal compact 请求的下游 SSE 心跳器。
 const openAICompactSSEKeepaliveKey = "openai_compact_sse_keepalive"
 
+type openAICompactRetryKeepaliveWriter interface {
+	OpenAICompactKeepaliveStarted() bool
+	WriteOpenAICompactKeepalive([]byte) (int, error)
+}
+
 // openAICompactSSEKeepalive 在 compact 上游 unary 等待期间向下游写 SSE 注释行
 // 心跳。上游 /responses/compact 在模型处理期间不发送任何字节（大上下文可长达
 // 数分钟），下游若经过反向代理（Nginx/Cloudflare Tunnel 等），零字节静默会触发
@@ -50,6 +55,9 @@ func StartOpenAICompactSSEKeepalive(c *gin.Context, interval time.Duration) func
 	k := &openAICompactSSEKeepalive{
 		writer: originalWriter,
 		stop:   make(chan struct{}),
+	}
+	if retryWriter, ok := originalWriter.(openAICompactRetryKeepaliveWriter); ok {
+		k.started = retryWriter.OpenAICompactKeepaliveStarted()
 	}
 	c.Set(openAICompactSSEKeepaliveKey, k)
 	wrappedWriter := &openAICompactKeepaliveWriter{ResponseWriter: originalWriter, k: k}
@@ -103,7 +111,13 @@ func (k *openAICompactSSEKeepalive) beat() bool {
 		k.writer.WriteHeader(http.StatusOK)
 		k.started = true
 	}
-	n, err := k.writer.Write([]byte(": keepalive\n\n"))
+	var n int
+	var err error
+	if retryWriter, ok := k.writer.(openAICompactRetryKeepaliveWriter); ok {
+		n, err = retryWriter.WriteOpenAICompactKeepalive([]byte(": keepalive\n\n"))
+	} else {
+		n, err = k.writer.Write([]byte(": keepalive\n\n"))
+	}
 	k.bytes += n
 	if err != nil {
 		k.stopped = true

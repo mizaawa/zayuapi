@@ -952,14 +952,17 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 		// Handle normal response
 		var usage *OpenAIUsage
 		var firstTokenMs *int
+		var responseErr error
 		responseID := ""
 		imageCount := 0
 		var imageOutputSizes []string
 		if reqStream {
+			writerSizeBeforeStream := OpenAICompactKeepaliveAdjustedWrittenSize(c)
 			streamResult, err := s.handleStreamingResponseWithReasoning(ctx, resp, c, account, startTime, originalModel, upstreamModel, reasoningEffortValue)
-			if err != nil {
+			if err != nil && (streamResult == nil || !preserveOpenAIStreamingUsage(c, writerSizeBeforeStream, streamResult.usage, err)) {
 				return nil, err
 			}
+			responseErr = err
 			usage = streamResult.usage
 			firstTokenMs = streamResult.firstTokenMs
 			responseID = strings.TrimSpace(streamResult.responseID)
@@ -1012,8 +1015,16 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 			forwardResult.ImageOutputSizes = imageOutputSizes
 			forwardResult.BillingModel = imageBillingModel
 		}
-		return forwardResult, nil
+		return forwardResult, responseErr
 	}
+}
+
+// Failed streams that cannot be replayed must retain reported usage for billing.
+func preserveOpenAIStreamingUsage(c *gin.Context, writerSizeBeforeStream int, usage *OpenAIUsage, err error) bool {
+	var failoverErr *UpstreamFailoverError
+	return c != nil && c.Writer != nil && c.Writer.Status() < 400 &&
+		OpenAICompactKeepaliveAdjustedWrittenSize(c) > writerSizeBeforeStream && GetOpsCyberPolicy(c) == nil &&
+		usage != nil && usage.HasTokens() && !errors.As(err, &failoverErr)
 }
 
 func (s *OpenAIGatewayService) buildUpstreamRequest(ctx context.Context, c *gin.Context, account *Account, body []byte, token string, isStream bool, promptCacheKey string, isCodexCLI bool) (*http.Request, error) {

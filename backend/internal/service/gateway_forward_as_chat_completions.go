@@ -5,7 +5,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -237,12 +236,14 @@ func (s *GatewayService) handleCCBufferedFromAnthropic(
 
 	var finalResp *apicompat.AnthropicResponse
 	var usage ClaudeUsage
+	sawTerminalEvent := false
 
 	for scanner.Scan() {
 		line := scanner.Text()
 		// SSE 规范允许 `event:xxx`（冒号后无空格）：Kimi 等 Anthropic 兼容上游
 		// 返回紧凑格式，严格匹配 "event: " 会丢弃全部事件（#4653 同根因）。
-		if _, ok := extractOpenAISSEEventLine(line); !ok {
+		eventType, ok := extractOpenAISSEEventLine(line)
+		if !ok {
 			continue
 		}
 
@@ -253,11 +254,20 @@ func (s *GatewayService) handleCCBufferedFromAnthropic(
 		if !ok {
 			continue
 		}
+		if anthropicCompatibilityEventIsError(eventType, payload) {
+			failure, message := s.anthropicCompatibilityStreamFailure(c, resp, []byte(payload), nil)
+			if !failure.ShouldRetryNextAccount() && !APIKeyFailoverAttemptEnabled(ginRequestContext(c)) {
+				writeGatewayCCError(c, mapUpstreamStatusCode(failure.StatusCode), "upstream_error", message)
+				return nil, fmt.Errorf("upstream response failed: %s", message)
+			}
+			return nil, failure
+		}
 
 		var event apicompat.AnthropicStreamEvent
 		if err := json.Unmarshal([]byte(payload), &event); err != nil {
 			continue
 		}
+		sawTerminalEvent = sawTerminalEvent || anthropicCompatibilityEventIsTerminal(&event)
 
 		// message_start carries the initial response structure and cache usage
 		if event.Type == "message_start" && event.Message != nil {
@@ -292,18 +302,9 @@ func (s *GatewayService) handleCCBufferedFromAnthropic(
 		}
 	}
 
-	if err := scanner.Err(); err != nil {
-		if !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
-			logger.L().Warn("forward_as_cc buffered: read error",
-				zap.Error(err),
-				zap.String("request_id", requestID),
-			)
-		}
-	}
-
-	if finalResp == nil {
-		writeGatewayCCError(c, http.StatusBadGateway, "server_error", "Upstream stream ended without a response")
-		return nil, fmt.Errorf("upstream stream ended without response")
+	if finalResp == nil || !sawTerminalEvent {
+		failure, _ := s.anthropicCompatibilityStreamFailure(c, resp, nil, scanner.Err())
+		return nil, failure
 	}
 
 	// Update usage from accumulated delta
@@ -367,6 +368,7 @@ func (s *GatewayService) handleCCStreamingFromAnthropic(
 	includeUsage bool,
 ) (*ForwardResult, error) {
 	requestID := resp.Header.Get("x-request-id")
+	writerSizeBeforeStream := c.Writer.Size()
 
 	if s.responseHeaderFilter != nil {
 		responseheaders.WriteFilteredHeaders(c.Writer.Header(), resp.Header, s.responseHeaderFilter)
@@ -388,6 +390,7 @@ func (s *GatewayService) handleCCStreamingFromAnthropic(
 	var usage ClaudeUsage
 	var firstTokenMs *int
 	firstChunk := true
+	sawTerminalEvent := false
 
 	scanner := bufio.NewScanner(resp.Body)
 	maxLineSize := defaultMaxLineSize
@@ -407,6 +410,18 @@ func (s *GatewayService) handleCCStreamingFromAnthropic(
 			Duration:        time.Since(startTime),
 			FirstTokenMs:    firstTokenMs,
 		}
+	}
+	handleFailure := func(payload []byte, cause error) (*ForwardResult, error) {
+		failure, message := s.anthropicCompatibilityStreamFailure(c, resp, payload, cause)
+		if c.Writer.Size() == writerSizeBeforeStream {
+			if !failure.ShouldRetryNextAccount() && !APIKeyFailoverAttemptEnabled(ginRequestContext(c)) {
+				writeGatewayCCError(c, mapUpstreamStatusCode(failure.StatusCode), "upstream_error", message)
+				return nil, fmt.Errorf("upstream response failed: %s", message)
+			}
+			return nil, failure
+		}
+		writeAnthropicCompatibilityStreamFailure(c, false, anthState.ResponseID, responseModel, message, failure.StatusCode)
+		return resultWithUsage(), fmt.Errorf("upstream response failed: %s", message)
 	}
 
 	writeChunk := func(chunk apicompat.ChatCompletionsChunk) bool {
@@ -441,22 +456,27 @@ func (s *GatewayService) handleCCStreamingFromAnthropic(
 
 		// Chain: Anthropic event → Responses events → CC chunks
 		responsesEvents := apicompat.AnthropicEventToResponsesEvents(event, anthState)
+		wroteChunks := false
 		for _, resEvt := range responsesEvents {
 			ccChunks := apicompat.ResponsesEventToChatChunks(&resEvt, ccState)
 			for _, chunk := range ccChunks {
+				wroteChunks = true
 				if disconnected := writeChunk(chunk); disconnected {
 					return true
 				}
 			}
 		}
-		c.Writer.Flush()
+		if wroteChunks {
+			c.Writer.Flush()
+		}
 		return false
 	}
 
 	for scanner.Scan() {
 		line := scanner.Text()
 		// 与缓冲路径一致：接受 SSE 紧凑格式（冒号后无空格，#4653 同根因）。
-		if _, ok := extractOpenAISSEEventLine(line); !ok {
+		eventType, ok := extractOpenAISSEEventLine(line)
+		if !ok {
 			continue
 		}
 
@@ -467,24 +487,23 @@ func (s *GatewayService) handleCCStreamingFromAnthropic(
 		if !ok {
 			continue
 		}
+		if anthropicCompatibilityEventIsError(eventType, payload) {
+			return handleFailure([]byte(payload), nil)
+		}
 
 		var event apicompat.AnthropicStreamEvent
 		if err := json.Unmarshal([]byte(payload), &event); err != nil {
 			continue
 		}
+		sawTerminalEvent = sawTerminalEvent || anthropicCompatibilityEventIsTerminal(&event)
 
 		if processAnthropicEvent(&event) {
 			return resultWithUsage(), nil
 		}
 	}
 
-	if err := scanner.Err(); err != nil {
-		if !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
-			logger.L().Warn("forward_as_cc stream: read error",
-				zap.Error(err),
-				zap.String("request_id", requestID),
-			)
-		}
+	if !sawTerminalEvent {
+		return handleFailure(nil, scanner.Err())
 	}
 
 	// Finalize both state machines
@@ -511,6 +530,7 @@ func (s *GatewayService) handleCCStreamingFromAnthropic(
 // the Anthropic-upstream CC forwarding path.
 func writeGatewayCCError(c *gin.Context, statusCode int, errType, message string) {
 	MarkResponseCommitted(c)
+	c.Writer.Header().Set("Content-Type", "application/json; charset=utf-8")
 	c.JSON(statusCode, gin.H{
 		"error": gin.H{
 			"type":    errType,

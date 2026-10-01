@@ -241,14 +241,17 @@ func (s *OpenAIGatewayService) forwardOpenAIPassthrough(
 
 	var usage *OpenAIUsage
 	var firstTokenMs *int
+	var responseErr error
 	responseID := ""
 	imageCount := 0
 	var imageOutputSizes []string
 	if reqStream {
+		writerSizeBeforeStream := OpenAICompactKeepaliveAdjustedWrittenSize(c)
 		result, err := s.handleStreamingResponsePassthrough(ctx, resp, c, account, startTime, reqModel, upstreamPassthroughModel)
-		if err != nil {
+		if err != nil && (result == nil || !preserveOpenAIStreamingUsage(c, writerSizeBeforeStream, result.usage, err)) {
 			return nil, err
 		}
+		responseErr = err
 		usage = result.usage
 		firstTokenMs = result.firstTokenMs
 		responseID = strings.TrimSpace(result.responseID)
@@ -299,7 +302,7 @@ func (s *OpenAIGatewayService) forwardOpenAIPassthrough(
 		forwardResult.ImageOutputSizes = imageOutputSizes
 		forwardResult.BillingModel = imageBillingModel
 	}
-	return forwardResult, nil
+	return forwardResult, responseErr
 }
 
 func logOpenAIPassthroughInstructionsRejected(

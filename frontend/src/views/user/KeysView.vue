@@ -200,13 +200,15 @@
               :title="supportsFailover(row.group) ? undefined : t('keys.failover.supportedPlatforms')"
               :class="[
                 'inline-flex max-w-full items-center justify-center rounded px-2.5 py-1.5 text-xs font-semibold transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500',
-                isFailoverActive(row)
-                  ? 'bg-red-50 text-red-700 ring-1 ring-red-200 hover:bg-red-100 dark:bg-red-900/25 dark:text-red-300 dark:ring-red-800 dark:hover:bg-red-900/40'
-                  : 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200 hover:bg-emerald-100 dark:bg-emerald-900/25 dark:text-emerald-300 dark:ring-emerald-800 dark:hover:bg-emerald-900/40'
+                !row.failover_enabled
+                  ? 'bg-gray-100 text-gray-500 ring-1 ring-gray-200 hover:bg-gray-200 dark:bg-dark-700 dark:text-dark-400 dark:ring-dark-600 dark:hover:bg-dark-600'
+                  : isFailoverActive(row)
+                    ? 'bg-red-50 text-red-700 ring-1 ring-red-200 hover:bg-red-100 dark:bg-red-900/25 dark:text-red-300 dark:ring-red-800 dark:hover:bg-red-900/40'
+                    : 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200 hover:bg-emerald-100 dark:bg-emerald-900/25 dark:text-emerald-300 dark:ring-emerald-800 dark:hover:bg-emerald-900/40'
               ]"
               @click="openFailoverModal(row)"
             >
-              {{ isFailoverActive(row) ? t('keys.failover.active') : t('keys.failover.healthy') }}
+              {{ !row.failover_enabled ? t('keys.failover.disabled') : isFailoverActive(row) ? t('keys.failover.active') : t('keys.failover.healthy') }}
             </button>
           </template>
 

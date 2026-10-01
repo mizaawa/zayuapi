@@ -322,7 +322,9 @@ func (h *GatewayHandler) ChatCompletions(c *gin.Context) {
 				zap.Bool("upstream_error_response_already_written", upstreamErrorAlreadyCommunicated),
 				zap.Error(err),
 			)
-			return
+			if !gatewayCompatibilityHasBillablePartialUsage(c, result, err, writerSizeBeforeForward) {
+				return
+			}
 		}
 
 		// 6. Record usage
@@ -364,6 +366,7 @@ func (h *GatewayHandler) ChatCompletions(c *gin.Context) {
 
 // chatCompletionsErrorResponse writes an error in OpenAI Chat Completions format.
 func (h *GatewayHandler) chatCompletionsErrorResponse(c *gin.Context, status int, errType, message string) {
+	c.Writer.Header().Set("Content-Type", "application/json; charset=utf-8")
 	c.JSON(status, gin.H{
 		"error": gin.H{
 			"type":    errType,

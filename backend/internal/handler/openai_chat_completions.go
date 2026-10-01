@@ -267,10 +267,18 @@ func (h *OpenAIGatewayHandler) ChatCompletions(c *gin.Context) {
 			service.SetOpsLatencyMs(c, service.OpsTimeToFirstTokenMsKey, int64(*result.FirstTokenMs))
 		}
 		if err != nil {
-			if result != nil && result.ImageCount > 0 {
-				reqLog.Warn("openai_chat_completions.forward_partial_error_with_image_result",
+			if result != nil && (result.ImageCount > 0 || openAIForwardHasBillablePartialUsage(c, result, err, writerSizeBeforeForward)) {
+				service.RecordAPIKeyFailoverUpstreamFailure(c.Request.Context(), http.StatusBadGateway, []byte(err.Error()))
+				if !openAIForwardErrorAlreadyCommunicated(c, writerSizeBeforeForward, err) {
+					if !h.ensureOpenAIStreamReadErrorResponse(c, err, streamStarted) {
+						h.ensureForwardErrorResponse(c, streamStarted)
+					}
+				}
+				reqLog.Warn("openai_chat_completions.forward_partial_error_with_usage",
 					zap.Int64("account_id", account.ID),
 					zap.Int("image_count", result.ImageCount),
+					zap.Int("input_tokens", result.Usage.InputTokens),
+					zap.Int("output_tokens", result.Usage.OutputTokens),
 					zap.Error(err),
 				)
 			} else {
@@ -353,13 +361,14 @@ func (h *OpenAIGatewayHandler) ChatCompletions(c *gin.Context) {
 			}
 		}
 		if result != nil {
-			h.gatewayService.ReportOpenAIAccountScheduleResult(account.ID, account.GetMappedModel(selectionModel), true, result.FirstTokenMs)
+			h.gatewayService.ReportOpenAIAccountScheduleResult(account.ID, account.GetMappedModel(selectionModel), err == nil, result.FirstTokenMs)
 		} else {
 			h.gatewayService.ReportOpenAIAccountScheduleResult(account.ID, account.GetMappedModel(selectionModel), true, nil)
 		}
 
 		userAgent := c.GetHeader("User-Agent")
 		clientIP := ip.GetClientIP(c)
+		requestPayloadHash := service.HashUsageRequestPayload(body)
 		inboundEndpoint := GetInboundEndpoint(c)
 		upstreamEndpoint := resolveOpenAIUpstreamEndpoint(c, account, result)
 		quotaPlatform := service.QuotaPlatform(c.Request.Context(), apiKey)
@@ -377,6 +386,7 @@ func (h *OpenAIGatewayHandler) ChatCompletions(c *gin.Context) {
 				UpstreamEndpoint:   upstreamEndpoint,
 				UserAgent:          userAgent,
 				IPAddress:          clientIP,
+				RequestPayloadHash: requestPayloadHash,
 				APIKeyService:      h.apiKeyService,
 				QuotaPlatform:      quotaPlatform,
 				SessionID:          sessionID,

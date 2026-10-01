@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/ctxkey"
@@ -64,6 +65,7 @@ func APIKeyFailover(keys apiKeyFailoverService, subscriptions *service.Subscript
 		next := c.Handler()
 		originalWriter := c.Writer
 		defer func() { c.Writer = originalWriter }()
+		keepaliveStarted := &atomic.Bool{}
 		limit := key.FailoverMaxRetries
 		if limit < 1 || limit > 10 {
 			limit = service.DefaultAPIKeyFailoverMaxRetries
@@ -83,7 +85,7 @@ func APIKeyFailover(keys apiKeyFailoverService, subscriptions *service.Subscript
 				}
 				call.Request.Body = io.NopCloser(bytes.NewReader(body))
 				call.Request = call.Request.WithContext(service.WithAPIKeyFailoverAttempt(call.Request.Context()))
-				writer := newAPIKeyFailoverWriter(originalWriter)
+				writer := newAPIKeyFailoverWriter(originalWriter, keepaliveStarted)
 				call.Writer = writer
 				if first {
 					first = false
@@ -239,17 +241,48 @@ func setAPIKeyFailoverBilling(c *gin.Context, key *service.APIKey, subscriptions
 
 type apiKeyFailoverWriter struct {
 	gin.ResponseWriter
-	mu        sync.Mutex
-	header    http.Header
-	status    int
-	size      int
-	written   bool
-	forwarded bool
-	body      bytes.Buffer
+	keepaliveStarted *atomic.Bool
+	mu               sync.Mutex
+	header           http.Header
+	status           int
+	size             int
+	written          bool
+	forwarded        bool
+	body             bytes.Buffer
 }
 
-func newAPIKeyFailoverWriter(parent gin.ResponseWriter) *apiKeyFailoverWriter {
-	return &apiKeyFailoverWriter{ResponseWriter: parent, header: parent.Header().Clone(), status: http.StatusOK, size: -1}
+func newAPIKeyFailoverWriter(parent gin.ResponseWriter, keepaliveStarted *atomic.Bool) *apiKeyFailoverWriter {
+	w := &apiKeyFailoverWriter{ResponseWriter: parent, keepaliveStarted: keepaliveStarted, header: parent.Header().Clone(), status: http.StatusOK, size: -1}
+	if keepaliveStarted.Load() {
+		w.written = true
+		w.size = 0
+	}
+	return w
+}
+
+func (w *apiKeyFailoverWriter) OpenAICompactKeepaliveStarted() bool {
+	return w.keepaliveStarted.Load()
+}
+
+// Compact comments can reach the client while terminal responses stay buffered
+// until the retry decision. Later attempts inherit the committed SSE headers.
+func (w *apiKeyFailoverWriter) WriteOpenAICompactKeepalive(data []byte) (int, error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if !w.keepaliveStarted.Swap(true) {
+		w.copyHeadersLocked()
+		w.ResponseWriter.WriteHeader(http.StatusOK)
+		w.ResponseWriter.WriteHeaderNow()
+	}
+	w.status = http.StatusOK
+	w.written = true
+	if w.size < 0 {
+		w.size = 0
+	}
+	n, err := w.ResponseWriter.Write(data)
+	w.size += n
+	w.ResponseWriter.Flush()
+	return n, err
 }
 
 func (w *apiKeyFailoverWriter) Header() http.Header { return w.header }
@@ -314,16 +347,20 @@ func (w *apiKeyFailoverWriter) commitLocked() {
 		return
 	}
 	w.forwarded = true
+	w.copyHeadersLocked()
+	w.ResponseWriter.WriteHeader(w.status)
+	w.ResponseWriter.WriteHeaderNow()
+	if w.body.Len() > 0 {
+		_, _ = w.ResponseWriter.Write(w.body.Bytes())
+	}
+}
+
+func (w *apiKeyFailoverWriter) copyHeadersLocked() {
 	parentHeader := w.ResponseWriter.Header()
 	for name := range parentHeader {
 		delete(parentHeader, name)
 	}
 	for name, values := range w.header {
 		parentHeader[name] = append([]string(nil), values...)
-	}
-	w.ResponseWriter.WriteHeader(w.status)
-	w.ResponseWriter.WriteHeaderNow()
-	if w.body.Len() > 0 {
-		_, _ = w.ResponseWriter.Write(w.body.Bytes())
 	}
 }
