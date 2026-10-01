@@ -273,10 +273,15 @@
               <span>{{ t('home.providers.antigravity') }}</span>
               <small>{{ t('home.providers.supported') }}</small>
             </div>
+            <div class="provider-item">
+              <span class="provider-mark provider-mark-neutral">G</span>
+              <span>{{ t('home.providers.grok') }}</span>
+              <small>{{ t('home.providers.supported') }}</small>
+            </div>
             <div class="provider-item provider-item-muted">
               <span class="provider-mark">+</span>
               <span>{{ t('home.providers.more') }}</span>
-              <small>{{ t('home.providers.soon') }}</small>
+              <small>{{ t('home.providers.viewMore') }}</small>
             </div>
           </div>
         </div>
@@ -577,7 +582,7 @@ onMounted(() => {
 .providers-section { padding: 7rem 1.5rem; background: var(--md-sys-color-surface-container); }
 .providers-inner { width: min(100%, 72rem); margin: 0 auto; }
 .providers-heading { margin-bottom: 3rem; }
-.provider-list { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 0.75rem; }
+.provider-list { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 0.75rem; }
 .provider-item { display: grid; min-height: 11rem; place-items: center; align-content: center; gap: 0.75rem; padding: 1.25rem; border: 1px solid var(--md-sys-color-outline); border-radius: 1.75rem; background: var(--md-sys-color-surface); font-weight: 750; transition: border-color 180ms ease, transform 180ms ease, box-shadow 180ms ease; }
 .provider-item:hover { border-color: var(--landing-accent); box-shadow: 0 1rem 2.5rem rgb(83 66 24 / 0.14); transform: translateY(-3px); }
 .provider-mark { display: grid; width: 3rem; height: 3rem; place-items: center; border-radius: 1rem; background: var(--md-sys-color-surface-container); font-weight: 750; }
@@ -585,6 +590,7 @@ onMounted(() => {
 .provider-mark-green { background: #e4f0df; color: #477b54; }
 .provider-mark-blue { background: #e5eff5; color: #456a7a; }
 .provider-mark-violet { background: #eee8f5; color: #6e5d84; }
+.provider-mark-neutral { background: #e8eaed; color: #3c4043; }
 .provider-item small { color: var(--landing-accent); font-size: 0.6875rem; font-weight: 700; }
 .provider-item-muted { opacity: 0.72; }
 
@@ -606,6 +612,10 @@ onMounted(() => {
 @keyframes target-breathe { 0%, 82%, 100% { border-color: transparent; } 88%, 94% { border-color: var(--landing-accent); } }
 @keyframes console-scan { 0% { transform: translateY(0); opacity: 0; } 10% { opacity: 0.75; } 85% { opacity: 0.35; } 100% { transform: translateY(22rem); opacity: 0; } }
 
+@media (max-width: 1100px) {
+  .provider-list { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
 @media (max-width: 900px) {
   .hero-content h1 { font-size: 4.5rem; }
   .routing-visual { grid-template-columns: minmax(0, 1fr) auto; }
@@ -615,7 +625,6 @@ onMounted(() => {
   .capabilities-grid article { padding: 0; }
   .capabilities-grid article + article { padding-top: 2.5rem; border-top: 1px solid var(--md-sys-color-outline); border-left: 0; }
   .provider-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .provider-item:last-child { grid-column: 1 / -1; }
 }
 
 @media (max-width: 640px) {
@@ -651,7 +660,6 @@ onMounted(() => {
   .providers-section { padding: 5rem 1rem; }
   .section-heading { margin-bottom: 3rem; }
   .provider-list { grid-template-columns: 1fr; }
-  .provider-item:last-child { grid-column: auto; }
   .provider-item { min-height: 8.5rem; }
   .landing-footer > div { flex-direction: column; text-align: center; }
 }

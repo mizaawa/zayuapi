@@ -228,22 +228,34 @@
           </div>
         </template>
 
-        <!-- 合并首字/总耗时的健康度列：左侧色条上端随首字档、下端随总耗时档，中段(40%-60%)短渐变过渡，便于纵向扫视整体健康状况 -->
         <template #cell-latency="{ row }">
-          <div class="flex items-stretch gap-2">
+          <div class="flex items-stretch gap-2.5 text-left" data-testid="usage-performance">
             <span
               class="w-1 shrink-0 rounded-full"
-              :class="row.first_token_ms != null
-                ? ['bg-gradient-to-b from-40% to-60%', LATENCY_BAR_FROM_CLASSES[firstTokenSeverity(row.first_token_ms)], LATENCY_BAR_TO_CLASSES[durationSeverity(row.duration_ms ?? 0)]]
-                : LATENCY_BAR_CLASSES[durationSeverity(row.duration_ms ?? 0)]"
+              :class="getLatencyBarClass(row)"
               aria-hidden="true"
             ></span>
-            <div class="grid grid-cols-[max-content_max-content] items-baseline gap-x-2 gap-y-0.5 text-xs">
+            <div class="grid min-w-[10rem] grid-cols-[max-content_minmax(4.5rem,1fr)] items-baseline gap-x-3 gap-y-1 text-xs sm:min-w-[13rem]">
               <span class="text-gray-400 dark:text-gray-500">{{ t('usage.latencyFirstToken') }}</span>
-              <span v-if="row.first_token_ms != null" class="font-medium tabular-nums" :class="LATENCY_TEXT_CLASSES[firstTokenSeverity(row.first_token_ms)]">{{ formatDuration(row.first_token_ms) }}</span>
-              <span v-else class="text-gray-400 dark:text-gray-500">-</span>
+              <span v-if="hasRecordedDuration(row.first_token_ms)" class="text-right font-medium tabular-nums" :class="LATENCY_TEXT_CLASSES[firstTokenSeverity(row.first_token_ms)]">{{ formatDuration(row.first_token_ms) }}</span>
+              <span v-else class="text-right text-[11px] text-gray-400 dark:text-gray-500">{{ t('usage.performanceNotRecorded') }}</span>
               <span class="text-gray-400 dark:text-gray-500">{{ t('usage.latencyDuration') }}</span>
-              <span class="font-medium tabular-nums" :class="LATENCY_TEXT_CLASSES[durationSeverity(row.duration_ms ?? 0)]">{{ formatDuration(row.duration_ms) }}</span>
+              <span v-if="hasRecordedDuration(row.duration_ms)" class="text-right font-medium tabular-nums" :class="LATENCY_TEXT_CLASSES[durationSeverity(row.duration_ms)]">{{ formatDuration(row.duration_ms) }}</span>
+              <span v-else class="text-right text-[11px] text-gray-400 dark:text-gray-500">{{ t('usage.performanceNotRecorded') }}</span>
+              <span class="text-gray-400 dark:text-gray-500" :title="t('usage.outputDeliverySpeedHint')">
+                <span class="hidden sm:inline">{{ t('usage.outputDeliverySpeed') }}</span>
+                <span class="sm:hidden">{{ t('usage.outputDeliverySpeedShort') }}</span>
+              </span>
+              <span
+                v-if="getEndToEndOutputSpeed(row) !== null"
+                data-testid="output-delivery-speed"
+                class="whitespace-nowrap text-right font-medium tabular-nums text-sky-600 dark:text-sky-400"
+                :title="t('usage.outputDeliverySpeedHint')"
+              >
+                {{ getEndToEndOutputSpeed(row)?.toFixed(1) }}
+                <span class="ml-0.5 text-[10px] font-normal text-gray-400 dark:text-gray-500">tok/s</span>
+              </span>
+              <span v-else data-testid="output-delivery-speed" class="text-right text-[11px] text-gray-400 dark:text-gray-500">{{ t(getOutputSpeedUnavailableReason(row)) }}</span>
             </div>
           </div>
         </template>
@@ -520,6 +532,7 @@ import { formatTokenPricePerMillion } from '@/utils/usagePricing'
 import { formatCacheHitRate, getCacheHitRate, getCacheHitRateClass } from '@/utils/cacheHitRate'
 import { getUsageServiceTierLabel } from '@/utils/usageServiceTier'
 import { resolveUsageRequestType } from '@/utils/usageRequestType'
+import { getEndToEndOutputSpeed, getOutputSpeedUnavailableReason } from '@/utils/outputSpeed'
 import {
   LATENCY_BAR_CLASSES,
   LATENCY_BAR_FROM_CLASSES,
@@ -694,9 +707,23 @@ const formatUserAgent = (ua: string): string => {
   return ua
 }
 
+const hasRecordedDuration = (ms: number | null | undefined): ms is number =>
+  ms != null && Number.isFinite(ms) && ms >= 0
+
+const getLatencyBarClass = (row: AdminUsageLog): string | string[] => {
+  const first = hasRecordedDuration(row.first_token_ms) ? firstTokenSeverity(row.first_token_ms) : null
+  const total = hasRecordedDuration(row.duration_ms) ? durationSeverity(row.duration_ms) : null
+  if (first && total) {
+    return ['bg-gradient-to-b from-40% to-60%', LATENCY_BAR_FROM_CLASSES[first], LATENCY_BAR_TO_CLASSES[total]]
+  }
+  if (first) return LATENCY_BAR_CLASSES[first]
+  if (total) return LATENCY_BAR_CLASSES[total]
+  return 'bg-gray-200 dark:bg-gray-700'
+}
+
 // 超过 1 分钟简化为 "Xm Ys"，免去人工换算（超过 1 小时再进位为 "Xh Ym"）
 const formatDuration = (ms: number | null | undefined): string => {
-  if (ms == null) return '-'
+  if (!hasRecordedDuration(ms)) return t('usage.performanceNotRecorded')
   if (ms < 1000) return `${ms}ms`
   if (ms < 60_000) return `${(ms / 1000).toFixed(2)}s`
   const totalSec = Math.round(ms / 1000)

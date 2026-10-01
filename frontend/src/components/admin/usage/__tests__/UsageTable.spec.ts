@@ -36,6 +36,11 @@ const messages: Record<string, string> = {
   'usage.original': 'Original',
   'usage.userBilled': 'User billed',
   'usage.accountBilled': 'Account billed',
+  'usage.outputDeliverySpeed': 'End-to-end output speed',
+  'usage.outputDeliverySpeedHint': 'Output tokens / recorded total duration (including first-token latency)',
+  'usage.performanceNotRecorded': 'Not recorded',
+  'usage.performanceNotApplicable': 'N/A',
+  'usage.performanceNoOutput': 'No output',
   'usage.imageUnit': ' images',
   'usage.imageCount': 'Image count',
   'usage.imageBillingSize': 'Billing size',
@@ -83,6 +88,7 @@ const DataTableStub = {
         <slot name="cell-tokens" :row="row" />
         <slot name="cell-cache_hit_rate" :row="row" />
         <slot name="cell-cost" :row="row" />
+        <slot name="cell-latency" :row="row" />
       </div>
     </div>
   `,
@@ -117,6 +123,48 @@ const baseImageRow = {
 }
 
 describe('admin UsageTable tooltip', () => {
+  it.each([true, false])('shows end-to-end speed with admin billing enabled: %s', (showAccountBilling) => {
+    const wrapper = mount(UsageTable, {
+      props: {
+        data: [{
+          ...baseImageRow,
+          model: 'gpt-5.4',
+          billing_mode: 'token',
+          image_count: 0,
+          output_tokens: 1218,
+          first_token_ms: 10620,
+          duration_ms: 25690,
+        }],
+        columns: [{ key: 'latency', label: 'Latency' }],
+        showAccountBilling,
+      },
+      global: { stubs: { DataTable: DataTableStub, Icon: true, Teleport: true } },
+    })
+    const speed = wrapper.get('[data-testid="output-delivery-speed"]')
+    expect(speed.text()).toBe('47.4 tok/s')
+    expect(speed.attributes('title')).toContain('including first-token latency')
+    const performance = wrapper.get('[data-testid="usage-performance"]')
+    expect(performance.text()).toContain('10.62s')
+    expect(performance.text()).toContain('25.69s')
+    expect(performance.text()).toContain('End-to-end output speed')
+    wrapper.unmount()
+  })
+
+  it('uses descriptive empty states and a neutral health bar when timing is missing', () => {
+    const wrapper = mount(UsageTable, {
+      props: {
+        data: [{ ...baseImageRow, billing_mode: 'token', image_count: 0, output_tokens: 100 }],
+        columns: [{ key: 'latency', label: 'Latency' }],
+      },
+      global: { stubs: { DataTable: DataTableStub, Icon: true, Teleport: true } },
+    })
+    const performance = wrapper.get('[data-testid="usage-performance"]')
+    expect(performance.findAll('span').some((span) => span.text() === '-')).toBe(false)
+    expect(wrapper.get('[data-testid="output-delivery-speed"]').text()).toBe('Not recorded')
+    expect(performance.get('[aria-hidden="true"]').classes()).toContain('bg-gray-200')
+    wrapper.unmount()
+  })
+
   it('renders cache hit percentages and a neutral dash when there are no cache reads', () => {
     const wrapper = mount(UsageTable, {
       props: {

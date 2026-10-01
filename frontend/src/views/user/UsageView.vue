@@ -237,6 +237,7 @@ import UserErrorRequestsTable from '@/components/user/UserErrorRequestsTable.vue
 import { getPersistedPageSize } from '@/composables/usePersistedPageSize'
 import { formatReasoningEffort } from '@/utils/format'
 import { formatCacheHitRate } from '@/utils/cacheHitRate'
+import { getEndToEndOutputSpeed } from '@/utils/outputSpeed'
 import { BILLING_MODE_IMAGE, getBillingModeLabel } from '@/utils/billingMode'
 import { resolveUsageRequestType, requestTypeToLegacyStream } from '@/utils/usageRequestType'
 import type {
@@ -666,27 +667,32 @@ const exportUsage = async (format: 'csv' | 'xlsx') => {
       'Original Cost',
       'First Token (ms)',
       'Duration (ms)',
+      'End-to-End Output Delivery Speed (tok/s)',
     ]
-    const rows = allLogs.map((log) => [
-      log.created_at,
-      log.api_key?.name || '',
-      log.model,
-      formatReasoningEffort(log.reasoning_effort),
-      log.inbound_endpoint || '',
-      log.ip_address || '',
-      getRequestTypeExportText(log),
-      getBillingModeLabel(getDisplayBillingMode(log), t),
-      log.input_tokens,
-      log.output_tokens,
-      log.cache_read_tokens,
-      log.cache_creation_tokens,
-      formatCacheHitRate(log),
-      log.rate_multiplier,
-      log.actual_cost.toFixed(8),
-      log.total_cost.toFixed(8),
-      log.first_token_ms ?? '',
-      log.duration_ms ?? '',
-    ])
+    const rows = allLogs.map((log) => {
+      const speed = getEndToEndOutputSpeed(log)
+      return [
+        log.created_at,
+        log.api_key?.name || '',
+        log.model,
+        formatReasoningEffort(log.reasoning_effort),
+        log.inbound_endpoint || '',
+        log.ip_address || '',
+        getRequestTypeExportText(log),
+        getBillingModeLabel(getDisplayBillingMode(log), t),
+        log.input_tokens,
+        log.output_tokens,
+        log.cache_read_tokens,
+        log.cache_creation_tokens,
+        formatCacheHitRate(log),
+        log.rate_multiplier,
+        log.actual_cost.toFixed(8),
+        log.total_cost.toFixed(8),
+        log.first_token_ms ?? '',
+        log.duration_ms ?? '',
+        speed === null ? '' : Number(speed.toFixed(1)),
+      ]
+    })
     const filename = `usage_${startDate.value}_to_${endDate.value}`
     if (format === 'xlsx') {
       const XLSX = await import('xlsx')

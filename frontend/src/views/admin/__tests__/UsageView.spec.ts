@@ -33,6 +33,7 @@ const messages: Record<string, string> = {
   'admin.dashboard.hour': 'Hour',
   'admin.usage.failedToLoadUser': 'Failed to load user',
   'usage.cacheHitRate': 'Cache hit rate',
+  'usage.outputDeliverySpeed': 'End-to-End Output Delivery Speed',
 	'usage.requestedModel': 'Requested model',
 	'usage.sentUpstreamModel': 'Sent upstream model',
 	'usage.upstreamResponseModel': 'Upstream response model',
@@ -664,6 +665,27 @@ describe('admin UsageView columns and export', () => {
     expect(headers[hitRateIndex - 1]).toBe('admin.usage.cacheCreationTokens')
     expect(headers[hitRateIndex + 1]).toBe('admin.usage.inputCost')
     expect(sheetAddAoa.mock.calls[0][1][0][hitRateIndex]).toBe(expected)
+    wrapper.unmount()
+  })
+
+  it.each([
+    { output_tokens: 101, duration_ms: 345, expected: 292.8 },
+    { output_tokens: 0, duration_ms: 345, expected: '' },
+    { output_tokens: 101, duration_ms: null, expected: '' },
+    { output_tokens: 101, duration_ms: 0, expected: '' },
+    { output_tokens: 101, duration_ms: 345, billing_mode: 'image', expected: '' },
+  ])('exports output delivery speed as $expected for $output_tokens tokens in $duration_ms ms', async ({ expected, ...usage }) => {
+    exportList.mockResolvedValue({ items: [usage], total: 1, pages: 1 })
+    const wrapper = mountRouteFilteredUsageView()
+    await flushPromises()
+
+    await (wrapper.vm as any).exportToExcel()
+
+    const headers = aoaToSheet.mock.calls[0][0][0]
+    const speedIndex = headers.indexOf('End-to-End Output Delivery Speed (tok/s)')
+    expect(speedIndex).toBeGreaterThan(-1)
+    expect(headers[speedIndex - 1]).toBe('usage.duration')
+    expect(sheetAddAoa.mock.calls[0][1][0][speedIndex]).toBe(expected)
     wrapper.unmount()
   })
 })
