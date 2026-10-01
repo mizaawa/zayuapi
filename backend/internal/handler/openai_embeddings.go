@@ -115,6 +115,7 @@ func (h *OpenAIGatewayHandler) Embeddings(c *gin.Context) {
 	if maxAccountSwitches <= 0 {
 		maxAccountSwitches = 3
 	}
+	maxAccountSwitches = service.APIKeyFailoverAccountSwitchLimit(c.Request.Context(), maxAccountSwitches)
 	routingStart := time.Now()
 
 	// 分组利润控制：embeddings 文本入口请求级装门并固定 pricingAt。
@@ -213,6 +214,7 @@ func (h *OpenAIGatewayHandler) Embeddings(c *gin.Context) {
 		if err != nil {
 			var failoverErr *service.UpstreamFailoverError
 			if errors.As(err, &failoverErr) {
+				service.RecordAPIKeyFailoverUpstreamFailure(c.Request.Context(), failoverErr.StatusCode, failoverErr.ResponseBody)
 				if c.Writer.Size() != writerSizeBeforeForward {
 					h.handleFailoverExhausted(c, failoverErr, true)
 					return

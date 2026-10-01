@@ -449,6 +449,9 @@ func (s *AntigravityGatewayService) handleSingleAccountRetryInPlace(
 
 // antigravityRetryLoop 执行带 URL fallback 的重试循环
 func (s *AntigravityGatewayService) antigravityRetryLoop(p antigravityRetryLoopParams) (*antigravityRetryLoopResult, error) {
+	if APIKeyFailoverAttemptFailed(p.ctx) {
+		return nil, ErrAPIKeyFailoverAttemptExhausted
+	}
 	// 预检查：模型限流 + overages 启用 + 积分未耗尽 → 直接注入 AI Credits
 	overagesInjected := false
 	if p.requestedModel != "" && p.account.Platform == PlatformAntigravity &&
@@ -530,6 +533,7 @@ urlFallbackLoop:
 				err = errors.New("upstream returned nil response")
 			}
 			if err != nil {
+				RecordAPIKeyFailoverUpstreamFailure(p.ctx, 0, nil)
 				safeErr := sanitizeUpstreamErrorMessage(err.Error())
 				appendOpsUpstreamError(p.c, OpsUpstreamErrorEvent{
 					Platform:           p.account.Platform,
@@ -540,6 +544,10 @@ urlFallbackLoop:
 					Kind:               "request_error",
 					Message:            safeErr,
 				})
+				if APIKeyFailoverAttemptEnabled(p.ctx) {
+					setOpsUpstreamError(p.c, 0, safeErr, "")
+					return nil, fmt.Errorf("upstream request failed: %w", err)
+				}
 				if shouldAntigravityFallbackToNextURL(err, 0) && urlIdx < len(availableURLs)-1 {
 					logger.LegacyPrintf("service.antigravity_gateway", "%s URL fallback (connection error): %s -> %s", p.prefix, baseURL, availableURLs[urlIdx+1])
 					continue urlFallbackLoop
@@ -561,6 +569,7 @@ urlFallbackLoop:
 			if resp.StatusCode >= 400 {
 				respBody := s.readUpstreamErrorBody(resp)
 				_ = resp.Body.Close()
+				RecordAPIKeyFailoverUpstreamFailure(p.ctx, resp.StatusCode, respBody)
 
 				if overagesInjected && shouldMarkCreditsExhausted(resp, respBody, nil) {
 					modelKey := resolveCreditsOveragesModelKey(p.ctx, p.account, "", p.requestedModel)
@@ -582,6 +591,11 @@ urlFallbackLoop:
 						Body:       io.NopCloser(bytes.NewReader(respBody)),
 					}
 					break urlFallbackLoop
+				}
+
+				if APIKeyFailoverAttemptEnabled(p.ctx) {
+					resp.Body = io.NopCloser(bytes.NewReader(respBody))
+					return &antigravityRetryLoopResult{resp: resp}, nil
 				}
 
 				// 429/503 限流处理：区分 URL 级别限流、智能重试和账户配额限流

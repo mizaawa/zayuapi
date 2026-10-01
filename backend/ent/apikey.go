@@ -36,6 +36,18 @@ type APIKey struct {
 	Purpose string `json:"purpose,omitempty"`
 	// GroupID holds the value of the "group_id" field.
 	GroupID *int64 `json:"group_id,omitempty"`
+	// FailoverEnabled holds the value of the "failover_enabled" field.
+	FailoverEnabled bool `json:"failover_enabled,omitempty"`
+	// FailoverGroupID holds the value of the "failover_group_id" field.
+	FailoverGroupID *int64 `json:"failover_group_id,omitempty"`
+	// FailoverMaxRetries holds the value of the "failover_max_retries" field.
+	FailoverMaxRetries int `json:"failover_max_retries,omitempty"`
+	// FailoverCooldownSeconds holds the value of the "failover_cooldown_seconds" field.
+	FailoverCooldownSeconds int `json:"failover_cooldown_seconds,omitempty"`
+	// FailoverCooldownUntil holds the value of the "failover_cooldown_until" field.
+	FailoverCooldownUntil *time.Time `json:"failover_cooldown_until,omitempty"`
+	// FailoverRevision holds the value of the "failover_revision" field.
+	FailoverRevision int64 `json:"failover_revision,omitempty"`
 	// Status holds the value of the "status" field.
 	Status string `json:"status,omitempty"`
 	// Last usage time of this API key
@@ -125,13 +137,15 @@ func (*APIKey) scanValues(columns []string) ([]any, error) {
 		switch columns[i] {
 		case apikey.FieldIPWhitelist, apikey.FieldIPBlacklist:
 			values[i] = new([]byte)
+		case apikey.FieldFailoverEnabled:
+			values[i] = new(sql.NullBool)
 		case apikey.FieldQuota, apikey.FieldQuotaUsed, apikey.FieldRateLimit5h, apikey.FieldRateLimit1d, apikey.FieldRateLimit7d, apikey.FieldUsage5h, apikey.FieldUsage1d, apikey.FieldUsage7d:
 			values[i] = new(sql.NullFloat64)
-		case apikey.FieldID, apikey.FieldUserID, apikey.FieldGroupID:
+		case apikey.FieldID, apikey.FieldUserID, apikey.FieldGroupID, apikey.FieldFailoverGroupID, apikey.FieldFailoverMaxRetries, apikey.FieldFailoverCooldownSeconds, apikey.FieldFailoverRevision:
 			values[i] = new(sql.NullInt64)
 		case apikey.FieldKey, apikey.FieldName, apikey.FieldPurpose, apikey.FieldStatus:
 			values[i] = new(sql.NullString)
-		case apikey.FieldCreatedAt, apikey.FieldUpdatedAt, apikey.FieldDeletedAt, apikey.FieldLastUsedAt, apikey.FieldExpiresAt, apikey.FieldWindow5hStart, apikey.FieldWindow1dStart, apikey.FieldWindow7dStart:
+		case apikey.FieldCreatedAt, apikey.FieldUpdatedAt, apikey.FieldDeletedAt, apikey.FieldFailoverCooldownUntil, apikey.FieldLastUsedAt, apikey.FieldExpiresAt, apikey.FieldWindow5hStart, apikey.FieldWindow1dStart, apikey.FieldWindow7dStart:
 			values[i] = new(sql.NullTime)
 		default:
 			values[i] = new(sql.UnknownType)
@@ -203,6 +217,44 @@ func (_m *APIKey) assignValues(columns []string, values []any) error {
 			} else if value.Valid {
 				_m.GroupID = new(int64)
 				*_m.GroupID = value.Int64
+			}
+		case apikey.FieldFailoverEnabled:
+			if value, ok := values[i].(*sql.NullBool); !ok {
+				return fmt.Errorf("unexpected type %T for field failover_enabled", values[i])
+			} else if value.Valid {
+				_m.FailoverEnabled = value.Bool
+			}
+		case apikey.FieldFailoverGroupID:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field failover_group_id", values[i])
+			} else if value.Valid {
+				_m.FailoverGroupID = new(int64)
+				*_m.FailoverGroupID = value.Int64
+			}
+		case apikey.FieldFailoverMaxRetries:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field failover_max_retries", values[i])
+			} else if value.Valid {
+				_m.FailoverMaxRetries = int(value.Int64)
+			}
+		case apikey.FieldFailoverCooldownSeconds:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field failover_cooldown_seconds", values[i])
+			} else if value.Valid {
+				_m.FailoverCooldownSeconds = int(value.Int64)
+			}
+		case apikey.FieldFailoverCooldownUntil:
+			if value, ok := values[i].(*sql.NullTime); !ok {
+				return fmt.Errorf("unexpected type %T for field failover_cooldown_until", values[i])
+			} else if value.Valid {
+				_m.FailoverCooldownUntil = new(time.Time)
+				*_m.FailoverCooldownUntil = value.Time
+			}
+		case apikey.FieldFailoverRevision:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field failover_revision", values[i])
+			} else if value.Valid {
+				_m.FailoverRevision = value.Int64
 			}
 		case apikey.FieldStatus:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -387,6 +439,28 @@ func (_m *APIKey) String() string {
 		builder.WriteString("group_id=")
 		builder.WriteString(fmt.Sprintf("%v", *v))
 	}
+	builder.WriteString(", ")
+	builder.WriteString("failover_enabled=")
+	builder.WriteString(fmt.Sprintf("%v", _m.FailoverEnabled))
+	builder.WriteString(", ")
+	if v := _m.FailoverGroupID; v != nil {
+		builder.WriteString("failover_group_id=")
+		builder.WriteString(fmt.Sprintf("%v", *v))
+	}
+	builder.WriteString(", ")
+	builder.WriteString("failover_max_retries=")
+	builder.WriteString(fmt.Sprintf("%v", _m.FailoverMaxRetries))
+	builder.WriteString(", ")
+	builder.WriteString("failover_cooldown_seconds=")
+	builder.WriteString(fmt.Sprintf("%v", _m.FailoverCooldownSeconds))
+	builder.WriteString(", ")
+	if v := _m.FailoverCooldownUntil; v != nil {
+		builder.WriteString("failover_cooldown_until=")
+		builder.WriteString(v.Format(time.ANSIC))
+	}
+	builder.WriteString(", ")
+	builder.WriteString("failover_revision=")
+	builder.WriteString(fmt.Sprintf("%v", _m.FailoverRevision))
 	builder.WriteString(", ")
 	builder.WriteString("status=")
 	builder.WriteString(_m.Status)

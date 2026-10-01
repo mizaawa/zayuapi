@@ -841,7 +841,7 @@ func (s *BillingCacheService) checkRPM(ctx context.Context, user *User, group *G
 		if override != nil {
 			// override=0 → 该用户在该分组免检（但 user 级仍会在下面检查）。
 			if *override > 0 {
-				count, incErr := s.userRPMCache.IncrementUserGroupRPM(ctx, user.ID, group.ID)
+				count, incErr := s.incrementFailoverUserGroupRPM(ctx, user.ID, group.ID)
 				if incErr != nil {
 					logger.LegacyPrintf(
 						"service.billing_cache",
@@ -856,7 +856,7 @@ func (s *BillingCacheService) checkRPM(ctx context.Context, user *User, group *G
 			// override 命中后跳过 group.rpm_limit（override 替代 group），但不 return——继续检查 user 级。
 		} else if group.RPMLimit > 0 {
 			// 无 override，检查 group.rpm_limit。
-			count, err := s.userRPMCache.IncrementUserGroupRPM(ctx, user.ID, group.ID)
+			count, err := s.incrementFailoverUserGroupRPM(ctx, user.ID, group.ID)
 			if err != nil {
 				logger.LegacyPrintf(
 					"service.billing_cache",
@@ -872,7 +872,7 @@ func (s *BillingCacheService) checkRPM(ctx context.Context, user *User, group *G
 
 	// ── 第二层：用户级全局硬上限（始终生效） ──
 	if user.RPMLimit > 0 {
-		count, err := s.userRPMCache.IncrementUserRPM(ctx, user.ID)
+		count, err := s.incrementFailoverUserRPM(ctx, user.ID)
 		if err != nil {
 			logger.LegacyPrintf(
 				"service.billing_cache",

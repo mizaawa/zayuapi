@@ -196,6 +196,9 @@ func NewHTTPUpstream(cfg *config.Config) service.HTTPUpstream {
 //   - 调用方必须关闭 resp.Body，否则会导致 inFlight 计数泄漏
 //   - inFlight > 0 的客户端不会被淘汰，确保活跃请求不被中断
 func (s *httpUpstreamService) Do(req *http.Request, proxyURL string, accountID int64, accountConcurrency int) (*http.Response, error) {
+	if req != nil && service.APIKeyFailoverAttemptFailed(req.Context()) {
+		return nil, service.ErrAPIKeyFailoverAttemptExhausted
+	}
 	applyGrokCLIProxyHeaders(req)
 	if err := s.validateRequestHost(req); err != nil {
 		return nil, err
@@ -214,8 +217,10 @@ func (s *httpUpstreamService) Do(req *http.Request, proxyURL string, accountID i
 	// 执行请求
 	client := httpClientForUpstreamRequest(entry.client, req)
 	client = httpClientWithGrokAccessDeniedFallback(client)
+	service.RecordAPIKeyFailoverUpstreamCall(req.Context())
 	resp, err := servertiming.Do(client, req)
 	if err != nil {
+		service.RecordAPIKeyFailoverUpstreamFailure(req.Context(), 0, nil)
 		s.recordOpenAIHTTP2Failure(profile, entry.protocolMode, entry.proxyKey, err)
 		// 请求失败，立即减少计数
 		atomic.AddInt64(&entry.inFlight, -1)
@@ -233,6 +238,7 @@ func (s *httpUpstreamService) Do(req *http.Request, proxyURL string, accountID i
 		atomic.AddInt64(&entry.inFlight, -1)
 		atomic.StoreInt64(&entry.lastUsed, time.Now().UnixNano())
 	})
+	recordAPIKeyFailoverResponse(req.Context(), resp)
 
 	return resp, nil
 }
@@ -249,6 +255,9 @@ func (s *httpUpstreamService) DoWithTLS(req *http.Request, proxyURL string, acco
 	// so a configured HTTP or SOCKS proxy is not bypassed.
 	if req != nil && req.URL != nil && strings.EqualFold(req.URL.Scheme, "http") {
 		return s.Do(req, proxyURL, accountID, accountConcurrency)
+	}
+	if req != nil && service.APIKeyFailoverAttemptFailed(req.Context()) {
+		return nil, service.ErrAPIKeyFailoverAttemptExhausted
 	}
 	applyGrokCLIProxyHeaders(req)
 	upstreamProfile := service.HTTPUpstreamProfileDefault
@@ -278,8 +287,10 @@ func (s *httpUpstreamService) DoWithTLS(req *http.Request, proxyURL string, acco
 
 	client := httpClientForUpstreamRequest(entry.client, req)
 	client = httpClientWithGrokAccessDeniedFallback(client)
+	service.RecordAPIKeyFailoverUpstreamCall(req.Context())
 	resp, err := servertiming.Do(client, req)
 	if err != nil {
+		service.RecordAPIKeyFailoverUpstreamFailure(req.Context(), 0, nil)
 		atomic.AddInt64(&entry.inFlight, -1)
 		atomic.StoreInt64(&entry.lastUsed, time.Now().UnixNano())
 		slog.Debug("tls_fingerprint_request_failed", "account_id", accountID, "error", err)
@@ -292,9 +303,32 @@ func (s *httpUpstreamService) DoWithTLS(req *http.Request, proxyURL string, acco
 		atomic.AddInt64(&entry.inFlight, -1)
 		atomic.StoreInt64(&entry.lastUsed, time.Now().UnixNano())
 	})
+	recordAPIKeyFailoverResponse(req.Context(), resp)
 
 	return resp, nil
 }
+
+func recordAPIKeyFailoverResponse(ctx context.Context, resp *http.Response) {
+	if !service.APIKeyFailoverAttemptEnabled(ctx) || resp == nil || resp.StatusCode < http.StatusBadRequest {
+		return
+	}
+	var body []byte
+	if resp.Body != nil {
+		// Error inspection must not consume the provider response or lose its
+		// tracked Close callback. Bound buffering for unexpectedly large errors.
+		original := resp.Body
+		body, _ = io.ReadAll(io.LimitReader(original, 64<<10))
+		resp.Body = &apiKeyFailoverReplayBody{Reader: io.MultiReader(bytes.NewReader(body), original), closer: original}
+	}
+	service.RecordAPIKeyFailoverUpstreamFailure(ctx, resp.StatusCode, body)
+}
+
+type apiKeyFailoverReplayBody struct {
+	io.Reader
+	closer io.Closer
+}
+
+func (b *apiKeyFailoverReplayBody) Close() error { return b.closer.Close() }
 
 func httpClientForUpstreamRequest(client *http.Client, req *http.Request) *http.Client {
 	if client == nil || req == nil || !service.HTTPUpstreamRedirectsDisabled(req.Context()) {
@@ -332,7 +366,7 @@ func httpClientWithGrokAccessDeniedFallback(client *http.Client) *http.Client {
 
 func (t *grokAccessDeniedFallbackTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	resp, err := t.base.RoundTrip(req)
-	if err != nil || !isGrokCLIAccessDeniedFallbackCandidate(req, resp) {
+	if err != nil || service.APIKeyFailoverAttemptEnabled(req.Context()) || !isGrokCLIAccessDeniedFallbackCandidate(req, resp) {
 		return resp, err
 	}
 

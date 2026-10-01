@@ -126,6 +126,9 @@ func (s *GeminiMessagesCompatService) forwardClaudeBodyAsChatCompletions(
 
 		resp, err = s.httpUpstream.Do(upstreamReq, proxyURL, account.ID, account.Concurrency)
 		if err != nil {
+			if APIKeyFailoverAttemptEnabled(ctx) {
+				RecordAPIKeyFailoverUpstreamFailure(ctx, 0, nil)
+			}
 			safeErr := sanitizeUpstreamErrorMessage(err.Error())
 			appendOpsUpstreamError(c, OpsUpstreamErrorEvent{
 				Platform:           account.Platform,
@@ -135,6 +138,10 @@ func (s *GeminiMessagesCompatService) forwardClaudeBodyAsChatCompletions(
 				Kind:               "request_error",
 				Message:            safeErr,
 			})
+			if APIKeyFailoverAttemptEnabled(ctx) {
+				setOpsUpstreamError(c, 0, safeErr, "")
+				return nil, s.writeChatCompletionsError(c, http.StatusBadGateway, "upstream_error", "Upstream request failed: "+safeErr)
+			}
 			if attempt < geminiMaxRetries {
 				logger.LegacyPrintf("service.gemini_chat_completions", "Gemini account %d: upstream request failed, retry %d/%d: %v", account.ID, attempt, geminiMaxRetries, err)
 				sleepGeminiBackoff(attempt)
@@ -142,6 +149,17 @@ func (s *GeminiMessagesCompatService) forwardClaudeBodyAsChatCompletions(
 			}
 			setOpsUpstreamError(c, 0, safeErr, "")
 			return nil, s.writeChatCompletionsError(c, http.StatusBadGateway, "upstream_error", "Upstream request failed after retries: "+safeErr)
+		}
+		if APIKeyFailoverAttemptEnabled(ctx) && resp.StatusCode >= http.StatusBadRequest {
+			respBody := s.readUpstreamErrorBody(resp)
+			_ = resp.Body.Close()
+			RecordAPIKeyFailoverUpstreamFailure(ctx, resp.StatusCode, respBody)
+			resp = &http.Response{
+				StatusCode: resp.StatusCode,
+				Header:     resp.Header.Clone(),
+				Body:       io.NopCloser(bytes.NewReader(respBody)),
+			}
+			break
 		}
 
 		if matched, rebuilt := s.checkErrorPolicyInLoop(ctx, account, resp, mappedModel); matched {
@@ -154,6 +172,15 @@ func (s *GeminiMessagesCompatService) forwardClaudeBodyAsChatCompletions(
 		if resp.StatusCode >= 400 && s.shouldRetryGeminiUpstreamError(account, resp.StatusCode) {
 			respBody := s.readUpstreamErrorBody(resp)
 			_ = resp.Body.Close()
+			RecordAPIKeyFailoverUpstreamFailure(ctx, resp.StatusCode, respBody)
+			if APIKeyFailoverAttemptEnabled(ctx) {
+				resp = &http.Response{
+					StatusCode: resp.StatusCode,
+					Header:     resp.Header.Clone(),
+					Body:       io.NopCloser(bytes.NewReader(respBody)),
+				}
+				break
+			}
 			if resp.StatusCode == http.StatusForbidden && isGeminiInsufficientScope(resp.Header, respBody) {
 				resp = &http.Response{
 					StatusCode: resp.StatusCode,
@@ -212,6 +239,7 @@ func (s *GeminiMessagesCompatService) forwardClaudeBodyAsChatCompletions(
 
 	if resp.StatusCode >= 400 {
 		respBody := s.readUpstreamErrorBody(resp)
+		RecordAPIKeyFailoverUpstreamFailure(ctx, resp.StatusCode, respBody)
 		policy := ErrorPolicyNone
 		if s.rateLimitService != nil {
 			policy = s.rateLimitService.CheckErrorPolicy(ctx, account, resp.StatusCode, respBody, mappedModel)

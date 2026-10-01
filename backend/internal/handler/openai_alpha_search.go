@@ -214,7 +214,7 @@ func (h *OpenAIGatewayHandler) AlphaSearch(c *gin.Context) {
 		h.gatewayService.RecordOpenAIAccountSwitch()
 		failedAccountIDs[account.ID] = struct{}{}
 		lastFailoverErr = failoverErr
-		if switchCount >= h.maxAccountSwitches {
+		if switchCount >= service.APIKeyFailoverAccountSwitchLimit(c.Request.Context(), h.maxAccountSwitches) {
 			h.handleFailoverExhausted(c, failoverErr, false)
 			return
 		}

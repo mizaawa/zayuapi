@@ -113,6 +113,90 @@ func (_c *APIKeyCreate) SetNillableGroupID(v *int64) *APIKeyCreate {
 	return _c
 }
 
+// SetFailoverEnabled sets the "failover_enabled" field.
+func (_c *APIKeyCreate) SetFailoverEnabled(v bool) *APIKeyCreate {
+	_c.mutation.SetFailoverEnabled(v)
+	return _c
+}
+
+// SetNillableFailoverEnabled sets the "failover_enabled" field if the given value is not nil.
+func (_c *APIKeyCreate) SetNillableFailoverEnabled(v *bool) *APIKeyCreate {
+	if v != nil {
+		_c.SetFailoverEnabled(*v)
+	}
+	return _c
+}
+
+// SetFailoverGroupID sets the "failover_group_id" field.
+func (_c *APIKeyCreate) SetFailoverGroupID(v int64) *APIKeyCreate {
+	_c.mutation.SetFailoverGroupID(v)
+	return _c
+}
+
+// SetNillableFailoverGroupID sets the "failover_group_id" field if the given value is not nil.
+func (_c *APIKeyCreate) SetNillableFailoverGroupID(v *int64) *APIKeyCreate {
+	if v != nil {
+		_c.SetFailoverGroupID(*v)
+	}
+	return _c
+}
+
+// SetFailoverMaxRetries sets the "failover_max_retries" field.
+func (_c *APIKeyCreate) SetFailoverMaxRetries(v int) *APIKeyCreate {
+	_c.mutation.SetFailoverMaxRetries(v)
+	return _c
+}
+
+// SetNillableFailoverMaxRetries sets the "failover_max_retries" field if the given value is not nil.
+func (_c *APIKeyCreate) SetNillableFailoverMaxRetries(v *int) *APIKeyCreate {
+	if v != nil {
+		_c.SetFailoverMaxRetries(*v)
+	}
+	return _c
+}
+
+// SetFailoverCooldownSeconds sets the "failover_cooldown_seconds" field.
+func (_c *APIKeyCreate) SetFailoverCooldownSeconds(v int) *APIKeyCreate {
+	_c.mutation.SetFailoverCooldownSeconds(v)
+	return _c
+}
+
+// SetNillableFailoverCooldownSeconds sets the "failover_cooldown_seconds" field if the given value is not nil.
+func (_c *APIKeyCreate) SetNillableFailoverCooldownSeconds(v *int) *APIKeyCreate {
+	if v != nil {
+		_c.SetFailoverCooldownSeconds(*v)
+	}
+	return _c
+}
+
+// SetFailoverCooldownUntil sets the "failover_cooldown_until" field.
+func (_c *APIKeyCreate) SetFailoverCooldownUntil(v time.Time) *APIKeyCreate {
+	_c.mutation.SetFailoverCooldownUntil(v)
+	return _c
+}
+
+// SetNillableFailoverCooldownUntil sets the "failover_cooldown_until" field if the given value is not nil.
+func (_c *APIKeyCreate) SetNillableFailoverCooldownUntil(v *time.Time) *APIKeyCreate {
+	if v != nil {
+		_c.SetFailoverCooldownUntil(*v)
+	}
+	return _c
+}
+
+// SetFailoverRevision sets the "failover_revision" field.
+func (_c *APIKeyCreate) SetFailoverRevision(v int64) *APIKeyCreate {
+	_c.mutation.SetFailoverRevision(v)
+	return _c
+}
+
+// SetNillableFailoverRevision sets the "failover_revision" field if the given value is not nil.
+func (_c *APIKeyCreate) SetNillableFailoverRevision(v *int64) *APIKeyCreate {
+	if v != nil {
+		_c.SetFailoverRevision(*v)
+	}
+	return _c
+}
+
 // SetStatus sets the "status" field.
 func (_c *APIKeyCreate) SetStatus(v string) *APIKeyCreate {
 	_c.mutation.SetStatus(v)
@@ -401,6 +485,22 @@ func (_c *APIKeyCreate) defaults() error {
 		v := apikey.DefaultPurpose
 		_c.mutation.SetPurpose(v)
 	}
+	if _, ok := _c.mutation.FailoverEnabled(); !ok {
+		v := apikey.DefaultFailoverEnabled
+		_c.mutation.SetFailoverEnabled(v)
+	}
+	if _, ok := _c.mutation.FailoverMaxRetries(); !ok {
+		v := apikey.DefaultFailoverMaxRetries
+		_c.mutation.SetFailoverMaxRetries(v)
+	}
+	if _, ok := _c.mutation.FailoverCooldownSeconds(); !ok {
+		v := apikey.DefaultFailoverCooldownSeconds
+		_c.mutation.SetFailoverCooldownSeconds(v)
+	}
+	if _, ok := _c.mutation.FailoverRevision(); !ok {
+		v := apikey.DefaultFailoverRevision
+		_c.mutation.SetFailoverRevision(v)
+	}
 	if _, ok := _c.mutation.Status(); !ok {
 		v := apikey.DefaultStatus
 		_c.mutation.SetStatus(v)
@@ -474,6 +574,28 @@ func (_c *APIKeyCreate) check() error {
 		if err := apikey.PurposeValidator(v); err != nil {
 			return &ValidationError{Name: "purpose", err: fmt.Errorf(`ent: validator failed for field "APIKey.purpose": %w`, err)}
 		}
+	}
+	if _, ok := _c.mutation.FailoverEnabled(); !ok {
+		return &ValidationError{Name: "failover_enabled", err: errors.New(`ent: missing required field "APIKey.failover_enabled"`)}
+	}
+	if _, ok := _c.mutation.FailoverMaxRetries(); !ok {
+		return &ValidationError{Name: "failover_max_retries", err: errors.New(`ent: missing required field "APIKey.failover_max_retries"`)}
+	}
+	if v, ok := _c.mutation.FailoverMaxRetries(); ok {
+		if err := apikey.FailoverMaxRetriesValidator(v); err != nil {
+			return &ValidationError{Name: "failover_max_retries", err: fmt.Errorf(`ent: validator failed for field "APIKey.failover_max_retries": %w`, err)}
+		}
+	}
+	if _, ok := _c.mutation.FailoverCooldownSeconds(); !ok {
+		return &ValidationError{Name: "failover_cooldown_seconds", err: errors.New(`ent: missing required field "APIKey.failover_cooldown_seconds"`)}
+	}
+	if v, ok := _c.mutation.FailoverCooldownSeconds(); ok {
+		if err := apikey.FailoverCooldownSecondsValidator(v); err != nil {
+			return &ValidationError{Name: "failover_cooldown_seconds", err: fmt.Errorf(`ent: validator failed for field "APIKey.failover_cooldown_seconds": %w`, err)}
+		}
+	}
+	if _, ok := _c.mutation.FailoverRevision(); !ok {
+		return &ValidationError{Name: "failover_revision", err: errors.New(`ent: missing required field "APIKey.failover_revision"`)}
 	}
 	if _, ok := _c.mutation.Status(); !ok {
 		return &ValidationError{Name: "status", err: errors.New(`ent: missing required field "APIKey.status"`)}
@@ -560,6 +682,30 @@ func (_c *APIKeyCreate) createSpec() (*APIKey, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.Purpose(); ok {
 		_spec.SetField(apikey.FieldPurpose, field.TypeString, value)
 		_node.Purpose = value
+	}
+	if value, ok := _c.mutation.FailoverEnabled(); ok {
+		_spec.SetField(apikey.FieldFailoverEnabled, field.TypeBool, value)
+		_node.FailoverEnabled = value
+	}
+	if value, ok := _c.mutation.FailoverGroupID(); ok {
+		_spec.SetField(apikey.FieldFailoverGroupID, field.TypeInt64, value)
+		_node.FailoverGroupID = &value
+	}
+	if value, ok := _c.mutation.FailoverMaxRetries(); ok {
+		_spec.SetField(apikey.FieldFailoverMaxRetries, field.TypeInt, value)
+		_node.FailoverMaxRetries = value
+	}
+	if value, ok := _c.mutation.FailoverCooldownSeconds(); ok {
+		_spec.SetField(apikey.FieldFailoverCooldownSeconds, field.TypeInt, value)
+		_node.FailoverCooldownSeconds = value
+	}
+	if value, ok := _c.mutation.FailoverCooldownUntil(); ok {
+		_spec.SetField(apikey.FieldFailoverCooldownUntil, field.TypeTime, value)
+		_node.FailoverCooldownUntil = &value
+	}
+	if value, ok := _c.mutation.FailoverRevision(); ok {
+		_spec.SetField(apikey.FieldFailoverRevision, field.TypeInt64, value)
+		_node.FailoverRevision = value
 	}
 	if value, ok := _c.mutation.Status(); ok {
 		_spec.SetField(apikey.FieldStatus, field.TypeString, value)
@@ -808,6 +954,114 @@ func (u *APIKeyUpsert) UpdateGroupID() *APIKeyUpsert {
 // ClearGroupID clears the value of the "group_id" field.
 func (u *APIKeyUpsert) ClearGroupID() *APIKeyUpsert {
 	u.SetNull(apikey.FieldGroupID)
+	return u
+}
+
+// SetFailoverEnabled sets the "failover_enabled" field.
+func (u *APIKeyUpsert) SetFailoverEnabled(v bool) *APIKeyUpsert {
+	u.Set(apikey.FieldFailoverEnabled, v)
+	return u
+}
+
+// UpdateFailoverEnabled sets the "failover_enabled" field to the value that was provided on create.
+func (u *APIKeyUpsert) UpdateFailoverEnabled() *APIKeyUpsert {
+	u.SetExcluded(apikey.FieldFailoverEnabled)
+	return u
+}
+
+// SetFailoverGroupID sets the "failover_group_id" field.
+func (u *APIKeyUpsert) SetFailoverGroupID(v int64) *APIKeyUpsert {
+	u.Set(apikey.FieldFailoverGroupID, v)
+	return u
+}
+
+// UpdateFailoverGroupID sets the "failover_group_id" field to the value that was provided on create.
+func (u *APIKeyUpsert) UpdateFailoverGroupID() *APIKeyUpsert {
+	u.SetExcluded(apikey.FieldFailoverGroupID)
+	return u
+}
+
+// AddFailoverGroupID adds v to the "failover_group_id" field.
+func (u *APIKeyUpsert) AddFailoverGroupID(v int64) *APIKeyUpsert {
+	u.Add(apikey.FieldFailoverGroupID, v)
+	return u
+}
+
+// ClearFailoverGroupID clears the value of the "failover_group_id" field.
+func (u *APIKeyUpsert) ClearFailoverGroupID() *APIKeyUpsert {
+	u.SetNull(apikey.FieldFailoverGroupID)
+	return u
+}
+
+// SetFailoverMaxRetries sets the "failover_max_retries" field.
+func (u *APIKeyUpsert) SetFailoverMaxRetries(v int) *APIKeyUpsert {
+	u.Set(apikey.FieldFailoverMaxRetries, v)
+	return u
+}
+
+// UpdateFailoverMaxRetries sets the "failover_max_retries" field to the value that was provided on create.
+func (u *APIKeyUpsert) UpdateFailoverMaxRetries() *APIKeyUpsert {
+	u.SetExcluded(apikey.FieldFailoverMaxRetries)
+	return u
+}
+
+// AddFailoverMaxRetries adds v to the "failover_max_retries" field.
+func (u *APIKeyUpsert) AddFailoverMaxRetries(v int) *APIKeyUpsert {
+	u.Add(apikey.FieldFailoverMaxRetries, v)
+	return u
+}
+
+// SetFailoverCooldownSeconds sets the "failover_cooldown_seconds" field.
+func (u *APIKeyUpsert) SetFailoverCooldownSeconds(v int) *APIKeyUpsert {
+	u.Set(apikey.FieldFailoverCooldownSeconds, v)
+	return u
+}
+
+// UpdateFailoverCooldownSeconds sets the "failover_cooldown_seconds" field to the value that was provided on create.
+func (u *APIKeyUpsert) UpdateFailoverCooldownSeconds() *APIKeyUpsert {
+	u.SetExcluded(apikey.FieldFailoverCooldownSeconds)
+	return u
+}
+
+// AddFailoverCooldownSeconds adds v to the "failover_cooldown_seconds" field.
+func (u *APIKeyUpsert) AddFailoverCooldownSeconds(v int) *APIKeyUpsert {
+	u.Add(apikey.FieldFailoverCooldownSeconds, v)
+	return u
+}
+
+// SetFailoverCooldownUntil sets the "failover_cooldown_until" field.
+func (u *APIKeyUpsert) SetFailoverCooldownUntil(v time.Time) *APIKeyUpsert {
+	u.Set(apikey.FieldFailoverCooldownUntil, v)
+	return u
+}
+
+// UpdateFailoverCooldownUntil sets the "failover_cooldown_until" field to the value that was provided on create.
+func (u *APIKeyUpsert) UpdateFailoverCooldownUntil() *APIKeyUpsert {
+	u.SetExcluded(apikey.FieldFailoverCooldownUntil)
+	return u
+}
+
+// ClearFailoverCooldownUntil clears the value of the "failover_cooldown_until" field.
+func (u *APIKeyUpsert) ClearFailoverCooldownUntil() *APIKeyUpsert {
+	u.SetNull(apikey.FieldFailoverCooldownUntil)
+	return u
+}
+
+// SetFailoverRevision sets the "failover_revision" field.
+func (u *APIKeyUpsert) SetFailoverRevision(v int64) *APIKeyUpsert {
+	u.Set(apikey.FieldFailoverRevision, v)
+	return u
+}
+
+// UpdateFailoverRevision sets the "failover_revision" field to the value that was provided on create.
+func (u *APIKeyUpsert) UpdateFailoverRevision() *APIKeyUpsert {
+	u.SetExcluded(apikey.FieldFailoverRevision)
+	return u
+}
+
+// AddFailoverRevision adds v to the "failover_revision" field.
+func (u *APIKeyUpsert) AddFailoverRevision(v int64) *APIKeyUpsert {
+	u.Add(apikey.FieldFailoverRevision, v)
 	return u
 }
 
@@ -1236,6 +1490,132 @@ func (u *APIKeyUpsertOne) UpdateGroupID() *APIKeyUpsertOne {
 func (u *APIKeyUpsertOne) ClearGroupID() *APIKeyUpsertOne {
 	return u.Update(func(s *APIKeyUpsert) {
 		s.ClearGroupID()
+	})
+}
+
+// SetFailoverEnabled sets the "failover_enabled" field.
+func (u *APIKeyUpsertOne) SetFailoverEnabled(v bool) *APIKeyUpsertOne {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.SetFailoverEnabled(v)
+	})
+}
+
+// UpdateFailoverEnabled sets the "failover_enabled" field to the value that was provided on create.
+func (u *APIKeyUpsertOne) UpdateFailoverEnabled() *APIKeyUpsertOne {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.UpdateFailoverEnabled()
+	})
+}
+
+// SetFailoverGroupID sets the "failover_group_id" field.
+func (u *APIKeyUpsertOne) SetFailoverGroupID(v int64) *APIKeyUpsertOne {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.SetFailoverGroupID(v)
+	})
+}
+
+// AddFailoverGroupID adds v to the "failover_group_id" field.
+func (u *APIKeyUpsertOne) AddFailoverGroupID(v int64) *APIKeyUpsertOne {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.AddFailoverGroupID(v)
+	})
+}
+
+// UpdateFailoverGroupID sets the "failover_group_id" field to the value that was provided on create.
+func (u *APIKeyUpsertOne) UpdateFailoverGroupID() *APIKeyUpsertOne {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.UpdateFailoverGroupID()
+	})
+}
+
+// ClearFailoverGroupID clears the value of the "failover_group_id" field.
+func (u *APIKeyUpsertOne) ClearFailoverGroupID() *APIKeyUpsertOne {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.ClearFailoverGroupID()
+	})
+}
+
+// SetFailoverMaxRetries sets the "failover_max_retries" field.
+func (u *APIKeyUpsertOne) SetFailoverMaxRetries(v int) *APIKeyUpsertOne {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.SetFailoverMaxRetries(v)
+	})
+}
+
+// AddFailoverMaxRetries adds v to the "failover_max_retries" field.
+func (u *APIKeyUpsertOne) AddFailoverMaxRetries(v int) *APIKeyUpsertOne {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.AddFailoverMaxRetries(v)
+	})
+}
+
+// UpdateFailoverMaxRetries sets the "failover_max_retries" field to the value that was provided on create.
+func (u *APIKeyUpsertOne) UpdateFailoverMaxRetries() *APIKeyUpsertOne {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.UpdateFailoverMaxRetries()
+	})
+}
+
+// SetFailoverCooldownSeconds sets the "failover_cooldown_seconds" field.
+func (u *APIKeyUpsertOne) SetFailoverCooldownSeconds(v int) *APIKeyUpsertOne {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.SetFailoverCooldownSeconds(v)
+	})
+}
+
+// AddFailoverCooldownSeconds adds v to the "failover_cooldown_seconds" field.
+func (u *APIKeyUpsertOne) AddFailoverCooldownSeconds(v int) *APIKeyUpsertOne {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.AddFailoverCooldownSeconds(v)
+	})
+}
+
+// UpdateFailoverCooldownSeconds sets the "failover_cooldown_seconds" field to the value that was provided on create.
+func (u *APIKeyUpsertOne) UpdateFailoverCooldownSeconds() *APIKeyUpsertOne {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.UpdateFailoverCooldownSeconds()
+	})
+}
+
+// SetFailoverCooldownUntil sets the "failover_cooldown_until" field.
+func (u *APIKeyUpsertOne) SetFailoverCooldownUntil(v time.Time) *APIKeyUpsertOne {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.SetFailoverCooldownUntil(v)
+	})
+}
+
+// UpdateFailoverCooldownUntil sets the "failover_cooldown_until" field to the value that was provided on create.
+func (u *APIKeyUpsertOne) UpdateFailoverCooldownUntil() *APIKeyUpsertOne {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.UpdateFailoverCooldownUntil()
+	})
+}
+
+// ClearFailoverCooldownUntil clears the value of the "failover_cooldown_until" field.
+func (u *APIKeyUpsertOne) ClearFailoverCooldownUntil() *APIKeyUpsertOne {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.ClearFailoverCooldownUntil()
+	})
+}
+
+// SetFailoverRevision sets the "failover_revision" field.
+func (u *APIKeyUpsertOne) SetFailoverRevision(v int64) *APIKeyUpsertOne {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.SetFailoverRevision(v)
+	})
+}
+
+// AddFailoverRevision adds v to the "failover_revision" field.
+func (u *APIKeyUpsertOne) AddFailoverRevision(v int64) *APIKeyUpsertOne {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.AddFailoverRevision(v)
+	})
+}
+
+// UpdateFailoverRevision sets the "failover_revision" field to the value that was provided on create.
+func (u *APIKeyUpsertOne) UpdateFailoverRevision() *APIKeyUpsertOne {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.UpdateFailoverRevision()
 	})
 }
 
@@ -1877,6 +2257,132 @@ func (u *APIKeyUpsertBulk) UpdateGroupID() *APIKeyUpsertBulk {
 func (u *APIKeyUpsertBulk) ClearGroupID() *APIKeyUpsertBulk {
 	return u.Update(func(s *APIKeyUpsert) {
 		s.ClearGroupID()
+	})
+}
+
+// SetFailoverEnabled sets the "failover_enabled" field.
+func (u *APIKeyUpsertBulk) SetFailoverEnabled(v bool) *APIKeyUpsertBulk {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.SetFailoverEnabled(v)
+	})
+}
+
+// UpdateFailoverEnabled sets the "failover_enabled" field to the value that was provided on create.
+func (u *APIKeyUpsertBulk) UpdateFailoverEnabled() *APIKeyUpsertBulk {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.UpdateFailoverEnabled()
+	})
+}
+
+// SetFailoverGroupID sets the "failover_group_id" field.
+func (u *APIKeyUpsertBulk) SetFailoverGroupID(v int64) *APIKeyUpsertBulk {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.SetFailoverGroupID(v)
+	})
+}
+
+// AddFailoverGroupID adds v to the "failover_group_id" field.
+func (u *APIKeyUpsertBulk) AddFailoverGroupID(v int64) *APIKeyUpsertBulk {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.AddFailoverGroupID(v)
+	})
+}
+
+// UpdateFailoverGroupID sets the "failover_group_id" field to the value that was provided on create.
+func (u *APIKeyUpsertBulk) UpdateFailoverGroupID() *APIKeyUpsertBulk {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.UpdateFailoverGroupID()
+	})
+}
+
+// ClearFailoverGroupID clears the value of the "failover_group_id" field.
+func (u *APIKeyUpsertBulk) ClearFailoverGroupID() *APIKeyUpsertBulk {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.ClearFailoverGroupID()
+	})
+}
+
+// SetFailoverMaxRetries sets the "failover_max_retries" field.
+func (u *APIKeyUpsertBulk) SetFailoverMaxRetries(v int) *APIKeyUpsertBulk {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.SetFailoverMaxRetries(v)
+	})
+}
+
+// AddFailoverMaxRetries adds v to the "failover_max_retries" field.
+func (u *APIKeyUpsertBulk) AddFailoverMaxRetries(v int) *APIKeyUpsertBulk {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.AddFailoverMaxRetries(v)
+	})
+}
+
+// UpdateFailoverMaxRetries sets the "failover_max_retries" field to the value that was provided on create.
+func (u *APIKeyUpsertBulk) UpdateFailoverMaxRetries() *APIKeyUpsertBulk {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.UpdateFailoverMaxRetries()
+	})
+}
+
+// SetFailoverCooldownSeconds sets the "failover_cooldown_seconds" field.
+func (u *APIKeyUpsertBulk) SetFailoverCooldownSeconds(v int) *APIKeyUpsertBulk {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.SetFailoverCooldownSeconds(v)
+	})
+}
+
+// AddFailoverCooldownSeconds adds v to the "failover_cooldown_seconds" field.
+func (u *APIKeyUpsertBulk) AddFailoverCooldownSeconds(v int) *APIKeyUpsertBulk {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.AddFailoverCooldownSeconds(v)
+	})
+}
+
+// UpdateFailoverCooldownSeconds sets the "failover_cooldown_seconds" field to the value that was provided on create.
+func (u *APIKeyUpsertBulk) UpdateFailoverCooldownSeconds() *APIKeyUpsertBulk {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.UpdateFailoverCooldownSeconds()
+	})
+}
+
+// SetFailoverCooldownUntil sets the "failover_cooldown_until" field.
+func (u *APIKeyUpsertBulk) SetFailoverCooldownUntil(v time.Time) *APIKeyUpsertBulk {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.SetFailoverCooldownUntil(v)
+	})
+}
+
+// UpdateFailoverCooldownUntil sets the "failover_cooldown_until" field to the value that was provided on create.
+func (u *APIKeyUpsertBulk) UpdateFailoverCooldownUntil() *APIKeyUpsertBulk {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.UpdateFailoverCooldownUntil()
+	})
+}
+
+// ClearFailoverCooldownUntil clears the value of the "failover_cooldown_until" field.
+func (u *APIKeyUpsertBulk) ClearFailoverCooldownUntil() *APIKeyUpsertBulk {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.ClearFailoverCooldownUntil()
+	})
+}
+
+// SetFailoverRevision sets the "failover_revision" field.
+func (u *APIKeyUpsertBulk) SetFailoverRevision(v int64) *APIKeyUpsertBulk {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.SetFailoverRevision(v)
+	})
+}
+
+// AddFailoverRevision adds v to the "failover_revision" field.
+func (u *APIKeyUpsertBulk) AddFailoverRevision(v int64) *APIKeyUpsertBulk {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.AddFailoverRevision(v)
+	})
+}
+
+// UpdateFailoverRevision sets the "failover_revision" field to the value that was provided on create.
+func (u *APIKeyUpsertBulk) UpdateFailoverRevision() *APIKeyUpsertBulk {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.UpdateFailoverRevision()
 	})
 }
 

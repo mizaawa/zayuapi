@@ -50,6 +50,9 @@ func ReadUpstreamResponseBody(reader io.Reader, cfg *config.Config, c *gin.Conte
 	maxBytes := resolveUpstreamResponseReadLimit(cfg)
 	body, err := readUpstreamResponseBodyLimited(reader, maxBytes)
 	if err != nil {
+		if c != nil && c.Request != nil {
+			RecordAPIKeyFailoverUpstreamFailure(c.Request.Context(), http.StatusBadGateway, nil)
+		}
 		if errors.Is(err, ErrUpstreamResponseBodyTooLarge) {
 			setOpsUpstreamError(c, http.StatusBadGateway, "upstream response too large", "")
 			if onTooLarge != nil {

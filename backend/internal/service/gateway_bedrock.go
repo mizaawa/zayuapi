@@ -225,6 +225,10 @@ func (s *GatewayService) executeBedrockUpstream(
 			return nil, fmt.Errorf("upstream request failed: %s", safeErr)
 		}
 
+		if APIKeyFailoverAttemptEnabled(ctx) && resp.StatusCode >= http.StatusBadRequest {
+			break
+		}
+
 		if resp.StatusCode >= 400 && resp.StatusCode != 400 && s.shouldRetryUpstreamError(account, resp.StatusCode) {
 			if attempt < maxRetryAttempts {
 				elapsed := time.Since(retryStart)

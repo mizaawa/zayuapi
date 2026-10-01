@@ -712,6 +712,12 @@ export interface ApiKey {
   updated_at: string
   current_concurrency: number
   group?: Group
+  failover_enabled?: boolean
+  failover_group_id?: number | null
+  failover_group?: Group
+  failover_max_retries?: number
+  failover_cooldown_seconds?: number
+  failover_cooldown_until?: string | null
   rate_limit_5h: number
   rate_limit_1d: number
   rate_limit_7d: number
@@ -724,6 +730,13 @@ export interface ApiKey {
   reset_5h_at: string | null
   reset_1d_at: string | null
   reset_7d_at: string | null
+}
+
+export interface ApiKeyFailoverSettings {
+  failover_enabled: boolean
+  failover_group_id: number | null
+  failover_max_retries: number
+  failover_cooldown_seconds: number
 }
 
 export interface CreateApiKeyRequest {
@@ -752,6 +765,11 @@ export interface UpdateApiKeyRequest {
   rate_limit_1d?: number
   rate_limit_7d?: number
   reset_rate_limit_usage?: boolean
+  failover_enabled?: boolean
+  failover_group_id?: number | null
+  failover_max_retries?: number
+  failover_cooldown_seconds?: number
+  release_failover_cooldown?: boolean
 }
 
 export interface CreateGroupRequest {

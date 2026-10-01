@@ -192,6 +192,24 @@
             </span>
           </template>
 
+          <template #cell-failover="{ row }">
+            <button
+              type="button"
+              :data-test="`failover-status-${row.id}`"
+              :disabled="!supportsFailover(row.group)"
+              :title="supportsFailover(row.group) ? undefined : t('keys.failover.supportedPlatforms')"
+              :class="[
+                'inline-flex max-w-full items-center justify-center rounded px-2.5 py-1.5 text-xs font-semibold transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500',
+                isFailoverActive(row)
+                  ? 'bg-red-50 text-red-700 ring-1 ring-red-200 hover:bg-red-100 dark:bg-red-900/25 dark:text-red-300 dark:ring-red-800 dark:hover:bg-red-900/40'
+                  : 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200 hover:bg-emerald-100 dark:bg-emerald-900/25 dark:text-emerald-300 dark:ring-emerald-800 dark:hover:bg-emerald-900/40'
+              ]"
+              @click="openFailoverModal(row)"
+            >
+              {{ isFailoverActive(row) ? t('keys.failover.active') : t('keys.failover.healthy') }}
+            </button>
+          </template>
+
           <template #cell-usage="{ row }">
             <div class="text-sm">
               <div class="flex items-center gap-1.5">
@@ -449,6 +467,50 @@
       </template>
     </TablePageLayout>
 
+    <BaseDialog
+      :show="showFailoverModal"
+      :title="t('keys.failover.group')"
+      width="normal"
+      @close="closeFailoverModal"
+    >
+      <form id="failover-form" class="space-y-5" @submit.prevent="saveFailoverSettings">
+        <FailoverSettings
+          v-if="selectedFailoverKey"
+          id="dialog-key-failover"
+          v-model="failoverSettings"
+          :primary-group="failoverPrimaryGroup"
+          :groups="groups"
+          :user-group-rates="userGroupRates"
+          :disabled="savingFailover || releasingFailover"
+        />
+        <div v-if="selectedFailoverKey && isFailoverActive(selectedFailoverKey)" class="text-sm text-gray-600 dark:text-gray-300">
+          {{ t('keys.failover.cooldownUntil') }}: {{ formatDateTime(selectedFailoverKey.failover_cooldown_until!) }}
+        </div>
+      </form>
+      <template #footer>
+        <div class="flex flex-wrap justify-end gap-3">
+          <button
+            type="button"
+            class="btn btn-secondary"
+            :disabled="savingFailover || releasingFailover || !selectedFailoverKey || !isFailoverActive(selectedFailoverKey)"
+            data-test="release-failover-cooldown"
+            @click="releaseFailoverCooldown"
+          >
+            {{ t('keys.failover.release') }}
+          </button>
+          <button
+            type="submit"
+            form="failover-form"
+            class="btn btn-primary"
+            :disabled="savingFailover || releasingFailover"
+            data-test="update-failover-settings"
+          >
+            {{ t('keys.failover.update') }}
+          </button>
+        </div>
+      </template>
+    </BaseDialog>
+
     <!-- Create/Edit Modal -->
     <BaseDialog
       :show="showCreateModal || showEditModal"
@@ -561,6 +623,16 @@
             :placeholder="t('keys.selectStatus')"
           />
         </div>
+
+        <FailoverSettings
+          v-if="showEditModal && supportsFailover(editPrimaryGroup)"
+          id="edit-key-failover"
+          v-model="failoverSettings"
+          :primary-group="editPrimaryGroup"
+          :groups="groups"
+          :user-group-rates="userGroupRates"
+          :disabled="submitting"
+        />
 
         <!-- IP Restriction Section -->
         <div class="space-y-3">
@@ -1139,7 +1211,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted, onUnmounted, type ComponentPublicInstance } from 'vue'
+import { ref, reactive, computed, watch, onMounted, onUnmounted, type ComponentPublicInstance } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAppStore } from '@/stores/app'
 import { useOnboardingStore } from '@/stores/onboarding'
@@ -1159,10 +1231,11 @@ import TablePageLayout from '@/components/layout/TablePageLayout.vue'
 	import SearchInput from '@/components/common/SearchInput.vue'
 	import Icon from '@/components/icons/Icon.vue'
 	import UseKeyModal from '@/components/keys/UseKeyModal.vue'
+	import FailoverSettings from '@/components/keys/FailoverSettings.vue'
 	import EndpointPopover from '@/components/keys/EndpointPopover.vue'
 	import GroupBadge from '@/components/common/GroupBadge.vue'
 	import GroupOptionItem from '@/components/common/GroupOptionItem.vue'
-	import type { ApiKey, Group, PublicSettings, SubscriptionType, GroupPlatform, UpdateApiKeyRequest } from '@/types'
+	import type { ApiKey, ApiKeyFailoverSettings, Group, PublicSettings, SubscriptionType, GroupPlatform, UpdateApiKeyRequest } from '@/types'
 import type { Column } from '@/components/common/types'
 import type { BatchApiKeyUsageStats } from '@/api/usage'
 import { formatDateTime } from '@/utils/format'
@@ -1204,6 +1277,7 @@ const allColumns = computed<Column[]>(() => [
   { key: 'key', label: t('keys.apiKey'), sortable: false },
   { key: 'group', label: t('keys.group'), sortable: false },
   { key: 'current_concurrency', label: t('keys.currentConcurrency'), sortable: true },
+  { key: 'failover', label: t('keys.failover.group'), sortable: false },
   { key: 'usage', label: t('keys.usage'), sortable: false },
   { key: 'rate_limit', label: t('keys.rateLimitColumn'), sortable: false },
   { key: 'expires_at', label: t('keys.expiresAt'), sortable: true },
@@ -1299,6 +1373,8 @@ const submitting = ref(false)
 const deleting = ref(false)
 const now = ref(new Date())
 let resetTimer: ReturnType<typeof setInterval> | null = null
+let failoverRefreshTimer: ReturnType<typeof setInterval> | null = null
+let failoverRefreshController: AbortController | null = null
 const usageStats = ref<Record<string, BatchApiKeyUsageStats>>({})
 const userGroupRates = ref<Record<number, number>>({})
 const blockedGroupIds = computed(() => new Set(
@@ -1324,6 +1400,10 @@ const filterGroupId = ref<string | number>('')
 
 const showCreateModal = ref(false)
 const showEditModal = ref(false)
+const showFailoverModal = ref(false)
+const selectedFailoverKey = ref<ApiKey | null>(null)
+const savingFailover = ref(false)
+const releasingFailover = ref(false)
 const showDeleteDialog = ref(false)
 const showResetQuotaDialog = ref(false)
 const showResetRateLimitDialog = ref(false)
@@ -1375,6 +1455,53 @@ const formData = ref({
   enable_expiration: false,
   expiration_preset: '30' as '7' | '30' | '90' | 'custom',
   expiration_date: ''
+})
+
+const getFailoverSettings = (key?: ApiKey): ApiKeyFailoverSettings => ({
+  failover_enabled: key?.failover_enabled ?? false,
+  failover_group_id: key?.failover_group_id ?? null,
+  failover_max_retries: key?.failover_max_retries ?? 3,
+  failover_cooldown_seconds: key?.failover_cooldown_seconds ?? 300
+})
+const failoverSettings = ref<ApiKeyFailoverSettings>(getFailoverSettings())
+const supportsFailover = (group?: Group) => Boolean(group && group.platform !== 'custom' && group.platform !== 'composite')
+const editPrimaryGroup = computed(() =>
+  groups.value.find((group) => group.id === formData.value.group_id) ??
+  (selectedKey.value?.group_id === formData.value.group_id ? selectedKey.value.group : undefined)
+)
+const failoverPrimaryGroup = computed(() =>
+  groups.value.find((group) => group.id === selectedFailoverKey.value?.group_id) ?? selectedFailoverKey.value?.group
+)
+
+const isFailoverActive = (key: ApiKey) => Boolean(
+  key.failover_enabled && key.failover_cooldown_until &&
+  new Date(key.failover_cooldown_until).getTime() > now.value.getTime()
+)
+
+const validateFailoverSettings = (primaryGroup: Group | undefined): boolean => {
+  if (!failoverSettings.value.failover_enabled) return true
+  const settings = failoverSettings.value
+  const fallbackGroup = groups.value.find((group) => group.id === settings.failover_group_id)
+  if (!primaryGroup || !supportsFailover(primaryGroup) || !fallbackGroup || fallbackGroup.id === primaryGroup.id ||
+    fallbackGroup.platform !== primaryGroup.platform || fallbackGroup.status !== 'active' ||
+    fallbackGroup.is_blocked_for_user) {
+    appStore.showError(t('keys.failover.groupRequired'))
+    return false
+  }
+  if (!Number.isInteger(settings.failover_max_retries) || settings.failover_max_retries < 1 || settings.failover_max_retries > 10) {
+    appStore.showError(t('keys.failover.invalidMaxRetries'))
+    return false
+  }
+  if (!Number.isInteger(settings.failover_cooldown_seconds) || settings.failover_cooldown_seconds < 1 || settings.failover_cooldown_seconds > 2147483647) {
+    appStore.showError(t('keys.failover.invalidCooldown'))
+    return false
+  }
+  return true
+}
+
+watch(() => formData.value.group_id, (groupId, previousGroupId) => {
+  if (!showEditModal.value || groupId === previousGroupId) return
+  if (!supportsFailover(editPrimaryGroup.value)) failoverSettings.value = getFailoverSettings()
 })
 
 // 自定义Key验证
@@ -1481,6 +1608,7 @@ const isAbortError = (error: unknown) => {
 }
 
 const loadApiKeys = async () => {
+  failoverRefreshController?.abort()
   abortController?.abort()
   const controller = new AbortController()
   abortController = controller
@@ -1588,6 +1716,7 @@ const handleSort = (key: string, order: 'asc' | 'desc') => {
 
 const editKey = (key: ApiKey) => {
   selectedKey.value = key
+  failoverSettings.value = getFailoverSettings(key)
   const hasIPRestriction = (key.ip_whitelist?.length > 0) || (key.ip_blacklist?.length > 0)
   const hasExpiration = !!key.expires_at
   formData.value = {
@@ -1610,6 +1739,86 @@ const editKey = (key: ApiKey) => {
     expiration_date: key.expires_at ? formatDateTimeLocal(key.expires_at) : ''
   }
   showEditModal.value = true
+}
+
+const openFailoverModal = (key: ApiKey) => {
+  selectedFailoverKey.value = key
+  failoverSettings.value = getFailoverSettings(key)
+  showFailoverModal.value = true
+}
+
+const closeFailoverModal = () => {
+  showFailoverModal.value = false
+  selectedFailoverKey.value = null
+}
+
+const replaceApiKey = (key: ApiKey) => {
+  apiKeys.value = apiKeys.value.map((item) => item.id === key.id ? key : item)
+  if (selectedKey.value?.id === key.id) selectedKey.value = key
+  if (selectedFailoverKey.value?.id === key.id) selectedFailoverKey.value = key
+}
+
+const saveFailoverSettings = async () => {
+  if (!selectedFailoverKey.value || savingFailover.value || releasingFailover.value) return
+  if (!validateFailoverSettings(failoverPrimaryGroup.value)) return
+  const keyId = selectedFailoverKey.value.id
+  failoverRefreshController?.abort()
+  savingFailover.value = true
+  try {
+    const key = await keysAPI.update(keyId, { ...failoverSettings.value })
+    replaceApiKey(key)
+    appStore.showSuccess(t('keys.keyUpdatedSuccess'))
+    closeFailoverModal()
+  } catch (error: any) {
+    appStore.showError(error.response?.data?.detail || error.message || t('keys.failedToSave'))
+  } finally {
+    savingFailover.value = false
+  }
+}
+
+const releaseFailoverCooldown = async () => {
+  if (!selectedFailoverKey.value || savingFailover.value || releasingFailover.value) return
+  const keyId = selectedFailoverKey.value.id
+  failoverRefreshController?.abort()
+  releasingFailover.value = true
+  try {
+    const key = await keysAPI.update(keyId, { release_failover_cooldown: true })
+    replaceApiKey(key)
+    appStore.showSuccess(t('keys.failover.released'))
+  } catch (error: any) {
+    appStore.showError(error.response?.data?.detail || error.message || t('keys.failover.failedToRelease'))
+  } finally {
+    releasingFailover.value = false
+  }
+}
+
+const refreshFailoverStatuses = async () => {
+  if (loading.value || submitting.value || savingFailover.value || releasingFailover.value ||
+    failoverRefreshController || !apiKeys.value.some((key) => key.failover_enabled)) return
+  const controller = new AbortController()
+  failoverRefreshController = controller
+  try {
+    const response = await keysAPI.list(pagination.value.page, pagination.value.page_size, {
+      search: filterSearch.value || undefined,
+      status: filterStatus.value || undefined,
+      group_id: filterGroupId.value === '' ? undefined : filterGroupId.value,
+      ...sortState.value
+    }, { signal: controller.signal })
+    if (controller.signal.aborted) return
+    for (const key of response.items) {
+      const existing = apiKeys.value.find((item) => item.id === key.id)
+      if (existing) replaceApiKey({
+        ...existing,
+        ...getFailoverSettings(key),
+        failover_group: key.failover_group,
+        failover_cooldown_until: key.failover_cooldown_until
+      })
+    }
+  } catch (error) {
+    if (!isAbortError(error)) console.error('Failed to refresh API key failover status:', error)
+  } finally {
+    if (failoverRefreshController === controller) failoverRefreshController = null
+  }
 }
 
 const toggleKeyStatus = async (key: ApiKey) => {
@@ -1715,6 +1924,7 @@ const handleSubmit = async () => {
     appStore.showError(t('keys.groupRequired'))
     return
   }
+  if (showEditModal.value && !validateFailoverSettings(editPrimaryGroup.value)) return
 
   // Validate custom key if enabled
   if (!showEditModal.value && formData.value.use_custom_key) {
@@ -1763,10 +1973,12 @@ const handleSubmit = async () => {
     rate_limit_7d: formData.value.rate_limit_7d && formData.value.rate_limit_7d > 0 ? formData.value.rate_limit_7d : 0,
   } : { rate_limit_5h: 0, rate_limit_1d: 0, rate_limit_7d: 0 }
 
+  failoverRefreshController?.abort()
   submitting.value = true
   try {
     if (showEditModal.value && selectedKey.value) {
       const updates: UpdateApiKeyRequest = {
+        ...failoverSettings.value,
         name: formData.value.name,
         group_id: formData.value.group_id,
         ip_whitelist: ipWhitelist,
@@ -1840,6 +2052,7 @@ const closeModals = () => {
   showCreateModal.value = false
   showEditModal.value = false
   selectedKey.value = null
+  failoverSettings.value = getFailoverSettings()
   formData.value = {
     name: '',
     group_id: null,
@@ -2013,11 +2226,15 @@ onMounted(() => {
   loadUserGroupRates()
   loadPublicSettings()
   document.addEventListener('click', closeGroupSelector)
-  resetTimer = setInterval(() => { now.value = new Date() }, 60000)
+  resetTimer = setInterval(() => { now.value = new Date() }, 1000)
+  failoverRefreshTimer = setInterval(() => { void refreshFailoverStatuses() }, 15000)
 })
 
 onUnmounted(() => {
   document.removeEventListener('click', closeGroupSelector)
   if (resetTimer) clearInterval(resetTimer)
+  if (failoverRefreshTimer) clearInterval(failoverRefreshTimer)
+  failoverRefreshController?.abort()
+  abortController?.abort()
 })
 </script>

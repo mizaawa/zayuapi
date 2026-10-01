@@ -1,8 +1,8 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import { nextTick } from 'vue'
 
-import type { ApiKey } from '@/types'
+import type { ApiKey, Group } from '@/types'
 import KeysView from '../KeysView.vue'
 
 const {
@@ -17,6 +17,7 @@ const {
   isCurrentStep,
   nextStep,
   deleteKey,
+  updateKey,
 } = vi.hoisted(() => ({
   listKeys: vi.fn(),
   getPublicSettings: vi.fn(),
@@ -29,6 +30,7 @@ const {
   isCurrentStep: vi.fn(),
   nextStep: vi.fn(),
   deleteKey: vi.fn(),
+  updateKey: vi.fn(),
 }))
 
 const messages: Record<string, string> = {
@@ -46,6 +48,9 @@ const messages: Record<string, string> = {
   'keys.group': 'Group',
   'keys.id': 'ID',
   'keys.currentConcurrency': 'Current Concurrency',
+  'keys.failover.group': 'Failover Group',
+  'keys.failover.healthy': 'Primary Group Healthy',
+  'keys.failover.active': 'Failover Group Active',
   'keys.lastUsedAt': 'Last Used',
   'keys.lastUsedIP': 'Last Used IP',
   'keys.rateLimitColumn': 'Rate Limit',
@@ -61,7 +66,7 @@ vi.mock('@/api', () => ({
   keysAPI: {
     list: listKeys,
     create: vi.fn(),
-    update: vi.fn(),
+    update: updateKey,
     delete: deleteKey,
     toggleStatus: vi.fn(),
   },
@@ -175,6 +180,7 @@ const DataTableStub = {
         <div data-test="current-concurrency">
           <slot name="cell-current_concurrency" :value="row.current_concurrency" :row="row" />
         </div>
+        <slot name="cell-failover" :row="row" />
         <div
           v-if="columns.some((col) => col.key === 'last_used_ip')"
           data-test="last-used-ip"
@@ -229,6 +235,13 @@ const ConfirmDialogStub = {
   `,
 }
 
+const BaseDialogStub = {
+  name: 'BaseDialog',
+  props: ['show', 'title'],
+  template: '<div v-if="show" role="dialog"><h3>{{ title }}</h3><slot /><slot name="footer" /></div>',
+}
+
+const wrappers: VueWrapper[] = []
 const mountView = async () => {
   const wrapper = mount(KeysView, {
     global: {
@@ -237,7 +250,7 @@ const mountView = async () => {
         TablePageLayout: TablePageLayoutStub,
         DataTable: DataTableStub,
         Pagination: PaginationStub,
-        BaseDialog: true,
+        BaseDialog: BaseDialogStub,
         ConfirmDialog: ConfirmDialogStub,
         EmptyState: true,
         Select: SelectStub,
@@ -253,6 +266,7 @@ const mountView = async () => {
   })
   await flushPromises()
   await nextTick()
+  wrappers.push(wrapper)
   return wrapper
 }
 
@@ -285,6 +299,7 @@ describe('user KeysView column settings', () => {
     isCurrentStep.mockReset()
     nextStep.mockReset()
     deleteKey.mockReset()
+    updateKey.mockReset()
 
     listKeys.mockResolvedValue({
       items: [createApiKey()],
@@ -299,6 +314,12 @@ describe('user KeysView column settings', () => {
     getUserGroupRates.mockResolvedValue({})
     isCurrentStep.mockReturnValue(false)
     deleteKey.mockResolvedValue({ message: 'deleted' })
+    updateKey.mockResolvedValue(createApiKey())
+  })
+
+  afterEach(() => {
+    wrappers.splice(0).forEach((wrapper) => wrapper.unmount())
+    vi.useRealTimers()
   })
 
   it('locks the delete confirmation while the request is in flight', async () => {
@@ -331,6 +352,7 @@ describe('user KeysView column settings', () => {
       'key',
       'group',
       'current_concurrency',
+      'failover',
       'usage',
       'expires_at',
       'status',
@@ -397,6 +419,7 @@ describe('user KeysView column settings', () => {
       'name',
       'key',
       'current_concurrency',
+      'failover',
       'usage',
       'rate_limit',
       'expires_at',
@@ -475,5 +498,211 @@ describe('user KeysView column settings', () => {
       },
       expect.objectContaining({ signal: expect.any(AbortSignal) })
     )
+  })
+
+  const group = (id: number, platform: Group['platform'] = 'openai', overrides: Partial<Group> = {}): Group => ({
+    id,
+    name: `Group ${id}`,
+    description: null,
+    platform,
+    status: 'active',
+    subscription_type: 'standard',
+    rate_multiplier: 2,
+    peak_rate_enabled: false,
+    peak_start: '',
+    peak_end: '',
+    peak_rate_multiplier: 1,
+    ...overrides,
+  } as Group)
+
+  const setKey = (key: ApiKey, availableGroups: Group[]) => {
+    listKeys.mockResolvedValue({ items: [key], total: 1, page: 1, page_size: 20, pages: 1 })
+    getAvailableGroups.mockResolvedValue(availableGroups)
+  }
+
+  it('shows green health when configured but not cooling', async () => {
+    const key = { ...createApiKey(), group_id: 1, group: group(1), failover_enabled: true, failover_group_id: 2 }
+    setKey(key, [group(1), group(2)])
+    const wrapper = await mountView()
+    expect(wrapper.get('[data-test="failover-status-1"]').text()).toBe('Primary Group Healthy')
+    expect(wrapper.get('[data-test="failover-status-1"]').classes()).toContain('text-emerald-700')
+    expect(wrapper.get('[data-test="failover-status-1"]').classes()).toContain('dark:text-emerald-300')
+    expect((wrapper.get('[data-test="failover-status-1"]').element as HTMLButtonElement).disabled).toBe(false)
+
+  })
+
+  it.each(['custom', 'composite'] as const)('disables failover configuration for the Custom wire platform %s', async (platform) => {
+    const key = { ...createApiKey(), group_id: 1, group: group(1, platform) }
+    setKey(key, [group(1, platform), group(2, platform)])
+    const wrapper = await mountView()
+    expect((wrapper.get('[data-test="failover-status-1"]').element as HTMLButtonElement).disabled).toBe(true)
+    await getButtonByText(wrapper, 'common.edit').trigger('click')
+    expect(wrapper.find('[data-test="failover-toggle"]').exists()).toBe(false)
+  })
+
+  it('renders active failover in themed red and restores green when cooldown expires', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-10-01T00:00:00Z'))
+    const key = {
+      ...createApiKey(), group_id: 1, group: group(1), failover_enabled: true,
+      failover_group_id: 2, failover_cooldown_until: '2026-10-01T00:00:02Z'
+    }
+    setKey(key, [group(1), group(2)])
+    const wrapper = await mountView()
+    expect(wrapper.get('[data-test="failover-status-1"]').text()).toBe('Failover Group Active')
+    expect(wrapper.get('[data-test="failover-status-1"]').classes()).toContain('dark:text-red-300')
+    await vi.advanceTimersByTimeAsync(2000)
+    expect(wrapper.get('[data-test="failover-status-1"]').text()).toBe('Primary Group Healthy')
+    expect(key.group_id).toBe(1)
+  })
+
+  it('offers only allowed, active groups on the primary platform with subscription and balance choices', async () => {
+    const key = { ...createApiKey(), group_id: 1, group: group(1) }
+    setKey(key, [
+      group(1), group(2), group(3, 'openai', { subscription_type: 'subscription' }),
+      group(4, 'anthropic'), group(5, 'openai', { is_blocked_for_user: true }),
+      group(6, 'openai', { status: 'inactive' }), group(7, 'custom')
+    ])
+    const wrapper = await mountView()
+    await wrapper.get('[data-test="failover-status-1"]').trigger('click')
+    await wrapper.get('[data-test="failover-toggle"]').trigger('click')
+    const selector = wrapper.findAllComponents({ name: 'Select' }).find((select) => select.attributes('data-test') === 'failover-group')!
+    expect(selector.props('options').map((option: { value: number }) => option.value)).toEqual([2, 3])
+    expect(wrapper.get('[data-test="failover-max-retries"]').element).toHaveProperty('value', '3')
+    expect(wrapper.get('[data-test="failover-cooldown"]').element).toHaveProperty('value', '300')
+  })
+
+  it.each(['anthropic', 'gemini', 'grok', 'antigravity'] as const)('allows %s failover settings with only eligible groups on that platform', async (platform) => {
+    const key = { ...createApiKey(), group_id: 1, group: group(1, platform) }
+    setKey(key, [
+      group(1, platform), group(2, platform), group(3, platform, { subscription_type: 'subscription' }),
+      group(4, 'openai'), group(5, platform, { is_blocked_for_user: true }),
+      group(6, platform, { status: 'inactive' }), group(7, 'custom'), group(8, 'composite')
+    ])
+    const wrapper = await mountView()
+    expect((wrapper.get('[data-test="failover-status-1"]').element as HTMLButtonElement).disabled).toBe(false)
+    await wrapper.get('[data-test="failover-status-1"]').trigger('click')
+    await wrapper.get('[data-test="failover-toggle"]').trigger('click')
+    const selector = wrapper.findAllComponents({ name: 'Select' }).find((select) => select.attributes('data-test') === 'failover-group')!
+    expect(selector.props('options').map((option: { value: number }) => option.value)).toEqual([2, 3])
+    expect(selector.props('options').every((option: { platform: string }) => option.platform === platform)).toBe(true)
+    selector.vm.$emit('update:modelValue', 2)
+    await nextTick()
+    await wrapper.get('#failover-form').trigger('submit')
+    await flushPromises()
+    expect(updateKey).toHaveBeenLastCalledWith(1, {
+      failover_enabled: true, failover_group_id: 2, failover_max_retries: 3, failover_cooldown_seconds: 300
+    })
+  })
+
+  it('synchronizes saved settings between the failover dialog and edit form without replacing the main group', async () => {
+    let key: ApiKey = { ...createApiKey(), group_id: 1, group: group(1) }
+    getAvailableGroups.mockResolvedValue([group(1), group(2)])
+    listKeys.mockImplementation(async () => ({ items: [key], total: 1, page: 1, page_size: 20, pages: 1 }))
+    updateKey.mockImplementation(async (_id, updates) => { key = { ...key, ...updates }; return key })
+    const wrapper = await mountView()
+    await wrapper.get('[data-test="failover-status-1"]').trigger('click')
+    await wrapper.get('[data-test="failover-toggle"]').trigger('click')
+    const selector = wrapper.findAllComponents({ name: 'Select' }).find((select) => select.attributes('data-test') === 'failover-group')!
+    selector.vm.$emit('update:modelValue', 2)
+    await nextTick()
+    await wrapper.get('[data-test="failover-max-retries"]').setValue('4')
+    await wrapper.get('[data-test="failover-cooldown"]').setValue('600')
+    await wrapper.get('#failover-form').trigger('submit')
+    await flushPromises()
+    expect(updateKey).toHaveBeenLastCalledWith(1, {
+      failover_enabled: true, failover_group_id: 2, failover_max_retries: 4, failover_cooldown_seconds: 600
+    })
+    expect(key.group_id).toBe(1)
+    await getButtonByText(wrapper, 'common.edit').trigger('click')
+    expect(wrapper.get('[data-test="failover-max-retries"]').element).toHaveProperty('value', '4')
+    expect(wrapper.get('[data-test="failover-cooldown"]').element).toHaveProperty('value', '600')
+    await wrapper.get('[data-test="failover-max-retries"]').setValue('2')
+    await wrapper.get('#key-form').trigger('submit')
+    await flushPromises()
+    await wrapper.get('[data-test="failover-status-1"]').trigger('click')
+    expect(wrapper.get('[data-test="failover-max-retries"]').element).toHaveProperty('value', '2')
+    expect(key.group_id).toBe(1)
+  })
+
+  it.each([0, 11, 1.5])('rejects invalid total retry attempts %s', async (attempts) => {
+    const key = { ...createApiKey(), group_id: 1, group: group(1), failover_enabled: true, failover_group_id: 2 }
+    setKey(key, [group(1), group(2)])
+    const wrapper = await mountView()
+    await wrapper.get('[data-test="failover-status-1"]').trigger('click')
+    await wrapper.get('[data-test="failover-max-retries"]').setValue(String(attempts))
+    await wrapper.get('#failover-form').trigger('submit')
+    expect(updateKey).not.toHaveBeenCalled()
+    expect(showError).toHaveBeenLastCalledWith('keys.failover.invalidMaxRetries')
+  })
+
+  it('clears incompatible failover settings when editing the primary platform', async () => {
+    const key = { ...createApiKey(), group_id: 1, group: group(1), failover_enabled: true, failover_group_id: 2 }
+    setKey(key, [group(1), group(2), group(3, 'anthropic')])
+    const wrapper = await mountView()
+    await getButtonByText(wrapper, 'common.edit').trigger('click')
+    const primarySelector = wrapper.findAllComponents({ name: 'Select' }).find((select) => select.attributes('data-tour') === 'key-form-group')!
+    primarySelector.vm.$emit('update:modelValue', 3)
+    await nextTick()
+    expect(wrapper.get('[data-test="failover-toggle"]').attributes('aria-checked')).toBe('false')
+    await wrapper.get('[data-test="failover-toggle"]').trigger('click')
+    const failoverSelector = wrapper.findAllComponents({ name: 'Select' }).find((select) => select.attributes('data-test') === 'failover-group')!
+    expect(failoverSelector.props('modelValue')).toBe(null)
+    expect(failoverSelector.props('options')).toEqual([])
+
+    primarySelector.vm.$emit('update:modelValue', 2)
+    await nextTick()
+    expect(failoverSelector.props('options').map((option: { value: number }) => option.value)).toEqual([1])
+  })
+
+  it('refreshes active failover state without overwriting an unsaved dialog draft', async () => {
+    vi.useFakeTimers()
+    const key = { ...createApiKey(), group_id: 1, group: group(1), failover_enabled: true, failover_group_id: 2 }
+    setKey(key, [group(1), group(2)])
+    const wrapper = await mountView()
+    await wrapper.get('[data-test="failover-status-1"]').trigger('click')
+    await wrapper.get('[data-test="failover-max-retries"]').setValue('8')
+    const coolingKey = { ...key, failover_cooldown_until: new Date(Date.now() + 300000).toISOString() }
+    listKeys.mockResolvedValue({ items: [coolingKey], total: 1, page: 1, page_size: 20, pages: 1 })
+    await vi.advanceTimersByTimeAsync(15000)
+    expect(wrapper.get('[data-test="failover-status-1"]').text()).toBe('Failover Group Active')
+    expect(wrapper.get('[data-test="failover-max-retries"]').element).toHaveProperty('value', '8')
+  })
+
+  it.each(['custom', 'composite'] as const)('disables failover when an OpenAI key is changed to Custom wire platform %s', async (platform) => {
+    const key = {
+      ...createApiKey(), group_id: 1, group: group(1), failover_enabled: true, failover_group_id: 2,
+      failover_cooldown_until: new Date(Date.now() + 300000).toISOString()
+    }
+    setKey(key, [group(1), group(2), group(3, platform)])
+    const wrapper = await mountView()
+    await getButtonByText(wrapper, 'common.edit').trigger('click')
+    const primarySelector = wrapper.findAllComponents({ name: 'Select' }).find((select) => select.attributes('data-tour') === 'key-form-group')!
+    primarySelector.vm.$emit('update:modelValue', 3)
+    await nextTick()
+    expect(wrapper.find('[data-test="failover-toggle"]').exists()).toBe(false)
+    await wrapper.get('#key-form').trigger('submit')
+    await flushPromises()
+    expect(updateKey).toHaveBeenCalledWith(1, expect.objectContaining({
+      group_id: 3, failover_enabled: false, failover_group_id: null
+    }))
+  })
+
+  it('releases only cooldown and preserves unsaved settings in the open dialog', async () => {
+    const key = {
+      ...createApiKey(), group_id: 1, group: group(1), failover_enabled: true, failover_group_id: 2,
+      failover_cooldown_until: new Date(Date.now() + 60000).toISOString()
+    }
+    setKey(key, [group(1), group(2)])
+    updateKey.mockResolvedValue({ ...key, failover_cooldown_until: null })
+    const wrapper = await mountView()
+    await wrapper.get('[data-test="failover-status-1"]').trigger('click')
+    await wrapper.get('[data-test="failover-max-retries"]').setValue('7')
+    await wrapper.get('[data-test="release-failover-cooldown"]').trigger('click')
+    await flushPromises()
+    expect(updateKey).toHaveBeenLastCalledWith(1, { release_failover_cooldown: true })
+    expect(wrapper.get('[data-test="failover-status-1"]').text()).toBe('Primary Group Healthy')
+    expect(wrapper.get('[data-test="failover-max-retries"]').element).toHaveProperty('value', '7')
+    expect((wrapper.get('[data-test="release-failover-cooldown"]').element as HTMLButtonElement).disabled).toBe(true)
   })
 })

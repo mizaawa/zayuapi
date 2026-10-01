@@ -71,7 +71,13 @@ type APIKey struct {
 	CreatedAt   time.Time  `json:"created_at"`
 	UpdatedAt   time.Time  `json:"updated_at"`
 	// CurrentConcurrency is the real-time active request count for this API key.
-	CurrentConcurrency int `json:"current_concurrency"`
+	CurrentConcurrency      int        `json:"current_concurrency"`
+	FailoverEnabled         bool       `json:"failover_enabled"`
+	FailoverGroupID         *int64     `json:"failover_group_id"`
+	FailoverMaxRetries      int        `json:"failover_max_retries"`
+	FailoverCooldownSeconds int        `json:"failover_cooldown_seconds"`
+	FailoverCooldownUntil   *time.Time `json:"failover_cooldown_until"`
+	FailoverActive          bool       `json:"failover_active"`
 
 	// Rate limit fields
 	RateLimit5h   float64    `json:"rate_limit_5h"`

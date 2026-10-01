@@ -170,6 +170,23 @@ func apiKeyAuthWithSubscription(apiKeyService *service.APIKeyService, subscripti
 		if !apiKey.IsManaged() && abortIfAPIKeyGroupNotAllowed(c, apiKey) {
 			return
 		}
+		if isAPIKeyFailoverSupported(apiKey) && isAPIKeyFailoverCall(c.Request) {
+			resolved, resolveErr := apiKeyService.ResolveAPIKeyFailover(c.Request.Context(), apiKey)
+			if resolveErr != nil {
+				AbortWithError(c, http.StatusServiceUnavailable, "API_KEY_FAILOVER_UNAVAILABLE", "Failed to resolve API key failover group")
+				return
+			}
+			apiKey = resolved
+			SetOpsFallbackAPIKey(c, apiKey)
+			if !apiKey.IsActive() && apiKey.Status != service.StatusAPIKeyExpired && apiKey.Status != service.StatusAPIKeyQuotaExhausted {
+				MarkIngressRejected(c, IngressRejectAPIKeyDisabled)
+				AbortWithError(c, http.StatusUnauthorized, "API_KEY_DISABLED", "API key is disabled")
+				return
+			}
+			if abortIfAPIKeyGroupUnavailable(c, apiKey) || abortIfAPIKeyGroupNotAllowed(c, apiKey) {
+				return
+			}
+		}
 		ctx := context.WithValue(c.Request.Context(), ctxkey.UserID, apiKey.User.ID)
 		c.Request = c.Request.WithContext(ctx)
 		billingInfoRequest := c.Request.URL.Path == "/v1/sub2api/billing"

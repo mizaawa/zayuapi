@@ -49,6 +49,12 @@ func (APIKey) Fields() []ent.Field {
 		field.Int64("group_id").
 			Optional().
 			Nillable(),
+		field.Bool("failover_enabled").Default(false),
+		field.Int64("failover_group_id").Optional().Nillable(),
+		field.Int("failover_max_retries").Default(3).Min(1).Max(10),
+		field.Int("failover_cooldown_seconds").Default(300).Positive(),
+		field.Time("failover_cooldown_until").Optional().Nillable(),
+		field.Int64("failover_revision").Default(0),
 		field.String("status").
 			MaxLen(20).
 			Default(domain.StatusActive),

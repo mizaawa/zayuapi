@@ -120,6 +120,130 @@ func (_u *APIKeyUpdate) ClearGroupID() *APIKeyUpdate {
 	return _u
 }
 
+// SetFailoverEnabled sets the "failover_enabled" field.
+func (_u *APIKeyUpdate) SetFailoverEnabled(v bool) *APIKeyUpdate {
+	_u.mutation.SetFailoverEnabled(v)
+	return _u
+}
+
+// SetNillableFailoverEnabled sets the "failover_enabled" field if the given value is not nil.
+func (_u *APIKeyUpdate) SetNillableFailoverEnabled(v *bool) *APIKeyUpdate {
+	if v != nil {
+		_u.SetFailoverEnabled(*v)
+	}
+	return _u
+}
+
+// SetFailoverGroupID sets the "failover_group_id" field.
+func (_u *APIKeyUpdate) SetFailoverGroupID(v int64) *APIKeyUpdate {
+	_u.mutation.ResetFailoverGroupID()
+	_u.mutation.SetFailoverGroupID(v)
+	return _u
+}
+
+// SetNillableFailoverGroupID sets the "failover_group_id" field if the given value is not nil.
+func (_u *APIKeyUpdate) SetNillableFailoverGroupID(v *int64) *APIKeyUpdate {
+	if v != nil {
+		_u.SetFailoverGroupID(*v)
+	}
+	return _u
+}
+
+// AddFailoverGroupID adds value to the "failover_group_id" field.
+func (_u *APIKeyUpdate) AddFailoverGroupID(v int64) *APIKeyUpdate {
+	_u.mutation.AddFailoverGroupID(v)
+	return _u
+}
+
+// ClearFailoverGroupID clears the value of the "failover_group_id" field.
+func (_u *APIKeyUpdate) ClearFailoverGroupID() *APIKeyUpdate {
+	_u.mutation.ClearFailoverGroupID()
+	return _u
+}
+
+// SetFailoverMaxRetries sets the "failover_max_retries" field.
+func (_u *APIKeyUpdate) SetFailoverMaxRetries(v int) *APIKeyUpdate {
+	_u.mutation.ResetFailoverMaxRetries()
+	_u.mutation.SetFailoverMaxRetries(v)
+	return _u
+}
+
+// SetNillableFailoverMaxRetries sets the "failover_max_retries" field if the given value is not nil.
+func (_u *APIKeyUpdate) SetNillableFailoverMaxRetries(v *int) *APIKeyUpdate {
+	if v != nil {
+		_u.SetFailoverMaxRetries(*v)
+	}
+	return _u
+}
+
+// AddFailoverMaxRetries adds value to the "failover_max_retries" field.
+func (_u *APIKeyUpdate) AddFailoverMaxRetries(v int) *APIKeyUpdate {
+	_u.mutation.AddFailoverMaxRetries(v)
+	return _u
+}
+
+// SetFailoverCooldownSeconds sets the "failover_cooldown_seconds" field.
+func (_u *APIKeyUpdate) SetFailoverCooldownSeconds(v int) *APIKeyUpdate {
+	_u.mutation.ResetFailoverCooldownSeconds()
+	_u.mutation.SetFailoverCooldownSeconds(v)
+	return _u
+}
+
+// SetNillableFailoverCooldownSeconds sets the "failover_cooldown_seconds" field if the given value is not nil.
+func (_u *APIKeyUpdate) SetNillableFailoverCooldownSeconds(v *int) *APIKeyUpdate {
+	if v != nil {
+		_u.SetFailoverCooldownSeconds(*v)
+	}
+	return _u
+}
+
+// AddFailoverCooldownSeconds adds value to the "failover_cooldown_seconds" field.
+func (_u *APIKeyUpdate) AddFailoverCooldownSeconds(v int) *APIKeyUpdate {
+	_u.mutation.AddFailoverCooldownSeconds(v)
+	return _u
+}
+
+// SetFailoverCooldownUntil sets the "failover_cooldown_until" field.
+func (_u *APIKeyUpdate) SetFailoverCooldownUntil(v time.Time) *APIKeyUpdate {
+	_u.mutation.SetFailoverCooldownUntil(v)
+	return _u
+}
+
+// SetNillableFailoverCooldownUntil sets the "failover_cooldown_until" field if the given value is not nil.
+func (_u *APIKeyUpdate) SetNillableFailoverCooldownUntil(v *time.Time) *APIKeyUpdate {
+	if v != nil {
+		_u.SetFailoverCooldownUntil(*v)
+	}
+	return _u
+}
+
+// ClearFailoverCooldownUntil clears the value of the "failover_cooldown_until" field.
+func (_u *APIKeyUpdate) ClearFailoverCooldownUntil() *APIKeyUpdate {
+	_u.mutation.ClearFailoverCooldownUntil()
+	return _u
+}
+
+// SetFailoverRevision sets the "failover_revision" field.
+func (_u *APIKeyUpdate) SetFailoverRevision(v int64) *APIKeyUpdate {
+	_u.mutation.ResetFailoverRevision()
+	_u.mutation.SetFailoverRevision(v)
+	return _u
+}
+
+// SetNillableFailoverRevision sets the "failover_revision" field if the given value is not nil.
+func (_u *APIKeyUpdate) SetNillableFailoverRevision(v *int64) *APIKeyUpdate {
+	if v != nil {
+		_u.SetFailoverRevision(*v)
+	}
+	return _u
+}
+
+// AddFailoverRevision adds value to the "failover_revision" field.
+func (_u *APIKeyUpdate) AddFailoverRevision(v int64) *APIKeyUpdate {
+	_u.mutation.AddFailoverRevision(v)
+	return _u
+}
+
 // SetStatus sets the "status" field.
 func (_u *APIKeyUpdate) SetStatus(v string) *APIKeyUpdate {
 	_u.mutation.SetStatus(v)
@@ -555,6 +679,16 @@ func (_u *APIKeyUpdate) check() error {
 			return &ValidationError{Name: "name", err: fmt.Errorf(`ent: validator failed for field "APIKey.name": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.FailoverMaxRetries(); ok {
+		if err := apikey.FailoverMaxRetriesValidator(v); err != nil {
+			return &ValidationError{Name: "failover_max_retries", err: fmt.Errorf(`ent: validator failed for field "APIKey.failover_max_retries": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.FailoverCooldownSeconds(); ok {
+		if err := apikey.FailoverCooldownSecondsValidator(v); err != nil {
+			return &ValidationError{Name: "failover_cooldown_seconds", err: fmt.Errorf(`ent: validator failed for field "APIKey.failover_cooldown_seconds": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.Status(); ok {
 		if err := apikey.StatusValidator(v); err != nil {
 			return &ValidationError{Name: "status", err: fmt.Errorf(`ent: validator failed for field "APIKey.status": %w`, err)}
@@ -592,6 +726,42 @@ func (_u *APIKeyUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if value, ok := _u.mutation.Name(); ok {
 		_spec.SetField(apikey.FieldName, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.FailoverEnabled(); ok {
+		_spec.SetField(apikey.FieldFailoverEnabled, field.TypeBool, value)
+	}
+	if value, ok := _u.mutation.FailoverGroupID(); ok {
+		_spec.SetField(apikey.FieldFailoverGroupID, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedFailoverGroupID(); ok {
+		_spec.AddField(apikey.FieldFailoverGroupID, field.TypeInt64, value)
+	}
+	if _u.mutation.FailoverGroupIDCleared() {
+		_spec.ClearField(apikey.FieldFailoverGroupID, field.TypeInt64)
+	}
+	if value, ok := _u.mutation.FailoverMaxRetries(); ok {
+		_spec.SetField(apikey.FieldFailoverMaxRetries, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedFailoverMaxRetries(); ok {
+		_spec.AddField(apikey.FieldFailoverMaxRetries, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.FailoverCooldownSeconds(); ok {
+		_spec.SetField(apikey.FieldFailoverCooldownSeconds, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedFailoverCooldownSeconds(); ok {
+		_spec.AddField(apikey.FieldFailoverCooldownSeconds, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.FailoverCooldownUntil(); ok {
+		_spec.SetField(apikey.FieldFailoverCooldownUntil, field.TypeTime, value)
+	}
+	if _u.mutation.FailoverCooldownUntilCleared() {
+		_spec.ClearField(apikey.FieldFailoverCooldownUntil, field.TypeTime)
+	}
+	if value, ok := _u.mutation.FailoverRevision(); ok {
+		_spec.SetField(apikey.FieldFailoverRevision, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedFailoverRevision(); ok {
+		_spec.AddField(apikey.FieldFailoverRevision, field.TypeInt64, value)
 	}
 	if value, ok := _u.mutation.Status(); ok {
 		_spec.SetField(apikey.FieldStatus, field.TypeString, value)
@@ -904,6 +1074,130 @@ func (_u *APIKeyUpdateOne) SetNillableGroupID(v *int64) *APIKeyUpdateOne {
 // ClearGroupID clears the value of the "group_id" field.
 func (_u *APIKeyUpdateOne) ClearGroupID() *APIKeyUpdateOne {
 	_u.mutation.ClearGroupID()
+	return _u
+}
+
+// SetFailoverEnabled sets the "failover_enabled" field.
+func (_u *APIKeyUpdateOne) SetFailoverEnabled(v bool) *APIKeyUpdateOne {
+	_u.mutation.SetFailoverEnabled(v)
+	return _u
+}
+
+// SetNillableFailoverEnabled sets the "failover_enabled" field if the given value is not nil.
+func (_u *APIKeyUpdateOne) SetNillableFailoverEnabled(v *bool) *APIKeyUpdateOne {
+	if v != nil {
+		_u.SetFailoverEnabled(*v)
+	}
+	return _u
+}
+
+// SetFailoverGroupID sets the "failover_group_id" field.
+func (_u *APIKeyUpdateOne) SetFailoverGroupID(v int64) *APIKeyUpdateOne {
+	_u.mutation.ResetFailoverGroupID()
+	_u.mutation.SetFailoverGroupID(v)
+	return _u
+}
+
+// SetNillableFailoverGroupID sets the "failover_group_id" field if the given value is not nil.
+func (_u *APIKeyUpdateOne) SetNillableFailoverGroupID(v *int64) *APIKeyUpdateOne {
+	if v != nil {
+		_u.SetFailoverGroupID(*v)
+	}
+	return _u
+}
+
+// AddFailoverGroupID adds value to the "failover_group_id" field.
+func (_u *APIKeyUpdateOne) AddFailoverGroupID(v int64) *APIKeyUpdateOne {
+	_u.mutation.AddFailoverGroupID(v)
+	return _u
+}
+
+// ClearFailoverGroupID clears the value of the "failover_group_id" field.
+func (_u *APIKeyUpdateOne) ClearFailoverGroupID() *APIKeyUpdateOne {
+	_u.mutation.ClearFailoverGroupID()
+	return _u
+}
+
+// SetFailoverMaxRetries sets the "failover_max_retries" field.
+func (_u *APIKeyUpdateOne) SetFailoverMaxRetries(v int) *APIKeyUpdateOne {
+	_u.mutation.ResetFailoverMaxRetries()
+	_u.mutation.SetFailoverMaxRetries(v)
+	return _u
+}
+
+// SetNillableFailoverMaxRetries sets the "failover_max_retries" field if the given value is not nil.
+func (_u *APIKeyUpdateOne) SetNillableFailoverMaxRetries(v *int) *APIKeyUpdateOne {
+	if v != nil {
+		_u.SetFailoverMaxRetries(*v)
+	}
+	return _u
+}
+
+// AddFailoverMaxRetries adds value to the "failover_max_retries" field.
+func (_u *APIKeyUpdateOne) AddFailoverMaxRetries(v int) *APIKeyUpdateOne {
+	_u.mutation.AddFailoverMaxRetries(v)
+	return _u
+}
+
+// SetFailoverCooldownSeconds sets the "failover_cooldown_seconds" field.
+func (_u *APIKeyUpdateOne) SetFailoverCooldownSeconds(v int) *APIKeyUpdateOne {
+	_u.mutation.ResetFailoverCooldownSeconds()
+	_u.mutation.SetFailoverCooldownSeconds(v)
+	return _u
+}
+
+// SetNillableFailoverCooldownSeconds sets the "failover_cooldown_seconds" field if the given value is not nil.
+func (_u *APIKeyUpdateOne) SetNillableFailoverCooldownSeconds(v *int) *APIKeyUpdateOne {
+	if v != nil {
+		_u.SetFailoverCooldownSeconds(*v)
+	}
+	return _u
+}
+
+// AddFailoverCooldownSeconds adds value to the "failover_cooldown_seconds" field.
+func (_u *APIKeyUpdateOne) AddFailoverCooldownSeconds(v int) *APIKeyUpdateOne {
+	_u.mutation.AddFailoverCooldownSeconds(v)
+	return _u
+}
+
+// SetFailoverCooldownUntil sets the "failover_cooldown_until" field.
+func (_u *APIKeyUpdateOne) SetFailoverCooldownUntil(v time.Time) *APIKeyUpdateOne {
+	_u.mutation.SetFailoverCooldownUntil(v)
+	return _u
+}
+
+// SetNillableFailoverCooldownUntil sets the "failover_cooldown_until" field if the given value is not nil.
+func (_u *APIKeyUpdateOne) SetNillableFailoverCooldownUntil(v *time.Time) *APIKeyUpdateOne {
+	if v != nil {
+		_u.SetFailoverCooldownUntil(*v)
+	}
+	return _u
+}
+
+// ClearFailoverCooldownUntil clears the value of the "failover_cooldown_until" field.
+func (_u *APIKeyUpdateOne) ClearFailoverCooldownUntil() *APIKeyUpdateOne {
+	_u.mutation.ClearFailoverCooldownUntil()
+	return _u
+}
+
+// SetFailoverRevision sets the "failover_revision" field.
+func (_u *APIKeyUpdateOne) SetFailoverRevision(v int64) *APIKeyUpdateOne {
+	_u.mutation.ResetFailoverRevision()
+	_u.mutation.SetFailoverRevision(v)
+	return _u
+}
+
+// SetNillableFailoverRevision sets the "failover_revision" field if the given value is not nil.
+func (_u *APIKeyUpdateOne) SetNillableFailoverRevision(v *int64) *APIKeyUpdateOne {
+	if v != nil {
+		_u.SetFailoverRevision(*v)
+	}
+	return _u
+}
+
+// AddFailoverRevision adds value to the "failover_revision" field.
+func (_u *APIKeyUpdateOne) AddFailoverRevision(v int64) *APIKeyUpdateOne {
+	_u.mutation.AddFailoverRevision(v)
 	return _u
 }
 
@@ -1355,6 +1649,16 @@ func (_u *APIKeyUpdateOne) check() error {
 			return &ValidationError{Name: "name", err: fmt.Errorf(`ent: validator failed for field "APIKey.name": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.FailoverMaxRetries(); ok {
+		if err := apikey.FailoverMaxRetriesValidator(v); err != nil {
+			return &ValidationError{Name: "failover_max_retries", err: fmt.Errorf(`ent: validator failed for field "APIKey.failover_max_retries": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.FailoverCooldownSeconds(); ok {
+		if err := apikey.FailoverCooldownSecondsValidator(v); err != nil {
+			return &ValidationError{Name: "failover_cooldown_seconds", err: fmt.Errorf(`ent: validator failed for field "APIKey.failover_cooldown_seconds": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.Status(); ok {
 		if err := apikey.StatusValidator(v); err != nil {
 			return &ValidationError{Name: "status", err: fmt.Errorf(`ent: validator failed for field "APIKey.status": %w`, err)}
@@ -1409,6 +1713,42 @@ func (_u *APIKeyUpdateOne) sqlSave(ctx context.Context) (_node *APIKey, err erro
 	}
 	if value, ok := _u.mutation.Name(); ok {
 		_spec.SetField(apikey.FieldName, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.FailoverEnabled(); ok {
+		_spec.SetField(apikey.FieldFailoverEnabled, field.TypeBool, value)
+	}
+	if value, ok := _u.mutation.FailoverGroupID(); ok {
+		_spec.SetField(apikey.FieldFailoverGroupID, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedFailoverGroupID(); ok {
+		_spec.AddField(apikey.FieldFailoverGroupID, field.TypeInt64, value)
+	}
+	if _u.mutation.FailoverGroupIDCleared() {
+		_spec.ClearField(apikey.FieldFailoverGroupID, field.TypeInt64)
+	}
+	if value, ok := _u.mutation.FailoverMaxRetries(); ok {
+		_spec.SetField(apikey.FieldFailoverMaxRetries, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedFailoverMaxRetries(); ok {
+		_spec.AddField(apikey.FieldFailoverMaxRetries, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.FailoverCooldownSeconds(); ok {
+		_spec.SetField(apikey.FieldFailoverCooldownSeconds, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedFailoverCooldownSeconds(); ok {
+		_spec.AddField(apikey.FieldFailoverCooldownSeconds, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.FailoverCooldownUntil(); ok {
+		_spec.SetField(apikey.FieldFailoverCooldownUntil, field.TypeTime, value)
+	}
+	if _u.mutation.FailoverCooldownUntilCleared() {
+		_spec.ClearField(apikey.FieldFailoverCooldownUntil, field.TypeTime)
+	}
+	if value, ok := _u.mutation.FailoverRevision(); ok {
+		_spec.SetField(apikey.FieldFailoverRevision, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedFailoverRevision(); ok {
+		_spec.AddField(apikey.FieldFailoverRevision, field.TypeInt64, value)
 	}
 	if value, ok := _u.mutation.Status(); ok {
 		_spec.SetField(apikey.FieldStatus, field.TypeString, value)

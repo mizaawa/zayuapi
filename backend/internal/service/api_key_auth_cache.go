@@ -4,17 +4,23 @@ import "time"
 
 // APIKeyAuthSnapshot API Key 认证缓存快照（仅包含认证所需字段）
 type APIKeyAuthSnapshot struct {
-	Version     int                      `json:"version"`
-	APIKeyID    int64                    `json:"api_key_id"`
-	UserID      int64                    `json:"user_id"`
-	GroupID     *int64                   `json:"group_id,omitempty"`
-	Name        string                   `json:"name"`
-	Purpose     string                   `json:"purpose,omitempty"`
-	Status      string                   `json:"status"`
-	IPWhitelist []string                 `json:"ip_whitelist,omitempty"`
-	IPBlacklist []string                 `json:"ip_blacklist,omitempty"`
-	User        APIKeyAuthUserSnapshot   `json:"user"`
-	Group       *APIKeyAuthGroupSnapshot `json:"group,omitempty"`
+	Version                 int                      `json:"version"`
+	APIKeyID                int64                    `json:"api_key_id"`
+	UserID                  int64                    `json:"user_id"`
+	GroupID                 *int64                   `json:"group_id,omitempty"`
+	Name                    string                   `json:"name"`
+	Purpose                 string                   `json:"purpose,omitempty"`
+	Status                  string                   `json:"status"`
+	IPWhitelist             []string                 `json:"ip_whitelist,omitempty"`
+	IPBlacklist             []string                 `json:"ip_blacklist,omitempty"`
+	User                    APIKeyAuthUserSnapshot   `json:"user"`
+	Group                   *APIKeyAuthGroupSnapshot `json:"group,omitempty"`
+	FailoverEnabled         bool                     `json:"failover_enabled"`
+	FailoverGroupID         *int64                   `json:"failover_group_id,omitempty"`
+	FailoverMaxRetries      int                      `json:"failover_max_retries"`
+	FailoverCooldownSeconds int                      `json:"failover_cooldown_seconds"`
+	FailoverCooldownUntil   *time.Time               `json:"failover_cooldown_until,omitempty"`
+	FailoverRevision        int64                    `json:"failover_revision"`
 
 	// Quota fields for API Key independent quota feature
 	Quota     float64 `json:"quota"`      // Quota limit in USD (0 = unlimited)

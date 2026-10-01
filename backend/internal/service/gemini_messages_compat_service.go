@@ -793,6 +793,9 @@ func (s *GeminiMessagesCompatService) Forward(ctx context.Context, c *gin.Contex
 
 		resp, err = s.httpUpstream.Do(upstreamReq, proxyURL, account.ID, account.Concurrency)
 		if err != nil {
+			if APIKeyFailoverAttemptEnabled(ctx) {
+				RecordAPIKeyFailoverUpstreamFailure(ctx, 0, nil)
+			}
 			safeErr := sanitizeUpstreamErrorMessage(err.Error())
 			appendOpsUpstreamError(c, OpsUpstreamErrorEvent{
 				Platform:           account.Platform,
@@ -802,6 +805,10 @@ func (s *GeminiMessagesCompatService) Forward(ctx context.Context, c *gin.Contex
 				Kind:               "request_error",
 				Message:            safeErr,
 			})
+			if APIKeyFailoverAttemptEnabled(ctx) {
+				setOpsUpstreamError(c, 0, safeErr, "")
+				return nil, s.writeClaudeError(c, http.StatusBadGateway, "upstream_error", "Upstream request failed: "+safeErr)
+			}
 			if attempt < geminiMaxRetries {
 				logger.LegacyPrintf("service.gemini_messages_compat", "Gemini account %d: upstream request failed, retry %d/%d: %v", account.ID, attempt, geminiMaxRetries, err)
 				sleepGeminiBackoff(attempt)
@@ -809,6 +816,17 @@ func (s *GeminiMessagesCompatService) Forward(ctx context.Context, c *gin.Contex
 			}
 			setOpsUpstreamError(c, 0, safeErr, "")
 			return nil, s.writeClaudeError(c, http.StatusBadGateway, "upstream_error", "Upstream request failed after retries: "+safeErr)
+		}
+		if APIKeyFailoverAttemptEnabled(ctx) && resp.StatusCode >= http.StatusBadRequest {
+			respBody := s.readUpstreamErrorBody(resp)
+			_ = resp.Body.Close()
+			RecordAPIKeyFailoverUpstreamFailure(ctx, resp.StatusCode, respBody)
+			resp = &http.Response{
+				StatusCode: resp.StatusCode,
+				Header:     resp.Header.Clone(),
+				Body:       io.NopCloser(bytes.NewReader(respBody)),
+			}
+			break
 		}
 
 		// Special-case: signature/thought_signature validation errors are not transient, but may be fixed by
@@ -890,6 +908,15 @@ func (s *GeminiMessagesCompatService) Forward(ctx context.Context, c *gin.Contex
 		if resp.StatusCode >= 400 && s.shouldRetryGeminiUpstreamError(account, resp.StatusCode) {
 			respBody := s.readUpstreamErrorBody(resp)
 			_ = resp.Body.Close()
+			RecordAPIKeyFailoverUpstreamFailure(ctx, resp.StatusCode, respBody)
+			if APIKeyFailoverAttemptEnabled(ctx) {
+				resp = &http.Response{
+					StatusCode: resp.StatusCode,
+					Header:     resp.Header.Clone(),
+					Body:       io.NopCloser(bytes.NewReader(respBody)),
+				}
+				break
+			}
 			// Don't treat insufficient-scope as transient.
 			if resp.StatusCode == 403 && isGeminiInsufficientScope(resp.Header, respBody) {
 				resp = &http.Response{
@@ -948,6 +975,7 @@ func (s *GeminiMessagesCompatService) Forward(ctx context.Context, c *gin.Contex
 
 	if resp.StatusCode >= 400 {
 		respBody := s.readUpstreamErrorBody(resp)
+		RecordAPIKeyFailoverUpstreamFailure(ctx, resp.StatusCode, respBody)
 		// 统一错误策略：自定义错误码 + 临时不可调度
 		if s.rateLimitService != nil {
 			policy := s.rateLimitService.CheckErrorPolicy(ctx, account, resp.StatusCode, respBody, mappedModel)
@@ -1328,6 +1356,9 @@ func (s *GeminiMessagesCompatService) ForwardNative(ctx context.Context, c *gin.
 
 		resp, err = s.httpUpstream.Do(upstreamReq, proxyURL, account.ID, account.Concurrency)
 		if err != nil {
+			if APIKeyFailoverAttemptEnabled(ctx) {
+				RecordAPIKeyFailoverUpstreamFailure(ctx, 0, nil)
+			}
 			safeErr := sanitizeUpstreamErrorMessage(err.Error())
 			appendOpsUpstreamError(c, OpsUpstreamErrorEvent{
 				Platform:           account.Platform,
@@ -1337,6 +1368,10 @@ func (s *GeminiMessagesCompatService) ForwardNative(ctx context.Context, c *gin.
 				Kind:               "request_error",
 				Message:            safeErr,
 			})
+			if APIKeyFailoverAttemptEnabled(ctx) {
+				setOpsUpstreamError(c, 0, safeErr, "")
+				return nil, s.writeGoogleError(c, http.StatusBadGateway, "Upstream request failed: "+safeErr)
+			}
 			if attempt < geminiMaxRetries {
 				logger.LegacyPrintf("service.gemini_messages_compat", "Gemini account %d: upstream request failed, retry %d/%d: %v", account.ID, attempt, geminiMaxRetries, err)
 				sleepGeminiBackoff(attempt)
@@ -1358,6 +1393,17 @@ func (s *GeminiMessagesCompatService) ForwardNative(ctx context.Context, c *gin.
 			setOpsUpstreamError(c, 0, safeErr, "")
 			return nil, s.writeGoogleError(c, http.StatusBadGateway, "Upstream request failed after retries: "+safeErr)
 		}
+		if APIKeyFailoverAttemptEnabled(ctx) && resp.StatusCode >= http.StatusBadRequest {
+			respBody := s.readUpstreamErrorBody(resp)
+			_ = resp.Body.Close()
+			RecordAPIKeyFailoverUpstreamFailure(ctx, resp.StatusCode, respBody)
+			resp = &http.Response{
+				StatusCode: resp.StatusCode,
+				Header:     resp.Header.Clone(),
+				Body:       io.NopCloser(bytes.NewReader(respBody)),
+			}
+			break
+		}
 
 		// 错误策略优先：匹配则跳过重试直接处理。
 		if matched, rebuilt := s.checkErrorPolicyInLoop(ctx, account, resp, mappedModel); matched {
@@ -1370,6 +1416,15 @@ func (s *GeminiMessagesCompatService) ForwardNative(ctx context.Context, c *gin.
 		if resp.StatusCode >= 400 && s.shouldRetryGeminiUpstreamError(account, resp.StatusCode) {
 			respBody := s.readUpstreamErrorBody(resp)
 			_ = resp.Body.Close()
+			RecordAPIKeyFailoverUpstreamFailure(ctx, resp.StatusCode, respBody)
+			if APIKeyFailoverAttemptEnabled(ctx) {
+				resp = &http.Response{
+					StatusCode: resp.StatusCode,
+					Header:     resp.Header.Clone(),
+					Body:       io.NopCloser(bytes.NewReader(respBody)),
+				}
+				break
+			}
 			// Don't treat insufficient-scope as transient.
 			if resp.StatusCode == 403 && isGeminiInsufficientScope(resp.Header, respBody) {
 				resp = &http.Response{
@@ -1450,6 +1505,7 @@ func (s *GeminiMessagesCompatService) ForwardNative(ctx context.Context, c *gin.
 
 	if resp.StatusCode >= 400 {
 		respBody := s.readUpstreamErrorBody(resp)
+		RecordAPIKeyFailoverUpstreamFailure(ctx, resp.StatusCode, respBody)
 		// Best-effort fallback for OAuth tokens missing AI Studio scopes when calling countTokens.
 		// This avoids Gemini SDKs failing hard during preflight token counting.
 		// Checked before error policy so it always works regardless of custom error codes.

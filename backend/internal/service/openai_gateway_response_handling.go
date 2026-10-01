@@ -433,6 +433,7 @@ func (s *OpenAIGatewayService) handleStreamingResponseWithReasoning(ctx context.
 			forceFlushFailedEvent := false
 			if eventType == "response.failed" {
 				failedMessage = extractOpenAISSEErrorMessage(dataBytes)
+				RecordAPIKeyFailoverUpstreamFailure(ctx, openAIStreamFailureStatus(dataBytes, failedMessage), dataBytes)
 				// response.failed 自带上游已消耗的 usage（input token 通常已扣）；必须先解析
 				// 再打 cyber 标记，否则 mark 记到的是解析前的 0，导致流式 cyber 按 0 token 计费
 				// 而漏记真实用量。对齐 WS V2 / Chat 流式路径（均先解析 usage 再 Mark）。
@@ -1318,6 +1319,7 @@ func (s *OpenAIGatewayService) handleNonStreamingResponse(ctx context.Context, r
 		if bodyLooksLikeSSE {
 			return s.handleSSEToJSON(ctx, resp, c, account, body, originalModel, mappedModel)
 		}
+		RecordAPIKeyFailoverUpstreamFailure(ctx, http.StatusBadGateway, body)
 		return nil, fmt.Errorf("parse response: invalid json response")
 	}
 	usage := &usageValue
@@ -1420,6 +1422,7 @@ func (s *OpenAIGatewayService) handleSSEToJSON(ctx context.Context, resp *http.R
 		terminalType, terminalPayload, terminalOK := extractOpenAISSETerminalEvent(bodyText)
 		if terminalOK && terminalType == "response.failed" {
 			msg := extractOpenAISSEErrorMessage(terminalPayload)
+			RecordAPIKeyFailoverUpstreamFailure(ctx, openAIStreamFailureStatus(terminalPayload, msg), terminalPayload)
 			if msg == "" {
 				msg = "Upstream compact response failed"
 			}

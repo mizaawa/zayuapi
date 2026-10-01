@@ -108,52 +108,62 @@ const (
 // APIKeyMutation represents an operation that mutates the APIKey nodes in the graph.
 type APIKeyMutation struct {
 	config
-	op                 Op
-	typ                string
-	id                 *int64
-	created_at         *time.Time
-	updated_at         *time.Time
-	deleted_at         *time.Time
-	key                *string
-	name               *string
-	purpose            *string
-	status             *string
-	last_used_at       *time.Time
-	ip_whitelist       *[]string
-	appendip_whitelist []string
-	ip_blacklist       *[]string
-	appendip_blacklist []string
-	quota              *float64
-	addquota           *float64
-	quota_used         *float64
-	addquota_used      *float64
-	expires_at         *time.Time
-	rate_limit_5h      *float64
-	addrate_limit_5h   *float64
-	rate_limit_1d      *float64
-	addrate_limit_1d   *float64
-	rate_limit_7d      *float64
-	addrate_limit_7d   *float64
-	usage_5h           *float64
-	addusage_5h        *float64
-	usage_1d           *float64
-	addusage_1d        *float64
-	usage_7d           *float64
-	addusage_7d        *float64
-	window_5h_start    *time.Time
-	window_1d_start    *time.Time
-	window_7d_start    *time.Time
-	clearedFields      map[string]struct{}
-	user               *int64
-	cleareduser        bool
-	group              *int64
-	clearedgroup       bool
-	usage_logs         map[int64]struct{}
-	removedusage_logs  map[int64]struct{}
-	clearedusage_logs  bool
-	done               bool
-	oldValue           func(context.Context) (*APIKey, error)
-	predicates         []predicate.APIKey
+	op                           Op
+	typ                          string
+	id                           *int64
+	created_at                   *time.Time
+	updated_at                   *time.Time
+	deleted_at                   *time.Time
+	key                          *string
+	name                         *string
+	purpose                      *string
+	failover_enabled             *bool
+	failover_group_id            *int64
+	addfailover_group_id         *int64
+	failover_max_retries         *int
+	addfailover_max_retries      *int
+	failover_cooldown_seconds    *int
+	addfailover_cooldown_seconds *int
+	failover_cooldown_until      *time.Time
+	failover_revision            *int64
+	addfailover_revision         *int64
+	status                       *string
+	last_used_at                 *time.Time
+	ip_whitelist                 *[]string
+	appendip_whitelist           []string
+	ip_blacklist                 *[]string
+	appendip_blacklist           []string
+	quota                        *float64
+	addquota                     *float64
+	quota_used                   *float64
+	addquota_used                *float64
+	expires_at                   *time.Time
+	rate_limit_5h                *float64
+	addrate_limit_5h             *float64
+	rate_limit_1d                *float64
+	addrate_limit_1d             *float64
+	rate_limit_7d                *float64
+	addrate_limit_7d             *float64
+	usage_5h                     *float64
+	addusage_5h                  *float64
+	usage_1d                     *float64
+	addusage_1d                  *float64
+	usage_7d                     *float64
+	addusage_7d                  *float64
+	window_5h_start              *time.Time
+	window_1d_start              *time.Time
+	window_7d_start              *time.Time
+	clearedFields                map[string]struct{}
+	user                         *int64
+	cleareduser                  bool
+	group                        *int64
+	clearedgroup                 bool
+	usage_logs                   map[int64]struct{}
+	removedusage_logs            map[int64]struct{}
+	clearedusage_logs            bool
+	done                         bool
+	oldValue                     func(context.Context) (*APIKey, error)
+	predicates                   []predicate.APIKey
 }
 
 var _ ent.Mutation = (*APIKeyMutation)(nil)
@@ -566,6 +576,329 @@ func (m *APIKeyMutation) GroupIDCleared() bool {
 func (m *APIKeyMutation) ResetGroupID() {
 	m.group = nil
 	delete(m.clearedFields, apikey.FieldGroupID)
+}
+
+// SetFailoverEnabled sets the "failover_enabled" field.
+func (m *APIKeyMutation) SetFailoverEnabled(b bool) {
+	m.failover_enabled = &b
+}
+
+// FailoverEnabled returns the value of the "failover_enabled" field in the mutation.
+func (m *APIKeyMutation) FailoverEnabled() (r bool, exists bool) {
+	v := m.failover_enabled
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldFailoverEnabled returns the old "failover_enabled" field's value of the APIKey entity.
+// If the APIKey object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *APIKeyMutation) OldFailoverEnabled(ctx context.Context) (v bool, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldFailoverEnabled is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldFailoverEnabled requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldFailoverEnabled: %w", err)
+	}
+	return oldValue.FailoverEnabled, nil
+}
+
+// ResetFailoverEnabled resets all changes to the "failover_enabled" field.
+func (m *APIKeyMutation) ResetFailoverEnabled() {
+	m.failover_enabled = nil
+}
+
+// SetFailoverGroupID sets the "failover_group_id" field.
+func (m *APIKeyMutation) SetFailoverGroupID(i int64) {
+	m.failover_group_id = &i
+	m.addfailover_group_id = nil
+}
+
+// FailoverGroupID returns the value of the "failover_group_id" field in the mutation.
+func (m *APIKeyMutation) FailoverGroupID() (r int64, exists bool) {
+	v := m.failover_group_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldFailoverGroupID returns the old "failover_group_id" field's value of the APIKey entity.
+// If the APIKey object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *APIKeyMutation) OldFailoverGroupID(ctx context.Context) (v *int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldFailoverGroupID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldFailoverGroupID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldFailoverGroupID: %w", err)
+	}
+	return oldValue.FailoverGroupID, nil
+}
+
+// AddFailoverGroupID adds i to the "failover_group_id" field.
+func (m *APIKeyMutation) AddFailoverGroupID(i int64) {
+	if m.addfailover_group_id != nil {
+		*m.addfailover_group_id += i
+	} else {
+		m.addfailover_group_id = &i
+	}
+}
+
+// AddedFailoverGroupID returns the value that was added to the "failover_group_id" field in this mutation.
+func (m *APIKeyMutation) AddedFailoverGroupID() (r int64, exists bool) {
+	v := m.addfailover_group_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ClearFailoverGroupID clears the value of the "failover_group_id" field.
+func (m *APIKeyMutation) ClearFailoverGroupID() {
+	m.failover_group_id = nil
+	m.addfailover_group_id = nil
+	m.clearedFields[apikey.FieldFailoverGroupID] = struct{}{}
+}
+
+// FailoverGroupIDCleared returns if the "failover_group_id" field was cleared in this mutation.
+func (m *APIKeyMutation) FailoverGroupIDCleared() bool {
+	_, ok := m.clearedFields[apikey.FieldFailoverGroupID]
+	return ok
+}
+
+// ResetFailoverGroupID resets all changes to the "failover_group_id" field.
+func (m *APIKeyMutation) ResetFailoverGroupID() {
+	m.failover_group_id = nil
+	m.addfailover_group_id = nil
+	delete(m.clearedFields, apikey.FieldFailoverGroupID)
+}
+
+// SetFailoverMaxRetries sets the "failover_max_retries" field.
+func (m *APIKeyMutation) SetFailoverMaxRetries(i int) {
+	m.failover_max_retries = &i
+	m.addfailover_max_retries = nil
+}
+
+// FailoverMaxRetries returns the value of the "failover_max_retries" field in the mutation.
+func (m *APIKeyMutation) FailoverMaxRetries() (r int, exists bool) {
+	v := m.failover_max_retries
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldFailoverMaxRetries returns the old "failover_max_retries" field's value of the APIKey entity.
+// If the APIKey object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *APIKeyMutation) OldFailoverMaxRetries(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldFailoverMaxRetries is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldFailoverMaxRetries requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldFailoverMaxRetries: %w", err)
+	}
+	return oldValue.FailoverMaxRetries, nil
+}
+
+// AddFailoverMaxRetries adds i to the "failover_max_retries" field.
+func (m *APIKeyMutation) AddFailoverMaxRetries(i int) {
+	if m.addfailover_max_retries != nil {
+		*m.addfailover_max_retries += i
+	} else {
+		m.addfailover_max_retries = &i
+	}
+}
+
+// AddedFailoverMaxRetries returns the value that was added to the "failover_max_retries" field in this mutation.
+func (m *APIKeyMutation) AddedFailoverMaxRetries() (r int, exists bool) {
+	v := m.addfailover_max_retries
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetFailoverMaxRetries resets all changes to the "failover_max_retries" field.
+func (m *APIKeyMutation) ResetFailoverMaxRetries() {
+	m.failover_max_retries = nil
+	m.addfailover_max_retries = nil
+}
+
+// SetFailoverCooldownSeconds sets the "failover_cooldown_seconds" field.
+func (m *APIKeyMutation) SetFailoverCooldownSeconds(i int) {
+	m.failover_cooldown_seconds = &i
+	m.addfailover_cooldown_seconds = nil
+}
+
+// FailoverCooldownSeconds returns the value of the "failover_cooldown_seconds" field in the mutation.
+func (m *APIKeyMutation) FailoverCooldownSeconds() (r int, exists bool) {
+	v := m.failover_cooldown_seconds
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldFailoverCooldownSeconds returns the old "failover_cooldown_seconds" field's value of the APIKey entity.
+// If the APIKey object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *APIKeyMutation) OldFailoverCooldownSeconds(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldFailoverCooldownSeconds is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldFailoverCooldownSeconds requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldFailoverCooldownSeconds: %w", err)
+	}
+	return oldValue.FailoverCooldownSeconds, nil
+}
+
+// AddFailoverCooldownSeconds adds i to the "failover_cooldown_seconds" field.
+func (m *APIKeyMutation) AddFailoverCooldownSeconds(i int) {
+	if m.addfailover_cooldown_seconds != nil {
+		*m.addfailover_cooldown_seconds += i
+	} else {
+		m.addfailover_cooldown_seconds = &i
+	}
+}
+
+// AddedFailoverCooldownSeconds returns the value that was added to the "failover_cooldown_seconds" field in this mutation.
+func (m *APIKeyMutation) AddedFailoverCooldownSeconds() (r int, exists bool) {
+	v := m.addfailover_cooldown_seconds
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetFailoverCooldownSeconds resets all changes to the "failover_cooldown_seconds" field.
+func (m *APIKeyMutation) ResetFailoverCooldownSeconds() {
+	m.failover_cooldown_seconds = nil
+	m.addfailover_cooldown_seconds = nil
+}
+
+// SetFailoverCooldownUntil sets the "failover_cooldown_until" field.
+func (m *APIKeyMutation) SetFailoverCooldownUntil(t time.Time) {
+	m.failover_cooldown_until = &t
+}
+
+// FailoverCooldownUntil returns the value of the "failover_cooldown_until" field in the mutation.
+func (m *APIKeyMutation) FailoverCooldownUntil() (r time.Time, exists bool) {
+	v := m.failover_cooldown_until
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldFailoverCooldownUntil returns the old "failover_cooldown_until" field's value of the APIKey entity.
+// If the APIKey object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *APIKeyMutation) OldFailoverCooldownUntil(ctx context.Context) (v *time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldFailoverCooldownUntil is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldFailoverCooldownUntil requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldFailoverCooldownUntil: %w", err)
+	}
+	return oldValue.FailoverCooldownUntil, nil
+}
+
+// ClearFailoverCooldownUntil clears the value of the "failover_cooldown_until" field.
+func (m *APIKeyMutation) ClearFailoverCooldownUntil() {
+	m.failover_cooldown_until = nil
+	m.clearedFields[apikey.FieldFailoverCooldownUntil] = struct{}{}
+}
+
+// FailoverCooldownUntilCleared returns if the "failover_cooldown_until" field was cleared in this mutation.
+func (m *APIKeyMutation) FailoverCooldownUntilCleared() bool {
+	_, ok := m.clearedFields[apikey.FieldFailoverCooldownUntil]
+	return ok
+}
+
+// ResetFailoverCooldownUntil resets all changes to the "failover_cooldown_until" field.
+func (m *APIKeyMutation) ResetFailoverCooldownUntil() {
+	m.failover_cooldown_until = nil
+	delete(m.clearedFields, apikey.FieldFailoverCooldownUntil)
+}
+
+// SetFailoverRevision sets the "failover_revision" field.
+func (m *APIKeyMutation) SetFailoverRevision(i int64) {
+	m.failover_revision = &i
+	m.addfailover_revision = nil
+}
+
+// FailoverRevision returns the value of the "failover_revision" field in the mutation.
+func (m *APIKeyMutation) FailoverRevision() (r int64, exists bool) {
+	v := m.failover_revision
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldFailoverRevision returns the old "failover_revision" field's value of the APIKey entity.
+// If the APIKey object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *APIKeyMutation) OldFailoverRevision(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldFailoverRevision is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldFailoverRevision requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldFailoverRevision: %w", err)
+	}
+	return oldValue.FailoverRevision, nil
+}
+
+// AddFailoverRevision adds i to the "failover_revision" field.
+func (m *APIKeyMutation) AddFailoverRevision(i int64) {
+	if m.addfailover_revision != nil {
+		*m.addfailover_revision += i
+	} else {
+		m.addfailover_revision = &i
+	}
+}
+
+// AddedFailoverRevision returns the value that was added to the "failover_revision" field in this mutation.
+func (m *APIKeyMutation) AddedFailoverRevision() (r int64, exists bool) {
+	v := m.addfailover_revision
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetFailoverRevision resets all changes to the "failover_revision" field.
+func (m *APIKeyMutation) ResetFailoverRevision() {
+	m.failover_revision = nil
+	m.addfailover_revision = nil
 }
 
 // SetStatus sets the "status" field.
@@ -1569,7 +1902,7 @@ func (m *APIKeyMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *APIKeyMutation) Fields() []string {
-	fields := make([]string, 0, 24)
+	fields := make([]string, 0, 30)
 	if m.created_at != nil {
 		fields = append(fields, apikey.FieldCreatedAt)
 	}
@@ -1593,6 +1926,24 @@ func (m *APIKeyMutation) Fields() []string {
 	}
 	if m.group != nil {
 		fields = append(fields, apikey.FieldGroupID)
+	}
+	if m.failover_enabled != nil {
+		fields = append(fields, apikey.FieldFailoverEnabled)
+	}
+	if m.failover_group_id != nil {
+		fields = append(fields, apikey.FieldFailoverGroupID)
+	}
+	if m.failover_max_retries != nil {
+		fields = append(fields, apikey.FieldFailoverMaxRetries)
+	}
+	if m.failover_cooldown_seconds != nil {
+		fields = append(fields, apikey.FieldFailoverCooldownSeconds)
+	}
+	if m.failover_cooldown_until != nil {
+		fields = append(fields, apikey.FieldFailoverCooldownUntil)
+	}
+	if m.failover_revision != nil {
+		fields = append(fields, apikey.FieldFailoverRevision)
 	}
 	if m.status != nil {
 		fields = append(fields, apikey.FieldStatus)
@@ -1666,6 +2017,18 @@ func (m *APIKeyMutation) Field(name string) (ent.Value, bool) {
 		return m.Purpose()
 	case apikey.FieldGroupID:
 		return m.GroupID()
+	case apikey.FieldFailoverEnabled:
+		return m.FailoverEnabled()
+	case apikey.FieldFailoverGroupID:
+		return m.FailoverGroupID()
+	case apikey.FieldFailoverMaxRetries:
+		return m.FailoverMaxRetries()
+	case apikey.FieldFailoverCooldownSeconds:
+		return m.FailoverCooldownSeconds()
+	case apikey.FieldFailoverCooldownUntil:
+		return m.FailoverCooldownUntil()
+	case apikey.FieldFailoverRevision:
+		return m.FailoverRevision()
 	case apikey.FieldStatus:
 		return m.Status()
 	case apikey.FieldLastUsedAt:
@@ -1723,6 +2086,18 @@ func (m *APIKeyMutation) OldField(ctx context.Context, name string) (ent.Value, 
 		return m.OldPurpose(ctx)
 	case apikey.FieldGroupID:
 		return m.OldGroupID(ctx)
+	case apikey.FieldFailoverEnabled:
+		return m.OldFailoverEnabled(ctx)
+	case apikey.FieldFailoverGroupID:
+		return m.OldFailoverGroupID(ctx)
+	case apikey.FieldFailoverMaxRetries:
+		return m.OldFailoverMaxRetries(ctx)
+	case apikey.FieldFailoverCooldownSeconds:
+		return m.OldFailoverCooldownSeconds(ctx)
+	case apikey.FieldFailoverCooldownUntil:
+		return m.OldFailoverCooldownUntil(ctx)
+	case apikey.FieldFailoverRevision:
+		return m.OldFailoverRevision(ctx)
 	case apikey.FieldStatus:
 		return m.OldStatus(ctx)
 	case apikey.FieldLastUsedAt:
@@ -1819,6 +2194,48 @@ func (m *APIKeyMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetGroupID(v)
+		return nil
+	case apikey.FieldFailoverEnabled:
+		v, ok := value.(bool)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetFailoverEnabled(v)
+		return nil
+	case apikey.FieldFailoverGroupID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetFailoverGroupID(v)
+		return nil
+	case apikey.FieldFailoverMaxRetries:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetFailoverMaxRetries(v)
+		return nil
+	case apikey.FieldFailoverCooldownSeconds:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetFailoverCooldownSeconds(v)
+		return nil
+	case apikey.FieldFailoverCooldownUntil:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetFailoverCooldownUntil(v)
+		return nil
+	case apikey.FieldFailoverRevision:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetFailoverRevision(v)
 		return nil
 	case apikey.FieldStatus:
 		v, ok := value.(string)
@@ -1940,6 +2357,18 @@ func (m *APIKeyMutation) SetField(name string, value ent.Value) error {
 // this mutation.
 func (m *APIKeyMutation) AddedFields() []string {
 	var fields []string
+	if m.addfailover_group_id != nil {
+		fields = append(fields, apikey.FieldFailoverGroupID)
+	}
+	if m.addfailover_max_retries != nil {
+		fields = append(fields, apikey.FieldFailoverMaxRetries)
+	}
+	if m.addfailover_cooldown_seconds != nil {
+		fields = append(fields, apikey.FieldFailoverCooldownSeconds)
+	}
+	if m.addfailover_revision != nil {
+		fields = append(fields, apikey.FieldFailoverRevision)
+	}
 	if m.addquota != nil {
 		fields = append(fields, apikey.FieldQuota)
 	}
@@ -1972,6 +2401,14 @@ func (m *APIKeyMutation) AddedFields() []string {
 // was not set, or was not defined in the schema.
 func (m *APIKeyMutation) AddedField(name string) (ent.Value, bool) {
 	switch name {
+	case apikey.FieldFailoverGroupID:
+		return m.AddedFailoverGroupID()
+	case apikey.FieldFailoverMaxRetries:
+		return m.AddedFailoverMaxRetries()
+	case apikey.FieldFailoverCooldownSeconds:
+		return m.AddedFailoverCooldownSeconds()
+	case apikey.FieldFailoverRevision:
+		return m.AddedFailoverRevision()
 	case apikey.FieldQuota:
 		return m.AddedQuota()
 	case apikey.FieldQuotaUsed:
@@ -1997,6 +2434,34 @@ func (m *APIKeyMutation) AddedField(name string) (ent.Value, bool) {
 // type.
 func (m *APIKeyMutation) AddField(name string, value ent.Value) error {
 	switch name {
+	case apikey.FieldFailoverGroupID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddFailoverGroupID(v)
+		return nil
+	case apikey.FieldFailoverMaxRetries:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddFailoverMaxRetries(v)
+		return nil
+	case apikey.FieldFailoverCooldownSeconds:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddFailoverCooldownSeconds(v)
+		return nil
+	case apikey.FieldFailoverRevision:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddFailoverRevision(v)
+		return nil
 	case apikey.FieldQuota:
 		v, ok := value.(float64)
 		if !ok {
@@ -2067,6 +2532,12 @@ func (m *APIKeyMutation) ClearedFields() []string {
 	if m.FieldCleared(apikey.FieldGroupID) {
 		fields = append(fields, apikey.FieldGroupID)
 	}
+	if m.FieldCleared(apikey.FieldFailoverGroupID) {
+		fields = append(fields, apikey.FieldFailoverGroupID)
+	}
+	if m.FieldCleared(apikey.FieldFailoverCooldownUntil) {
+		fields = append(fields, apikey.FieldFailoverCooldownUntil)
+	}
 	if m.FieldCleared(apikey.FieldLastUsedAt) {
 		fields = append(fields, apikey.FieldLastUsedAt)
 	}
@@ -2107,6 +2578,12 @@ func (m *APIKeyMutation) ClearField(name string) error {
 		return nil
 	case apikey.FieldGroupID:
 		m.ClearGroupID()
+		return nil
+	case apikey.FieldFailoverGroupID:
+		m.ClearFailoverGroupID()
+		return nil
+	case apikey.FieldFailoverCooldownUntil:
+		m.ClearFailoverCooldownUntil()
 		return nil
 	case apikey.FieldLastUsedAt:
 		m.ClearLastUsedAt()
@@ -2160,6 +2637,24 @@ func (m *APIKeyMutation) ResetField(name string) error {
 		return nil
 	case apikey.FieldGroupID:
 		m.ResetGroupID()
+		return nil
+	case apikey.FieldFailoverEnabled:
+		m.ResetFailoverEnabled()
+		return nil
+	case apikey.FieldFailoverGroupID:
+		m.ResetFailoverGroupID()
+		return nil
+	case apikey.FieldFailoverMaxRetries:
+		m.ResetFailoverMaxRetries()
+		return nil
+	case apikey.FieldFailoverCooldownSeconds:
+		m.ResetFailoverCooldownSeconds()
+		return nil
+	case apikey.FieldFailoverCooldownUntil:
+		m.ResetFailoverCooldownUntil()
+		return nil
+	case apikey.FieldFailoverRevision:
+		m.ResetFailoverRevision()
 		return nil
 	case apikey.FieldStatus:
 		m.ResetStatus()

@@ -95,6 +95,36 @@ func GroupID(v int64) predicate.APIKey {
 	return predicate.APIKey(sql.FieldEQ(FieldGroupID, v))
 }
 
+// FailoverEnabled applies equality check predicate on the "failover_enabled" field. It's identical to FailoverEnabledEQ.
+func FailoverEnabled(v bool) predicate.APIKey {
+	return predicate.APIKey(sql.FieldEQ(FieldFailoverEnabled, v))
+}
+
+// FailoverGroupID applies equality check predicate on the "failover_group_id" field. It's identical to FailoverGroupIDEQ.
+func FailoverGroupID(v int64) predicate.APIKey {
+	return predicate.APIKey(sql.FieldEQ(FieldFailoverGroupID, v))
+}
+
+// FailoverMaxRetries applies equality check predicate on the "failover_max_retries" field. It's identical to FailoverMaxRetriesEQ.
+func FailoverMaxRetries(v int) predicate.APIKey {
+	return predicate.APIKey(sql.FieldEQ(FieldFailoverMaxRetries, v))
+}
+
+// FailoverCooldownSeconds applies equality check predicate on the "failover_cooldown_seconds" field. It's identical to FailoverCooldownSecondsEQ.
+func FailoverCooldownSeconds(v int) predicate.APIKey {
+	return predicate.APIKey(sql.FieldEQ(FieldFailoverCooldownSeconds, v))
+}
+
+// FailoverCooldownUntil applies equality check predicate on the "failover_cooldown_until" field. It's identical to FailoverCooldownUntilEQ.
+func FailoverCooldownUntil(v time.Time) predicate.APIKey {
+	return predicate.APIKey(sql.FieldEQ(FieldFailoverCooldownUntil, v))
+}
+
+// FailoverRevision applies equality check predicate on the "failover_revision" field. It's identical to FailoverRevisionEQ.
+func FailoverRevision(v int64) predicate.APIKey {
+	return predicate.APIKey(sql.FieldEQ(FieldFailoverRevision, v))
+}
+
 // Status applies equality check predicate on the "status" field. It's identical to StatusEQ.
 func Status(v string) predicate.APIKey {
 	return predicate.APIKey(sql.FieldEQ(FieldStatus, v))
@@ -538,6 +568,236 @@ func GroupIDIsNil() predicate.APIKey {
 // GroupIDNotNil applies the NotNil predicate on the "group_id" field.
 func GroupIDNotNil() predicate.APIKey {
 	return predicate.APIKey(sql.FieldNotNull(FieldGroupID))
+}
+
+// FailoverEnabledEQ applies the EQ predicate on the "failover_enabled" field.
+func FailoverEnabledEQ(v bool) predicate.APIKey {
+	return predicate.APIKey(sql.FieldEQ(FieldFailoverEnabled, v))
+}
+
+// FailoverEnabledNEQ applies the NEQ predicate on the "failover_enabled" field.
+func FailoverEnabledNEQ(v bool) predicate.APIKey {
+	return predicate.APIKey(sql.FieldNEQ(FieldFailoverEnabled, v))
+}
+
+// FailoverGroupIDEQ applies the EQ predicate on the "failover_group_id" field.
+func FailoverGroupIDEQ(v int64) predicate.APIKey {
+	return predicate.APIKey(sql.FieldEQ(FieldFailoverGroupID, v))
+}
+
+// FailoverGroupIDNEQ applies the NEQ predicate on the "failover_group_id" field.
+func FailoverGroupIDNEQ(v int64) predicate.APIKey {
+	return predicate.APIKey(sql.FieldNEQ(FieldFailoverGroupID, v))
+}
+
+// FailoverGroupIDIn applies the In predicate on the "failover_group_id" field.
+func FailoverGroupIDIn(vs ...int64) predicate.APIKey {
+	return predicate.APIKey(sql.FieldIn(FieldFailoverGroupID, vs...))
+}
+
+// FailoverGroupIDNotIn applies the NotIn predicate on the "failover_group_id" field.
+func FailoverGroupIDNotIn(vs ...int64) predicate.APIKey {
+	return predicate.APIKey(sql.FieldNotIn(FieldFailoverGroupID, vs...))
+}
+
+// FailoverGroupIDGT applies the GT predicate on the "failover_group_id" field.
+func FailoverGroupIDGT(v int64) predicate.APIKey {
+	return predicate.APIKey(sql.FieldGT(FieldFailoverGroupID, v))
+}
+
+// FailoverGroupIDGTE applies the GTE predicate on the "failover_group_id" field.
+func FailoverGroupIDGTE(v int64) predicate.APIKey {
+	return predicate.APIKey(sql.FieldGTE(FieldFailoverGroupID, v))
+}
+
+// FailoverGroupIDLT applies the LT predicate on the "failover_group_id" field.
+func FailoverGroupIDLT(v int64) predicate.APIKey {
+	return predicate.APIKey(sql.FieldLT(FieldFailoverGroupID, v))
+}
+
+// FailoverGroupIDLTE applies the LTE predicate on the "failover_group_id" field.
+func FailoverGroupIDLTE(v int64) predicate.APIKey {
+	return predicate.APIKey(sql.FieldLTE(FieldFailoverGroupID, v))
+}
+
+// FailoverGroupIDIsNil applies the IsNil predicate on the "failover_group_id" field.
+func FailoverGroupIDIsNil() predicate.APIKey {
+	return predicate.APIKey(sql.FieldIsNull(FieldFailoverGroupID))
+}
+
+// FailoverGroupIDNotNil applies the NotNil predicate on the "failover_group_id" field.
+func FailoverGroupIDNotNil() predicate.APIKey {
+	return predicate.APIKey(sql.FieldNotNull(FieldFailoverGroupID))
+}
+
+// FailoverMaxRetriesEQ applies the EQ predicate on the "failover_max_retries" field.
+func FailoverMaxRetriesEQ(v int) predicate.APIKey {
+	return predicate.APIKey(sql.FieldEQ(FieldFailoverMaxRetries, v))
+}
+
+// FailoverMaxRetriesNEQ applies the NEQ predicate on the "failover_max_retries" field.
+func FailoverMaxRetriesNEQ(v int) predicate.APIKey {
+	return predicate.APIKey(sql.FieldNEQ(FieldFailoverMaxRetries, v))
+}
+
+// FailoverMaxRetriesIn applies the In predicate on the "failover_max_retries" field.
+func FailoverMaxRetriesIn(vs ...int) predicate.APIKey {
+	return predicate.APIKey(sql.FieldIn(FieldFailoverMaxRetries, vs...))
+}
+
+// FailoverMaxRetriesNotIn applies the NotIn predicate on the "failover_max_retries" field.
+func FailoverMaxRetriesNotIn(vs ...int) predicate.APIKey {
+	return predicate.APIKey(sql.FieldNotIn(FieldFailoverMaxRetries, vs...))
+}
+
+// FailoverMaxRetriesGT applies the GT predicate on the "failover_max_retries" field.
+func FailoverMaxRetriesGT(v int) predicate.APIKey {
+	return predicate.APIKey(sql.FieldGT(FieldFailoverMaxRetries, v))
+}
+
+// FailoverMaxRetriesGTE applies the GTE predicate on the "failover_max_retries" field.
+func FailoverMaxRetriesGTE(v int) predicate.APIKey {
+	return predicate.APIKey(sql.FieldGTE(FieldFailoverMaxRetries, v))
+}
+
+// FailoverMaxRetriesLT applies the LT predicate on the "failover_max_retries" field.
+func FailoverMaxRetriesLT(v int) predicate.APIKey {
+	return predicate.APIKey(sql.FieldLT(FieldFailoverMaxRetries, v))
+}
+
+// FailoverMaxRetriesLTE applies the LTE predicate on the "failover_max_retries" field.
+func FailoverMaxRetriesLTE(v int) predicate.APIKey {
+	return predicate.APIKey(sql.FieldLTE(FieldFailoverMaxRetries, v))
+}
+
+// FailoverCooldownSecondsEQ applies the EQ predicate on the "failover_cooldown_seconds" field.
+func FailoverCooldownSecondsEQ(v int) predicate.APIKey {
+	return predicate.APIKey(sql.FieldEQ(FieldFailoverCooldownSeconds, v))
+}
+
+// FailoverCooldownSecondsNEQ applies the NEQ predicate on the "failover_cooldown_seconds" field.
+func FailoverCooldownSecondsNEQ(v int) predicate.APIKey {
+	return predicate.APIKey(sql.FieldNEQ(FieldFailoverCooldownSeconds, v))
+}
+
+// FailoverCooldownSecondsIn applies the In predicate on the "failover_cooldown_seconds" field.
+func FailoverCooldownSecondsIn(vs ...int) predicate.APIKey {
+	return predicate.APIKey(sql.FieldIn(FieldFailoverCooldownSeconds, vs...))
+}
+
+// FailoverCooldownSecondsNotIn applies the NotIn predicate on the "failover_cooldown_seconds" field.
+func FailoverCooldownSecondsNotIn(vs ...int) predicate.APIKey {
+	return predicate.APIKey(sql.FieldNotIn(FieldFailoverCooldownSeconds, vs...))
+}
+
+// FailoverCooldownSecondsGT applies the GT predicate on the "failover_cooldown_seconds" field.
+func FailoverCooldownSecondsGT(v int) predicate.APIKey {
+	return predicate.APIKey(sql.FieldGT(FieldFailoverCooldownSeconds, v))
+}
+
+// FailoverCooldownSecondsGTE applies the GTE predicate on the "failover_cooldown_seconds" field.
+func FailoverCooldownSecondsGTE(v int) predicate.APIKey {
+	return predicate.APIKey(sql.FieldGTE(FieldFailoverCooldownSeconds, v))
+}
+
+// FailoverCooldownSecondsLT applies the LT predicate on the "failover_cooldown_seconds" field.
+func FailoverCooldownSecondsLT(v int) predicate.APIKey {
+	return predicate.APIKey(sql.FieldLT(FieldFailoverCooldownSeconds, v))
+}
+
+// FailoverCooldownSecondsLTE applies the LTE predicate on the "failover_cooldown_seconds" field.
+func FailoverCooldownSecondsLTE(v int) predicate.APIKey {
+	return predicate.APIKey(sql.FieldLTE(FieldFailoverCooldownSeconds, v))
+}
+
+// FailoverCooldownUntilEQ applies the EQ predicate on the "failover_cooldown_until" field.
+func FailoverCooldownUntilEQ(v time.Time) predicate.APIKey {
+	return predicate.APIKey(sql.FieldEQ(FieldFailoverCooldownUntil, v))
+}
+
+// FailoverCooldownUntilNEQ applies the NEQ predicate on the "failover_cooldown_until" field.
+func FailoverCooldownUntilNEQ(v time.Time) predicate.APIKey {
+	return predicate.APIKey(sql.FieldNEQ(FieldFailoverCooldownUntil, v))
+}
+
+// FailoverCooldownUntilIn applies the In predicate on the "failover_cooldown_until" field.
+func FailoverCooldownUntilIn(vs ...time.Time) predicate.APIKey {
+	return predicate.APIKey(sql.FieldIn(FieldFailoverCooldownUntil, vs...))
+}
+
+// FailoverCooldownUntilNotIn applies the NotIn predicate on the "failover_cooldown_until" field.
+func FailoverCooldownUntilNotIn(vs ...time.Time) predicate.APIKey {
+	return predicate.APIKey(sql.FieldNotIn(FieldFailoverCooldownUntil, vs...))
+}
+
+// FailoverCooldownUntilGT applies the GT predicate on the "failover_cooldown_until" field.
+func FailoverCooldownUntilGT(v time.Time) predicate.APIKey {
+	return predicate.APIKey(sql.FieldGT(FieldFailoverCooldownUntil, v))
+}
+
+// FailoverCooldownUntilGTE applies the GTE predicate on the "failover_cooldown_until" field.
+func FailoverCooldownUntilGTE(v time.Time) predicate.APIKey {
+	return predicate.APIKey(sql.FieldGTE(FieldFailoverCooldownUntil, v))
+}
+
+// FailoverCooldownUntilLT applies the LT predicate on the "failover_cooldown_until" field.
+func FailoverCooldownUntilLT(v time.Time) predicate.APIKey {
+	return predicate.APIKey(sql.FieldLT(FieldFailoverCooldownUntil, v))
+}
+
+// FailoverCooldownUntilLTE applies the LTE predicate on the "failover_cooldown_until" field.
+func FailoverCooldownUntilLTE(v time.Time) predicate.APIKey {
+	return predicate.APIKey(sql.FieldLTE(FieldFailoverCooldownUntil, v))
+}
+
+// FailoverCooldownUntilIsNil applies the IsNil predicate on the "failover_cooldown_until" field.
+func FailoverCooldownUntilIsNil() predicate.APIKey {
+	return predicate.APIKey(sql.FieldIsNull(FieldFailoverCooldownUntil))
+}
+
+// FailoverCooldownUntilNotNil applies the NotNil predicate on the "failover_cooldown_until" field.
+func FailoverCooldownUntilNotNil() predicate.APIKey {
+	return predicate.APIKey(sql.FieldNotNull(FieldFailoverCooldownUntil))
+}
+
+// FailoverRevisionEQ applies the EQ predicate on the "failover_revision" field.
+func FailoverRevisionEQ(v int64) predicate.APIKey {
+	return predicate.APIKey(sql.FieldEQ(FieldFailoverRevision, v))
+}
+
+// FailoverRevisionNEQ applies the NEQ predicate on the "failover_revision" field.
+func FailoverRevisionNEQ(v int64) predicate.APIKey {
+	return predicate.APIKey(sql.FieldNEQ(FieldFailoverRevision, v))
+}
+
+// FailoverRevisionIn applies the In predicate on the "failover_revision" field.
+func FailoverRevisionIn(vs ...int64) predicate.APIKey {
+	return predicate.APIKey(sql.FieldIn(FieldFailoverRevision, vs...))
+}
+
+// FailoverRevisionNotIn applies the NotIn predicate on the "failover_revision" field.
+func FailoverRevisionNotIn(vs ...int64) predicate.APIKey {
+	return predicate.APIKey(sql.FieldNotIn(FieldFailoverRevision, vs...))
+}
+
+// FailoverRevisionGT applies the GT predicate on the "failover_revision" field.
+func FailoverRevisionGT(v int64) predicate.APIKey {
+	return predicate.APIKey(sql.FieldGT(FieldFailoverRevision, v))
+}
+
+// FailoverRevisionGTE applies the GTE predicate on the "failover_revision" field.
+func FailoverRevisionGTE(v int64) predicate.APIKey {
+	return predicate.APIKey(sql.FieldGTE(FieldFailoverRevision, v))
+}
+
+// FailoverRevisionLT applies the LT predicate on the "failover_revision" field.
+func FailoverRevisionLT(v int64) predicate.APIKey {
+	return predicate.APIKey(sql.FieldLT(FieldFailoverRevision, v))
+}
+
+// FailoverRevisionLTE applies the LTE predicate on the "failover_revision" field.
+func FailoverRevisionLTE(v int64) predicate.APIKey {
+	return predicate.APIKey(sql.FieldLTE(FieldFailoverRevision, v))
 }
 
 // StatusEQ applies the EQ predicate on the "status" field.

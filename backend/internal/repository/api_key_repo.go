@@ -45,6 +45,12 @@ func (r *apiKeyRepository) ordinaryQuery() *dbent.APIKeyQuery {
 }
 
 func (r *apiKeyRepository) Create(ctx context.Context, key *service.APIKey) error {
+	if key.FailoverMaxRetries == 0 {
+		key.FailoverMaxRetries = service.DefaultAPIKeyFailoverMaxRetries
+	}
+	if key.FailoverCooldownSeconds == 0 {
+		key.FailoverCooldownSeconds = service.DefaultAPIKeyFailoverCooldownSeconds
+	}
 	builder := r.client.APIKey.Create().
 		SetUserID(key.UserID).
 		SetKey(key.Key).
@@ -52,6 +58,10 @@ func (r *apiKeyRepository) Create(ctx context.Context, key *service.APIKey) erro
 		SetPurpose(key.Purpose).
 		SetStatus(key.Status).
 		SetNillableGroupID(key.GroupID).
+		SetFailoverEnabled(key.FailoverEnabled).
+		SetNillableFailoverGroupID(key.FailoverGroupID).
+		SetFailoverMaxRetries(key.FailoverMaxRetries).
+		SetFailoverCooldownSeconds(key.FailoverCooldownSeconds).
 		SetNillableLastUsedAt(key.LastUsedAt).
 		SetQuota(key.Quota).
 		SetQuotaUsed(key.QuotaUsed).
@@ -145,6 +155,12 @@ func (r *apiKeyRepository) GetByKeyForAuth(ctx context.Context, key string) (*se
 			apikey.FieldID,
 			apikey.FieldUserID,
 			apikey.FieldGroupID,
+			apikey.FieldFailoverEnabled,
+			apikey.FieldFailoverGroupID,
+			apikey.FieldFailoverMaxRetries,
+			apikey.FieldFailoverCooldownSeconds,
+			apikey.FieldFailoverCooldownUntil,
+			apikey.FieldFailoverRevision,
 			apikey.FieldName,
 			apikey.FieldPurpose,
 			apikey.FieldStatus,
@@ -310,6 +326,33 @@ func (r *apiKeyRepository) Update(ctx context.Context, key *service.APIKey, fiel
 		} else {
 			builder.ClearGroupID()
 		}
+		if !fields.FailoverConfig && !fields.FailoverCooldown {
+			builder.SetFailoverEnabled(false).ClearFailoverGroupID().ClearFailoverCooldownUntil().AddFailoverRevision(1)
+			key.FailoverEnabled = false
+			key.FailoverGroupID = nil
+			key.FailoverCooldownUntil = nil
+			key.FailoverRevision++
+		}
+	}
+	if fields.FailoverConfig {
+		builder.SetFailoverEnabled(key.FailoverEnabled).
+			SetFailoverMaxRetries(key.FailoverMaxRetries).
+			SetFailoverCooldownSeconds(key.FailoverCooldownSeconds)
+		if key.FailoverGroupID != nil {
+			builder.SetFailoverGroupID(*key.FailoverGroupID)
+		} else {
+			builder.ClearFailoverGroupID()
+		}
+	}
+	if fields.FailoverCooldown {
+		if key.FailoverCooldownUntil == nil {
+			builder.ClearFailoverCooldownUntil()
+		} else {
+			builder.SetFailoverCooldownUntil(*key.FailoverCooldownUntil)
+		}
+	}
+	if fields.FailoverConfig || fields.FailoverCooldown {
+		builder.AddFailoverRevision(1)
 	}
 
 	// Expiration time
@@ -346,6 +389,9 @@ func (r *apiKeyRepository) Update(ctx context.Context, key *service.APIKey, fiel
 
 	// 使用同一时间戳回填，避免并发删除导致二次查询失败。
 	key.UpdatedAt = now
+	if fields.FailoverConfig || fields.FailoverCooldown {
+		key.FailoverRevision++
+	}
 	return nil
 }
 
@@ -717,6 +763,10 @@ func (r *apiKeyRepository) ClearGroupIDByGroupID(ctx context.Context, groupID in
 	n, err := r.client.APIKey.Update().
 		Where(apikey.GroupIDEQ(groupID), apikey.DeletedAtIsNil(), apikey.PurposeEQ("")).
 		ClearGroupID().
+		SetFailoverEnabled(false).
+		ClearFailoverGroupID().
+		ClearFailoverCooldownUntil().
+		AddFailoverRevision(1).
 		Save(ctx)
 	return int64(n), err
 }
@@ -727,6 +777,10 @@ func (r *apiKeyRepository) UpdateGroupIDByUserAndGroup(ctx context.Context, user
 	n, err := client.APIKey.Update().
 		Where(apikey.UserIDEQ(userID), apikey.GroupIDEQ(oldGroupID), apikey.DeletedAtIsNil(), apikey.PurposeEQ("")).
 		SetGroupID(newGroupID).
+		SetFailoverEnabled(false).
+		ClearFailoverGroupID().
+		ClearFailoverCooldownUntil().
+		AddFailoverRevision(1).
 		Save(ctx)
 	return int64(n), err
 }
@@ -878,30 +932,36 @@ func apiKeyEntityToService(m *dbent.APIKey) *service.APIKey {
 		return nil
 	}
 	out := &service.APIKey{
-		ID:            m.ID,
-		UserID:        m.UserID,
-		Key:           m.Key,
-		Name:          m.Name,
-		Purpose:       m.Purpose,
-		Status:        m.Status,
-		IPWhitelist:   m.IPWhitelist,
-		IPBlacklist:   m.IPBlacklist,
-		LastUsedAt:    m.LastUsedAt,
-		CreatedAt:     m.CreatedAt,
-		UpdatedAt:     m.UpdatedAt,
-		GroupID:       m.GroupID,
-		Quota:         m.Quota,
-		QuotaUsed:     m.QuotaUsed,
-		ExpiresAt:     m.ExpiresAt,
-		RateLimit5h:   m.RateLimit5h,
-		RateLimit1d:   m.RateLimit1d,
-		RateLimit7d:   m.RateLimit7d,
-		Usage5h:       m.Usage5h,
-		Usage1d:       m.Usage1d,
-		Usage7d:       m.Usage7d,
-		Window5hStart: m.Window5hStart,
-		Window1dStart: m.Window1dStart,
-		Window7dStart: m.Window7dStart,
+		ID:                      m.ID,
+		UserID:                  m.UserID,
+		Key:                     m.Key,
+		Name:                    m.Name,
+		Purpose:                 m.Purpose,
+		Status:                  m.Status,
+		IPWhitelist:             m.IPWhitelist,
+		IPBlacklist:             m.IPBlacklist,
+		LastUsedAt:              m.LastUsedAt,
+		CreatedAt:               m.CreatedAt,
+		UpdatedAt:               m.UpdatedAt,
+		GroupID:                 m.GroupID,
+		FailoverEnabled:         m.FailoverEnabled,
+		FailoverGroupID:         m.FailoverGroupID,
+		FailoverMaxRetries:      m.FailoverMaxRetries,
+		FailoverCooldownSeconds: m.FailoverCooldownSeconds,
+		FailoverCooldownUntil:   m.FailoverCooldownUntil,
+		FailoverRevision:        m.FailoverRevision,
+		Quota:                   m.Quota,
+		QuotaUsed:               m.QuotaUsed,
+		ExpiresAt:               m.ExpiresAt,
+		RateLimit5h:             m.RateLimit5h,
+		RateLimit1d:             m.RateLimit1d,
+		RateLimit7d:             m.RateLimit7d,
+		Usage5h:                 m.Usage5h,
+		Usage1d:                 m.Usage1d,
+		Usage7d:                 m.Usage7d,
+		Window5hStart:           m.Window5hStart,
+		Window1dStart:           m.Window1dStart,
+		Window7dStart:           m.Window7dStart,
 	}
 	if m.Edges.User != nil {
 		out.User = userEntityToService(m.Edges.User)

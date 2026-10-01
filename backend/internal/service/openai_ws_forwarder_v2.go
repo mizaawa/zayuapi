@@ -574,6 +574,7 @@ func (s *OpenAIGatewayService) forwardOpenAIWSV2(
 		imageCounter.AddSSEData(message)
 
 		if eventType == "response.failed" {
+			RecordAPIKeyFailoverUpstreamFailure(ctx, openAIStreamFailureStatus(message, extractOpenAISSEErrorMessage(message)), message)
 			if hit, code, msg := detectOpenAICyberPolicy(message); hit {
 				MarkOpsCyberPolicy(c, CyberPolicyMark{
 					Code:           code,
@@ -589,6 +590,7 @@ func (s *OpenAIGatewayService) forwardOpenAIWSV2(
 		if eventType == "error" {
 			s.handleOpenAIWSErrorEventTransientFailure(ctx, account, mappedModel, lease.HandshakeHeaders(), message)
 			errCodeRaw, errTypeRaw, errMsgRaw := parseOpenAIWSErrorEventFields(message)
+			RecordAPIKeyFailoverUpstreamFailure(ctx, openAIWSErrorHTTPStatusFromRaw(errCodeRaw, errTypeRaw), message)
 			s.persistOpenAIWSRateLimitSignal(ctx, account, lease.HandshakeHeaders(), message, errCodeRaw, errTypeRaw, errMsgRaw)
 			errMsg := strings.TrimSpace(errMsgRaw)
 			if errMsg == "" {

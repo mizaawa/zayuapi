@@ -486,6 +486,9 @@ func markOpsRoutingCapacityLimited(c *gin.Context) {
 		return
 	}
 	c.Set(opsRoutingCapacityLimitedKey, true)
+	if c.Request != nil {
+		service.RecordAPIKeyFailoverUpstreamFailure(c.Request.Context(), http.StatusServiceUnavailable, nil)
+	}
 }
 
 func markOpsRoutingCapacityLimitedIfNoAvailable(c *gin.Context, err error) {

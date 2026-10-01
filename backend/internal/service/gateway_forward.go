@@ -407,6 +407,10 @@ func (s *GatewayService) Forward(ctx context.Context, c *gin.Context, account *A
 			return nil, fmt.Errorf("upstream request failed: %s", safeErr)
 		}
 
+		if APIKeyFailoverAttemptEnabled(ctx) && resp.StatusCode >= http.StatusBadRequest {
+			break
+		}
+
 		// 优先检测thinking block签名错误（400）并重试一次
 		if resp.StatusCode == 400 {
 			respBody, readErr := s.readUpstreamErrorBody(resp)

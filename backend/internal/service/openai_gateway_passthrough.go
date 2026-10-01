@@ -218,7 +218,7 @@ func (s *OpenAIGatewayService) forwardOpenAIPassthrough(
 		probeBody := s.readUpstreamErrorBody(resp)
 		_ = resp.Body.Close()
 		resp.Body = io.NopCloser(bytes.NewReader(probeBody))
-		if !agentTaskRecoveryTried && s.isAgentIdentityAccount(ctx, account) && isAgentIdentityTaskInvalidHTTPResponse(resp.StatusCode, probeBody) {
+		if !APIKeyFailoverAttemptEnabled(ctx) && !agentTaskRecoveryTried && s.isAgentIdentityAccount(ctx, account) && isAgentIdentityTaskInvalidHTTPResponse(resp.StatusCode, probeBody) {
 			agentTaskRecoveryTried = true
 			expectedTaskID := account.GetCredential("task_id")
 			if recoveryErr := s.recoverAgentIdentityTask(ctx, account, expectedTaskID); recoveryErr != nil {
@@ -1062,6 +1062,9 @@ func (s *OpenAIGatewayService) recordOpenAIStreamUpstreamError(
 		detail = truncateString(string(payload), maxBytes)
 	}
 	if c != nil {
+		if c.Request != nil {
+			RecordAPIKeyFailoverUpstreamFailure(c.Request.Context(), statusCode, payload)
+		}
 		setOpsUpstreamError(c, statusCode, message, detail)
 		event := OpsUpstreamErrorEvent{
 			Platform:           PlatformOpenAI,
@@ -1250,6 +1253,7 @@ func (s *OpenAIGatewayService) handleStreamingResponsePassthrough(
 			eventType := strings.TrimSpace(gjson.Get(trimmedData, "type").String())
 			if eventType == "response.failed" {
 				failedMessage = extractOpenAISSEErrorMessage(dataBytes)
+				RecordAPIKeyFailoverUpstreamFailure(ctx, openAIStreamFailureStatus(dataBytes, failedMessage), dataBytes)
 				// response.failed 自带上游已消耗的 usage（input token 通常已扣）；必须先解析
 				// 再打 cyber 标记，否则 mark 记到的是解析前的 0，导致流式 cyber 按 0 token 计费
 				// 而漏记真实用量。对齐 WS V2 / Chat 流式路径（均先解析 usage 再 Mark）。
@@ -1426,6 +1430,10 @@ func (s *OpenAIGatewayService) handleNonStreamingResponsePassthrough(
 	if isEventStreamResponse(resp.Header) {
 		return s.handlePassthroughSSEToJSON(ctx, resp, c, account, body, originalModel, mappedModel)
 	}
+	if APIKeyFailoverAttemptEnabled(ctx) && !gjson.ValidBytes(body) && !bodyHasSSEFraming(body) {
+		RecordAPIKeyFailoverUpstreamFailure(ctx, http.StatusBadGateway, body)
+		return nil, fmt.Errorf("parse response: invalid json response")
+	}
 
 	usage := &OpenAIUsage{}
 	usageParsed := false
@@ -1507,6 +1515,7 @@ func (s *OpenAIGatewayService) handlePassthroughSSEToJSON(ctx context.Context, r
 		terminalType, terminalPayload, terminalOK := extractOpenAISSETerminalEvent(bodyText)
 		if terminalOK && terminalType == "response.failed" {
 			msg := extractOpenAISSEErrorMessage(terminalPayload)
+			RecordAPIKeyFailoverUpstreamFailure(ctx, openAIStreamFailureStatus(terminalPayload, msg), terminalPayload)
 			if msg == "" {
 				msg = "Upstream compact response failed"
 			}

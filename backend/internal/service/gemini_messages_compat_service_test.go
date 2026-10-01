@@ -526,6 +526,55 @@ func TestGeminiMessagesCompatServiceForward_PreservesRequestedModelAndMappedUpst
 	require.Contains(t, httpStub.lastReq.URL.String(), "/models/claude-sonnet-4-20250514:")
 }
 
+func TestAPIKeyFailoverGeminiCompatibilityUsesOuterRetryBudget(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	for _, useChatCompletions := range []bool{false, true} {
+		name := "Anthropic Messages"
+		if useChatCompletions {
+			name = "Chat Completions"
+		}
+		t.Run(name, func(t *testing.T) {
+			httpStub := &geminiCompatHTTPUpstreamStub{
+				response: &http.Response{
+					StatusCode: http.StatusServiceUnavailable,
+					Header:     http.Header{"Content-Type": []string{"application/json"}},
+					Body:       io.NopCloser(strings.NewReader(`{"error":{"code":503,"status":"UNAVAILABLE","message":"Gemini temporarily unavailable"}}`)),
+				},
+			}
+			svc := &GeminiMessagesCompatService{httpUpstream: httpStub, cfg: &config.Config{}}
+			account := &Account{
+				ID:       1,
+				Platform: PlatformGemini,
+				Type:     AccountTypeAPIKey,
+				Credentials: map[string]any{
+					"api_key": "test-key",
+				},
+				Concurrency: 1,
+			}
+			path := "/v1/messages"
+			body := []byte(`{"model":"claude-test","max_tokens":16,"messages":[{"role":"user","content":"hello"}]}`)
+			if useChatCompletions {
+				path = "/v1/chat/completions"
+				body = []byte(`{"model":"gemini-test","messages":[{"role":"user","content":"hello"}]}`)
+			}
+			recorder := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(recorder)
+			ctx := WithAPIKeyFailoverAttempt(context.Background())
+			c.Request = httptest.NewRequest(http.MethodPost, path, bytes.NewReader(body)).WithContext(ctx)
+
+			if useChatCompletions {
+				_, _ = svc.ForwardAsChatCompletions(ctx, c, account, body)
+			} else {
+				_, _ = svc.Forward(ctx, c, account, body)
+			}
+
+			require.Equal(t, 1, httpStub.calls, "the gateway retry middleware owns retries for failover-enabled keys")
+			require.True(t, APIKeyFailoverAttemptFailed(ctx))
+			require.False(t, APIKeyFailoverAttemptModelUnavailable(ctx))
+		})
+	}
+}
+
 func TestGeminiMessagesCompatServiceForward_NormalizesWebSearchToolForAIStudio(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	w := httptest.NewRecorder()

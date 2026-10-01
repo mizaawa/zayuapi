@@ -31,6 +31,18 @@ const (
 	FieldPurpose = "purpose"
 	// FieldGroupID holds the string denoting the group_id field in the database.
 	FieldGroupID = "group_id"
+	// FieldFailoverEnabled holds the string denoting the failover_enabled field in the database.
+	FieldFailoverEnabled = "failover_enabled"
+	// FieldFailoverGroupID holds the string denoting the failover_group_id field in the database.
+	FieldFailoverGroupID = "failover_group_id"
+	// FieldFailoverMaxRetries holds the string denoting the failover_max_retries field in the database.
+	FieldFailoverMaxRetries = "failover_max_retries"
+	// FieldFailoverCooldownSeconds holds the string denoting the failover_cooldown_seconds field in the database.
+	FieldFailoverCooldownSeconds = "failover_cooldown_seconds"
+	// FieldFailoverCooldownUntil holds the string denoting the failover_cooldown_until field in the database.
+	FieldFailoverCooldownUntil = "failover_cooldown_until"
+	// FieldFailoverRevision holds the string denoting the failover_revision field in the database.
+	FieldFailoverRevision = "failover_revision"
 	// FieldStatus holds the string denoting the status field in the database.
 	FieldStatus = "status"
 	// FieldLastUsedAt holds the string denoting the last_used_at field in the database.
@@ -105,6 +117,12 @@ var Columns = []string{
 	FieldName,
 	FieldPurpose,
 	FieldGroupID,
+	FieldFailoverEnabled,
+	FieldFailoverGroupID,
+	FieldFailoverMaxRetries,
+	FieldFailoverCooldownSeconds,
+	FieldFailoverCooldownUntil,
+	FieldFailoverRevision,
 	FieldStatus,
 	FieldLastUsedAt,
 	FieldIPWhitelist,
@@ -155,6 +173,18 @@ var (
 	DefaultPurpose string
 	// PurposeValidator is a validator for the "purpose" field. It is called by the builders before save.
 	PurposeValidator func(string) error
+	// DefaultFailoverEnabled holds the default value on creation for the "failover_enabled" field.
+	DefaultFailoverEnabled bool
+	// DefaultFailoverMaxRetries holds the default value on creation for the "failover_max_retries" field.
+	DefaultFailoverMaxRetries int
+	// FailoverMaxRetriesValidator is a validator for the "failover_max_retries" field. It is called by the builders before save.
+	FailoverMaxRetriesValidator func(int) error
+	// DefaultFailoverCooldownSeconds holds the default value on creation for the "failover_cooldown_seconds" field.
+	DefaultFailoverCooldownSeconds int
+	// FailoverCooldownSecondsValidator is a validator for the "failover_cooldown_seconds" field. It is called by the builders before save.
+	FailoverCooldownSecondsValidator func(int) error
+	// DefaultFailoverRevision holds the default value on creation for the "failover_revision" field.
+	DefaultFailoverRevision int64
 	// DefaultStatus holds the default value on creation for the "status" field.
 	DefaultStatus string
 	// StatusValidator is a validator for the "status" field. It is called by the builders before save.
@@ -223,6 +253,36 @@ func ByPurpose(opts ...sql.OrderTermOption) OrderOption {
 // ByGroupID orders the results by the group_id field.
 func ByGroupID(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldGroupID, opts...).ToFunc()
+}
+
+// ByFailoverEnabled orders the results by the failover_enabled field.
+func ByFailoverEnabled(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldFailoverEnabled, opts...).ToFunc()
+}
+
+// ByFailoverGroupID orders the results by the failover_group_id field.
+func ByFailoverGroupID(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldFailoverGroupID, opts...).ToFunc()
+}
+
+// ByFailoverMaxRetries orders the results by the failover_max_retries field.
+func ByFailoverMaxRetries(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldFailoverMaxRetries, opts...).ToFunc()
+}
+
+// ByFailoverCooldownSeconds orders the results by the failover_cooldown_seconds field.
+func ByFailoverCooldownSeconds(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldFailoverCooldownSeconds, opts...).ToFunc()
+}
+
+// ByFailoverCooldownUntil orders the results by the failover_cooldown_until field.
+func ByFailoverCooldownUntil(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldFailoverCooldownUntil, opts...).ToFunc()
+}
+
+// ByFailoverRevision orders the results by the failover_revision field.
+func ByFailoverRevision(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldFailoverRevision, opts...).ToFunc()
 }
 
 // ByStatus orders the results by the status field.

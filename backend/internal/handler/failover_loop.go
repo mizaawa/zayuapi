@@ -135,6 +135,12 @@ func (s *FailoverState) HandleFailoverError(
 		return FailoverCanceled
 	}
 	s.LastFailoverErr = failoverErr
+	if service.APIKeyFailoverAttemptEnabled(ctx) {
+		if failoverErr != nil {
+			service.RecordAPIKeyFailoverUpstreamFailure(ctx, failoverErr.StatusCode, failoverErr.ResponseBody)
+		}
+		return FailoverExhausted
+	}
 	if failoverErr == nil || !failoverErr.ShouldRetryNextAccount() {
 		return FailoverExhausted
 	}
@@ -206,6 +212,9 @@ func (s *FailoverState) HandleSelectionExhausted(ctx context.Context) FailoverAc
 	// 不代表账号耗尽，直接按取消终止。
 	if ctx.Err() != nil {
 		return FailoverCanceled
+	}
+	if service.APIKeyFailoverAttemptEnabled(ctx) {
+		return FailoverExhausted
 	}
 
 	if s.LastFailoverErr != nil &&

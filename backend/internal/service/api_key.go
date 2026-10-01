@@ -50,6 +50,16 @@ type APIKey struct {
 	Group               *Group
 	CurrentConcurrency  int
 
+	FailoverEnabled         bool
+	FailoverGroupID         *int64
+	FailoverMaxRetries      int
+	FailoverCooldownSeconds int
+	FailoverCooldownUntil   *time.Time
+	FailoverRevision        int64
+	// Request-local routing metadata; these never change the persisted primary group.
+	FailoverActive         bool
+	FailoverPrimaryGroupID *int64
+
 	// Quota fields
 	Quota     float64    // Quota limit in USD (0 = unlimited)
 	QuotaUsed float64    // Used quota amount
@@ -75,6 +85,11 @@ func (k *APIKey) IsManaged() bool {
 
 func (k *APIKey) IsActive() bool {
 	return k.Status == StatusActive
+}
+
+func (k *APIKey) IsFailoverActive() bool {
+	return k != nil && k.FailoverEnabled && k.FailoverGroupID != nil &&
+		k.FailoverCooldownUntil != nil && time.Now().Before(*k.FailoverCooldownUntil)
 }
 
 // HasRateLimits returns true if any rate limit window is configured
