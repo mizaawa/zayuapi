@@ -44,14 +44,7 @@ archives:
     files:
       - LICENSE*
       - README*
-      - deploy/*.md
-      - deploy/*.sh
-      - deploy/*.yml
-      - deploy/*.yaml
-      - deploy/*.service
-      - deploy/Caddyfile
-      - deploy/Dockerfile
-      - deploy/Makefile
+      - deploy/[!.]*
       - deploy/.env.example
 
 checksum:
