@@ -220,7 +220,8 @@ docker compose pull sub2api
 docker compose up -d sub2api
 
 # Roll back to a specific release without changing the existing volumes
-SUB2API_IMAGE=ghcr.io/mizaawa/zayuapi:v0.1.181 docker compose up -d sub2api
+SUB2API_IMAGE=ghcr.io/mizaawa/zayuapi:0.2.108 docker compose pull sub2api
+SUB2API_IMAGE=ghcr.io/mizaawa/zayuapi:0.2.108 docker compose up -d --no-deps sub2api
 
 # Remove all data (caution!)
 docker compose down -v
