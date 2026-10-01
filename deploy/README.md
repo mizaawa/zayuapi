@@ -52,35 +52,24 @@ See [APPLE_CONTAINER.md](./APPLE_CONTAINER.md) for configuration, upgrades, pers
 
 ### Method 1: One-Click Deployment (Recommended)
 
-Use the automated preparation script for the easiest setup:
+Run the deployment helper from the private repository clone:
+
+This repository and its GHCR image are private. The repository's `deploy/.env` contains the configured credentials. See [PRIVATE_REPOSITORY.md](./PRIVATE_REPOSITORY.md) for details.
 
 ```bash
-# Download and run the preparation script
-curl -sSL https://raw.githubusercontent.com/mizaawa/sub2api/main/deploy/docker-deploy.sh | bash
-
-# Or download first, then run
-curl -sSL https://raw.githubusercontent.com/mizaawa/sub2api/main/deploy/docker-deploy.sh -o docker-deploy.sh
-chmod +x docker-deploy.sh
-./docker-deploy.sh
+git clone https://github.com/mizaawa/zayuapi.git
+cd zayuapi/deploy
+bash start-private.sh
 ```
 
-**What the script does:**
-- Downloads `docker-compose.local.yml` and `.env.example`
-- Automatically generates secure secrets (JWT_SECRET, TOTP_ENCRYPTION_KEY, POSTGRES_PASSWORD)
-- Creates `.env` file with generated secrets
-- Creates necessary data directories (data/, postgres_data/, redis_data/)
-- **Displays generated credentials** (POSTGRES_PASSWORD, JWT_SECRET, etc.)
+The helper authenticates to GHCR, pulls the configured private image, and starts the Compose services.
 
-**After running the script:**
+View logs after deployment:
 ```bash
-# Start services
-docker compose -f docker-compose.local.yml up -d
-
-# View logs
-docker compose -f docker-compose.local.yml logs -f sub2api
+docker compose logs -f sub2api
 
 # If admin password was auto-generated, find it in logs:
-docker compose -f docker-compose.local.yml logs sub2api | grep "admin password"
+docker compose logs sub2api | grep "admin password"
 
 # Access Web UI
 # http://localhost:8080
@@ -92,8 +81,8 @@ If you prefer manual control:
 
 ```bash
 # Clone repository
-git clone https://github.com/mizaawa/sub2api.git
-cd sub2api/deploy
+git clone https://github.com/mizaawa/zayuapi.git
+cd zayuapi/deploy
 
 # Configure environment
 cp .env.example .env
@@ -231,7 +220,7 @@ docker compose pull sub2api
 docker compose up -d sub2api
 
 # Roll back to a specific release without changing the existing volumes
-SUB2API_IMAGE=ghcr.io/mizaawa/sub2api:v0.1.181 docker compose up -d sub2api
+SUB2API_IMAGE=ghcr.io/mizaawa/zayuapi:v0.1.181 docker compose up -d sub2api
 
 # Remove all data (caution!)
 docker compose down -v
@@ -255,7 +244,7 @@ docker compose down -v
 | `ADMIN_EMAIL` | No | `admin@sub2api.local` | Admin email |
 | `ADMIN_PASSWORD` | No | *(auto-generated)* | Admin password |
 | `TZ` | No | `Asia/Shanghai` | Timezone |
-| `UPDATE_GITHUB_TOKEN` | No | *(empty)* | Token for `api.github.com` release checks only; asset downloads remain anonymous. |
+| `UPDATE_GITHUB_TOKEN` | Yes for private releases | *(empty)* | Fine-grained PAT for this repository with Contents read access; used for release metadata and asset API downloads. |
 | `GEMINI_OAUTH_CLIENT_ID` | No | *(builtin)* | Google OAuth client ID (Gemini OAuth). Leave empty to use the built-in Gemini CLI client. |
 | `GEMINI_OAUTH_CLIENT_SECRET` | No | *(builtin)* | Google OAuth client secret (Gemini OAuth). Leave empty to use the built-in Gemini CLI client. |
 | `GEMINI_OAUTH_SCOPES` | No | *(default)* | OAuth scopes (Gemini OAuth) |
@@ -390,15 +379,22 @@ GEMINI_OAUTH_CLIENT_SECRET=GOCSPX-your-client-secret
 
 For production servers using systemd.
 
-### One-Line Installation
+### Private Repository Installation
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/mizaawa/sub2api/main/deploy/install.sh | sudo bash
+git clone https://github.com/mizaawa/zayuapi.git
+cd zayuapi
+read -rsp 'Release token (Contents: Read-only): ' UPDATE_GITHUB_TOKEN; echo
+export UPDATE_GITHUB_TOKEN
+sudo --preserve-env=UPDATE_GITHUB_TOKEN bash deploy/install.sh
+unset UPDATE_GITHUB_TOKEN
 ```
+
+For background update checks and downloads, the installer saves `UPDATE_GITHUB_TOKEN` in `/etc/sub2api/update.env` (root-owned, mode `600`) and restarts `sub2api`. The systemd unit reads this file.
 
 ### Manual Installation
 
-1. Download the latest release from [GitHub Releases](https://github.com/mizaawa/sub2api/releases)
+1. Download the latest release from [GitHub Releases](https://github.com/mizaawa/zayuapi/releases)
 2. Extract and copy the binary to `/opt/sub2api/`
 3. Copy `sub2api.service` to `/etc/systemd/system/`
 4. Run:

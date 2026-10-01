@@ -53,6 +53,8 @@ pnpm-debug.log*
 .env.*.local
 *.env
 !.env.example
+# This private deployment checkout intentionally tracks its deployment environment.
+!deploy/.env
 docker-compose.override.yml
 
 # ===================

@@ -1,6 +1,6 @@
 [Unit]
 Description=Sub2API - AI API Gateway Platform
-Documentation=https://github.com/mizaawa/sub2api
+Documentation=https://github.com/mizaawa/zayuapi
 After=network.target postgresql.service redis.service
 Wants=postgresql.service redis.service
 
@@ -28,6 +28,8 @@ ReadWritePaths=/opt/sub2api
 Environment=GIN_MODE=release
 Environment=SERVER_HOST=0.0.0.0
 Environment=SERVER_PORT=8080
+# Root-owned, mode 600 file containing UPDATE_GITHUB_TOKEN for private updates.
+EnvironmentFile=-/etc/sub2api/update.env
 
 [Install]
 WantedBy=multi-user.target

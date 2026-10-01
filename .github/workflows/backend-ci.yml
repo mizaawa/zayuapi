@@ -24,6 +24,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+      - name: Check private GitHub deployment workflows
+        run: |
+          bash -n deploy/install.sh
+          bash -n deploy/docker-deploy.sh
+          bash -n deploy/start-private.sh
+          bash deploy/tests/install-github-token-test.sh
+          bash deploy/tests/private-deployment-test.sh
+          bash deploy/tests/start-private-test.sh
       - uses: actions/setup-go@v6
         with:
           go-version-file: backend/go.mod

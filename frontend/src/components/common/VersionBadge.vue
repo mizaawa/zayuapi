@@ -651,9 +651,9 @@ import {
 import { useClipboard } from '@/composables/useClipboard'
 import Icon from '@/components/icons/Icon.vue'
 
-const GITHUB_REPO = 'mizaawa/sub2api'
+const GITHUB_REPO = 'mizaawa/zayuapi'
 // GHCR image published by this repository's release workflow.
-const DOCKER_IMAGE = 'ghcr.io/mizaawa/sub2api'
+const DOCKER_IMAGE = 'ghcr.io/mizaawa/zayuapi'
 
 const { t } = useI18n()
 
@@ -710,17 +710,22 @@ const manualTabs = computed(() => [
 const scriptRollbackCommand = computed(() => {
   if (!selectedRollbackVersion.value) return ''
   const tag = `v${selectedRollbackVersion.value}`
-  return `curl -sSL https://raw.githubusercontent.com/${GITHUB_REPO}/${tag}/deploy/install.sh | sudo bash -s -- rollback ${tag}`
+  return [
+    `git clone https://github.com/${GITHUB_REPO}.git zayuapi`,
+    'cd zayuapi',
+    `sudo --preserve-env=UPDATE_GITHUB_TOKEN bash deploy/install.sh rollback ${tag}`
+  ].join('\n')
 })
 
 const dockerRollbackCommand = computed(() => {
   if (!selectedRollbackVersion.value) return ''
   return [
     `# ${t('version.dockerEditCompose')}`,
-    `SUB2API_IMAGE=${DOCKER_IMAGE}:${selectedRollbackVersion.value}`,
+    `export SUB2API_IMAGE=${DOCKER_IMAGE}:${selectedRollbackVersion.value}`,
     '',
     `# ${t('version.dockerRecreate')}`,
-    'docker compose up -d'
+    'docker compose pull sub2api',
+    'docker compose up -d --no-deps sub2api'
   ].join('\n')
 })
 

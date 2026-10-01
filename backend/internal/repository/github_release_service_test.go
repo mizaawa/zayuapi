@@ -3,9 +3,11 @@ package repository
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -125,11 +127,123 @@ func TestGitHubReleaseClientDoesNotAuthorizeDownloads(t *testing.T) {
 
 	dest := filepath.Join(t.TempDir(), "asset")
 	require.NoError(t, client.DownloadFile(context.Background(), "https://objects.githubusercontent.com/asset", dest, 100))
-	_, err := client.FetchChecksumFile(context.Background(), "https://github.com/test/repo/releases/download/v1/checksums.txt")
+	_, err := client.FetchChecksumFile(context.Background(), "https://github.com/checksums.txt")
 	require.NoError(t, err)
 	require.Len(t, headers, 2)
 	for _, header := range headers {
 		require.Empty(t, header.Get("Authorization"))
+	}
+}
+
+func TestGitHubReleaseClientPrivateAssetDownloads(t *testing.T) {
+	client := newTestGitHubReleaseClient()
+	client.updateGitHubToken = "update-secret"
+	transport := githubReleaseRoundTripFunc(func(req *http.Request) (*http.Response, error) {
+		require.Equal(t, "api.github.com", req.URL.Host)
+		require.Equal(t, "Bearer update-secret", req.Header.Get("Authorization"))
+		require.Equal(t, "application/octet-stream", req.Header.Get("Accept"))
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     make(http.Header),
+			Body:       io.NopCloser(strings.NewReader("private asset")),
+			Request:    req,
+		}, nil
+	})
+	client.httpClient.Transport = transport
+	client.downloadHTTPClient.Transport = transport
+
+	dest := filepath.Join(t.TempDir(), "archive.tar.gz")
+	require.NoError(t, client.DownloadFile(context.Background(), "https://api.github.com/repos/test/repo/releases/assets/123", dest, 100))
+	content, err := os.ReadFile(dest)
+	require.NoError(t, err)
+	require.Equal(t, "private asset", string(content))
+	checksum, err := client.FetchChecksumFile(context.Background(), "https://api.github.com/repos/test/repo/releases/assets/124")
+	require.NoError(t, err)
+	require.Equal(t, "private asset", string(checksum))
+}
+
+func TestGitHubReleaseClientPrivateBrowserDownloadCompatibility(t *testing.T) {
+	for _, checksums := range []bool{false, true} {
+		t.Run(fmt.Sprint("checksums=", checksums), func(t *testing.T) {
+			client := newTestGitHubReleaseClient()
+			client.updateGitHubToken = "update-secret"
+			var paths []string
+			transport := githubReleaseRoundTripFunc(func(req *http.Request) (*http.Response, error) {
+				paths = append(paths, req.URL.EscapedPath())
+				require.Equal(t, "api.github.com", req.URL.Host)
+				require.Equal(t, "Bearer update-secret", req.Header.Get("Authorization"))
+				body := "downloaded"
+				if len(paths) == 1 {
+					require.Equal(t, "application/vnd.github.v3+json", req.Header.Get("Accept"))
+					body = `{"assets":[{"name":"asset file.tar.gz","url":"https://api.github.com/repos/test/repo/releases/assets/123"}]}`
+				} else {
+					require.Equal(t, "application/octet-stream", req.Header.Get("Accept"))
+				}
+				return &http.Response{StatusCode: http.StatusOK, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(body)), Request: req}, nil
+			})
+			client.httpClient.Transport = transport
+			client.downloadHTTPClient.Transport = transport
+			browserURL := "https://github.com/test/repo/releases/download/v1%2Ftest/asset%20file.tar.gz"
+			if checksums {
+				body, err := client.FetchChecksumFile(context.Background(), browserURL)
+				require.NoError(t, err)
+				require.Equal(t, "downloaded", string(body))
+			} else {
+				require.NoError(t, client.DownloadFile(context.Background(), browserURL, filepath.Join(t.TempDir(), "archive"), 100))
+			}
+			require.Equal(t, []string{"/repos/test/repo/releases/tags/v1%2Ftest", "/repos/test/repo/releases/assets/123"}, paths)
+		})
+	}
+}
+
+func TestGitHubReleaseClientPrivateAssetRedirectDoesNotLeakToken(t *testing.T) {
+	client := newTestGitHubReleaseClient()
+	client.updateGitHubToken = "update-secret"
+	var hosts []string
+	client.downloadHTTPClient.Transport = githubReleaseRoundTripFunc(func(req *http.Request) (*http.Response, error) {
+		hosts = append(hosts, req.URL.Host)
+		resp := &http.Response{StatusCode: http.StatusOK, Header: make(http.Header), Body: io.NopCloser(strings.NewReader("asset")), Request: req}
+		if req.URL.Host == "api.github.com" {
+			require.Equal(t, "Bearer update-secret", req.Header.Get("Authorization"))
+			resp.StatusCode = http.StatusFound
+			resp.Header.Set("Location", "https://release-assets.githubusercontent.com/download?signature=example")
+		} else {
+			require.Empty(t, req.Header.Get("Authorization"))
+		}
+		return resp, nil
+	})
+	require.NoError(t, client.DownloadFile(context.Background(), "https://api.github.com/repos/test/repo/releases/assets/123", filepath.Join(t.TempDir(), "archive"), 100))
+	require.Equal(t, []string{"api.github.com", "release-assets.githubusercontent.com"}, hosts)
+}
+
+func TestGitHubReleaseClientAssetRedirectPolicy(t *testing.T) {
+	for _, rawURL := range []string{
+		"http://api.github.com/asset", "https://sub.api.github.com/asset",
+		"https://api.github.com:443/asset", "https://user@api.github.com/asset", "https://example.com/asset",
+	} {
+		t.Run(rawURL, func(t *testing.T) {
+			req, err := http.NewRequest(http.MethodGet, rawURL, nil)
+			require.NoError(t, err)
+			req.Header.Set("Authorization", "Bearer update-secret")
+			require.Error(t, githubAssetCheckRedirect(nil)(req, nil))
+			require.Empty(t, req.Header.Get("Authorization"))
+		})
+	}
+	req := &http.Request{URL: &url.URL{Scheme: "https", Host: "api.github.com"}, Header: make(http.Header)}
+	require.Error(t, githubAssetCheckRedirect(nil)(req, make([]*http.Request, 10)))
+}
+
+func TestGitHubReleaseClientChecksumSizeLimit(t *testing.T) {
+	for _, contentLength := range []int64{-1, maxChecksumSize + 1} {
+		t.Run(fmt.Sprint("length=", contentLength), func(t *testing.T) {
+			client := newTestGitHubReleaseClient()
+			client.httpClient.Transport = githubReleaseRoundTripFunc(func(req *http.Request) (*http.Response, error) {
+				return &http.Response{StatusCode: http.StatusOK, Header: make(http.Header), ContentLength: contentLength,
+					Body: io.NopCloser(strings.NewReader(strings.Repeat("x", maxChecksumSize+1))), Request: req}, nil
+			})
+			_, err := client.FetchChecksumFile(context.Background(), "https://api.github.com/repos/test/repo/releases/assets/123")
+			require.ErrorContains(t, err, "checksum file")
+		})
 	}
 }
 

@@ -26,6 +26,8 @@ type githubReleaseClientError struct {
 	err error
 }
 
+const maxChecksumSize = 1024 * 1024
+
 // NewGitHubReleaseClient 创建 GitHub Release 客户端
 // proxyURL 为空时直连 GitHub，支持 http/https/socks5/socks5h 协议
 // 代理配置失败时行为由 allowDirectOnProxyError 控制：
@@ -65,7 +67,7 @@ func NewGitHubReleaseClient(proxyURL string, allowDirectOnProxyError bool) servi
 	return &githubReleaseClient{
 		httpClient:         apiClient,
 		downloadHTTPClient: downloadClient,
-		updateGitHubToken:  os.Getenv("UPDATE_GITHUB_TOKEN"),
+		updateGitHubToken:  strings.TrimSpace(os.Getenv("UPDATE_GITHUB_TOKEN")),
 	}
 }
 
@@ -81,11 +83,29 @@ func isGitHubAPIURL(url *url.URL) bool {
 
 func githubAPICheckRedirect(previous func(*http.Request, []*http.Request) error) func(*http.Request, []*http.Request) error {
 	return func(req *http.Request, via []*http.Request) error {
+		var err error
+		if previous != nil {
+			err = previous(req, via)
+		} else if len(via) >= 10 {
+			err = fmt.Errorf("stopped after 10 redirects")
+		}
 		if !isGitHubAPIURL(req.URL) {
 			req.Header.Del("Authorization")
 		}
-		if previous != nil {
-			return previous(req, via)
+		return err
+	}
+}
+
+func githubAssetCheckRedirect(previous func(*http.Request, []*http.Request) error) func(*http.Request, []*http.Request) error {
+	checkAuthorization := githubAPICheckRedirect(previous)
+	return func(req *http.Request, via []*http.Request) error {
+		if err := checkAuthorization(req, via); err != nil {
+			return err
+		}
+		if req.URL.Scheme != "https" || req.URL.User != nil ||
+			(req.URL.Host != "api.github.com" && req.URL.Host != "github.com" &&
+				req.URL.Host != "objects.githubusercontent.com" && req.URL.Host != "release-assets.githubusercontent.com") {
+			return fmt.Errorf("release asset redirected to an untrusted URL")
 		}
 		return nil
 	}
@@ -102,6 +122,67 @@ func (c *githubReleaseClient) newAPIRequest(ctx context.Context, url string) (*h
 		req.Header.Set("Authorization", "Bearer "+c.updateGitHubToken)
 	}
 	return req, nil
+}
+
+func (c *githubReleaseClient) newAssetRequest(ctx context.Context, rawURL string) (*http.Request, error) {
+	parsedURL, err := url.Parse(rawURL)
+	if err != nil {
+		return nil, err
+	}
+	// Older cached releases contain only browser URLs, which cannot download private assets.
+	if c.updateGitHubToken != "" && parsedURL.Scheme == "https" && parsedURL.Host == "github.com" && parsedURL.User == nil {
+		parts := strings.Split(strings.TrimPrefix(parsedURL.EscapedPath(), "/"), "/")
+		if len(parts) == 6 && parts[2] == "releases" && parts[3] == "download" {
+			filename, err := url.PathUnescape(parts[5])
+			if err != nil {
+				return nil, err
+			}
+			apiURL := fmt.Sprintf("https://api.github.com/repos/%s/%s/releases/tags/%s", parts[0], parts[1], parts[4])
+			req, err := c.newAPIRequest(ctx, apiURL)
+			if err != nil {
+				return nil, err
+			}
+			resp, err := c.httpClient.Do(req)
+			if err != nil {
+				return nil, err
+			}
+			defer func() { _ = resp.Body.Close() }()
+			if resp.StatusCode != http.StatusOK {
+				return nil, fmt.Errorf("GitHub release asset lookup returned %d", resp.StatusCode)
+			}
+			var release service.GitHubRelease
+			if err := json.NewDecoder(resp.Body).Decode(&release); err != nil {
+				return nil, err
+			}
+			found := false
+			for _, asset := range release.Assets {
+				if asset.Name == filename && asset.APIURL != "" {
+					assetURL, err := url.Parse(asset.APIURL)
+					if err != nil || !isGitHubAPIURL(assetURL) {
+						return nil, fmt.Errorf("invalid GitHub release asset API URL")
+					}
+					rawURL = asset.APIURL
+					found = true
+					break
+				}
+			}
+			if !found {
+				return nil, fmt.Errorf("release asset not found: %s", filename)
+			}
+		}
+	}
+	req, err := c.newAPIRequest(ctx, rawURL)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Accept", "application/octet-stream")
+	return req, nil
+}
+
+func (c *githubReleaseClient) doAssetRequest(client *http.Client, req *http.Request) (*http.Response, error) {
+	client = cloneHTTPClient(client)
+	client.CheckRedirect = githubAssetCheckRedirect(client.CheckRedirect)
+	return client.Do(req)
 }
 
 func (c *githubReleaseClientError) FetchLatestRelease(ctx context.Context, repo string) (*service.GitHubRelease, error) {
@@ -179,13 +260,13 @@ func (c *githubReleaseClient) FetchRecentReleases(ctx context.Context, repo stri
 }
 
 func (c *githubReleaseClient) DownloadFile(ctx context.Context, url, dest string, maxSize int64) error {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	req, err := c.newAssetRequest(ctx, url)
 	if err != nil {
 		return err
 	}
 
 	// 使用预配置的下载客户端（已包含代理配置）
-	resp, err := c.downloadHTTPClient.Do(req)
+	resp, err := c.doAssetRequest(c.downloadHTTPClient, req)
 	if err != nil {
 		return err
 	}
@@ -227,12 +308,12 @@ func (c *githubReleaseClient) DownloadFile(ctx context.Context, url, dest string
 }
 
 func (c *githubReleaseClient) FetchChecksumFile(ctx context.Context, url string) ([]byte, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	req, err := c.newAssetRequest(ctx, url)
 	if err != nil {
 		return nil, err
 	}
 
-	resp, err := c.httpClient.Do(req)
+	resp, err := c.doAssetRequest(c.httpClient, req)
 	if err != nil {
 		return nil, err
 	}
@@ -242,5 +323,15 @@ func (c *githubReleaseClient) FetchChecksumFile(ctx context.Context, url string)
 		return nil, fmt.Errorf("HTTP %d", resp.StatusCode)
 	}
 
-	return io.ReadAll(resp.Body)
+	if resp.ContentLength > maxChecksumSize {
+		return nil, fmt.Errorf("checksum file too large (max %d bytes)", maxChecksumSize)
+	}
+	data, err := io.ReadAll(io.LimitReader(resp.Body, maxChecksumSize+1))
+	if err != nil {
+		return nil, err
+	}
+	if len(data) > maxChecksumSize {
+		return nil, fmt.Errorf("checksum file exceeded maximum size of %d bytes", maxChecksumSize)
+	}
+	return data, nil
 }

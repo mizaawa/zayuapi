@@ -2,7 +2,7 @@
 #
 # Sub2API Installation Script
 # Sub2API 安装脚本
-# Usage: curl -sSL https://raw.githubusercontent.com/mizaawa/sub2api/main/deploy/install.sh | bash
+# Usage: UPDATE_GITHUB_TOKEN=<contents-read-token> bash deploy/install.sh
 #
 
 set -e
@@ -31,11 +31,12 @@ CYAN='\033[0;36m'
 NC='\033[0m' # No Color
 
 # Configuration
-GITHUB_REPO="mizaawa/sub2api"
+GITHUB_REPO="mizaawa/zayuapi"
 INSTALL_DIR="/opt/sub2api"
 SERVICE_NAME="sub2api"
 SERVICE_USER="sub2api"
 CONFIG_DIR="/etc/sub2api"
+SYSTEMD_DIR="/etc/systemd/system"
 
 # Server configuration (will be set by user)
 SERVER_HOST="0.0.0.0"
@@ -473,6 +474,10 @@ check_dependencies() {
         missing+=("tar")
     fi
 
+    if ! command -v python3 &> /dev/null; then
+        missing+=("python3")
+    fi
+
     if [ ${#missing[@]} -gt 0 ]; then
         print_error "$(msg 'missing_deps'): ${missing[*]}"
         print_info "$(msg 'install_deps_first')"
@@ -480,10 +485,34 @@ check_dependencies() {
     fi
 }
 
-# Authenticate only GitHub REST API requests. Release asset downloads must stay anonymous.
+# Read only the token assignment; never execute the saved environment file.
+load_update_token() {
+    local line
+    if [ -z "${UPDATE_GITHUB_TOKEN:-}" ] && [ -r "$CONFIG_DIR/update.env" ]; then
+        while IFS= read -r line || [ -n "$line" ]; do
+            case "$line" in
+                UPDATE_GITHUB_TOKEN=*) UPDATE_GITHUB_TOKEN="${line#UPDATE_GITHUB_TOKEN=}" ;;
+            esac
+        done < "$CONFIG_DIR/update.env"
+    fi
+    if [ -n "${UPDATE_GITHUB_TOKEN:-}" ] && [[ ! "$UPDATE_GITHUB_TOKEN" =~ ^[A-Za-z0-9_-]+$ ]]; then
+        echo "UPDATE_GITHUB_TOKEN contains unsupported characters" >&2
+        return 2
+    fi
+}
+
+require_update_token() {
+    load_update_token || return
+    if [ -z "${UPDATE_GITHUB_TOKEN:-}" ]; then
+        echo "Set UPDATE_GITHUB_TOKEN to a token with Contents: read access to ${GITHUB_REPO}." >&2
+        return 2
+    fi
+}
+
+# Authentication is confined to a single GitHub REST API request, without redirects.
 github_api_curl() {
     local arg
-    local expect_value=false
+    local expect_value=""
     local url
 
     if [ "$#" -lt 1 ]; then
@@ -495,15 +524,22 @@ github_api_curl() {
     # Keep authenticated invocations constrained to the options used below. In
     # particular, curl config, --url, and --next could add another destination.
     for arg in "${@:1:$#-1}"; do
-        if [ "$expect_value" = true ]; then
-            expect_value=false
+        if [ -n "$expect_value" ]; then
+            if [ "$expect_value" = header ] && [ "$arg" != "Accept: application/octet-stream" ]; then
+                echo "Unsafe GitHub API header" >&2
+                return 2
+            fi
+            expect_value=""
             continue
         fi
         case "$arg" in
-            -s|--silent)
+            -s|--silent|-S|--show-error|-f|--fail)
                 ;;
-            --connect-timeout|--max-time|-o|--output|-w|--write-out)
-                expect_value=true
+            --connect-timeout|--max-time|-o|--output|-w|--write-out|-D|--dump-header)
+                expect_value=value
+                ;;
+            -H|--header)
+                expect_value=header
                 ;;
             *)
                 echo "Unsafe github_api_curl argument: $arg" >&2
@@ -512,11 +548,12 @@ github_api_curl() {
         esac
     done
 
-    if [ "$expect_value" = true ] || [[ "$url" != https://api.github.com/* ]]; then
+    if [ -n "$expect_value" ] || [[ "$url" != https://api.github.com/* ]]; then
         echo "github_api_curl requires exactly one GitHub API URL" >&2
         return 2
     fi
 
+    load_update_token || return
     if [ -n "${UPDATE_GITHUB_TOKEN:-}" ]; then
         if [[ "$UPDATE_GITHUB_TOKEN" == *$'\n'* || "$UPDATE_GITHUB_TOKEN" == *$'\r'* || "$UPDATE_GITHUB_TOKEN" == *'"'* || "$UPDATE_GITHUB_TOKEN" == *'\'* ]]; then
             echo "UPDATE_GITHUB_TOKEN contains unsupported characters" >&2
@@ -528,10 +565,91 @@ github_api_curl() {
     fi
 }
 
+github_release_asset_download() {
+    local url="$1" output="$2" headers status location
+    headers=$(mktemp)
+    if ! status=$(github_api_curl -s -S -f --connect-timeout 10 --max-time 300 \
+        -H "Accept: application/octet-stream" -D "$headers" -o "$output" -w '%{http_code}' "$url"); then
+        rm -f "$headers"
+        return 1
+    fi
+    if [ "$status" = 200 ]; then
+        rm -f "$headers"
+        return 0
+    fi
+    if [ "$status" != 302 ] && [ "$status" != 307 ]; then
+        rm -f "$headers"
+        echo "Unexpected GitHub release asset response: $status" >&2
+        return 1
+    fi
+    if ! location=$(python3 - "$headers" <<'PY'
+import email.parser
+import pathlib
+import re
+import sys
+from urllib.parse import urlsplit
+
+blocks = re.split(r"(?m)^HTTP/\S+ [0-9]{3}[^\n]*\n", pathlib.Path(sys.argv[1]).read_text())
+locations = email.parser.Parser().parsestr(blocks[-1]).get_all("Location", [])
+if len(locations) != 1:
+    sys.exit("Missing or ambiguous GitHub release asset redirect")
+url = locations[0].strip()
+parsed = urlsplit(url)
+if parsed.scheme != "https" or parsed.hostname not in ("release-assets.githubusercontent.com", "objects.githubusercontent.com") or parsed.username or parsed.password or parsed.port not in (None, 443):
+    sys.exit("Untrusted GitHub release asset redirect")
+print(url)
+PY
+    ); then
+        rm -f "$headers"
+        return 1
+    fi
+    rm -f "$headers"
+    # Use a separate unauthenticated request so no credentials reach the asset CDN.
+    UPDATE_GITHUB_TOKEN= GITHUB_TOKEN= GH_TOKEN= curl -q --globoff -f -s -S \
+        --connect-timeout 10 --max-time 300 "$location" -o "$output"
+}
+
+release_asset_url() {
+    python3 - "$1" "$2" "$GITHUB_REPO" <<'PY'
+import json
+import re
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as source:
+    release = json.load(source)
+matches = [asset.get("url", "") for asset in release.get("assets", []) if asset.get("name") == sys.argv[2]]
+pattern = r"https://api\.github\.com/repos/" + re.escape(sys.argv[3]) + r"/releases/assets/[0-9]+"
+if len(matches) != 1 or not re.fullmatch(pattern, matches[0]):
+    sys.exit("Release asset not found or has an invalid API URL: " + sys.argv[2])
+print(matches[0])
+PY
+}
+
+verify_release_checksum() {
+    python3 - "$1" "$2" "$3" <<'PY'
+import hashlib
+import pathlib
+import re
+import sys
+
+entries = [line.split() for line in pathlib.Path(sys.argv[2]).read_text().splitlines()]
+matches = [entry[0] for entry in entries if len(entry) == 2 and entry[1].lstrip("*") == sys.argv[3]]
+if len(matches) != 1 or not re.fullmatch(r"[0-9a-fA-F]{64}", matches[0]):
+    sys.exit("Missing or invalid archive checksum")
+digest = hashlib.sha256()
+with open(sys.argv[1], "rb") as archive:
+    for chunk in iter(lambda: archive.read(1024 * 1024), b""):
+        digest.update(chunk)
+if digest.hexdigest() != matches[0].lower():
+    sys.exit("Release archive checksum mismatch")
+PY
+}
+
 # Get latest release version
 get_latest_version() {
+    require_update_token || exit 1
     print_info "$(msg 'fetching_version')"
-    LATEST_VERSION=$(github_api_curl -s --connect-timeout 10 --max-time 30 "https://api.github.com/repos/${GITHUB_REPO}/releases/latest" 2>/dev/null | grep '"tag_name"' | sed -E 's/.*"([^"]+)".*/\1/')
+    LATEST_VERSION=$(github_api_curl -s -S -f --connect-timeout 10 --max-time 30 "https://api.github.com/repos/${GITHUB_REPO}/releases/latest" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("tag_name", ""))')
 
     if [ -z "$LATEST_VERSION" ]; then
         print_error "$(msg 'failed_get_version')"
@@ -544,10 +662,11 @@ get_latest_version() {
 
 # List available versions
 list_versions() {
+    require_update_token || exit 1
     print_info "$(msg 'fetching_versions')"
 
     local versions
-    versions=$(github_api_curl -s --connect-timeout 10 --max-time 30 "https://api.github.com/repos/${GITHUB_REPO}/releases" 2>/dev/null | grep '"tag_name"' | sed -E 's/.*"([^"]+)".*/\1/' | head -20)
+    versions=$(github_api_curl -s -S -f --connect-timeout 10 --max-time 30 "https://api.github.com/repos/${GITHUB_REPO}/releases?per_page=20" | python3 -c 'import json,sys; print("\n".join(release["tag_name"] for release in json.load(sys.stdin)))')
 
     if [ -z "$versions" ]; then
         print_error "$(msg 'failed_get_version')"
@@ -567,6 +686,7 @@ list_versions() {
 
 # Validate if a version exists
 validate_version() {
+    require_update_token || exit 1
     local version="$1"
 
     # Check for empty version
@@ -578,6 +698,10 @@ validate_version() {
     # Ensure version starts with 'v'
     if [[ ! "$version" =~ ^v ]]; then
         version="v$version"
+    fi
+    if [[ ! "$version" =~ ^v[0-9A-Za-z._+-]+$ ]]; then
+        print_error "Invalid release tag: $version" >&2
+        exit 1
     fi
 
     print_info "$(msg 'validating_version') $version" >&2
@@ -615,39 +739,42 @@ get_current_version() {
 
 # Download and extract
 download_and_extract() {
+    require_update_token || exit 1
     local version_num=${LATEST_VERSION#v}
     local archive_name="sub2api_${version_num}_${OS}_${ARCH}.tar.gz"
-    local download_url="https://github.com/${GITHUB_REPO}/releases/download/${LATEST_VERSION}/${archive_name}"
-    local checksum_url="https://github.com/${GITHUB_REPO}/releases/download/${LATEST_VERSION}/checksums.txt"
+    local download_url checksum_url
 
     print_info "$(msg 'downloading') ${archive_name}..."
 
     # Create temp directory
     TEMP_DIR=$(mktemp -d)
-    trap "rm -rf $TEMP_DIR" EXIT
+    trap 'rm -rf "$TEMP_DIR"' EXIT
+
+    if ! github_api_curl -s -S -f --connect-timeout 10 --max-time 30 \
+        -o "$TEMP_DIR/release.json" "https://api.github.com/repos/${GITHUB_REPO}/releases/tags/${LATEST_VERSION}"; then
+        print_error "$(msg 'failed_get_version')"
+        exit 1
+    fi
+    download_url=$(release_asset_url "$TEMP_DIR/release.json" "$archive_name") || exit 1
+    checksum_url=$(release_asset_url "$TEMP_DIR/release.json" "checksums.txt") || exit 1
 
     # Download archive
-    if ! curl -sL "$download_url" -o "$TEMP_DIR/$archive_name"; then
+    if ! github_release_asset_download "$download_url" "$TEMP_DIR/$archive_name"; then
         print_error "$(msg 'download_failed')"
         exit 1
     fi
 
     # Download and verify checksum
     print_info "$(msg 'verifying_checksum')"
-    if curl -sL "$checksum_url" -o "$TEMP_DIR/checksums.txt" 2>/dev/null; then
-        local expected_checksum=$(grep "$archive_name" "$TEMP_DIR/checksums.txt" | awk '{print $1}')
-        local actual_checksum=$(sha256sum "$TEMP_DIR/$archive_name" | awk '{print $1}')
-
-        if [ "$expected_checksum" != "$actual_checksum" ]; then
-            print_error "$(msg 'checksum_failed')"
-            print_error "Expected: $expected_checksum"
-            print_error "Actual: $actual_checksum"
-            exit 1
-        fi
-        print_success "$(msg 'checksum_verified')"
-    else
-        print_warning "$(msg 'checksum_not_found')"
+    if ! github_release_asset_download "$checksum_url" "$TEMP_DIR/checksums.txt"; then
+        print_error "$(msg 'checksum_not_found')"
+        exit 1
     fi
+    if ! verify_release_checksum "$TEMP_DIR/$archive_name" "$TEMP_DIR/checksums.txt" "$archive_name"; then
+        print_error "$(msg 'checksum_failed')"
+        exit 1
+    fi
+    print_success "$(msg 'checksum_verified')"
 
     # Extract
     print_info "$(msg 'extracting')"
@@ -705,20 +832,43 @@ setup_directories() {
 
     # Set ownership
     chown -R "$SERVICE_USER:$SERVICE_USER" "$INSTALL_DIR"
-    chown -R "$SERVICE_USER:$SERVICE_USER" "$CONFIG_DIR"
+    chown root:root "$CONFIG_DIR"
+    chmod 755 "$CONFIG_DIR"
 
     print_success "$(msg 'dirs_configured')"
+}
+
+persist_update_token() {
+    require_update_token || return
+    mkdir -p "$CONFIG_DIR"
+    chown root:root "$CONFIG_DIR"
+    chmod 755 "$CONFIG_DIR"
+    local token_file
+    token_file=$(umask 077; mktemp "$CONFIG_DIR/.update.env.XXXXXX")
+    printf 'UPDATE_GITHUB_TOKEN=%s\n' "$UPDATE_GITHUB_TOKEN" > "$token_file"
+    chown root:root "$token_file"
+    chmod 600 "$token_file"
+    mv -f "$token_file" "$CONFIG_DIR/update.env"
+}
+
+configure_existing_update_environment() {
+    persist_update_token
+    mkdir -p "$SYSTEMD_DIR/$SERVICE_NAME.service.d"
+    printf '[Service]\nEnvironmentFile=-%s/update.env\n' "$CONFIG_DIR" \
+        > "$SYSTEMD_DIR/$SERVICE_NAME.service.d/update.conf"
+    systemctl daemon-reload
 }
 
 # Install systemd service
 install_service() {
     print_info "$(msg 'installing_service')"
+    persist_update_token
 
     # Create service file with configured host and port
-    cat > /etc/systemd/system/sub2api.service << EOF
+    cat > "$SYSTEMD_DIR/sub2api.service" << EOF
 [Unit]
 Description=Sub2API - AI API Gateway Platform
-Documentation=https://github.com/mizaawa/sub2api
+Documentation=https://github.com/mizaawa/zayuapi
 After=network.target postgresql.service redis.service
 Wants=postgresql.service redis.service
 
@@ -745,6 +895,7 @@ ReadWritePaths=/opt/sub2api
 Environment=GIN_MODE=release
 Environment=SERVER_HOST=${SERVER_HOST}
 Environment=SERVER_PORT=${SERVER_PORT}
+EnvironmentFile=-${CONFIG_DIR}/update.env
 
 [Install]
 WantedBy=multi-user.target
@@ -885,6 +1036,7 @@ upgrade() {
 
     # Start service
     print_info "$(msg 'starting_service')"
+    configure_existing_update_environment
     systemctl start sub2api
 
     print_success "$(msg 'upgrade_complete')"
@@ -947,6 +1099,7 @@ install_version() {
 
     # Start service
     print_info "$(msg 'starting_service')"
+    configure_existing_update_environment
     if systemctl start sub2api; then
         print_success "$(msg 'service_started')"
     else
