@@ -36,7 +36,7 @@ const messages: Record<string, string> = {
   'usage.original': 'Original',
   'usage.userBilled': 'User billed',
   'usage.accountBilled': 'Account billed',
-  'usage.outputDeliverySpeed': 'End-to-end output speed',
+  'usage.outputDeliverySpeed': 'TPS',
   'usage.outputDeliverySpeedHint': 'Output tokens / recorded total duration (including first-token latency)',
   'usage.performanceNotRecorded': 'Not recorded',
   'usage.performanceNotApplicable': 'N/A',
@@ -146,7 +146,7 @@ describe('admin UsageTable tooltip', () => {
     const performance = wrapper.get('[data-testid="usage-performance"]')
     expect(performance.text()).toContain('10.62s')
     expect(performance.text()).toContain('25.69s')
-    expect(performance.text()).toContain('End-to-end output speed')
+    expect(performance.text()).toContain('TPS')
     wrapper.unmount()
   })
 

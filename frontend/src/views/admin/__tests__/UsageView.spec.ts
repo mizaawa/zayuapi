@@ -33,7 +33,7 @@ const messages: Record<string, string> = {
   'admin.dashboard.hour': 'Hour',
   'admin.usage.failedToLoadUser': 'Failed to load user',
   'usage.cacheHitRate': 'Cache hit rate',
-  'usage.outputDeliverySpeed': 'End-to-End Output Delivery Speed',
+  'usage.outputDeliverySpeed': 'TPS',
 	'usage.requestedModel': 'Requested model',
 	'usage.sentUpstreamModel': 'Sent upstream model',
 	'usage.upstreamResponseModel': 'Upstream response model',
@@ -682,7 +682,7 @@ describe('admin UsageView columns and export', () => {
     await (wrapper.vm as any).exportToExcel()
 
     const headers = aoaToSheet.mock.calls[0][0][0]
-    const speedIndex = headers.indexOf('End-to-End Output Delivery Speed (tok/s)')
+    const speedIndex = headers.indexOf('TPS (tok/s)')
     expect(speedIndex).toBeGreaterThan(-1)
     expect(headers[speedIndex - 1]).toBe('usage.duration')
     expect(sheetAddAoa.mock.calls[0][1][0][speedIndex]).toBe(expected)

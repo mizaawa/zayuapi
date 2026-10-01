@@ -287,7 +287,7 @@ describe('user UsageView', () => {
     expect(showSuccess).toHaveBeenCalled()
     expect(csvContent.startsWith('\uFEFF')).toBe(true)
     expect(csvContent.slice(1)).toBe([
-      'Time,API Key Name,Model,Reasoning Effort,Inbound Endpoint,IP Address,Type,Billing Mode,Input Tokens,Output Tokens,Cache Read Tokens,Cache Creation Tokens,Cache Hit Rate,Rate Multiplier,Billed Cost,Original Cost,First Token (ms),Duration (ms),End-to-End Output Delivery Speed (tok/s)',
+      'Time,API Key Name,Model,Reasoning Effort,Inbound Endpoint,IP Address,Type,Billing Mode,Input Tokens,Output Tokens,Cache Read Tokens,Cache Creation Tokens,Cache Hit Rate,Rate Multiplier,Billed Cost,Original Cost,First Token (ms),Duration (ms),TPS (tok/s)',
       '2026-03-08T00:00:00Z,demo-key,gpt-5.4,-,,203.0.113.10,Sync,Token,4057,101,278272,4,98.6%,1,0.09288300,0.09288300,12,345,292.8',
     ].join('\n'))
     expect(csvContent).toContain('IP Address')
@@ -352,7 +352,7 @@ describe('user UsageView', () => {
     expect(csvContent).toContain(',Image,0,0,0,0,-,')
     expect(csvContent).not.toContain(',Token,0,0,0,0,')
     const [headers, row] = csvContent.slice(1).split('\n').map(line => line.split(','))
-    const speedIndex = headers!.indexOf('End-to-End Output Delivery Speed (tok/s)')
+    const speedIndex = headers!.indexOf('TPS (tok/s)')
     expect(speedIndex).toBeGreaterThan(-1)
     expect(row![speedIndex]).toBe('')
 
@@ -401,7 +401,7 @@ describe('user UsageView', () => {
     expect(data).toHaveLength(102)
     expect(data[1]![cacheHitRateIndex]).toBe('98.6%')
     expect(data[101]![cacheHitRateIndex]).toBe('-')
-    const speedIndex = data[0]!.indexOf('End-to-End Output Delivery Speed (tok/s)')
+    const speedIndex = data[0]!.indexOf('TPS (tok/s)')
     expect(speedIndex).toBeGreaterThan(-1)
     expect(data[0]![speedIndex - 1]).toBe('Duration (ms)')
     expect(data[1]![speedIndex]).toBe(292.8)

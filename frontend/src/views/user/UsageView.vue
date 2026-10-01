@@ -667,7 +667,7 @@ const exportUsage = async (format: 'csv' | 'xlsx') => {
       'Original Cost',
       'First Token (ms)',
       'Duration (ms)',
-      'End-to-End Output Delivery Speed (tok/s)',
+      'TPS (tok/s)',
     ]
     const rows = allLogs.map((log) => {
       const speed = getEndToEndOutputSpeed(log)
