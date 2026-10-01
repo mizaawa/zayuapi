@@ -53,7 +53,8 @@ func TestHTTPUpstreamAPIKeyFailoverStopsAfterFirstFailure(t *testing.T) {
 				_, _ = w.Write([]byte(`{"error":{"message":"Upstream capacity exhausted"}}`))
 			}))
 			t.Cleanup(server.Close)
-			upstream := NewHTTPUpstream(nil).(*httpUpstreamService)
+			upstream, ok := NewHTTPUpstream(nil).(*httpUpstreamService)
+			require.True(t, ok)
 			ctx := service.WithAPIKeyFailoverAttempt(t.Context())
 			for i := 0; i < 3; i++ {
 				req, err := http.NewRequestWithContext(ctx, http.MethodGet, server.URL, nil)

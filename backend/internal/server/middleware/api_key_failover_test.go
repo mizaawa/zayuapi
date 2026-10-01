@@ -83,7 +83,8 @@ func TestAPIKeyFailoverRoutesAfterExactAttemptLimit(t *testing.T) {
 			markFailoverTestFailure(c, 429, `{"error":{"message":"upstream limited"}}`)
 			return
 		}
-		group := c.Request.Context().Value(ctxkey.Group).(*service.Group)
+		group, ok := c.Request.Context().Value(ctxkey.Group).(*service.Group)
+		require.True(t, ok)
 		require.Equal(t, int64(2), group.ID)
 		require.Equal(t, float64(4), group.RateMultiplier)
 		subscription, _ := GetSubscriptionFromContext(c)
