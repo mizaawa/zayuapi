@@ -16,7 +16,7 @@
         role="note"
         aria-labelledby="registration-announcement-title"
         data-testid="registration-announcement"
-        class="registration-announcement flex items-start gap-3 rounded-r-lg px-4 py-3"
+        class="registration-announcement relative flex items-start gap-3 rounded-2xl py-3 pl-7 pr-4"
       >
         <Icon name="bell" size="md" class="mt-0.5 shrink-0 text-primary-700" aria-hidden="true" />
         <div class="min-w-0 flex-1">
@@ -1077,9 +1077,21 @@ async function handleRegister(): Promise<void> {
 
 <style scoped>
 .registration-announcement {
-  border-left: 3px solid var(--md-sys-color-primary);
+  border: 1px solid color-mix(in srgb, var(--md-sys-color-primary) 32%, var(--md-sys-color-outline));
   background: color-mix(in srgb, var(--md-sys-color-surface) 70%, transparent);
   color: var(--md-sys-color-on-surface-variant);
+}
+
+.registration-announcement::before {
+  content: '';
+  position: absolute;
+  top: 12px;
+  bottom: 12px;
+  left: 12px;
+  width: 3px;
+  border-radius: 9999px;
+  background: var(--md-sys-color-primary);
+  pointer-events: none;
 }
 
 .fade-enter-active,
