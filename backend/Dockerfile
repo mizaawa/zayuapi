@@ -1,5 +1,8 @@
 FROM golang:1.26.6-alpine
 
+ARG SOURCE_REPOSITORY=mizaawa/zayuapi
+LABEL org.opencontainers.image.source="https://github.com/${SOURCE_REPOSITORY}"
+
 WORKDIR /app
 
 # 安装必要的工具

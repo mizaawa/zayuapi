@@ -182,7 +182,7 @@
 
                 <a
                   v-if="authStore.isAdmin"
-                  href="https://github.com/mizaawa/sub2api"
+                  href="https://github.com/mizaawa/zayuapi"
                   target="_blank"
                   rel="noopener noreferrer"
                   @click="closeDropdown"

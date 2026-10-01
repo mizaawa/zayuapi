@@ -16,7 +16,7 @@ services:
   # Sub2API Application
   # ===========================================================================
   sub2api:
-    image: ${SUB2API_IMAGE:-ghcr.io/mizaawa/sub2api:latest}
+    image: ${SUB2API_IMAGE:-ghcr.io/mizaawa/zayuapi:latest}
     container_name: sub2api
     restart: unless-stopped
     security_opt:

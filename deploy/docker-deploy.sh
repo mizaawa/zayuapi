@@ -20,8 +20,8 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
-# GitHub raw content base URL
-GITHUB_RAW_URL="https://raw.githubusercontent.com/mizaawa/sub2api/main/deploy"
+GITHUB_REPO="mizaawa/zayuapi"
+SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 
 # Print colored message
 print_info() {
@@ -50,6 +50,48 @@ command_exists() {
     command -v "$1" >/dev/null 2>&1
 }
 
+validate_update_token() {
+    if [ -n "${UPDATE_GITHUB_TOKEN:-}" ] && [[ ! "$UPDATE_GITHUB_TOKEN" =~ ^[A-Za-z0-9_-]+$ ]]; then
+        print_error "UPDATE_GITHUB_TOKEN contains unsupported characters."
+        return 1
+    fi
+}
+
+prepare_deployment_file() {
+    local source_name="$1" destination="$2" temp_file status
+    if [ -f "$SCRIPT_DIR/$source_name" ]; then
+        if [ "$SCRIPT_DIR/$source_name" != "$(pwd)/$destination" ]; then
+            cp "$SCRIPT_DIR/$source_name" "$destination"
+        fi
+        return 0
+    fi
+    if [ -z "${UPDATE_GITHUB_TOKEN:-}" ]; then
+        print_error "Local deployment files are missing. Set UPDATE_GITHUB_TOKEN with Contents: read access to ${GITHUB_REPO}."
+        return 1
+    fi
+    validate_update_token || return
+    if ! command_exists curl; then
+        print_error "curl is required to download private deployment files."
+        return 1
+    fi
+    temp_file=$(mktemp)
+    # Do not follow redirects or load curlrc; the token is sent only to GitHub API.
+    if ! status=$(printf 'header = "Authorization: Bearer %s"\n' "$UPDATE_GITHUB_TOKEN" | \
+        UPDATE_GITHUB_TOKEN= GITHUB_TOKEN= GH_TOKEN= curl -q --globoff --config - \
+        -f -s -S --connect-timeout 10 --max-time 60 \
+        -H 'Accept: application/vnd.github.raw+json' -w '%{http_code}' \
+        "https://api.github.com/repos/${GITHUB_REPO}/contents/deploy/${source_name}?ref=main" -o "$temp_file"); then
+        rm -f "$temp_file"
+        return 1
+    fi
+    if [ "$status" != 200 ]; then
+        print_error "Unexpected GitHub deployment file response: $status"
+        rm -f "$temp_file"
+        return 1
+    fi
+    mv -f "$temp_file" "$destination"
+}
+
 # Main installation function
 main() {
     echo ""
@@ -63,6 +105,7 @@ main() {
         print_error "openssl is not installed. Please install openssl first."
         exit 1
     fi
+    validate_update_token || exit 1
 
     # Check if deployment already exists
     if [ -f "docker-compose.yml" ] && [ -f ".env" ]; then
@@ -76,25 +119,14 @@ main() {
     fi
 
     # Download docker-compose.local.yml and save as docker-compose.yml
-    print_info "Downloading docker-compose.yml..."
-    if command_exists curl; then
-        curl -sSL "${GITHUB_RAW_URL}/docker-compose.local.yml" -o docker-compose.yml
-    elif command_exists wget; then
-        wget -q "${GITHUB_RAW_URL}/docker-compose.local.yml" -O docker-compose.yml
-    else
-        print_error "Neither curl nor wget is installed. Please install one of them."
-        exit 1
-    fi
-    print_success "Downloaded docker-compose.yml"
+    print_info "Preparing docker-compose.yml..."
+    prepare_deployment_file docker-compose.local.yml docker-compose.yml
+    print_success "Prepared docker-compose.yml"
 
     # Download .env.example
-    print_info "Downloading .env.example..."
-    if command_exists curl; then
-        curl -sSL "${GITHUB_RAW_URL}/.env.example" -o .env.example
-    else
-        wget -q "${GITHUB_RAW_URL}/.env.example" -O .env.example
-    fi
-    print_success "Downloaded .env.example"
+    print_info "Preparing .env.example..."
+    prepare_deployment_file .env.example .env.example
+    print_success "Prepared .env.example"
 
     # Generate .env file with auto-generated secrets
     print_info "Generating secure secrets..."
@@ -107,6 +139,7 @@ main() {
 
     # Create .env from .env.example
     cp .env.example .env
+    chmod 600 .env
 
     # Update .env with generated secrets (cross-platform compatible)
     if sed --version >/dev/null 2>&1; then
@@ -119,6 +152,17 @@ main() {
         sed -i '' "s/^JWT_SECRET=.*/JWT_SECRET=${JWT_SECRET}/" .env
         sed -i '' "s/^TOTP_ENCRYPTION_KEY=.*/TOTP_ENCRYPTION_KEY=${TOTP_ENCRYPTION_KEY}/" .env
         sed -i '' "s/^POSTGRES_PASSWORD=.*/POSTGRES_PASSWORD=${POSTGRES_PASSWORD}/" .env
+    fi
+    if [ -n "${UPDATE_GITHUB_TOKEN:-}" ]; then
+        local env_file line
+        env_file=$(umask 077; mktemp ./.env.XXXXXX)
+        while IFS= read -r line || [ -n "$line" ]; do
+            case "$line" in
+                UPDATE_GITHUB_TOKEN=*) printf 'UPDATE_GITHUB_TOKEN=%s\n' "$UPDATE_GITHUB_TOKEN" ;;
+                *) printf '%s\n' "$line" ;;
+            esac
+        done < .env > "$env_file"
+        mv -f "$env_file" .env
     fi
 
     # Create data directories

@@ -108,9 +108,10 @@ FROM ${POSTGRES_IMAGE} AS pg-client
 FROM ${ALPINE_IMAGE}
 
 # Labels
+ARG SOURCE_REPOSITORY=mizaawa/zayuapi
 LABEL maintainer="mizaawa <github.com/mizaawa>"
 LABEL description="Sub2API - AI API Gateway Platform"
-LABEL org.opencontainers.image.source="https://github.com/mizaawa/sub2api"
+LABEL org.opencontainers.image.source="https://github.com/${SOURCE_REPOSITORY}"
 
 # Install runtime dependencies
 RUN apk add --no-cache \

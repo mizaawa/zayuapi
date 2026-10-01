@@ -107,7 +107,7 @@ describe('HomeView compact mode', () => {
       .toBe('https://github.com/Wei-Shaw/sub2api')
     expect(wrapper.get('[data-testid="home-upstream-github-footer"]').attributes('href'))
       .toBe('https://github.com/Wei-Shaw/sub2api')
-    expect(wrapper.html()).not.toContain('github.com/mizaawa/sub2api')
+    expect(wrapper.html()).not.toContain('github.com/mizaawa/zayuapi')
   })
 
   it('links unauthenticated visitors to login', () => {

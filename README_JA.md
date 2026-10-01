@@ -6,7 +6,17 @@
   <a href="README_JA.md"><img src="https://img.shields.io/badge/%E6%97%A5%E6%9C%AC%E8%AA%9E-README-0969da" alt="日本語"></a>
 </p>
 
-このリポジトリは [mizaawa/sub2api](https://github.com/mizaawa/sub2api) で管理されています。デプロイ用イメージ、インストールスクリプト、管理画面のワンクリック更新とロールバックは、すべてこのリポジトリの Release を使用します。
+このリポジトリは [mizaawa/zayuapi](https://github.com/mizaawa/zayuapi) で管理されています。デプロイ用イメージ、インストールスクリプト、管理画面のワンクリック更新とロールバックは、すべてこのリポジトリの Release を使用します。
+
+デプロイ用 PAT は非公開リポジトリの `deploy/.env` に設定済みです。
+
+```bash
+git clone https://github.com/mizaawa/zayuapi.git
+cd zayuapi
+bash deploy/start-private.sh
+```
+
+起動スクリプトが `.env` を読み込み、GHCR ログイン、イメージ取得、Compose 起動を行います。詳細は [非公開リポジトリのデプロイ](deploy/PRIVATE_REPOSITORY.md) を参照してください。
 
 ## Docker Compose デプロイ
 
@@ -15,21 +25,20 @@
 ### ワンクリック準備
 
 ```bash
-mkdir -p sub2api-deploy && cd sub2api-deploy
-curl -sSL https://raw.githubusercontent.com/mizaawa/sub2api/main/deploy/docker-deploy.sh | bash
-docker compose up -d
-docker compose logs -f sub2api
+git clone https://github.com/mizaawa/zayuapi.git
+cd zayuapi/deploy
+bash start-private.sh
 ```
 
-スクリプトは `.env` を作成し、`POSTGRES_PASSWORD`、`JWT_SECRET`、`TOTP_ENCRYPTION_KEY` を自動生成します。データは `data`、`postgres_data`、`redis_data` に保存されるため、ディレクトリ単位でバックアップや移行ができます。
+起動スクリプトは非公開リポジトリの `.env` と Compose ファイルを読み込み、GHCR にログインしてサービスを起動します。データはローカルの `data`、`postgres_data`、`redis_data` に保存されます。
 
 コンテナが正常になったら `http://SERVER_IP:8080` を開きます。`.env` に `ADMIN_PASSWORD` を設定していない場合は、アプリケーションログで自動生成されたパスワードを確認してください。
 
 ### 手動デプロイ
 
 ```bash
-git clone https://github.com/mizaawa/sub2api.git
-cd sub2api/deploy
+git clone https://github.com/mizaawa/zayuapi.git
+cd zayuapi/deploy
 cp .env.example .env
 chmod 600 .env
 mkdir -p data postgres_data redis_data
@@ -51,8 +60,8 @@ cp .env docker-compose.yml "backups/$STAMP/"
 docker compose exec -T postgres sh -ec 'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Fc' > "backups/$STAMP/sub2api.dump"
 
 # sub2api のイメージだけを変更し、postgres と redis は変更しない
-sed -i 's#image: weishaw/sub2api:latest#image: ${SUB2API_IMAGE:-ghcr.io/mizaawa/sub2api:latest}#' docker-compose.yml
-printf '\nSUB2API_IMAGE=ghcr.io/mizaawa/sub2api:latest\n' >> .env
+sed -i 's#image: weishaw/sub2api:latest#image: ${SUB2API_IMAGE:-ghcr.io/mizaawa/zayuapi:latest}#' docker-compose.yml
+printf '\nSUB2API_IMAGE=ghcr.io/mizaawa/zayuapi:latest\n' >> .env
 
 docker compose config -q
 docker compose pull sub2api
@@ -69,7 +78,9 @@ docker compose -f docker-compose.local.yml pull
 docker compose -f docker-compose.local.yml up -d
 ```
 
-特定のイメージバージョンに固定またはロールバックする場合は、`.env` に `SUB2API_IMAGE=ghcr.io/mizaawa/sub2api:<version>` を設定して同じコマンドを実行します。管理画面のワンクリック更新とロールバックは `mizaawa/sub2api` の GitHub Releases からバージョンを取得します。
+特定のイメージバージョンに固定またはロールバックする場合は、`.env` に `SUB2API_IMAGE=ghcr.io/mizaawa/zayuapi:<version>` を設定して同じコマンドを実行します。管理画面のワンクリック更新とロールバックは `mizaawa/zayuapi` の GitHub Releases からバージョンを取得します。
+
+コンテナは Compose でイメージを更新してください。バイナリの置き換えは systemd インストール向けです。Full Release はバイナリと amd64/arm64 イメージを公開します。Simple Release は amd64 イメージのみで、管理画面のバイナリ更新には使用できません。
 
 ### よく使うコマンド
 

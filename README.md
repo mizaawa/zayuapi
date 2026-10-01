@@ -6,7 +6,17 @@
   <a href="README_JA.md"><img src="https://img.shields.io/badge/%E6%97%A5%E6%9C%AC%E8%AA%9E-README-0969da" alt="日本語"></a>
 </p>
 
-This repository is maintained at [mizaawa/sub2api](https://github.com/mizaawa/sub2api). Deployment images, install scripts, and the in-app version update and rollback feature all use this repository's releases.
+This repository is maintained at [mizaawa/zayuapi](https://github.com/mizaawa/zayuapi). Deployment images, install scripts, and the in-app version update and rollback feature all use this repository's releases.
+
+This is a private repository. The deployment PAT is stored in the private repository's `deploy/.env`:
+
+```bash
+git clone https://github.com/mizaawa/zayuapi.git
+cd zayuapi
+bash deploy/start-private.sh
+```
+
+The startup script reads `.env`, authenticates Docker to GHCR, pulls the image and starts Compose. See [private repository deployment](deploy/PRIVATE_REPOSITORY.md) for deployment and release details.
 
 ## Docker Compose
 
@@ -15,21 +25,20 @@ Prerequisites: Docker Engine 20.10+ and Docker Compose v2+.
 ### One-command preparation
 
 ```bash
-mkdir -p sub2api-deploy && cd sub2api-deploy
-curl -sSL https://raw.githubusercontent.com/mizaawa/sub2api/main/deploy/docker-deploy.sh | bash
-docker compose up -d
-docker compose logs -f sub2api
+git clone https://github.com/mizaawa/zayuapi.git
+cd zayuapi/deploy
+bash start-private.sh
 ```
 
-The preparation script creates `.env`, generates `POSTGRES_PASSWORD`, `JWT_SECRET`, and `TOTP_ENCRYPTION_KEY`, and uses local `data`, `postgres_data`, and `redis_data` directories so the deployment can be backed up or moved as one directory.
+The startup script reads the private repository `.env` and Compose files, logs Docker into GHCR and starts the stack. Data stays in the local `data`, `postgres_data`, and `redis_data` directories.
 
 Open `http://SERVER_IP:8080` after the containers become healthy. If no `ADMIN_PASSWORD` is set in `.env`, inspect the application log for the generated password.
 
 ### Manual deployment
 
 ```bash
-git clone https://github.com/mizaawa/sub2api.git
-cd sub2api/deploy
+git clone https://github.com/mizaawa/zayuapi.git
+cd zayuapi/deploy
 cp .env.example .env
 chmod 600 .env
 mkdir -p data postgres_data redis_data
@@ -51,8 +60,8 @@ cp .env docker-compose.yml "backups/$STAMP/"
 docker compose exec -T postgres sh -ec 'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Fc' > "backups/$STAMP/sub2api.dump"
 
 # Change only the sub2api service image; leave postgres and redis unchanged.
-sed -i 's#image: weishaw/sub2api:latest#image: ${SUB2API_IMAGE:-ghcr.io/mizaawa/sub2api:latest}#' docker-compose.yml
-printf '\nSUB2API_IMAGE=ghcr.io/mizaawa/sub2api:latest\n' >> .env
+sed -i 's#image: weishaw/sub2api:latest#image: ${SUB2API_IMAGE:-ghcr.io/mizaawa/zayuapi:latest}#' docker-compose.yml
+printf '\nSUB2API_IMAGE=ghcr.io/mizaawa/zayuapi:latest\n' >> .env
 
 docker compose config -q
 docker compose pull sub2api
@@ -71,7 +80,9 @@ docker compose -f docker-compose.local.yml pull
 docker compose -f docker-compose.local.yml up -d
 ```
 
-To pin a specific published image version, set `SUB2API_IMAGE=ghcr.io/mizaawa/sub2api:<version>` in `.env`, then run the same two commands. The administrator console checks releases from `mizaawa/sub2api`; its one-click update and rollback options require release assets published by this repository.
+To pin a specific published image version, set `SUB2API_IMAGE=ghcr.io/mizaawa/zayuapi:<version>` in `.env`, then run the same two commands. The administrator console checks releases from `mizaawa/zayuapi`; its one-click update and rollback options require release assets published by this repository.
+
+Update container deployments through Compose. In-place binary replacement is intended for systemd installations; recreating a container restores the image's binary. Full releases include platform binaries and amd64/arm64 images. Simple releases contain only the amd64 image and cannot supply in-app binary updates.
 
 ### Common commands
 
