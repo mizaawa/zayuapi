@@ -88,7 +88,7 @@ export default {
 
     backup: {
       title: 'Database Backup',
-      description: 'Full database backup to S3-compatible storage with scheduled backup and restore',
+      description: 'Full database backup to S3 or WebDAV storage with scheduled backup and restore',
       s3: {
         title: 'S3 Storage Configuration',
         description: 'Configure S3-compatible storage (supports Cloudflare R2)',
@@ -107,6 +107,20 @@ export default {
         testSuccess: 'S3 connection test successful',
         testFailed: 'S3 connection test failed',
         saved: 'S3 configuration saved'
+      },
+      webdav: {
+        title: 'WebDAV Storage Configuration',
+        description: 'Store database backups on a WebDAV server.',
+        enabled: 'Use WebDAV for backups',
+        url: 'WebDAV URL',
+        username: 'Username',
+        password: 'Password',
+        passwordConfigured: 'Already configured, leave empty to keep',
+        path: 'Storage Path',
+        testConnection: 'Test Connection',
+        testSuccess: 'WebDAV connection test successful',
+        testFailed: 'WebDAV connection test failed',
+        saved: 'WebDAV configuration saved'
       },
       imageStorage: {
         title: 'Async image object storage',

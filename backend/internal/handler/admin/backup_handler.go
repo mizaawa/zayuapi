@@ -1,6 +1,10 @@
 package admin
 
 import (
+	"mime"
+	"net/http"
+	"path"
+
 	"github.com/Wei-Shaw/sub2api/internal/pkg/response"
 	"github.com/Wei-Shaw/sub2api/internal/server/middleware"
 	"github.com/Wei-Shaw/sub2api/internal/service"
@@ -54,6 +58,42 @@ func (h *BackupHandler) TestS3Connection(c *gin.Context) {
 	}
 	err := h.backupService.TestS3Connection(c.Request.Context(), req)
 	if err != nil {
+		response.Success(c, gin.H{"ok": false, "message": err.Error()})
+		return
+	}
+	response.Success(c, gin.H{"ok": true, "message": "connection successful"})
+}
+
+func (h *BackupHandler) GetWebDAVConfig(c *gin.Context) {
+	cfg, err := h.backupService.GetWebDAVConfig(c.Request.Context())
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, cfg)
+}
+
+func (h *BackupHandler) UpdateWebDAVConfig(c *gin.Context) {
+	var req service.BackupWebDAVConfig
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "Invalid request: "+err.Error())
+		return
+	}
+	cfg, err := h.backupService.UpdateWebDAVConfig(c.Request.Context(), req)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, cfg)
+}
+
+func (h *BackupHandler) TestWebDAVConnection(c *gin.Context) {
+	var req service.BackupWebDAVConfig
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "Invalid request: "+err.Error())
+		return
+	}
+	if err := h.backupService.TestWebDAVConnection(c.Request.Context(), req); err != nil {
 		response.Success(c, gin.H{"ok": false, "message": err.Error()})
 		return
 	}
@@ -159,6 +199,24 @@ func (h *BackupHandler) GetDownloadURL(c *gin.Context) {
 		return
 	}
 	response.Success(c, gin.H{"url": url})
+}
+
+// DownloadBackup streams an authenticated WebDAV backup through the API.
+func (h *BackupHandler) DownloadBackup(c *gin.Context) {
+	backupID := c.Param("id")
+	if backupID == "" {
+		response.BadRequest(c, "backup ID is required")
+		return
+	}
+	record, body, err := h.backupService.OpenBackupDownload(c.Request.Context(), backupID)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	defer func() { _ = body.Close() }()
+	c.Header("Content-Disposition", mime.FormatMediaType("attachment", map[string]string{"filename": path.Base(record.FileName)}))
+	c.Header("Cache-Control", "no-store")
+	c.DataFromReader(http.StatusOK, record.SizeBytes, "application/gzip", body, nil)
 }
 
 // ─── 恢复操作（需要重新输入管理员密码） ───

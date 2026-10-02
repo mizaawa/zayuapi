@@ -4,7 +4,7 @@ import { defineComponent, ref } from 'vue'
 
 import UsageView from '../UsageView.vue'
 
-const { list, exportList, getStats, getSnapshotV2, getById, getModelStats, listErrorLogs, routeQuery, aoaToSheet, sheetAddAoa, saveAs, xlsxWrite } = vi.hoisted(() => {
+const { list, exportList, getStats, getSnapshotV2, getById, getModelStats, listErrorLogs, routeQuery, aoaToSheet, sheetAddAoa, saveAs, xlsxWrite, showError, showSuccess } = vi.hoisted(() => {
   vi.stubGlobal('localStorage', {
     getItem: vi.fn(() => null),
     setItem: vi.fn(),
@@ -24,6 +24,8 @@ const { list, exportList, getStats, getSnapshotV2, getById, getModelStats, listE
 		sheetAddAoa: vi.fn(),
 		saveAs: vi.fn(),
 		xlsxWrite: vi.fn(() => new Uint8Array([1, 2, 3])),
+    showError: vi.fn(),
+    showSuccess: vi.fn(),
   }
 })
 
@@ -89,9 +91,9 @@ vi.mock('@/api/admin/ops', () => ({
 
 vi.mock('@/stores/app', () => ({
   useAppStore: () => ({
-    showError: vi.fn(),
+    showError,
     showWarning: vi.fn(),
-    showSuccess: vi.fn(),
+    showSuccess,
     showInfo: vi.fn(),
   }),
 }))
@@ -597,6 +599,8 @@ describe('admin UsageView columns and export', () => {
 		sheetAddAoa.mockClear()
 		saveAs.mockClear()
 		xlsxWrite.mockClear()
+    showError.mockClear()
+    showSuccess.mockClear()
 	})
 
 	afterEach(() => {
@@ -622,6 +626,72 @@ describe('admin UsageView columns and export', () => {
 		expect(row.slice(4, 8)).toEqual(['gpt-5.6-sol', 'gpt-5.5', 'gpt-5.4', 'Yes'])
 		expect(saveAs).toHaveBeenCalledTimes(1)
 	})
+
+  it('exports all pages while counting once and keeping the original filters', async () => {
+    const wrapper = mountRouteFilteredUsageView()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    const originalStartDate = vm.filters.start_date
+    const originalEndDate = vm.filters.end_date
+    vm.filters.model = 'gpt-5.4'
+    const log = { model: 'gpt-5.4', input_tokens: 1, output_tokens: 1 }
+    exportList.mockReset()
+    exportList.mockImplementationOnce(() => {
+      vm.filters.model = 'changed-model'
+      vm.filters.start_date = '2026-01-01'
+      return Promise.resolve({ items: Array.from({ length: 1000 }, () => log), total: 1001 })
+    })
+    exportList.mockResolvedValueOnce({ items: [log], total: 1001 })
+
+    await vm.exportToExcel()
+
+    expect(exportList).toHaveBeenCalledTimes(2)
+    for (let page = 1; page <= 2; page++) {
+      expect(exportList).toHaveBeenNthCalledWith(page, expect.objectContaining({
+        page, page_size: 1000, exact_total: page === 1, model: 'gpt-5.4', start_date: originalStartDate,
+      }), expect.objectContaining({ signal: expect.any(AbortSignal), timeout: 120000 }))
+    }
+    expect(sheetAddAoa.mock.calls.map(call => call[1].length)).toEqual([1000, 1])
+    expect(saveAs).toHaveBeenCalledWith(expect.any(Blob), `usage_${originalStartDate}_to_${originalEndDate}.xlsx`)
+    expect(vm.exportProgress.current).toBe(1001)
+    wrapper.unmount()
+  })
+
+  it('cancels an in-flight export without downloading or showing an error', async () => {
+    const wrapper = mountRouteFilteredUsageView()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    exportList.mockImplementationOnce((_params, { signal }) => new Promise((_resolve, reject) => {
+      signal.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')), { once: true })
+    }))
+    const pending = vm.exportToExcel()
+    await flushPromises()
+    vm.cancelExport()
+    await pending
+
+    expect(saveAs).not.toHaveBeenCalled()
+    expect(showError).not.toHaveBeenCalled()
+    expect(vm.exporting).toBe(false)
+    expect(vm.exportProgress.show).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('does not download a partial export when a later page fails and shows the reason', async () => {
+    const wrapper = mountRouteFilteredUsageView()
+    await flushPromises()
+    exportList.mockReset()
+    exportList.mockResolvedValueOnce({ items: Array.from({ length: 1000 }, () => ({ model: 'gpt-5.4' })), total: 1001 })
+    exportList.mockRejectedValueOnce({ status: 503, message: 'Database unavailable' })
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    await (wrapper.vm as any).exportToExcel()
+
+    expect(saveAs).not.toHaveBeenCalled()
+    expect(showSuccess).not.toHaveBeenCalled()
+    expect(showError).toHaveBeenCalledWith('usage.exportFailed: Database unavailable')
+    errorSpy.mockRestore()
+    wrapper.unmount()
+  })
 
   it('shows the cache hit rate between tokens and cost and allows toggling it', async () => {
     const wrapper = mountRouteFilteredUsageView()

@@ -102,11 +102,12 @@ export interface AdminUsageQueryParams extends UsageQueryParams {
  */
 export async function list(
   params: AdminUsageQueryParams,
-  options?: { signal?: AbortSignal }
+  options?: { signal?: AbortSignal; timeout?: number }
 ): Promise<PaginatedResponse<AdminUsageLog>> {
   const { data } = await apiClient.get<PaginatedResponse<AdminUsageLog>>('/admin/usage', {
     params,
-    signal: options?.signal
+    signal: options?.signal,
+    timeout: options?.timeout
   })
   return data
 }

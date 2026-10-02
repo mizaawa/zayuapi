@@ -10,6 +10,15 @@ export interface BackupS3Config {
   force_path_style: boolean
 }
 
+export interface BackupWebDAVConfig {
+  enabled: boolean
+  url: string
+  username: string
+  password?: string
+  path: string
+  password_configured?: boolean
+}
+
 export interface BackupScheduleConfig {
   enabled: boolean
   cron_expr: string
@@ -20,6 +29,7 @@ export interface BackupScheduleConfig {
 export interface BackupRecord {
   id: string
   status: 'pending' | 'running' | 'completed' | 'failed'
+  storage_type?: 's3' | 'webdav'
   backup_type: string
   file_name: string
   s3_key: string
@@ -76,6 +86,22 @@ export async function updateS3Config(config: BackupS3Config): Promise<BackupS3Co
 
 export async function testS3Connection(config: BackupS3Config): Promise<TestS3Response> {
   const { data } = await apiClient.post<TestS3Response>('/admin/backups/s3-config/test', config)
+  return data
+}
+
+// WebDAV backup storage
+export async function getWebDAVConfig(): Promise<BackupWebDAVConfig> {
+  const { data } = await apiClient.get<BackupWebDAVConfig>('/admin/backups/webdav-config')
+  return data
+}
+
+export async function updateWebDAVConfig(config: BackupWebDAVConfig): Promise<BackupWebDAVConfig> {
+  const { data } = await apiClient.put<BackupWebDAVConfig>('/admin/backups/webdav-config', config)
+  return data
+}
+
+export async function testWebDAVConnection(config: BackupWebDAVConfig): Promise<TestS3Response> {
+  const { data } = await apiClient.post<TestS3Response>('/admin/backups/webdav-config/test', config)
   return data
 }
 
@@ -161,6 +187,11 @@ export async function getDownloadURL(id: string): Promise<BackupDownloadResponse
   return data
 }
 
+export async function downloadBackupFile(id: string): Promise<Blob> {
+  const { data } = await apiClient.get<Blob>(`/admin/backups/${id}/download`, { responseType: 'blob' })
+  return data
+}
+
 // Restore
 export async function restoreBackup(id: string, password: string): Promise<BackupRecord> {
   const { data } = await apiClient.post<BackupRecord>(`/admin/backups/${id}/restore`, { password })
@@ -171,6 +202,9 @@ export const backupAPI = {
   getS3Config,
   updateS3Config,
   testS3Connection,
+  getWebDAVConfig,
+  updateWebDAVConfig,
+  testWebDAVConnection,
   getImageStorageConfig,
   updateImageStorageConfig,
   testImageStorageConnection,
@@ -181,6 +215,7 @@ export const backupAPI = {
   getBackup,
   deleteBackup,
   getDownloadURL,
+  downloadBackupFile,
   restoreBackup,
 }
 

@@ -305,6 +305,45 @@ describe('API Client', () => {
 
       window.removeEventListener('admin-compliance-required', listener)
     })
+
+    it('从 AxiosHeaders 中解析 Retry-After 秒数并返回限流错误', async () => {
+      const adapter = vi.fn().mockRejectedValue({
+        response: {
+          status: 429,
+          data: { message: 'Too many requests' },
+          headers: new axios.AxiosHeaders({ 'Retry-After': '7' }),
+        },
+        config: { url: '/test' },
+        code: 'ERR_BAD_REQUEST',
+        message: 'Request failed with status code 429',
+      })
+      apiClient.defaults.adapter = adapter
+
+      await expect(apiClient.get('/test')).rejects.toMatchObject({
+        status: 429,
+        retryAfter: 7,
+      })
+    })
+
+    it('also parses Retry-After from ordinary headers as an HTTP date', async () => {
+      const retryAt = new Date(Date.now() + 5000).toUTCString()
+      const adapter = vi.fn().mockRejectedValue({
+        response: {
+          status: 429,
+          data: {},
+          headers: { 'retry-after': retryAt },
+        },
+        config: { url: '/test' },
+        code: 'ERR_BAD_REQUEST',
+        message: 'Request failed with status code 429',
+      })
+      apiClient.defaults.adapter = adapter
+
+      await expect(apiClient.get('/test')).rejects.toMatchObject({
+        status: 429,
+        retryAfter: 5,
+      })
+    })
   })
 
   // --- 401 Token 刷新 ---
@@ -452,6 +491,21 @@ describe('API Client', () => {
           message: 'Network error. Please check your connection.',
         })
       )
+    })
+
+    it.each(['ECONNABORTED', 'ETIMEDOUT'])('超时 %s 保留 code 和具体 message', async (code) => {
+      const adapter = vi.fn().mockRejectedValue({
+        code,
+        message: 'timeout of 120000ms exceeded',
+        config: { url: '/test' },
+      })
+      apiClient.defaults.adapter = adapter
+
+      await expect(apiClient.get('/test')).rejects.toEqual({
+        status: 0,
+        code,
+        message: 'timeout of 120000ms exceeded',
+      })
     })
   })
 
