@@ -181,7 +181,7 @@ func TestWebDAVBackupStoreFollowsPikPakCDNRedirectWithoutCredentials(t *testing.
 	certPool.AddCert(server.Certificate())
 	dialer := &net.Dialer{}
 	store.client.Transport = &http.Transport{
-		TLSClientConfig: &tls.Config{RootCAs: certPool, ServerName: "example.com"},
+		TLSClientConfig: &tls.Config{RootCAs: certPool, ServerName: "example.com", MinVersion: tls.VersionTLS12},
 		DialContext: func(ctx context.Context, network, _ string) (net.Conn, error) {
 			return dialer.DialContext(ctx, network, server.Listener.Addr().String())
 		},
@@ -189,7 +189,7 @@ func TestWebDAVBackupStoreFollowsPikPakCDNRedirectWithoutCredentials(t *testing.
 
 	body, err := store.Download(context.Background(), "dump.sql.gz")
 	require.NoError(t, err)
-	defer body.Close()
+	defer func() { require.NoError(t, body.Close()) }()
 	got, err := io.ReadAll(body)
 	require.NoError(t, err)
 	require.Equal(t, downloaded, string(got))
@@ -257,7 +257,7 @@ func TestWebDAVConnectionTestRetriesTemporaryPikPakCDN405(t *testing.T) {
 	certPool.AddCert(server.Certificate())
 	dialer := &net.Dialer{}
 	store.client.Transport = &http.Transport{
-		TLSClientConfig: &tls.Config{RootCAs: certPool, ServerName: "example.com"},
+		TLSClientConfig: &tls.Config{RootCAs: certPool, ServerName: "example.com", MinVersion: tls.VersionTLS12},
 		DialContext: func(ctx context.Context, network, _ string) (net.Conn, error) {
 			return dialer.DialContext(ctx, network, server.Listener.Addr().String())
 		},
