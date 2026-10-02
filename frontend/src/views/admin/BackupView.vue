@@ -318,45 +318,94 @@
         <div class="mb-4 flex flex-wrap items-start justify-between gap-3">
           <div>
             <h3 class="text-base font-semibold text-gray-900 dark:text-white">
+              {{ t('admin.backup.databaseStorage.title') }}
+            </h3>
+            <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+              {{ t('admin.backup.databaseStorage.description') }}
+            </p>
+          </div>
+          <button
+            type="button"
+            class="btn btn-secondary btn-sm"
+            :disabled="loadingDatabaseStorageStats"
+            @click="measureDatabaseStorage"
+          >
+            <Icon :name="databaseStorageStats ? 'refresh' : 'database'" size="sm" />
+            {{ loadingDatabaseStorageStats
+              ? t('common.loading')
+              : databaseStorageStats ? t('admin.backup.databaseStorage.remeasure') : t('admin.backup.databaseStorage.measure') }}
+          </button>
+        </div>
+
+        <div v-if="databaseStorageStats" class="border-y border-gray-200 py-4 dark:border-dark-700">
+          <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
+            <div>
+              <p class="text-xs text-gray-500 dark:text-gray-400">{{ t('admin.backup.databaseStorage.database') }}</p>
+              <p class="mt-1 break-all text-lg font-semibold text-gray-900 dark:text-white">{{ databaseStorageStats.database_name }}</p>
+            </div>
+            <div>
+              <p class="text-xs text-gray-500 dark:text-gray-400">{{ t('admin.backup.databaseStorage.databaseSize') }}</p>
+              <p class="mt-1 text-lg font-semibold text-gray-900 dark:text-white">{{ formatSize(databaseStorageStats.database_bytes) }}</p>
+            </div>
+            <div>
+              <p class="text-xs text-gray-500 dark:text-gray-400">{{ t('admin.backup.databaseStorage.tableSize') }}</p>
+              <p class="mt-1 text-lg font-semibold text-gray-900 dark:text-white">{{ formatSize(databaseStorageStats.table_bytes) }}</p>
+            </div>
+            <div>
+              <p class="text-xs text-gray-500 dark:text-gray-400">{{ t('admin.backup.databaseStorage.indexSizeTotal') }}</p>
+              <p class="mt-1 text-lg font-semibold text-gray-900 dark:text-white">{{ formatSize(databaseStorageStats.index_bytes) }}</p>
+            </div>
+            <div>
+              <p class="text-xs text-gray-500 dark:text-gray-400">{{ t('admin.backup.databaseStorage.businessTotal') }}</p>
+              <p class="mt-1 text-lg font-semibold text-gray-900 dark:text-white">{{ formatSize(databaseStorageStats.total_bytes) }}</p>
+            </div>
+          </div>
+
+          <div class="mt-4 max-h-96 overflow-auto border-t border-gray-200 dark:border-dark-700">
+            <table class="min-w-full text-left">
+              <thead class="sticky top-0 bg-gray-50 dark:bg-dark-800">
+                <tr class="text-xs text-gray-500 dark:text-gray-400">
+                  <th class="py-2 pr-4 font-medium">{{ t('admin.backup.databaseStorage.tableName') }}</th>
+                  <th class="py-2 pr-4 text-right font-medium">{{ t('admin.backup.databaseStorage.tableData') }}</th>
+                  <th class="py-2 pr-4 text-right font-medium">{{ t('admin.backup.databaseStorage.indexSize') }}</th>
+                  <th class="py-2 text-right font-medium">{{ t('admin.backup.databaseStorage.totalSize') }}</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-gray-100 dark:divide-dark-700">
+                <tr v-for="table in databaseStorageStats.tables" :key="table.table_name">
+                  <td class="py-2 pr-4 font-mono text-xs text-gray-800 dark:text-gray-200">{{ table.table_name }}</td>
+                  <td class="py-2 pr-4 text-right text-xs text-gray-600 dark:text-gray-300">{{ formatSize(table.table_bytes) }}</td>
+                  <td class="py-2 pr-4 text-right text-xs text-gray-600 dark:text-gray-300">{{ formatSize(table.index_bytes) }}</td>
+                  <td class="py-2 text-right text-xs font-medium text-gray-800 dark:text-gray-200">{{ formatSize(table.total_bytes) }}</td>
+                </tr>
+                <tr v-if="databaseStorageStats.tables.length === 0">
+                  <td colspan="4" class="py-4 text-center text-sm text-gray-500 dark:text-gray-400">
+                    {{ t('admin.backup.databaseStorage.noTables') }}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p class="mt-3 text-xs text-gray-500 dark:text-gray-400">
+            {{ t('admin.backup.databaseStorage.measuredAt', { time: formatDate(databaseStorageStats.measured_at) }) }}
+          </p>
+        </div>
+        <p v-else class="border-y border-gray-200 py-4 text-sm text-gray-500 dark:border-dark-700 dark:text-gray-400">
+          {{ t('admin.backup.databaseStorage.notMeasured') }}
+        </p>
+      </div>
+
+      <div class="card p-6">
+        <div class="mb-4 flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h3 class="text-base font-semibold text-gray-900 dark:text-white">
               {{ t('admin.backup.usageLogs.title') }}
             </h3>
             <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
               {{ t('admin.backup.usageLogs.description') }}
             </p>
           </div>
-          <button
-            type="button"
-            class="btn btn-secondary btn-sm"
-            :disabled="loadingUsageStats"
-            @click="measureUsageLogs"
-          >
-            <Icon :name="usageStats ? 'refresh' : 'database'" size="sm" />
-            {{ loadingUsageStats
-              ? t('common.loading')
-              : usageStats ? t('admin.backup.usageLogs.remeasure') : t('admin.backup.usageLogs.measure') }}
-          </button>
         </div>
-
-        <div v-if="usageStats" class="grid grid-cols-1 gap-4 border-y border-gray-200 py-4 dark:border-dark-700 sm:grid-cols-3">
-          <div>
-            <p class="text-xs text-gray-500 dark:text-gray-400">{{ t('admin.backup.usageLogs.tableSize') }}</p>
-            <p class="mt-1 text-lg font-semibold text-gray-900 dark:text-white">{{ formatSize(usageStats.table_bytes) }}</p>
-          </div>
-          <div>
-            <p class="text-xs text-gray-500 dark:text-gray-400">{{ t('admin.backup.usageLogs.indexSize') }}</p>
-            <p class="mt-1 text-lg font-semibold text-gray-900 dark:text-white">{{ formatSize(usageStats.index_bytes) }}</p>
-          </div>
-          <div>
-            <p class="text-xs text-gray-500 dark:text-gray-400">{{ t('admin.backup.usageLogs.totalSize') }}</p>
-            <p class="mt-1 text-lg font-semibold text-gray-900 dark:text-white">{{ formatSize(usageStats.total_bytes) }}</p>
-          </div>
-          <p class="text-xs text-gray-500 dark:text-gray-400 sm:col-span-3">
-            {{ t('admin.backup.usageLogs.measuredAt', { time: formatDate(usageStats.measured_at) }) }}
-          </p>
-        </div>
-        <p v-else class="border-y border-gray-200 py-4 text-sm text-gray-500 dark:border-dark-700 dark:text-gray-400">
-          {{ t('admin.backup.usageLogs.notMeasured') }}
-        </p>
 
         <div class="mt-5">
           <div class="space-y-3">
@@ -576,6 +625,17 @@
         <input id="manual-usage-retention" v-model.number="manualUsageRetentionDays" type="number" min="1" max="3650" step="1" class="input w-full" :disabled="creatingUsageCleanup || manualUsageDeleteAll" />
       </div>
     </ConfirmDialog>
+    <ConfirmDialog
+      :show="showScheduledDeleteAllConfirm"
+      :title="t('admin.backup.usageLogs.confirmScheduledDeleteAllTitle')"
+      :message="t('admin.backup.usageLogs.confirmScheduledDeleteAllMessage', { days: usageCleanupSettings.interval_days })"
+      :confirm-text="t('admin.backup.usageLogs.confirmScheduledDeleteAll')"
+      :cancel-text="t('common.cancel')"
+      :danger="true"
+      :loading="savingUsageCleanupSettings"
+      @confirm="confirmScheduledDeleteAllSettings"
+      @cancel="showScheduledDeleteAllConfirm = false"
+    />
 </template>
 
 <script setup lang="ts">
@@ -592,7 +652,7 @@ import type {
   BackupDownloadPart,
   ImageStorageConfig,
 } from '@/api/admin/backup'
-import type { UsageCleanupScheduleSettings, UsageLogsStorageStats } from '@/api/admin/usage'
+import type { DatabaseStorageStats, UsageCleanupScheduleSettings } from '@/api/admin/usage'
 import { useStepUp, isStepUpBlocked, isStepUpCancelled, stepUpBlockReason } from '@/composables/useStepUp'
 import TotpStepUpDialog from '@/components/auth/TotpStepUpDialog.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
@@ -602,13 +662,14 @@ const { t } = useI18n()
 const appStore = useAppStore()
 const backupStepUp = useStepUp()
 
-const usageStats = ref<UsageLogsStorageStats | null>(null)
-const loadingUsageStats = ref(false)
+const databaseStorageStats = ref<DatabaseStorageStats | null>(null)
+const loadingDatabaseStorageStats = ref(false)
 const usageCleanupSettings = ref<UsageCleanupScheduleSettings>({ enabled: false, interval_days: 1, retention_days: 90, delete_all: false })
 const loadingUsageCleanupSettings = ref(false)
 const usageCleanupSettingsReady = ref(false)
 const savingUsageCleanupSettings = ref(false)
 const showUsageCleanupConfirm = ref(false)
+const showScheduledDeleteAllConfirm = ref(false)
 const creatingUsageCleanup = ref(false)
 const manualUsageRetentionDays = ref(90)
 const manualUsageDeleteAll = ref(false)
@@ -943,6 +1004,19 @@ async function saveUsageCleanupSettings() {
     appStore.showError(t('admin.backup.usageLogs.invalidIntervalDays'))
     return
   }
+  if (usageCleanupSettings.value.enabled && usageCleanupSettings.value.delete_all) {
+    showScheduledDeleteAllConfirm.value = true
+    return
+  }
+  await persistUsageCleanupSettings()
+}
+
+async function confirmScheduledDeleteAllSettings() {
+  showScheduledDeleteAllConfirm.value = false
+  await persistUsageCleanupSettings()
+}
+
+async function persistUsageCleanupSettings() {
   savingUsageCleanupSettings.value = true
   try {
     usageCleanupSettings.value = await adminAPI.usage.updateRetentionSettings(usageCleanupSettings.value)
@@ -954,14 +1028,14 @@ async function saveUsageCleanupSettings() {
   }
 }
 
-async function measureUsageLogs() {
-  loadingUsageStats.value = true
+async function measureDatabaseStorage() {
+  loadingDatabaseStorageStats.value = true
   try {
-    usageStats.value = await adminAPI.usage.getStorageStats()
+    databaseStorageStats.value = await adminAPI.usage.getDatabaseStorageStats()
   } catch (error) {
     appStore.showError((error as { message?: string })?.message || t('errors.networkError'))
   } finally {
-    loadingUsageStats.value = false
+    loadingDatabaseStorageStats.value = false
   }
 }
 
@@ -1179,7 +1253,9 @@ function formatSize(bytes: number): string {
   if (!bytes || bytes <= 0) return '-'
   if (bytes < 1024) return `${bytes} B`
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+  if (bytes < 1024 * 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`
+  return `${(bytes / (1024 * 1024 * 1024 * 1024)).toFixed(1)} TB`
 }
 
 function formatDate(value?: string): string {

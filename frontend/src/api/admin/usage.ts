@@ -90,7 +90,17 @@ export interface UsageCleanupScheduleSettings {
   last_run_at?: string | null
 }
 
-export interface UsageLogsStorageStats {
+export interface DatabaseTableStorageStats {
+  table_name: string
+  table_bytes: number
+  index_bytes: number
+  total_bytes: number
+}
+
+export interface DatabaseStorageStats {
+  database_name: string
+  database_bytes: number
+  tables: DatabaseTableStorageStats[]
   table_bytes: number
   index_bytes: number
   total_bytes: number
@@ -234,8 +244,8 @@ export async function updateRetentionSettings(payload: UsageCleanupScheduleSetti
   return data
 }
 
-export async function getStorageStats(): Promise<UsageLogsStorageStats> {
-  const { data } = await apiClient.get<UsageLogsStorageStats>('/admin/usage/storage-stats')
+export async function getDatabaseStorageStats(): Promise<DatabaseStorageStats> {
+  const { data } = await apiClient.get<DatabaseStorageStats>('/admin/usage/database-storage-stats')
   return data
 }
 
@@ -257,7 +267,7 @@ export const adminUsageAPI = {
   cancelCleanupTask,
   getRetentionSettings,
   updateRetentionSettings,
-  getStorageStats,
+  getDatabaseStorageStats,
   createRetentionCleanup
 }
 

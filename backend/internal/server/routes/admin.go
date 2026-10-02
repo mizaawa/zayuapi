@@ -669,7 +669,7 @@ func registerUsageRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 		usage.GET("/stats", h.Admin.Usage.Stats)
 		usage.GET("/search-users", h.Admin.Usage.SearchUsers)
 		usage.GET("/search-api-keys", h.Admin.Usage.SearchAPIKeys)
-		usage.GET("/storage-stats", h.Admin.Usage.GetStorageStats)
+		usage.GET("/database-storage-stats", h.Admin.Usage.GetDatabaseStorageStats)
 		usage.GET("/retention-settings", h.Admin.Usage.GetCleanupSettings)
 		usage.PUT("/retention-settings", h.Admin.Usage.UpdateCleanupSettings)
 		usage.POST("/retention-cleanup", h.Admin.Usage.CreateRetentionCleanup)
