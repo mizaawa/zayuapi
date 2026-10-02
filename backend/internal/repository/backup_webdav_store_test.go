@@ -19,10 +19,11 @@ func TestWebDAVBackupStoreUploadDownloadDeleteAndConnectionTest(t *testing.T) {
 	const username = "backup-user"
 	const password = "backup-password"
 	const expectedRoot = "/remote.php/dav/files/backup-user"
-	const expectedPrefix = expectedRoot + "/database/backups/"
+	const expectedPrefix = expectedRoot + "/个人兴趣/服务器自动备份/"
 	var mu sync.Mutex
 	objects := make(map[string][]byte)
 	var methods []string
+	probeGets := 0
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotUser, gotPassword, ok := r.BasicAuth()
 		if !ok || gotUser != username || gotPassword != password {
@@ -60,7 +61,16 @@ func TestWebDAVBackupStoreUploadDownloadDeleteAndConnectionTest(t *testing.T) {
 			}
 			key := strings.TrimPrefix(r.URL.Path, expectedPrefix)
 			mu.Lock()
+			if strings.HasPrefix(key, "zayuapi-connection-test-") && probeGets == 0 {
+				probeGets++
+				mu.Unlock()
+				http.NotFound(w, r)
+				return
+			}
 			data, found := objects[key]
+			if strings.HasPrefix(key, "zayuapi-connection-test-") {
+				probeGets++
+			}
 			mu.Unlock()
 			if !found {
 				http.NotFound(w, r)
@@ -89,7 +99,7 @@ func TestWebDAVBackupStoreUploadDownloadDeleteAndConnectionTest(t *testing.T) {
 		WebDAVURL:      server.URL + "/remote.php/dav/files/backup-user",
 		WebDAVUsername: username,
 		WebDAVPassword: password,
-		WebDAVPath:     "database/backups",
+		WebDAVPath:     "个人兴趣/服务器自动备份",
 	})
 	require.NoError(t, err)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -117,6 +127,7 @@ func TestWebDAVBackupStoreUploadDownloadDeleteAndConnectionTest(t *testing.T) {
 	require.Contains(t, methods, http.MethodPut)
 	require.Contains(t, methods, http.MethodGet)
 	require.Contains(t, methods, http.MethodDelete)
+	require.Equal(t, 2, probeGets, "connection probe retries once when the PUT is not immediately visible")
 	require.Empty(t, objects)
 }
 

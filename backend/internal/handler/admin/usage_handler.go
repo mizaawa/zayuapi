@@ -57,6 +57,18 @@ type CreateUsageCleanupTaskRequest struct {
 	Timezone    string  `json:"timezone"`
 }
 
+type UpdateUsageCleanupSettingsRequest struct {
+	Enabled       bool `json:"enabled"`
+	IntervalDays  int  `json:"interval_days"`
+	RetentionDays int  `json:"retention_days"`
+	DeleteAll     bool `json:"delete_all"`
+}
+
+type CreateUsageRetentionCleanupRequest struct {
+	RetentionDays int `json:"retention_days"`
+	DeleteAll     bool `json:"delete_all"`
+}
+
 // List handles listing all usage records with filters
 // GET /api/v1/admin/usage
 func (h *UsageHandler) List(c *gin.Context) {
@@ -476,6 +488,78 @@ func (h *UsageHandler) ListCleanupTasks(c *gin.Context) {
 	}
 	logger.LegacyPrintf("handler.admin.usage", "[UsageCleanup] 返回清理任务列表: operator=%d total=%d items=%d page=%d page_size=%d", operator, result.Total, len(out), page, pageSize)
 	response.Paginated(c, out, result.Total, page, pageSize)
+}
+
+func (h *UsageHandler) GetCleanupSettings(c *gin.Context) {
+	if h.cleanupService == nil {
+		response.Error(c, http.StatusServiceUnavailable, "Usage cleanup service unavailable")
+		return
+	}
+	settings, err := h.cleanupService.GetScheduleSettings(c.Request.Context())
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, settings)
+}
+
+func (h *UsageHandler) UpdateCleanupSettings(c *gin.Context) {
+	if h.cleanupService == nil {
+		response.Error(c, http.StatusServiceUnavailable, "Usage cleanup service unavailable")
+		return
+	}
+	subject, ok := middleware.GetAuthSubjectFromContext(c)
+	if !ok || subject.UserID <= 0 {
+		response.Unauthorized(c, "Unauthorized")
+		return
+	}
+	var req UpdateUsageCleanupSettingsRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "Invalid request: "+err.Error())
+		return
+	}
+	settings, err := h.cleanupService.UpdateScheduleSettings(c.Request.Context(), req.Enabled, req.IntervalDays, req.RetentionDays, req.DeleteAll, subject.UserID)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, settings)
+}
+
+func (h *UsageHandler) GetStorageStats(c *gin.Context) {
+	if h.cleanupService == nil {
+		response.Error(c, http.StatusServiceUnavailable, "Usage cleanup service unavailable")
+		return
+	}
+	stats, err := h.cleanupService.GetStorageStats(c.Request.Context())
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, stats)
+}
+
+func (h *UsageHandler) CreateRetentionCleanup(c *gin.Context) {
+	if h.cleanupService == nil {
+		response.Error(c, http.StatusServiceUnavailable, "Usage cleanup service unavailable")
+		return
+	}
+	subject, ok := middleware.GetAuthSubjectFromContext(c)
+	if !ok || subject.UserID <= 0 {
+		response.Unauthorized(c, "Unauthorized")
+		return
+	}
+	var req CreateUsageRetentionCleanupRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "Invalid request: "+err.Error())
+		return
+	}
+	task, err := h.cleanupService.CreateRetentionTask(c.Request.Context(), req.RetentionDays, req.DeleteAll, subject.UserID)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, dto.UsageCleanupTaskFromService(task))
 }
 
 // CreateCleanupTask handles creating a usage cleanup task

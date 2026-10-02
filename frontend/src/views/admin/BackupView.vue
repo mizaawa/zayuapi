@@ -313,6 +313,115 @@
           </table>
         </div>
       </div>
+
+      <div class="card p-6">
+        <div class="mb-4 flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h3 class="text-base font-semibold text-gray-900 dark:text-white">
+              {{ t('admin.backup.usageLogs.title') }}
+            </h3>
+            <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+              {{ t('admin.backup.usageLogs.description') }}
+            </p>
+          </div>
+          <button
+            type="button"
+            class="btn btn-secondary btn-sm"
+            :disabled="loadingUsageStats"
+            @click="measureUsageLogs"
+          >
+            <Icon :name="usageStats ? 'refresh' : 'database'" size="sm" />
+            {{ loadingUsageStats
+              ? t('common.loading')
+              : usageStats ? t('admin.backup.usageLogs.remeasure') : t('admin.backup.usageLogs.measure') }}
+          </button>
+        </div>
+
+        <div v-if="usageStats" class="grid grid-cols-1 gap-4 border-y border-gray-200 py-4 dark:border-dark-700 sm:grid-cols-3">
+          <div>
+            <p class="text-xs text-gray-500 dark:text-gray-400">{{ t('admin.backup.usageLogs.tableSize') }}</p>
+            <p class="mt-1 text-lg font-semibold text-gray-900 dark:text-white">{{ formatSize(usageStats.table_bytes) }}</p>
+          </div>
+          <div>
+            <p class="text-xs text-gray-500 dark:text-gray-400">{{ t('admin.backup.usageLogs.indexSize') }}</p>
+            <p class="mt-1 text-lg font-semibold text-gray-900 dark:text-white">{{ formatSize(usageStats.index_bytes) }}</p>
+          </div>
+          <div>
+            <p class="text-xs text-gray-500 dark:text-gray-400">{{ t('admin.backup.usageLogs.totalSize') }}</p>
+            <p class="mt-1 text-lg font-semibold text-gray-900 dark:text-white">{{ formatSize(usageStats.total_bytes) }}</p>
+          </div>
+          <p class="text-xs text-gray-500 dark:text-gray-400 sm:col-span-3">
+            {{ t('admin.backup.usageLogs.measuredAt', { time: formatDate(usageStats.measured_at) }) }}
+          </p>
+        </div>
+        <p v-else class="border-y border-gray-200 py-4 text-sm text-gray-500 dark:border-dark-700 dark:text-gray-400">
+          {{ t('admin.backup.usageLogs.notMeasured') }}
+        </p>
+
+        <div class="mt-5">
+          <div class="space-y-3">
+            <label class="inline-flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-300">
+              <input v-model="usageCleanupSettings.enabled" type="checkbox" :disabled="!usageCleanupSettingsReady || savingUsageCleanupSettings" />
+              <span>{{ t('admin.backup.usageLogs.scheduledEnabled') }}</span>
+            </label>
+            <div v-if="usageCleanupSettings.enabled" class="max-w-xs">
+              <label for="usage-cleanup-interval" class="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-400">
+                {{ t('admin.backup.usageLogs.intervalDays') }}
+              </label>
+              <input
+                id="usage-cleanup-interval"
+                v-model.number="usageCleanupSettings.interval_days"
+                type="number"
+                min="1"
+                max="365"
+                step="1"
+                class="input w-full"
+              />
+              <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                {{ t('admin.backup.usageLogs.intervalHint', { days: usageCleanupSettings.interval_days }) }}
+              </p>
+            </div>
+            <div class="max-w-xs">
+              <div class="mb-1 flex flex-wrap items-center gap-x-3 gap-y-1">
+                <label for="usage-cleanup-retention" class="text-xs font-medium text-gray-600 dark:text-gray-400">
+                  {{ t('admin.backup.usageLogs.retentionDays') }}
+                </label>
+                <label class="inline-flex items-center gap-1.5 text-xs text-gray-600 dark:text-gray-400">
+                  <input v-model="usageCleanupSettings.delete_all" type="checkbox" :disabled="!usageCleanupSettingsReady || savingUsageCleanupSettings" />
+                  <span>{{ t('admin.backup.usageLogs.deleteAll') }}</span>
+                </label>
+              </div>
+              <input
+                id="usage-cleanup-retention"
+                v-model.number="usageCleanupSettings.retention_days"
+                type="number"
+                min="1"
+                max="3650"
+                step="1"
+                class="input w-full"
+                :disabled="usageCleanupSettings.delete_all || !usageCleanupSettingsReady || savingUsageCleanupSettings"
+              />
+            </div>
+            <p class="text-xs text-gray-500 dark:text-gray-400">
+              {{ usageCleanupSettings.delete_all
+                ? t('admin.backup.usageLogs.deleteAllHint')
+                : usageCleanupSettings.enabled
+                ? t('admin.backup.usageLogs.retentionHint', { days: usageCleanupSettings.retention_days })
+                : t('admin.backup.usageLogs.disabledHint') }}
+            </p>
+          </div>
+        </div>
+
+        <div class="mt-5 flex flex-wrap items-center justify-end gap-2 border-t border-gray-200 pt-4 dark:border-dark-700">
+          <button type="button" class="btn btn-primary btn-sm" :disabled="!usageCleanupSettingsReady || savingUsageCleanupSettings" @click="saveUsageCleanupSettings">
+            {{ savingUsageCleanupSettings ? t('common.loading') : t('common.save') }}
+          </button>
+          <button type="button" class="btn btn-danger btn-sm" :disabled="!usageCleanupSettingsReady || creatingUsageCleanup" @click="openUsageCleanupConfirm">
+            <Icon name="trash" size="sm" />
+            {{ creatingUsageCleanup ? t('common.loading') : t('admin.backup.usageLogs.manualCleanup') }}
+          </button>
+        </div>
+      </div>
     </div>
 
     <!-- Cloudflare R2 Setup Guide Modal -->
@@ -441,6 +550,32 @@
       </transition>
     </teleport>
     <TotpStepUpDialog :controller="backupStepUp" />
+    <ConfirmDialog
+      :show="showUsageCleanupConfirm"
+      :title="t('admin.backup.usageLogs.confirmTitle')"
+      :message="manualUsageDeleteAll
+        ? t('admin.backup.usageLogs.confirmMessageAll')
+        : t('admin.backup.usageLogs.confirmMessage', { days: manualUsageRetentionDays })"
+      :confirm-text="t('admin.backup.usageLogs.confirmCleanup')"
+      :cancel-text="t('common.cancel')"
+      :danger="true"
+      :loading="creatingUsageCleanup"
+      @confirm="confirmUsageCleanup"
+      @cancel="showUsageCleanupConfirm = false"
+    >
+      <div>
+        <div class="mb-1 flex flex-wrap items-center gap-x-3 gap-y-1">
+          <label for="manual-usage-retention" class="text-sm font-medium text-gray-700 dark:text-gray-300">
+            {{ t('admin.backup.usageLogs.retentionDays') }}
+          </label>
+          <label class="inline-flex items-center gap-1.5 text-sm text-gray-700 dark:text-gray-300">
+            <input v-model="manualUsageDeleteAll" type="checkbox" :disabled="creatingUsageCleanup" />
+            <span>{{ t('admin.backup.usageLogs.deleteAll') }}</span>
+          </label>
+        </div>
+        <input id="manual-usage-retention" v-model.number="manualUsageRetentionDays" type="number" min="1" max="3650" step="1" class="input w-full" :disabled="creatingUsageCleanup || manualUsageDeleteAll" />
+      </div>
+    </ConfirmDialog>
 </template>
 
 <script setup lang="ts">
@@ -457,12 +592,26 @@ import type {
   BackupDownloadPart,
   ImageStorageConfig,
 } from '@/api/admin/backup'
+import type { UsageCleanupScheduleSettings, UsageLogsStorageStats } from '@/api/admin/usage'
 import { useStepUp, isStepUpBlocked, isStepUpCancelled, stepUpBlockReason } from '@/composables/useStepUp'
 import TotpStepUpDialog from '@/components/auth/TotpStepUpDialog.vue'
+import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
+import Icon from '@/components/icons/Icon.vue'
 
 const { t } = useI18n()
 const appStore = useAppStore()
 const backupStepUp = useStepUp()
+
+const usageStats = ref<UsageLogsStorageStats | null>(null)
+const loadingUsageStats = ref(false)
+const usageCleanupSettings = ref<UsageCleanupScheduleSettings>({ enabled: false, interval_days: 1, retention_days: 90, delete_all: false })
+const loadingUsageCleanupSettings = ref(false)
+const usageCleanupSettingsReady = ref(false)
+const savingUsageCleanupSettings = ref(false)
+const showUsageCleanupConfirm = ref(false)
+const creatingUsageCleanup = ref(false)
+const manualUsageRetentionDays = ref(90)
+const manualUsageDeleteAll = ref(false)
 
 // 敏感操作被 2FA 门控拦截时的统一提示。
 function reportStepUpBlocked(error: unknown): boolean {
@@ -771,6 +920,75 @@ async function loadWebDAVConfig() {
   }
 }
 
+async function loadUsageCleanupSettings() {
+  loadingUsageCleanupSettings.value = true
+  try {
+    usageCleanupSettings.value = await adminAPI.usage.getRetentionSettings()
+    usageCleanupSettingsReady.value = true
+  } catch (error) {
+    appStore.showError((error as { message?: string })?.message || t('errors.networkError'))
+  } finally {
+    loadingUsageCleanupSettings.value = false
+  }
+}
+
+async function saveUsageCleanupSettings() {
+  const days = usageCleanupSettings.value.retention_days
+  const intervalDays = usageCleanupSettings.value.interval_days
+  if (!usageCleanupSettings.value.delete_all && (!Number.isInteger(days) || days < 1 || days > 3650)) {
+    appStore.showError(t('admin.backup.usageLogs.invalidRetentionDays'))
+    return
+  }
+  if (!Number.isInteger(intervalDays) || intervalDays < 1 || intervalDays > 365) {
+    appStore.showError(t('admin.backup.usageLogs.invalidIntervalDays'))
+    return
+  }
+  savingUsageCleanupSettings.value = true
+  try {
+    usageCleanupSettings.value = await adminAPI.usage.updateRetentionSettings(usageCleanupSettings.value)
+    appStore.showSuccess(t('admin.backup.usageLogs.settingsSaved'))
+  } catch (error) {
+    appStore.showError((error as { message?: string })?.message || t('errors.networkError'))
+  } finally {
+    savingUsageCleanupSettings.value = false
+  }
+}
+
+async function measureUsageLogs() {
+  loadingUsageStats.value = true
+  try {
+    usageStats.value = await adminAPI.usage.getStorageStats()
+  } catch (error) {
+    appStore.showError((error as { message?: string })?.message || t('errors.networkError'))
+  } finally {
+    loadingUsageStats.value = false
+  }
+}
+
+async function confirmUsageCleanup() {
+  const days = manualUsageRetentionDays.value
+  if (!manualUsageDeleteAll.value && (!Number.isInteger(days) || days < 1 || days > 3650)) {
+    appStore.showError(t('admin.backup.usageLogs.invalidRetentionDays'))
+    return
+  }
+  creatingUsageCleanup.value = true
+  try {
+    const task = await adminAPI.usage.createRetentionCleanup(days, manualUsageDeleteAll.value)
+    showUsageCleanupConfirm.value = false
+    appStore.showSuccess(t('admin.backup.usageLogs.cleanupQueued', { id: task.id }))
+  } catch (error) {
+    appStore.showError((error as { message?: string })?.message || t('errors.networkError'))
+  } finally {
+    creatingUsageCleanup.value = false
+  }
+}
+
+function openUsageCleanupConfirm() {
+  manualUsageRetentionDays.value = usageCleanupSettings.value.retention_days
+  manualUsageDeleteAll.value = usageCleanupSettings.value.delete_all
+  showUsageCleanupConfirm.value = true
+}
+
 async function saveWebDAVConfig() {
   savingWebDAV.value = true
   try {
@@ -973,7 +1191,7 @@ function formatDate(value?: string): string {
 
 onMounted(async () => {
   document.addEventListener('visibilitychange', handleVisibilityChange)
-  await Promise.all([loadS3Config(), loadWebDAVConfig(), loadImageStorageConfig(), loadSchedule(), loadBackups()])
+  await Promise.all([loadS3Config(), loadWebDAVConfig(), loadImageStorageConfig(), loadSchedule(), loadBackups(), loadUsageCleanupSettings()])
 
   // 如果有正在 running 的备份，恢复轮询
   const runningBackup = backups.value.find(r => r.status === 'running')
