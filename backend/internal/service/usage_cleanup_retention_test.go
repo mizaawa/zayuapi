@@ -193,8 +193,8 @@ type retentionMaintenanceRepoStub struct {
 	throughIDs []int64
 }
 
-func (r *retentionMaintenanceRepoStub) GetUsageLogsStorageStats(context.Context) (*UsageLogsStorageStats, error) {
-	return &UsageLogsStorageStats{TableBytes: 100, IndexBytes: 40, TotalBytes: 160}, nil
+func (r *retentionMaintenanceRepoStub) GetDatabaseStorageStats(context.Context) (*DatabaseStorageStats, error) {
+	return &DatabaseStorageStats{DatabaseName: "app", DatabaseBytes: 300, TableBytes: 100, IndexBytes: 40, TotalBytes: 140}, nil
 }
 
 func (r *retentionMaintenanceRepoStub) GetUsageLogsMaxID(context.Context) (int64, error) {

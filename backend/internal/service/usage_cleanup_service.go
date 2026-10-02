@@ -214,15 +214,15 @@ func (s *UsageCleanupService) UpdateScheduleSettings(ctx context.Context, enable
 	return settings, nil
 }
 
-func (s *UsageCleanupService) GetStorageStats(ctx context.Context) (*UsageLogsStorageStats, error) {
+func (s *UsageCleanupService) GetDatabaseStorageStats(ctx context.Context) (*DatabaseStorageStats, error) {
 	if s == nil || s.repo == nil {
 		return nil, fmt.Errorf("usage cleanup service not ready")
 	}
 	repo, ok := s.repo.(UsageCleanupMaintenanceRepository)
 	if !ok {
-		return nil, fmt.Errorf("usage log storage statistics unavailable")
+		return nil, fmt.Errorf("database storage statistics unavailable")
 	}
-	return repo.GetUsageLogsStorageStats(ctx)
+	return repo.GetDatabaseStorageStats(ctx)
 }
 
 func (s *UsageCleanupService) CreateRetentionTask(ctx context.Context, retentionDays int, deleteAll bool, createdBy int64) (*UsageCleanupTask, error) {

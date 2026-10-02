@@ -49,17 +49,27 @@ type UsageCleanupScheduleSettings struct {
 	UpdatedBy     int64      `json:"updated_by,omitempty"`
 }
 
-type UsageLogsStorageStats struct {
-	TableBytes int64     `json:"table_bytes"`
-	IndexBytes int64     `json:"index_bytes"`
-	TotalBytes int64     `json:"total_bytes"`
-	MeasuredAt time.Time `json:"measured_at"`
+type DatabaseTableStorageStats struct {
+	TableName  string `json:"table_name"`
+	TableBytes int64  `json:"table_bytes"`
+	IndexBytes int64  `json:"index_bytes"`
+	TotalBytes int64  `json:"total_bytes"`
+}
+
+type DatabaseStorageStats struct {
+	DatabaseName  string                      `json:"database_name"`
+	DatabaseBytes int64                       `json:"database_bytes"`
+	Tables        []DatabaseTableStorageStats `json:"tables"`
+	TableBytes    int64                       `json:"table_bytes"`
+	IndexBytes    int64                       `json:"index_bytes"`
+	TotalBytes    int64                       `json:"total_bytes"`
+	MeasuredAt    time.Time                   `json:"measured_at"`
 }
 
 // UsageCleanupMaintenanceRepository provides storage-aware retention cleanup.
 // It is optional so task-only test repositories and existing integrations remain valid.
 type UsageCleanupMaintenanceRepository interface {
-	GetUsageLogsStorageStats(ctx context.Context) (*UsageLogsStorageStats, error)
+	GetDatabaseStorageStats(ctx context.Context) (*DatabaseStorageStats, error)
 	GetUsageLogsMaxID(ctx context.Context) (int64, error)
 	DeleteUsageLogsBeforeBatch(ctx context.Context, cutoff time.Time, limit int) (int64, error)
 	DeleteUsageLogsThroughIDBatch(ctx context.Context, maxID int64, limit int) (int64, error)

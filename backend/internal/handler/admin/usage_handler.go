@@ -65,7 +65,7 @@ type UpdateUsageCleanupSettingsRequest struct {
 }
 
 type CreateUsageRetentionCleanupRequest struct {
-	RetentionDays int `json:"retention_days"`
+	RetentionDays int  `json:"retention_days"`
 	DeleteAll     bool `json:"delete_all"`
 }
 
@@ -526,12 +526,12 @@ func (h *UsageHandler) UpdateCleanupSettings(c *gin.Context) {
 	response.Success(c, settings)
 }
 
-func (h *UsageHandler) GetStorageStats(c *gin.Context) {
+func (h *UsageHandler) GetDatabaseStorageStats(c *gin.Context) {
 	if h.cleanupService == nil {
 		response.Error(c, http.StatusServiceUnavailable, "Usage cleanup service unavailable")
 		return
 	}
-	stats, err := h.cleanupService.GetStorageStats(c.Request.Context())
+	stats, err := h.cleanupService.GetDatabaseStorageStats(c.Request.Context())
 	if err != nil {
 		response.ErrorFrom(c, err)
 		return

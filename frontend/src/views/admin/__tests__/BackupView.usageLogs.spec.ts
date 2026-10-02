@@ -13,7 +13,7 @@ const {
   listBackups,
   getRetentionSettings,
   updateRetentionSettings,
-  getStorageStats,
+  getDatabaseStorageStats,
   createRetentionCleanup,
   showSuccess,
   showError,
@@ -25,7 +25,7 @@ const {
   listBackups: vi.fn(),
   getRetentionSettings: vi.fn(),
   updateRetentionSettings: vi.fn(),
-  getStorageStats: vi.fn(),
+  getDatabaseStorageStats: vi.fn(),
   createRetentionCleanup: vi.fn(),
   showSuccess: vi.fn(),
   showError: vi.fn(),
@@ -43,7 +43,7 @@ vi.mock('@/api', () => ({
     usage: {
       getRetentionSettings,
       updateRetentionSettings,
-      getStorageStats,
+      getDatabaseStorageStats,
       createRetentionCleanup,
     },
   },
@@ -86,6 +86,14 @@ function usagePanel(wrapper: VueWrapper): DOMWrapper<Element> {
   return panel
 }
 
+function databaseStoragePanel(wrapper: VueWrapper): DOMWrapper<Element> {
+  const panel = wrapper.findAll('.card').find((card) =>
+    card.find('h3').text().includes('admin.backup.databaseStorage.title')
+  )
+  if (!panel) throw new Error('Database storage panel not found')
+  return panel
+}
+
 function buttonByText(scope: VueWrapper | DOMWrapper<Element>, text: string): DOMWrapper<HTMLButtonElement> {
   const button = scope.findAll<HTMLButtonElement>('button').find((item) => item.text() === text)
   if (!button) throw new Error(`button not found: ${text}`)
@@ -110,10 +118,16 @@ describe('admin BackupView Usage_logs management', () => {
     listBackups.mockResolvedValue({ items: [] })
     getRetentionSettings.mockResolvedValue({ enabled: false, interval_days: 7, retention_days: 45, delete_all: false })
     updateRetentionSettings.mockImplementation(async (settings: UsageCleanupScheduleSettings) => ({ ...settings }))
-    getStorageStats.mockResolvedValue({
+    getDatabaseStorageStats.mockResolvedValue({
+      database_name: 'app',
+      database_bytes: 2 * 1024 ** 3,
+      tables: [
+        { table_name: 'public.usage_logs', table_bytes: 1024 ** 3, index_bytes: 1024 ** 2, total_bytes: 1024 ** 3 + 1024 ** 2 },
+        { table_name: 'public.users', table_bytes: 1024 ** 2, index_bytes: 1024 ** 2, total_bytes: 2 * 1024 ** 2 },
+      ],
       table_bytes: 1024 ** 3,
       index_bytes: 1024 ** 2,
-      total_bytes: 1024 ** 3 + 1024 ** 2,
+      total_bytes: 1024 ** 3 + 2 * 1024 ** 2,
       measured_at: '2026-10-02T00:00:00Z',
     })
     createRetentionCleanup.mockResolvedValue({ id: 11, status: 'pending' })
@@ -123,24 +137,30 @@ describe('admin BackupView Usage_logs management', () => {
     mountedViews.splice(0).forEach((wrapper) => wrapper.unmount())
   })
 
-  it('measures storage only on demand and permits another measurement', async () => {
+  it('measures all database storage only on demand and permits another measurement', async () => {
     const wrapper = mountView()
     await flushPromises()
-    const panel = usagePanel(wrapper)
+    const panel = databaseStoragePanel(wrapper)
 
     expect(getRetentionSettings).toHaveBeenCalledTimes(1)
-    expect(getStorageStats).not.toHaveBeenCalled()
-    expect(panel.text()).not.toContain('admin.backup.usageLogs.totalSize')
+    expect(getDatabaseStorageStats).not.toHaveBeenCalled()
+    expect(panel.text()).not.toContain('admin.backup.databaseStorage.databaseSize')
 
-    await buttonByText(panel, 'admin.backup.usageLogs.measure').trigger('click')
+    await buttonByText(panel, 'admin.backup.databaseStorage.measure').trigger('click')
     await flushPromises()
 
-    expect(getStorageStats).toHaveBeenCalledTimes(1)
-    expect(panel.text()).toContain('admin.backup.usageLogs.totalSize')
+    expect(getDatabaseStorageStats).toHaveBeenCalledTimes(1)
+    expect(panel.text()).toContain('public.usage_logs')
+    expect(panel.text()).toContain('public.users')
+    expect(panel.text()).toContain('admin.backup.databaseStorage.databaseSize')
+    expect(panel.text()).toContain('admin.backup.databaseStorage.indexSizeTotal')
+    expect(panel.text()).toContain('admin.backup.databaseStorage.businessTotal')
+    expect(updateRetentionSettings).not.toHaveBeenCalled()
+    expect(createRetentionCleanup).not.toHaveBeenCalled()
 
-    await buttonByText(panel, 'admin.backup.usageLogs.remeasure').trigger('click')
+    await buttonByText(panel, 'admin.backup.databaseStorage.remeasure').trigger('click')
     await flushPromises()
-    expect(getStorageStats).toHaveBeenCalledTimes(2)
+    expect(getDatabaseStorageStats).toHaveBeenCalledTimes(2)
   })
 
   it('saves the cleanup interval separately from the selected retention period', async () => {
@@ -232,6 +252,35 @@ describe('admin BackupView Usage_logs management', () => {
     await deleteAll.setValue(false)
     expect(days.element.disabled).toBe(false)
     expect(days.element.value).toBe('45')
+  })
+
+  it('requires confirmation before enabling scheduled delete-all cleanup', async () => {
+    const wrapper = mountView()
+    await flushPromises()
+    const panel = usagePanel(wrapper)
+    const [enabled, deleteAll] = panel.findAll<HTMLInputElement>('input[type="checkbox"]')
+
+    await enabled.setValue(true)
+    await deleteAll.setValue(true)
+    await buttonByText(panel, 'common.save').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.get('[role="dialog"]').text()).toContain('admin.backup.usageLogs.confirmScheduledDeleteAllMessage')
+    expect(updateRetentionSettings).not.toHaveBeenCalled()
+    await buttonByText(wrapper.get('[role="dialog"]'), 'common.cancel').trigger('click')
+    await flushPromises()
+    expect(updateRetentionSettings).not.toHaveBeenCalled()
+
+    await buttonByText(panel, 'common.save').trigger('click')
+    const dialog = wrapper.get('[role="dialog"]')
+    await buttonByText(dialog, 'admin.backup.usageLogs.confirmScheduledDeleteAll').trigger('click')
+    await flushPromises()
+
+    expect(updateRetentionSettings).toHaveBeenCalledWith({
+      enabled: true, interval_days: 7, retention_days: 45, delete_all: true,
+    })
+    expect(showSuccess).toHaveBeenCalledWith('admin.backup.usageLogs.settingsSaved')
+    expect(wrapper.find('[role="dialog"]').exists()).toBe(false)
   })
 
   it('requires confirmation before queuing manual delete-all cleanup', async () => {

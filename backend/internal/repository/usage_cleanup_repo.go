@@ -320,27 +320,73 @@ func (r *usageCleanupRepository) DeleteUsageLogsBatch(ctx context.Context, filte
 	return deleted, nil
 }
 
-func (r *usageCleanupRepository) GetUsageLogsStorageStats(ctx context.Context) (*service.UsageLogsStorageStats, error) {
+func (r *usageCleanupRepository) GetDatabaseStorageStats(ctx context.Context) (*service.DatabaseStorageStats, error) {
 	const query = `
-		WITH RECURSIVE relations(relid) AS (
-			SELECT 'usage_logs'::regclass::oid
+		WITH RECURSIVE database_info AS (
+			SELECT current_database()::text AS database_name,
+				pg_database_size(current_database())::bigint AS database_bytes
+		), user_tables AS (
+			SELECT c.oid AS table_oid,
+				quote_ident(n.nspname) || '.' || quote_ident(c.relname) AS table_name
+			FROM pg_class c
+			JOIN pg_namespace n ON n.oid = c.relnamespace
+			WHERE c.relkind IN ('r', 'm', 'p')
+				AND NOT c.relispartition
+				AND n.nspname <> 'information_schema'
+				AND left(n.nspname, 3) <> 'pg_'
+		), relation_tree(root_oid, relid) AS (
+			SELECT table_oid, table_oid FROM user_tables
 			UNION ALL
-			SELECT i.inhrelid
-			FROM pg_inherits i
-			JOIN relations parent ON i.inhparent = parent.relid
-		), leaves AS (
-			SELECT relid
-			FROM relations current_rel
-			WHERE NOT EXISTS (SELECT 1 FROM pg_inherits i WHERE i.inhparent = current_rel.relid)
+			SELECT relation_tree.root_oid, child.oid
+			FROM relation_tree
+			JOIN pg_inherits inheritance ON inheritance.inhparent = relation_tree.relid
+			JOIN pg_class child ON child.oid = inheritance.inhrelid AND child.relispartition
+		), table_sizes AS (
+			SELECT relation_tree.root_oid,
+				COALESCE(SUM(pg_table_size(physical_table.oid)), 0)::bigint AS table_bytes,
+				COALESCE(SUM(pg_indexes_size(physical_table.oid)), 0)::bigint AS index_bytes,
+				COALESCE(SUM(pg_total_relation_size(physical_table.oid)), 0)::bigint AS total_bytes
+			FROM relation_tree
+			JOIN pg_class physical_table ON physical_table.oid = relation_tree.relid
+			WHERE physical_table.relkind IN ('r', 'm')
+			GROUP BY relation_tree.root_oid
 		)
-		SELECT
-			COALESCE(SUM(pg_table_size(relid::regclass)), 0)::bigint,
-			COALESCE(SUM(pg_indexes_size(relid::regclass)), 0)::bigint,
-			COALESCE(SUM(pg_total_relation_size(relid::regclass)), 0)::bigint
-		FROM leaves
+		SELECT database_info.database_name, database_info.database_bytes,
+			user_tables.table_name,
+			COALESCE(table_sizes.table_bytes, 0), COALESCE(table_sizes.index_bytes, 0), COALESCE(table_sizes.total_bytes, 0)
+		FROM database_info
+		LEFT JOIN user_tables ON true
+		LEFT JOIN table_sizes ON table_sizes.root_oid = user_tables.table_oid
+		ORDER BY table_sizes.total_bytes DESC NULLS LAST, user_tables.table_name
 	`
-	stats := &service.UsageLogsStorageStats{MeasuredAt: time.Now().UTC()}
-	if err := scanSingleRow(ctx, r.sql, query, nil, &stats.TableBytes, &stats.IndexBytes, &stats.TotalBytes); err != nil {
+	rows, err := r.sql.QueryContext(ctx, query)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+
+	stats := &service.DatabaseStorageStats{Tables: []service.DatabaseTableStorageStats{}, MeasuredAt: time.Now().UTC()}
+	for rows.Next() {
+		var tableName sql.NullString
+		var tableBytes, indexBytes, totalBytes sql.NullInt64
+		if err := rows.Scan(&stats.DatabaseName, &stats.DatabaseBytes, &tableName, &tableBytes, &indexBytes, &totalBytes); err != nil {
+			return nil, err
+		}
+		if !tableName.Valid {
+			continue
+		}
+		table := service.DatabaseTableStorageStats{
+			TableName:  tableName.String,
+			TableBytes: tableBytes.Int64,
+			IndexBytes: indexBytes.Int64,
+			TotalBytes: totalBytes.Int64,
+		}
+		stats.Tables = append(stats.Tables, table)
+		stats.TableBytes += table.TableBytes
+		stats.IndexBytes += table.IndexBytes
+		stats.TotalBytes += table.TotalBytes
+	}
+	if err := rows.Err(); err != nil {
 		return nil, err
 	}
 	return stats, nil
