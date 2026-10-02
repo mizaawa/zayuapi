@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"path"
@@ -46,17 +47,86 @@ func newWebDAVBackupStore(cfg *service.BackupS3Config) (*webDAVBackupStore, erro
 				IdleConnTimeout:       90 * time.Second,
 			},
 			CheckRedirect: func(req *http.Request, via []*http.Request) error {
-				if len(via) >= 5 {
-					return fmt.Errorf("too many WebDAV redirects")
-				}
-				previous := via[len(via)-1].URL
-				if req.URL.Scheme != previous.Scheme || !strings.EqualFold(req.URL.Host, previous.Host) {
-					return fmt.Errorf("WebDAV redirect to a different origin was rejected")
-				}
-				return nil
+				return checkWebDAVRedirect(req, via, parsed)
 			},
 		},
 	}, nil
+}
+
+func checkWebDAVRedirect(req *http.Request, via []*http.Request, webDAVURL *url.URL) error {
+	if len(via) == 0 {
+		return fmt.Errorf("invalid WebDAV redirect chain")
+	}
+	if len(via) >= 6 {
+		return fmt.Errorf("too many WebDAV redirects")
+	}
+	previous := via[len(via)-1]
+	if req.URL.User != nil {
+		return fmt.Errorf("WebDAV redirects with embedded credentials are not allowed")
+	}
+	if sameWebDAVOrigin(previous.URL, req.URL) {
+		return nil
+	}
+
+	if previous.Method != http.MethodGet && previous.Method != http.MethodHead {
+		return fmt.Errorf("cross-origin WebDAV redirects are only allowed for GET and HEAD")
+	}
+	if req.Method != http.MethodGet && req.Method != http.MethodHead {
+		return fmt.Errorf("cross-origin WebDAV redirects are only allowed for GET and HEAD")
+	}
+	if !strings.EqualFold(webDAVURL.Scheme, "https") || !strings.EqualFold(previous.URL.Scheme, "https") || !strings.EqualFold(req.URL.Scheme, "https") {
+		return fmt.Errorf("insecure cross-origin WebDAV redirect was rejected")
+	}
+	if previous.URL.User != nil || !isPikPakWebDAVHost(webDAVURL.Hostname()) || !isPikPakRedirectHost(previous.URL.Hostname()) || !isPikPakRedirectHost(req.URL.Hostname()) {
+		return fmt.Errorf("cross-origin WebDAV redirect to an untrusted host was rejected")
+	}
+	if port := req.URL.Port(); port != "" && port != "443" {
+		return fmt.Errorf("cross-origin WebDAV redirect to a non-HTTPS port was rejected")
+	}
+	if net.ParseIP(req.URL.Hostname()) != nil {
+		return fmt.Errorf("cross-origin WebDAV redirect to an IP address was rejected")
+	}
+
+	// PikPak redirects downloads to signed CDN URLs. Never forward WebDAV
+	// credentials or cookies to that separate origin.
+	req.Header.Del("Authorization")
+	req.Header.Del("Cookie")
+	req.Header.Del("Cookie2")
+	req.Header.Del("Proxy-Authorization")
+	return nil
+}
+
+func sameWebDAVOrigin(a, b *url.URL) bool {
+	if !strings.EqualFold(a.Scheme, b.Scheme) || !strings.EqualFold(strings.TrimSuffix(a.Hostname(), "."), strings.TrimSuffix(b.Hostname(), ".")) {
+		return false
+	}
+	return effectiveWebDAVPort(a) == effectiveWebDAVPort(b)
+}
+
+func effectiveWebDAVPort(u *url.URL) string {
+	if port := u.Port(); port != "" {
+		return port
+	}
+	if strings.EqualFold(u.Scheme, "https") {
+		return "443"
+	}
+	if strings.EqualFold(u.Scheme, "http") {
+		return "80"
+	}
+	return ""
+}
+
+func isPikPakWebDAVHost(host string) bool {
+	return isHostOrSubdomain(host, "pikpak.ai") || isHostOrSubdomain(host, "mypikpak.com")
+}
+
+func isPikPakRedirectHost(host string) bool {
+	return isPikPakWebDAVHost(host) || isHostOrSubdomain(host, "mypikpak.net")
+}
+
+func isHostOrSubdomain(host, domain string) bool {
+	host = strings.TrimSuffix(strings.ToLower(host), ".")
+	return host == domain || strings.HasSuffix(host, "."+domain)
 }
 
 func cleanWebDAVPath(value string) (string, error) {
@@ -91,6 +161,8 @@ func (s *webDAVBackupStore) objectURL(key string) (*url.URL, error) {
 	}
 	segments = append(segments, strings.Split(strings.Trim(key, "/"), "/")...)
 	u.Path = path.Join(append([]string{u.Path}, segments...)...)
+	// Keep Path decoded so net/url escapes each Unicode path segment exactly
+	// once when the request URL is serialized.
 	u.RawPath = ""
 	return &u, nil
 }
@@ -215,7 +287,7 @@ func (s *webDAVBackupStore) HeadBucket(ctx context.Context) error {
 		}
 	}()
 	var got []byte
-	backoffs := [...]time.Duration{200 * time.Millisecond, 400 * time.Millisecond, 800 * time.Millisecond, 1600 * time.Millisecond}
+	backoffs := [...]time.Duration{200 * time.Millisecond, 400 * time.Millisecond, 800 * time.Millisecond, 1600 * time.Millisecond, 3200 * time.Millisecond}
 	for attempt := 0; ; attempt++ {
 		resp, err := s.do(ctx, http.MethodGet, key, nil, "")
 		if err != nil {
@@ -230,8 +302,8 @@ func (s *webDAVBackupStore) HeadBucket(ctx context.Context) error {
 			break
 		}
 		_ = resp.Body.Close()
-		if resp.StatusCode != http.StatusNotFound || attempt >= len(backoffs) {
-			return fmt.Errorf("WebDAV connection test download failed: WebDAV GET failed: %s", resp.Status)
+		if !retryableWebDAVProbeStatus(resp, s.baseURL) || attempt >= len(backoffs) {
+			return fmt.Errorf("WebDAV connection test download failed: %s", describeWebDAVGetFailure(resp, s.baseURL))
 		}
 		timer := time.NewTimer(backoffs[attempt])
 		select {
@@ -249,6 +321,31 @@ func (s *webDAVBackupStore) HeadBucket(ctx context.Context) error {
 	}
 	deleted = true
 	return nil
+}
+
+func retryableWebDAVProbeStatus(resp *http.Response, webDAVURL *url.URL) bool {
+	if resp.StatusCode == http.StatusNotFound {
+		return true
+	}
+	if resp.StatusCode != http.StatusMethodNotAllowed || resp.Request == nil || resp.Request.URL == nil {
+		return false
+	}
+	return isHostOrSubdomain(resp.Request.URL.Hostname(), "mypikpak.net") && isPikPakWebDAVHost(webDAVURL.Hostname())
+}
+
+func describeWebDAVGetFailure(resp *http.Response, webDAVURL *url.URL) string {
+	if resp.Request == nil || resp.Request.URL == nil {
+		return fmt.Sprintf("WebDAV GET failed: %s", resp.Status)
+	}
+	host := resp.Request.URL.Hostname()
+	switch {
+	case strings.EqualFold(host, webDAVURL.Hostname()):
+		return fmt.Sprintf("WebDAV GET failed: %s (response from WebDAV server)", resp.Status)
+	case isHostOrSubdomain(host, "mypikpak.net"):
+		return fmt.Sprintf("WebDAV GET failed: %s (response from PikPak download CDN)", resp.Status)
+	default:
+		return fmt.Sprintf("WebDAV GET failed: %s (response from %s)", resp.Status, host)
+	}
 }
 
 var _ service.BackupObjectStore = (*webDAVBackupStore)(nil)
