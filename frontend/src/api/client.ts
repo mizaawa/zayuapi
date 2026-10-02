@@ -3,7 +3,7 @@
  * Base client with interceptors for authentication, token refresh, and error handling
  */
 
-import axios, { AxiosInstance, AxiosError, InternalAxiosRequestConfig, AxiosResponse } from 'axios'
+import axios, { AxiosHeaders, AxiosInstance, AxiosError, InternalAxiosRequestConfig, AxiosResponse } from 'axios'
 import type { ApiResponse } from '@/types'
 import { getLocale } from '@/i18n'
 import {
@@ -77,6 +77,24 @@ apiClient.interceptors.request.use(
 )
 
 // ==================== Response Interceptor ====================
+
+function parseRetryAfter(headers: AxiosResponse['headers'] | undefined): number | undefined {
+  const value = headers instanceof AxiosHeaders
+    ? headers.get('Retry-After')
+    : headers && Object.entries(headers as Record<string, unknown>)
+      .find(([name]) => name.toLowerCase() === 'retry-after')?.[1]
+  if (typeof value !== 'string' && typeof value !== 'number') return undefined
+  const text = String(value).trim()
+  if (!text) return undefined
+
+  const seconds = Number(text)
+  if (!Number.isNaN(seconds)) {
+    return Number.isFinite(seconds) && seconds >= 0 ? seconds : undefined
+  }
+
+  const deadline = Date.parse(text)
+  return Number.isFinite(deadline) ? Math.max(0, Math.ceil((deadline - Date.now()) / 1000)) : undefined
+}
 
 apiClient.interceptors.response.use(
   (response: AxiosResponse) => {
@@ -251,6 +269,15 @@ apiClient.interceptors.response.use(
         error: apiData.error,
         message: apiData.message || apiData.detail || error.message,
         metadata: apiData.metadata,
+        retryAfter: parseRetryAfter(error.response.headers),
+      })
+    }
+
+    if (error.code === 'ECONNABORTED' || error.code === 'ETIMEDOUT') {
+      return Promise.reject({
+        status: 0,
+        code: error.code,
+        message: error.message || 'Request timed out. Please try again.'
       })
     }
 

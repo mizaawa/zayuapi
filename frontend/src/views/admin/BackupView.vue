@@ -54,6 +54,50 @@
         </div>
       </div>
 
+      <!-- WebDAV Storage Config -->
+      <div class="card p-6">
+        <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h3 class="text-base font-semibold text-gray-900 dark:text-white">
+              {{ t('admin.backup.webdav.title') }}
+            </h3>
+            <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+              {{ t('admin.backup.webdav.description') }}
+            </p>
+          </div>
+          <label class="inline-flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+            <input v-model="webdavForm.enabled" type="checkbox" />
+            <span>{{ t('admin.backup.webdav.enabled') }}</span>
+          </label>
+        </div>
+        <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
+          <div>
+            <label class="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-400">{{ t('admin.backup.webdav.url') }}</label>
+            <input v-model="webdavForm.url" class="input w-full" placeholder="https://dav.example.com/remote.php/dav/files/user" />
+          </div>
+          <div>
+            <label class="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-400">{{ t('admin.backup.webdav.path') }}</label>
+            <input v-model="webdavForm.path" class="input w-full" placeholder="backups/" />
+          </div>
+          <div>
+            <label class="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-400">{{ t('admin.backup.webdav.username') }}</label>
+            <input v-model="webdavForm.username" class="input w-full" autocomplete="username" />
+          </div>
+          <div>
+            <label class="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-400">{{ t('admin.backup.webdav.password') }}</label>
+            <input v-model="webdavForm.password" type="password" class="input w-full" autocomplete="new-password" :placeholder="webdavPasswordConfigured ? t('admin.backup.webdav.passwordConfigured') : ''" />
+          </div>
+        </div>
+        <div class="mt-4 flex flex-wrap gap-2">
+          <button type="button" class="btn btn-secondary btn-sm" :disabled="testingWebDAV" @click="testWebDAV">
+            {{ testingWebDAV ? t('common.loading') : t('admin.backup.webdav.testConnection') }}
+          </button>
+          <button type="button" class="btn btn-primary btn-sm" :disabled="savingWebDAV" @click="saveWebDAVConfig">
+            {{ savingWebDAV ? t('common.loading') : t('common.save') }}
+          </button>
+        </div>
+      </div>
+
       <!-- Async image object storage -->
       <div class="card p-6">
         <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
@@ -406,8 +450,10 @@ import { adminAPI } from '@/api'
 import { useAppStore } from '@/stores'
 import type {
   BackupS3Config,
+  BackupWebDAVConfig,
   BackupScheduleConfig,
   BackupRecord,
+  BackupDownloadResponse,
   BackupDownloadPart,
   ImageStorageConfig,
 } from '@/api/admin/backup'
@@ -442,6 +488,18 @@ const s3Form = ref<BackupS3Config>({
 const s3SecretConfigured = ref(false)
 const savingS3 = ref(false)
 const testingS3 = ref(false)
+
+// WebDAV backup storage
+const webdavForm = ref<BackupWebDAVConfig>({
+  enabled: false,
+  url: '',
+  username: '',
+  password: '',
+  path: 'backups/',
+})
+const webdavPasswordConfigured = ref(false)
+const savingWebDAV = ref(false)
+const testingWebDAV = ref(false)
 
 // Async image object storage. Shares the S3 client with backups, so the default is
 // to reuse the credentials configured above and only differ by prefix.
@@ -697,6 +755,55 @@ async function testS3() {
   }
 }
 
+async function loadWebDAVConfig() {
+  try {
+    const cfg = await adminAPI.backup.getWebDAVConfig()
+    webdavForm.value = {
+      enabled: cfg.enabled ?? false,
+      url: cfg.url || '',
+      username: cfg.username || '',
+      password: '',
+      path: cfg.path || 'backups/',
+    }
+    webdavPasswordConfigured.value = cfg.password_configured ?? Boolean(cfg.username)
+  } catch (error) {
+    appStore.showError((error as { message?: string })?.message || t('errors.networkError'))
+  }
+}
+
+async function saveWebDAVConfig() {
+  savingWebDAV.value = true
+  try {
+    await backupStepUp.run(() => adminAPI.backup.updateWebDAVConfig(webdavForm.value))
+    appStore.showSuccess(t('admin.backup.webdav.saved'))
+    await loadWebDAVConfig()
+  } catch (error) {
+    if (isStepUpCancelled(error)) {
+      savingWebDAV.value = false
+      return
+    }
+    appStore.showError((error as { message?: string })?.message || t('errors.networkError'))
+  } finally {
+    savingWebDAV.value = false
+  }
+}
+
+async function testWebDAV() {
+  testingWebDAV.value = true
+  try {
+    const result = await adminAPI.backup.testWebDAVConnection(webdavForm.value)
+    if (result.ok) {
+      appStore.showSuccess(result.message || t('admin.backup.webdav.testSuccess'))
+    } else {
+      appStore.showError(result.message || t('admin.backup.webdav.testFailed'))
+    }
+  } catch (error) {
+    appStore.showError((error as { message?: string })?.message || t('errors.networkError'))
+  } finally {
+    testingWebDAV.value = false
+  }
+}
+
 async function loadSchedule() {
   try {
     const cfg = await adminAPI.backup.getSchedule()
@@ -762,10 +869,25 @@ async function createBackup() {
 
 async function downloadBackup(id: string) {
   try {
-    const result = await backupStepUp.run(() => adminAPI.backup.getDownloadURL(id))
+    const result = await backupStepUp.run(async (): Promise<BackupDownloadResponse & { blob?: Blob }> => {
+      const download = await adminAPI.backup.getDownloadURL(id)
+      if (download.url?.startsWith(`/admin/backups/${id}/download`)) {
+        return { ...download, blob: await adminAPI.backup.downloadBackupFile(id) }
+      }
+      return download
+    })
     if (result.parts && result.parts.length > 0) {
       downloadParts.value = result.parts
       downloadPartsModalOpen.value = true
+      return
+    }
+    if (result.blob) {
+      const link = document.createElement('a')
+      const objectURL = URL.createObjectURL(result.blob)
+      link.href = objectURL
+      link.download = backups.value.find(record => record.id === id)?.file_name || `backup-${id}.sql.gz`
+      link.click()
+      window.setTimeout(() => URL.revokeObjectURL(objectURL), 1000)
       return
     }
     if (!result.url) {
@@ -851,7 +973,7 @@ function formatDate(value?: string): string {
 
 onMounted(async () => {
   document.addEventListener('visibilitychange', handleVisibilityChange)
-  await Promise.all([loadS3Config(), loadImageStorageConfig(), loadSchedule(), loadBackups()])
+  await Promise.all([loadS3Config(), loadWebDAVConfig(), loadImageStorageConfig(), loadSchedule(), loadBackups()])
 
   // 如果有正在 running 的备份，恢复轮询
   const runningBackup = backups.value.find(r => r.status === 'running')

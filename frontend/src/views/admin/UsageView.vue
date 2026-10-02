@@ -191,6 +191,7 @@ import { getPersistedPageSize } from '@/composables/usePersistedPageSize'
 import { formatReasoningEffort } from '@/utils/format'
 import { formatCacheHitRate } from '@/utils/cacheHitRate'
 import { getEndToEndOutputSpeed } from '@/utils/outputSpeed'
+import { fetchUsageExportPage, USAGE_EXPORT_PAGE_SIZE, USAGE_EXPORT_TIMEOUT } from '@/utils/usageExport'
 import { resolveUsageRequestType, requestTypeToLegacyStream } from '@/utils/usageRequestType'
 import AppLayout from '@/components/layout/AppLayout.vue'; import Pagination from '@/components/common/Pagination.vue'; import Select from '@/components/common/Select.vue'; import DateRangePicker from '@/components/common/DateRangePicker.vue'
 import UsageStatsCards from '@/components/admin/usage/UsageStatsCards.vue'; import UsageFilters from '@/components/admin/usage/UsageFilters.vue'
@@ -572,8 +573,11 @@ const getRequestTypeLabel = (log: AdminUsageLog): string => {
 const exportToExcel = async () => {
   if (exporting.value) return; exporting.value = true; exportProgress.show = true
   const c = new AbortController(); exportAbortController = c
+  const params = buildUsageListParams(1, USAGE_EXPORT_PAGE_SIZE, true)
+  const filename = `usage_${params.start_date}_to_${params.end_date}.xlsx`
+  Object.assign(exportProgress, { progress: 0, current: 0, total: 0, estimatedTime: '' })
   try {
-    let p = 1; let total = pagination.total; let exportedCount = 0
+    let p = 1; let total = 0; let exportedCount = 0
     const XLSX = await import('xlsx')
     const headers = [
       t('usage.time'), t('admin.usage.user'), t('usage.apiKeyFilter'),
@@ -592,10 +596,10 @@ const exportToExcel = async () => {
     ]
     const ws = XLSX.utils.aoa_to_sheet([headers])
     while (true) {
-      const res = await adminUsageAPI.list(
-        buildUsageListParams(p, 100, true),
-        { signal: c.signal }
-      )
+      const res = await fetchUsageExportPage(() => adminUsageAPI.list(
+        { ...params, page: p, exact_total: p === 1 },
+        { signal: c.signal, timeout: USAGE_EXPORT_TIMEOUT }
+      ), c.signal)
       if (c.signal.aborted) break; if (p === 1) { total = res.total; exportProgress.total = total }
       const rows = (res.items || []).map((log: AdminUsageLog) => {
         const speed = getEndToEndOutputSpeed(log)
@@ -620,15 +624,21 @@ const exportToExcel = async () => {
       exportedCount += rows.length
       exportProgress.current = exportedCount
       exportProgress.progress = total > 0 ? Math.min(100, Math.round(exportedCount / total * 100)) : 0
-      if (exportedCount >= total || res.items.length < 100) break; p++
+      if (exportedCount >= total || rows.length < USAGE_EXPORT_PAGE_SIZE) break; p++
     }
     if(!c.signal.aborted) {
       const wb = XLSX.utils.book_new()
       XLSX.utils.book_append_sheet(wb, ws, 'Usage')
-      saveAs(new Blob([XLSX.write(wb, { bookType: 'xlsx', type: 'array' })], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), `usage_${filters.value.start_date}_to_${filters.value.end_date}.xlsx`)
+      saveAs(new Blob([XLSX.write(wb, { bookType: 'xlsx', type: 'array' })], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), filename)
       appStore.showSuccess(t('usage.exportSuccess'))
     }
-  } catch (error) { console.error('Failed to export:', error); appStore.showError('Export Failed') }
+  } catch (error) {
+    if (!c.signal.aborted) {
+      console.error('Failed to export:', error)
+      const detail = (error as { message?: string })?.message
+      appStore.showError(detail ? `${t('usage.exportFailed')}: ${detail}` : t('usage.exportFailed'))
+    }
+  }
   finally { if(exportAbortController === c) { exportAbortController = null; exporting.value = false; exportProgress.show = false } }
 }
 

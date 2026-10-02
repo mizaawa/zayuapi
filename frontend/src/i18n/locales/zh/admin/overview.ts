@@ -88,7 +88,7 @@ export default {
 
     backup: {
       title: '数据库备份',
-      description: '全量数据库备份到 S3 兼容存储，支持定时备份与恢复',
+      description: '全量数据库备份到 S3 或 WebDAV 存储，支持定时备份与恢复',
       s3: {
         title: 'S3 存储配置',
         description: '配置 S3 兼容存储（支持 Cloudflare R2）',
@@ -107,6 +107,20 @@ export default {
         testSuccess: 'S3 连接测试成功',
         testFailed: 'S3 连接测试失败',
         saved: 'S3 配置已保存'
+      },
+      webdav: {
+        title: 'WebDAV 存储配置',
+        description: '将数据库备份保存到 WebDAV 服务器。',
+        enabled: '启用 WebDAV 作为备份存储',
+        url: 'WebDAV 地址',
+        username: '用户名',
+        password: '密码',
+        passwordConfigured: '已配置，留空保持不变',
+        path: '存储路径',
+        testConnection: '测试连接',
+        testSuccess: 'WebDAV 连接测试成功',
+        testFailed: 'WebDAV 连接测试失败',
+        saved: 'WebDAV 配置已保存'
       },
       imageStorage: {
         title: '异步生图对象存储',

@@ -151,7 +151,7 @@ export async function list(
  */
 export async function query(
   params: UsageQueryParams & { sort_by?: string; sort_order?: 'asc' | 'desc' },
-  config: { signal?: AbortSignal } = {}
+  config: { signal?: AbortSignal; timeout?: number } = {}
 ): Promise<PaginatedResponse<UsageLog>> {
   const { data } = await apiClient.get<PaginatedResponse<UsageLog>>('/usage', {
     ...config,

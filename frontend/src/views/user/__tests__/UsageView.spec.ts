@@ -279,10 +279,10 @@ describe('user UsageView', () => {
 
     expect(exportedBlob).not.toBeNull()
     expect(query).toHaveBeenCalledWith(expect.objectContaining({
-      page_size: 100,
+      page_size: 1000,
       sort_by: 'created_at',
       sort_order: 'desc',
-    }))
+    }), expect.objectContaining({ signal: expect.any(AbortSignal), timeout: 120000 }))
     expect(clickSpy).toHaveBeenCalled()
     expect(showSuccess).toHaveBeenCalled()
     expect(csvContent.startsWith('\uFEFF')).toBe(true)
@@ -363,7 +363,7 @@ describe('user UsageView', () => {
   })
 
   it('exports Excel across filtered pages with formatted cache hit rates and missing-cache placeholders', async () => {
-    query.mockResolvedValue({ items: [usageLog], total: 101, pages: 2 })
+    query.mockResolvedValue({ items: [usageLog], total: 1, pages: 1 })
     const wrapper = mountUsageView()
     await flushPromises()
     const vm = wrapper.vm as any
@@ -372,10 +372,10 @@ describe('user UsageView', () => {
     vm.toggleColumn('cache_hit_rate')
 
     query.mockReset()
-    query.mockResolvedValueOnce({ items: Array.from({ length: 100 }, () => usageLog), total: 101, pages: 2 })
+    query.mockResolvedValueOnce({ items: Array.from({ length: 1000 }, () => usageLog), total: 1001, pages: 2 })
     query.mockResolvedValueOnce({
       items: [{ ...usageLog, cache_read_tokens: 0, cache_creation_tokens: 25, duration_ms: null }],
-      total: 101,
+      total: 1001,
       pages: 2,
     })
 
@@ -388,28 +388,70 @@ describe('user UsageView', () => {
     for (let page = 1; page <= 2; page++) {
       expect(query).toHaveBeenNthCalledWith(page, expect.objectContaining({
         page,
-        page_size: 100,
+        page_size: 1000,
         api_key_id: 1,
         model: 'gpt-5.4',
         sort_by: 'created_at',
         sort_order: 'desc',
-      }))
+      }), expect.objectContaining({ signal: expect.any(AbortSignal), timeout: 120000 }))
     }
     const data = aoaToSheet.mock.calls[0]![0] as (string | number)[][]
     const cacheHitRateIndex = data[0]!.indexOf('Cache Hit Rate')
     expect(cacheHitRateIndex).toBeGreaterThan(-1)
-    expect(data).toHaveLength(102)
+    expect(data).toHaveLength(1002)
     expect(data[1]![cacheHitRateIndex]).toBe('98.6%')
-    expect(data[101]![cacheHitRateIndex]).toBe('-')
+    expect(data[1001]![cacheHitRateIndex]).toBe('-')
     const speedIndex = data[0]!.indexOf('TPS (tok/s)')
     expect(speedIndex).toBeGreaterThan(-1)
     expect(data[0]![speedIndex - 1]).toBe('Duration (ms)')
     expect(data[1]![speedIndex]).toBe(292.8)
-    expect(data[101]![speedIndex]).toBe('')
+    expect(data[1001]![speedIndex]).toBe('')
     expect(data[0]).not.toContain('Upstream Endpoint')
     expect(xlsxWrite).toHaveBeenCalledWith(expect.anything(), { bookType: 'xlsx', type: 'array' })
     expect(saveAs).toHaveBeenCalledWith(expect.any(Blob), expect.stringMatching(/^usage_.*\.xlsx$/))
     expect(showSuccess).toHaveBeenCalledWith('Export success')
+    wrapper.unmount()
+  })
+
+  it('keeps the original filters and filename when filters change during export', async () => {
+    const wrapper = mountUsageView()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    const originalStartDate = vm.startDate
+    const originalEndDate = vm.endDate
+    vm.filters.model = 'gpt-5.4'
+    query.mockReset()
+    query.mockImplementationOnce(() => {
+      vm.filters.model = 'changed-model'
+      vm.startDate = '2026-01-01'
+      return Promise.resolve({ items: Array.from({ length: 1000 }, () => usageLog), total: 1001 })
+    })
+    query.mockResolvedValueOnce({ items: [usageLog], total: 1001 })
+
+    await vm.exportToExcel()
+
+    expect(query).toHaveBeenNthCalledWith(2, expect.objectContaining({
+      page: 2, model: 'gpt-5.4', start_date: originalStartDate,
+    }), expect.anything())
+    expect(saveAs).toHaveBeenCalledWith(expect.any(Blob), `usage_${originalStartDate}_to_${originalEndDate}.xlsx`)
+    wrapper.unmount()
+  })
+
+  it('does not download a partial export after a later page fails and shows the reason', async () => {
+    const wrapper = mountUsageView()
+    await flushPromises()
+    query.mockReset()
+    query.mockResolvedValueOnce({ items: Array.from({ length: 1000 }, () => usageLog), total: 1001 })
+    query.mockRejectedValueOnce({ status: 503, message: 'Database unavailable' })
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    await (wrapper.vm as any).exportToExcel()
+
+    expect(saveAs).not.toHaveBeenCalled()
+    expect(showSuccess).not.toHaveBeenCalled()
+    expect(showError).toHaveBeenCalledWith('Export failed: Database unavailable')
+    expect((wrapper.vm as any).exporting).toBe(false)
+    errorSpy.mockRestore()
     wrapper.unmount()
   })
 })

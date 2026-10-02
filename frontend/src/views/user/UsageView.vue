@@ -238,6 +238,7 @@ import { getPersistedPageSize } from '@/composables/usePersistedPageSize'
 import { formatReasoningEffort } from '@/utils/format'
 import { formatCacheHitRate } from '@/utils/cacheHitRate'
 import { getEndToEndOutputSpeed } from '@/utils/outputSpeed'
+import { fetchUsageExportPage, USAGE_EXPORT_PAGE_SIZE, USAGE_EXPORT_TIMEOUT } from '@/utils/usageExport'
 import { BILLING_MODE_IMAGE, getBillingModeLabel } from '@/utils/billingMode'
 import { resolveUsageRequestType, requestTypeToLegacyStream } from '@/utils/usageRequestType'
 import type {
@@ -275,6 +276,7 @@ const chartsLoading = ref(false)
 const modelStatsLoading = ref(false)
 const endpointStatsLoading = ref(false)
 const exporting = ref(false)
+let exportAbortController: AbortController | null = null
 const errorRows = ref<UserErrorRequest[]>([])
 const errorLoading = ref(false)
 const errorPage = ref(1)
@@ -635,14 +637,23 @@ const exportUsage = async (format: 'csv' | 'xlsx') => {
     return
   }
   exporting.value = true
+  const c = new AbortController()
+  exportAbortController = c
+  const params = buildUsageListParams(1, USAGE_EXPORT_PAGE_SIZE)
+  const filename = `usage_${params.start_date}_to_${params.end_date}`
   appStore.showInfo(t('usage.preparingExport'))
   try {
     const allLogs: UsageLog[] = []
-    const pageSize = 100
-    const totalPages = Math.ceil(pagination.total / pageSize)
-    for (let page = 1; page <= totalPages; page++) {
-      const response = await usageAPI.query(buildUsageListParams(page, pageSize))
+    let total = 0
+    for (let page = 1; ; page++) {
+      const response = await fetchUsageExportPage(() => usageAPI.query(
+        { ...params, page },
+        { signal: c.signal, timeout: USAGE_EXPORT_TIMEOUT }
+      ), c.signal)
+      if (c.signal.aborted) return
+      if (page === 1) total = response.total
       allLogs.push(...response.items)
+      if (allLogs.length >= total || response.items.length < USAGE_EXPORT_PAGE_SIZE) break
     }
     if (allLogs.length === 0) {
       appStore.showWarning(t('usage.noDataToExport'))
@@ -693,9 +704,9 @@ const exportUsage = async (format: 'csv' | 'xlsx') => {
         speed === null ? '' : Number(speed.toFixed(1)),
       ]
     })
-    const filename = `usage_${startDate.value}_to_${endDate.value}`
     if (format === 'xlsx') {
       const XLSX = await import('xlsx')
+      if (c.signal.aborted) return
       const worksheet = XLSX.utils.aoa_to_sheet([headers, ...rows])
       const workbook = XLSX.utils.book_new()
       XLSX.utils.book_append_sheet(workbook, worksheet, 'Usage')
@@ -716,9 +727,13 @@ const exportUsage = async (format: 'csv' | 'xlsx') => {
     }
     appStore.showSuccess(t('usage.exportSuccess'))
   } catch (error) {
-    console.error('Usage export failed:', error)
-    appStore.showError(t('usage.exportFailed'))
+    if (!c.signal.aborted) {
+      console.error('Usage export failed:', error)
+      const detail = (error as { message?: string })?.message
+      appStore.showError(detail ? `${t('usage.exportFailed')}: ${detail}` : t('usage.exportFailed'))
+    }
   } finally {
+    exportAbortController = null
     exporting.value = false
   }
 }
@@ -914,6 +929,7 @@ onMounted(() => {
 
 onUnmounted(() => {
   abortController?.abort()
+  exportAbortController?.abort()
   document.removeEventListener('click', handleColumnClickOutside)
 })
 
