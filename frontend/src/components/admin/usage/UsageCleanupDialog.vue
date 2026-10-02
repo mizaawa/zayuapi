@@ -222,6 +222,12 @@ const formatDateTime = (value?: string | null) => {
 }
 
 const formatRange = (task: UsageCleanupTask) => {
+  if (task.filters.delete_through_id !== undefined) {
+    return t('admin.backup.usageLogs.cleanupAll')
+  }
+  if (task.filters.retention_cutoff) {
+    return t('admin.backup.usageLogs.cleanupBefore', { time: formatDateTime(task.filters.retention_cutoff) })
+  }
   const start = formatDateTime(task.filters.start_time)
   const end = formatDateTime(task.filters.end_time)
   return `${start} ~ ${end}`

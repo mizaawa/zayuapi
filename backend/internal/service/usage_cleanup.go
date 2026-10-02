@@ -26,16 +26,43 @@ const (
 // - nil 表示未设置该过滤条件
 // - 过滤条件均为精确匹配
 type UsageCleanupFilters struct {
-	StartTime   time.Time `json:"start_time"`
-	EndTime     time.Time `json:"end_time"`
-	UserID      *int64    `json:"user_id,omitempty"`
-	APIKeyID    *int64    `json:"api_key_id,omitempty"`
-	AccountID   *int64    `json:"account_id,omitempty"`
-	GroupID     *int64    `json:"group_id,omitempty"`
-	Model       *string   `json:"model,omitempty"`
-	RequestType *int16    `json:"request_type,omitempty"`
-	Stream      *bool     `json:"stream,omitempty"`
-	BillingType *int8     `json:"billing_type,omitempty"`
+	StartTime       time.Time  `json:"start_time"`
+	EndTime         time.Time  `json:"end_time"`
+	RetentionCutoff *time.Time `json:"retention_cutoff,omitempty"`
+	DeleteThroughID *int64     `json:"delete_through_id,omitempty"`
+	UserID          *int64     `json:"user_id,omitempty"`
+	APIKeyID        *int64     `json:"api_key_id,omitempty"`
+	AccountID       *int64     `json:"account_id,omitempty"`
+	GroupID         *int64     `json:"group_id,omitempty"`
+	Model           *string    `json:"model,omitempty"`
+	RequestType     *int16     `json:"request_type,omitempty"`
+	Stream          *bool      `json:"stream,omitempty"`
+	BillingType     *int8      `json:"billing_type,omitempty"`
+}
+
+type UsageCleanupScheduleSettings struct {
+	Enabled       bool       `json:"enabled"`
+	IntervalDays  int        `json:"interval_days"`
+	RetentionDays int        `json:"retention_days"`
+	DeleteAll     bool       `json:"delete_all"`
+	LastRunAt     *time.Time `json:"last_run_at,omitempty"`
+	UpdatedBy     int64      `json:"updated_by,omitempty"`
+}
+
+type UsageLogsStorageStats struct {
+	TableBytes int64     `json:"table_bytes"`
+	IndexBytes int64     `json:"index_bytes"`
+	TotalBytes int64     `json:"total_bytes"`
+	MeasuredAt time.Time `json:"measured_at"`
+}
+
+// UsageCleanupMaintenanceRepository provides storage-aware retention cleanup.
+// It is optional so task-only test repositories and existing integrations remain valid.
+type UsageCleanupMaintenanceRepository interface {
+	GetUsageLogsStorageStats(ctx context.Context) (*UsageLogsStorageStats, error)
+	GetUsageLogsMaxID(ctx context.Context) (int64, error)
+	DeleteUsageLogsBeforeBatch(ctx context.Context, cutoff time.Time, limit int) (int64, error)
+	DeleteUsageLogsThroughIDBatch(ctx context.Context, maxID int64, limit int) (int64, error)
 }
 
 // UsageCleanupTask 表示使用记录清理任务

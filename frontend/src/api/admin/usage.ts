@@ -41,6 +41,8 @@ export interface SimpleApiKey {
 export interface UsageCleanupFilters {
   start_time: string
   end_time: string
+  retention_cutoff?: string
+  delete_through_id?: number
   user_id?: number
   api_key_id?: number
   account_id?: number
@@ -78,6 +80,21 @@ export interface CreateUsageCleanupTaskRequest {
   stream?: boolean | null
   billing_type?: number | null
   timezone?: string
+}
+
+export interface UsageCleanupScheduleSettings {
+  enabled: boolean
+  interval_days: number
+  retention_days: number
+  delete_all: boolean
+  last_run_at?: string | null
+}
+
+export interface UsageLogsStorageStats {
+  table_bytes: number
+  index_bytes: number
+  total_bytes: number
+  measured_at: string
 }
 
 export interface AdminUsageQueryParams extends UsageQueryParams {
@@ -207,6 +224,29 @@ export async function cancelCleanupTask(taskId: number): Promise<{ id: number; s
   return data
 }
 
+export async function getRetentionSettings(): Promise<UsageCleanupScheduleSettings> {
+  const { data } = await apiClient.get<UsageCleanupScheduleSettings>('/admin/usage/retention-settings')
+  return data
+}
+
+export async function updateRetentionSettings(payload: UsageCleanupScheduleSettings): Promise<UsageCleanupScheduleSettings> {
+  const { data } = await apiClient.put<UsageCleanupScheduleSettings>('/admin/usage/retention-settings', payload)
+  return data
+}
+
+export async function getStorageStats(): Promise<UsageLogsStorageStats> {
+  const { data } = await apiClient.get<UsageLogsStorageStats>('/admin/usage/storage-stats')
+  return data
+}
+
+export async function createRetentionCleanup(retentionDays: number, deleteAll = false): Promise<UsageCleanupTask> {
+  const { data } = await apiClient.post<UsageCleanupTask>('/admin/usage/retention-cleanup', {
+    retention_days: retentionDays,
+    delete_all: deleteAll
+  })
+  return data
+}
+
 export const adminUsageAPI = {
   list,
   getStats,
@@ -214,7 +254,11 @@ export const adminUsageAPI = {
   searchApiKeys,
   listCleanupTasks,
   createCleanupTask,
-  cancelCleanupTask
+  cancelCleanupTask,
+  getRetentionSettings,
+  updateRetentionSettings,
+  getStorageStats,
+  createRetentionCleanup
 }
 
 export default adminUsageAPI

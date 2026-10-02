@@ -198,7 +198,10 @@ func (s *webDAVBackupStore) PresignURL(context.Context, string, time.Duration) (
 }
 
 func (s *webDAVBackupStore) HeadBucket(ctx context.Context) error {
-	key := ".zayuapi-connection-test-" + uuid.NewString()
+	// Some cloud-drive WebDAV implementations accept hidden-file PUTs but hide
+	// dot-prefixed files from subsequent GET requests. Use a normal temporary
+	// filename so the write/read/delete probe reflects regular backup objects.
+	key := "zayuapi-connection-test-" + uuid.NewString() + ".txt"
 	content := []byte("zayuapi-webdav-connection-test")
 	if _, err := s.Upload(ctx, key, bytes.NewReader(content), "application/octet-stream"); err != nil {
 		return fmt.Errorf("WebDAV connection test upload failed: %w", err)
@@ -211,14 +214,32 @@ func (s *webDAVBackupStore) HeadBucket(ctx context.Context) error {
 			_ = s.Delete(cleanupCtx, key)
 		}
 	}()
-	body, err := s.Download(ctx, key)
-	if err != nil {
-		return fmt.Errorf("WebDAV connection test download failed: %w", err)
-	}
-	got, readErr := io.ReadAll(body)
-	_ = body.Close()
-	if readErr != nil {
-		return fmt.Errorf("WebDAV connection test read failed: %w", readErr)
+	var got []byte
+	backoffs := [...]time.Duration{200 * time.Millisecond, 400 * time.Millisecond, 800 * time.Millisecond, 1600 * time.Millisecond}
+	for attempt := 0; ; attempt++ {
+		resp, err := s.do(ctx, http.MethodGet, key, nil, "")
+		if err != nil {
+			return fmt.Errorf("WebDAV connection test download failed: %w", err)
+		}
+		if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+			got, err = io.ReadAll(resp.Body)
+			_ = resp.Body.Close()
+			if err != nil {
+				return fmt.Errorf("WebDAV connection test read failed: %w", err)
+			}
+			break
+		}
+		_ = resp.Body.Close()
+		if resp.StatusCode != http.StatusNotFound || attempt >= len(backoffs) {
+			return fmt.Errorf("WebDAV connection test download failed: WebDAV GET failed: %s", resp.Status)
+		}
+		timer := time.NewTimer(backoffs[attempt])
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return fmt.Errorf("WebDAV connection test download failed: %w", ctx.Err())
+		case <-timer.C:
+		}
 	}
 	if !bytes.Equal(got, content) {
 		return fmt.Errorf("WebDAV connection test returned unexpected data")

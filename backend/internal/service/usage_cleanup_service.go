@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -16,10 +17,15 @@ import (
 	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/pagination"
+	"github.com/google/uuid"
 )
 
 const (
-	usageCleanupWorkerName = "usage_cleanup_worker"
+	usageCleanupWorkerName         = "usage_cleanup_worker"
+	usageCleanupScheduleWorkerName = "usage_cleanup_schedule_worker"
+	usageCleanupScheduleSettingKey = "usage_cleanup_schedule"
+	usageCleanupScheduleLockKey    = "usage:cleanup:schedule"
+	usageCleanupScheduleInterval   = time.Minute
 )
 
 // UsageCleanupService 负责创建与执行使用记录清理任务
@@ -28,10 +34,15 @@ type UsageCleanupService struct {
 	timingWheel *TimingWheelService
 	dashboard   *DashboardAggregationService
 	cfg         *config.Config
+	settings    SettingRepository
+	leaderLock  LeaderLockCache
+	db          *sql.DB
+	instanceID  string
 
-	running   int32
-	startOnce sync.Once
-	stopOnce  sync.Once
+	running         int32
+	scheduleRunning int32
+	startOnce       sync.Once
+	stopOnce        sync.Once
 
 	workerCtx    context.Context
 	workerCancel context.CancelFunc
@@ -44,15 +55,35 @@ func NewUsageCleanupService(repo UsageCleanupRepository, timingWheel *TimingWhee
 		timingWheel:  timingWheel,
 		dashboard:    dashboard,
 		cfg:          cfg,
+		instanceID:   uuid.NewString(),
 		workerCtx:    workerCtx,
 		workerCancel: workerCancel,
 	}
 }
 
+func (s *UsageCleanupService) SetSettingsRepository(repo SettingRepository) {
+	if s != nil {
+		s.settings = repo
+	}
+}
+
+func (s *UsageCleanupService) SetLeaderLock(lockCache LeaderLockCache, db *sql.DB) {
+	if s != nil {
+		s.leaderLock = lockCache
+		s.db = db
+	}
+}
+
 func describeUsageCleanupFilters(filters UsageCleanupFilters) string {
 	var parts []string
-	parts = append(parts, "start="+filters.StartTime.UTC().Format(time.RFC3339))
-	parts = append(parts, "end="+filters.EndTime.UTC().Format(time.RFC3339))
+	if filters.RetentionCutoff != nil {
+		parts = append(parts, "retention_before="+filters.RetentionCutoff.UTC().Format(time.RFC3339))
+	} else if filters.DeleteThroughID != nil {
+		parts = append(parts, fmt.Sprintf("delete_through_id=%d", *filters.DeleteThroughID))
+	} else {
+		parts = append(parts, "start="+filters.StartTime.UTC().Format(time.RFC3339))
+		parts = append(parts, "end="+filters.EndTime.UTC().Format(time.RFC3339))
+	}
 	if filters.UserID != nil {
 		parts = append(parts, fmt.Sprintf("user_id=%d", *filters.UserID))
 	}
@@ -96,6 +127,9 @@ func (s *UsageCleanupService) Start() {
 	interval := s.workerInterval()
 	s.startOnce.Do(func() {
 		s.timingWheel.ScheduleRecurring(usageCleanupWorkerName, interval, s.runOnce)
+		if s.settings != nil {
+			s.timingWheel.ScheduleRecurring(usageCleanupScheduleWorkerName, usageCleanupScheduleInterval, s.runScheduledCleanup)
+		}
 		logger.LegacyPrintf("service.usage_cleanup", "[UsageCleanup] started (interval=%s max_range_days=%d batch_size=%d task_timeout=%s)", interval, s.maxRangeDays(), s.batchSize(), s.taskTimeout())
 	})
 }
@@ -110,6 +144,7 @@ func (s *UsageCleanupService) Stop() {
 		}
 		if s.timingWheel != nil {
 			s.timingWheel.Cancel(usageCleanupWorkerName)
+			s.timingWheel.Cancel(usageCleanupScheduleWorkerName)
 		}
 		logger.LegacyPrintf("service.usage_cleanup", "[UsageCleanup] stopped")
 	})
@@ -120,6 +155,184 @@ func (s *UsageCleanupService) ListTasks(ctx context.Context, params pagination.P
 		return nil, nil, fmt.Errorf("cleanup service not ready")
 	}
 	return s.repo.ListTasks(ctx, params)
+}
+
+func (s *UsageCleanupService) GetScheduleSettings(ctx context.Context) (*UsageCleanupScheduleSettings, error) {
+	if s == nil || s.settings == nil {
+		return nil, fmt.Errorf("usage cleanup settings unavailable")
+	}
+	settings := &UsageCleanupScheduleSettings{IntervalDays: 1, RetentionDays: s.defaultRetentionDays()}
+	raw, err := s.settings.GetValue(ctx, usageCleanupScheduleSettingKey)
+	if err != nil {
+		if errors.Is(err, ErrSettingNotFound) {
+			return settings, nil
+		}
+		return nil, err
+	}
+	if err := json.Unmarshal([]byte(raw), settings); err != nil {
+		return nil, fmt.Errorf("decode usage cleanup settings: %w", err)
+	}
+	if settings.RetentionDays < 1 || settings.RetentionDays > 3650 {
+		settings.RetentionDays = s.defaultRetentionDays()
+	}
+	if settings.IntervalDays < 1 || settings.IntervalDays > 365 {
+		settings.IntervalDays = 1
+	}
+	return settings, nil
+}
+
+func (s *UsageCleanupService) UpdateScheduleSettings(ctx context.Context, enabled bool, intervalDays, retentionDays int, deleteAll bool, updatedBy int64) (*UsageCleanupScheduleSettings, error) {
+	if s == nil || s.settings == nil {
+		return nil, fmt.Errorf("usage cleanup settings unavailable")
+	}
+	if updatedBy <= 0 {
+		return nil, infraerrors.BadRequest("USAGE_CLEANUP_INVALID_CREATOR", "invalid creator")
+	}
+	if !deleteAll && (retentionDays < 1 || retentionDays > 3650) {
+		return nil, infraerrors.BadRequest("USAGE_CLEANUP_INVALID_RETENTION_DAYS", "retention_days must be between 1 and 3650")
+	}
+	if intervalDays < 1 || intervalDays > 365 {
+		return nil, infraerrors.BadRequest("USAGE_CLEANUP_INVALID_INTERVAL_DAYS", "interval_days must be between 1 and 365")
+	}
+	release, acquired := tryAcquireSingletonLeaderLock(ctx, s.leaderLock, s.db, usageCleanupScheduleLockKey, s.instanceID, 3*time.Minute)
+	if !acquired {
+		return nil, infraerrors.New(http.StatusConflict, "USAGE_CLEANUP_SETTINGS_BUSY", "cleanup settings are busy, please retry")
+	}
+	defer release()
+	settings, err := s.GetScheduleSettings(ctx)
+	if err != nil {
+		return nil, err
+	}
+	settings.Enabled = enabled
+	settings.IntervalDays = intervalDays
+	settings.RetentionDays = retentionDays
+	settings.DeleteAll = deleteAll
+	settings.UpdatedBy = updatedBy
+	if err := s.saveScheduleSettings(ctx, settings); err != nil {
+		return nil, err
+	}
+	return settings, nil
+}
+
+func (s *UsageCleanupService) GetStorageStats(ctx context.Context) (*UsageLogsStorageStats, error) {
+	if s == nil || s.repo == nil {
+		return nil, fmt.Errorf("usage cleanup service not ready")
+	}
+	repo, ok := s.repo.(UsageCleanupMaintenanceRepository)
+	if !ok {
+		return nil, fmt.Errorf("usage log storage statistics unavailable")
+	}
+	return repo.GetUsageLogsStorageStats(ctx)
+}
+
+func (s *UsageCleanupService) CreateRetentionTask(ctx context.Context, retentionDays int, deleteAll bool, createdBy int64) (*UsageCleanupTask, error) {
+	if s == nil || s.repo == nil {
+		return nil, fmt.Errorf("cleanup service not ready")
+	}
+	if s.cfg != nil && !s.cfg.UsageCleanup.Enabled {
+		return nil, infraerrors.New(http.StatusServiceUnavailable, "USAGE_CLEANUP_DISABLED", "usage cleanup is disabled")
+	}
+	if createdBy <= 0 {
+		return nil, infraerrors.BadRequest("USAGE_CLEANUP_INVALID_CREATOR", "invalid creator")
+	}
+	if !deleteAll && (retentionDays < 1 || retentionDays > 3650) {
+		return nil, infraerrors.BadRequest("USAGE_CLEANUP_INVALID_RETENTION_DAYS", "retention_days must be between 1 and 3650")
+	}
+
+	filters := UsageCleanupFilters{}
+	if deleteAll {
+		maintenanceRepo, ok := s.repo.(UsageCleanupMaintenanceRepository)
+		if !ok {
+			return nil, fmt.Errorf("usage log cleanup repository is unavailable")
+		}
+		maxID, err := maintenanceRepo.GetUsageLogsMaxID(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("snapshot usage log cleanup boundary: %w", err)
+		}
+		filters.DeleteThroughID = &maxID
+	} else {
+		cutoff := time.Now().UTC().AddDate(0, 0, -retentionDays)
+		filters.RetentionCutoff = &cutoff
+	}
+	task := &UsageCleanupTask{
+		Status:    UsageCleanupStatusPending,
+		Filters:   filters,
+		CreatedBy: createdBy,
+	}
+	if err := s.repo.CreateTask(ctx, task); err != nil {
+		return nil, fmt.Errorf("create retention cleanup task: %w", err)
+	}
+	logger.LegacyPrintf("service.usage_cleanup", "[UsageCleanup] retention task persisted: task=%d operator=%d delete_all=%t retention_days=%d %s", task.ID, createdBy, deleteAll, retentionDays, describeUsageCleanupFilters(filters))
+	go s.runOnce()
+	return task, nil
+}
+
+func (s *UsageCleanupService) defaultRetentionDays() int {
+	if s != nil && s.cfg != nil && s.cfg.DashboardAgg.Retention.UsageLogsDays > 0 {
+		return s.cfg.DashboardAgg.Retention.UsageLogsDays
+	}
+	return 90
+}
+
+func (s *UsageCleanupService) saveScheduleSettings(ctx context.Context, settings *UsageCleanupScheduleSettings) error {
+	if settings == nil || s == nil || s.settings == nil {
+		return fmt.Errorf("usage cleanup settings unavailable")
+	}
+	raw, err := json.Marshal(settings)
+	if err != nil {
+		return fmt.Errorf("encode usage cleanup settings: %w", err)
+	}
+	return s.settings.Set(ctx, usageCleanupScheduleSettingKey, string(raw))
+}
+
+func (s *UsageCleanupService) runScheduledCleanup() {
+	if s == nil || s.settings == nil || s.repo == nil {
+		return
+	}
+	if !atomic.CompareAndSwapInt32(&s.scheduleRunning, 0, 1) {
+		return
+	}
+	defer atomic.StoreInt32(&s.scheduleRunning, 0)
+
+	parent := context.Background()
+	if s.workerCtx != nil {
+		parent = s.workerCtx
+	}
+	ctx, cancel := context.WithTimeout(parent, 2*time.Minute)
+	defer cancel()
+	release, acquired := tryAcquireSingletonLeaderLock(ctx, s.leaderLock, s.db, usageCleanupScheduleLockKey, s.instanceID, 3*time.Minute)
+	if !acquired {
+		return
+	}
+	defer release()
+
+	settings, err := s.GetScheduleSettings(ctx)
+	if err != nil {
+		logger.LegacyPrintf("service.usage_cleanup", "[UsageCleanup] load scheduled cleanup settings failed: %v", err)
+		return
+	}
+	if !settings.Enabled || settings.UpdatedBy <= 0 {
+		return
+	}
+	now := time.Now().UTC()
+	if settings.LastRunAt != nil && now.Sub(*settings.LastRunAt) < time.Duration(settings.IntervalDays)*24*time.Hour {
+		return
+	}
+	previousRun := settings.LastRunAt
+	settings.LastRunAt = &now
+	if err := s.saveScheduleSettings(ctx, settings); err != nil {
+		logger.LegacyPrintf("service.usage_cleanup", "[UsageCleanup] persist scheduled cleanup marker failed: %v", err)
+		return
+	}
+	if _, err := s.CreateRetentionTask(ctx, settings.RetentionDays, settings.DeleteAll, settings.UpdatedBy); err != nil {
+		settings.LastRunAt = previousRun
+		rollbackCtx, rollbackCancel := context.WithTimeout(context.Background(), 3*time.Second)
+		rollbackErr := s.saveScheduleSettings(rollbackCtx, settings)
+		rollbackCancel()
+		logger.LegacyPrintf("service.usage_cleanup", "[UsageCleanup] scheduled cleanup enqueue failed: %v rollback_err=%v", err, rollbackErr)
+		return
+	}
+	logger.LegacyPrintf("service.usage_cleanup", "[UsageCleanup] scheduled cleanup enqueued: delete_all=%t retention_days=%d", settings.DeleteAll, settings.RetentionDays)
 }
 
 func (s *UsageCleanupService) CreateTask(ctx context.Context, filters UsageCleanupFilters, createdBy int64) (*UsageCleanupTask, error) {
@@ -195,6 +408,15 @@ func (s *UsageCleanupService) executeTask(ctx context.Context, task *UsageCleanu
 	deletedTotal := task.DeletedRows
 	start := time.Now()
 	logger.LegacyPrintf("service.usage_cleanup", "[UsageCleanup] task started: task=%d batch_size=%d deleted_rows=%d %s", task.ID, batchSize, deletedTotal, describeUsageCleanupFilters(task.Filters))
+	var maintenanceRepo UsageCleanupMaintenanceRepository
+	if task.Filters.RetentionCutoff != nil || task.Filters.DeleteThroughID != nil {
+		var ok bool
+		maintenanceRepo, ok = s.repo.(UsageCleanupMaintenanceRepository)
+		if !ok {
+			s.markTaskFailed(task.ID, deletedTotal, fmt.Errorf("retention cleanup repository is unavailable"))
+			return
+		}
+	}
 	var batchNum int
 
 	for {
@@ -213,7 +435,14 @@ func (s *UsageCleanupService) executeTask(ctx context.Context, task *UsageCleanu
 		}
 
 		batchNum++
-		deleted, err := s.repo.DeleteUsageLogsBatch(ctx, task.Filters, batchSize)
+		var deleted int64
+		if maintenanceRepo != nil && task.Filters.DeleteThroughID != nil {
+			deleted, err = maintenanceRepo.DeleteUsageLogsThroughIDBatch(ctx, *task.Filters.DeleteThroughID, batchSize)
+		} else if maintenanceRepo != nil {
+			deleted, err = maintenanceRepo.DeleteUsageLogsBeforeBatch(ctx, *task.Filters.RetentionCutoff, batchSize)
+		} else {
+			deleted, err = s.repo.DeleteUsageLogsBatch(ctx, task.Filters, batchSize)
+		}
 		if err != nil {
 			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 				// 任务被中断（例如服务停止/超时），保持 running 状态，后续通过 stale reclaim 续跑。
@@ -247,7 +476,7 @@ func (s *UsageCleanupService) executeTask(ctx context.Context, task *UsageCleanu
 		logger.LegacyPrintf("service.usage_cleanup", "[UsageCleanup] task succeeded: task=%d deleted_rows=%d duration=%s", task.ID, deletedTotal, time.Since(start))
 	}
 
-	if s.dashboard != nil {
+	if s.dashboard != nil && task.Filters.RetentionCutoff == nil && task.Filters.DeleteThroughID == nil {
 		if err := s.dashboard.TriggerRecomputeRange(task.Filters.StartTime, task.Filters.EndTime); err != nil {
 			logger.LegacyPrintf("service.usage_cleanup", "[UsageCleanup] trigger dashboard recompute failed: task=%d err=%v", task.ID, err)
 		} else {
@@ -289,6 +518,12 @@ func (s *UsageCleanupService) isTaskCanceled(ctx context.Context, taskID int64) 
 }
 
 func (s *UsageCleanupService) validateFilters(filters UsageCleanupFilters) error {
+	if filters.RetentionCutoff != nil {
+		if filters.RetentionCutoff.IsZero() {
+			return infraerrors.BadRequest("USAGE_CLEANUP_INVALID_RETENTION_CUTOFF", "retention cutoff is required")
+		}
+		return nil
+	}
 	if filters.StartTime.IsZero() || filters.EndTime.IsZero() {
 		return infraerrors.BadRequest("USAGE_CLEANUP_MISSING_RANGE", "start_date and end_date are required")
 	}

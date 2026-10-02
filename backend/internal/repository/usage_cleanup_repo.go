@@ -320,6 +320,98 @@ func (r *usageCleanupRepository) DeleteUsageLogsBatch(ctx context.Context, filte
 	return deleted, nil
 }
 
+func (r *usageCleanupRepository) GetUsageLogsStorageStats(ctx context.Context) (*service.UsageLogsStorageStats, error) {
+	const query = `
+		WITH RECURSIVE relations(relid) AS (
+			SELECT 'usage_logs'::regclass::oid
+			UNION ALL
+			SELECT i.inhrelid
+			FROM pg_inherits i
+			JOIN relations parent ON i.inhparent = parent.relid
+		), leaves AS (
+			SELECT relid
+			FROM relations current_rel
+			WHERE NOT EXISTS (SELECT 1 FROM pg_inherits i WHERE i.inhparent = current_rel.relid)
+		)
+		SELECT
+			COALESCE(SUM(pg_table_size(relid::regclass)), 0)::bigint,
+			COALESCE(SUM(pg_indexes_size(relid::regclass)), 0)::bigint,
+			COALESCE(SUM(pg_total_relation_size(relid::regclass)), 0)::bigint
+		FROM leaves
+	`
+	stats := &service.UsageLogsStorageStats{MeasuredAt: time.Now().UTC()}
+	if err := scanSingleRow(ctx, r.sql, query, nil, &stats.TableBytes, &stats.IndexBytes, &stats.TotalBytes); err != nil {
+		return nil, err
+	}
+	return stats, nil
+}
+
+func (r *usageCleanupRepository) GetUsageLogsMaxID(ctx context.Context) (int64, error) {
+	var maxID int64
+	if err := scanSingleRow(ctx, r.sql, `SELECT COALESCE(MAX(id), 0) FROM usage_logs`, nil, &maxID); err != nil {
+		return 0, err
+	}
+	return maxID, nil
+}
+
+func (r *usageCleanupRepository) DeleteUsageLogsBeforeBatch(ctx context.Context, cutoff time.Time, limit int) (int64, error) {
+	rows, err := r.sql.QueryContext(ctx, `
+		WITH target AS (
+			SELECT tableoid, ctid
+			FROM usage_logs
+			WHERE created_at < $1
+			ORDER BY created_at ASC, id ASC
+			LIMIT $2
+		)
+		DELETE FROM usage_logs
+		USING target
+		WHERE usage_logs.tableoid = target.tableoid AND usage_logs.ctid = target.ctid
+		RETURNING usage_logs.id
+	`, cutoff.UTC(), limit)
+	if err != nil {
+		return 0, err
+	}
+	defer func() { _ = rows.Close() }()
+
+	var deleted int64
+	for rows.Next() {
+		deleted++
+	}
+	if err := rows.Err(); err != nil {
+		return deleted, err
+	}
+	return deleted, nil
+}
+
+func (r *usageCleanupRepository) DeleteUsageLogsThroughIDBatch(ctx context.Context, maxID int64, limit int) (int64, error) {
+	rows, err := r.sql.QueryContext(ctx, `
+		WITH target AS (
+			SELECT tableoid, ctid
+			FROM usage_logs
+			WHERE id <= $1
+			ORDER BY id ASC
+			LIMIT $2
+		)
+		DELETE FROM usage_logs
+		USING target
+		WHERE usage_logs.tableoid = target.tableoid AND usage_logs.ctid = target.ctid
+		RETURNING usage_logs.id
+	`, maxID, limit)
+	if err != nil {
+		return 0, err
+	}
+	defer func() { _ = rows.Close() }()
+
+	var deleted int64
+	for rows.Next() {
+		deleted++
+	}
+	if err := rows.Err(); err != nil {
+		return deleted, err
+	}
+	return deleted, nil
+}
+
 func buildUsageCleanupWhere(filters service.UsageCleanupFilters) (string, []any) {
 	conditions := make([]string, 0, 8)
 	args := make([]any, 0, 8)
