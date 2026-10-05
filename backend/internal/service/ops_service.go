@@ -709,7 +709,20 @@ func (s *OpsService) GetUserErrorRequestDetail(ctx context.Context, userID, id i
 	if id <= 0 {
 		return nil, infraerrors.BadRequest("OPS_ERROR_INVALID_ID", "invalid error id")
 	}
-	detail, err := s.opsRepo.GetErrorLogByID(ctx, id)
+	var detail *OpsErrorLogDetail
+	var err error
+	if s.channelMonitorUsageLogsHidden(ctx) {
+		type visibilityReader interface {
+			GetErrorLogByIDWithVisibility(context.Context, int64, bool) (*OpsErrorLogDetail, error)
+		}
+		reader, ok := s.opsRepo.(visibilityReader)
+		if !ok {
+			return nil, infraerrors.NotFound("OPS_ERROR_NOT_FOUND", "ops error log not found")
+		}
+		detail, err = reader.GetErrorLogByIDWithVisibility(ctx, id, true)
+	} else {
+		detail, err = s.opsRepo.GetErrorLogByID(ctx, id)
+	}
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, infraerrors.NotFound("OPS_ERROR_NOT_FOUND", "ops error log not found")

@@ -395,6 +395,10 @@ LIMIT $` + itoa(len(args)+1) + ` OFFSET $` + itoa(len(args)+2)
 }
 
 func (r *opsRepository) GetErrorLogByID(ctx context.Context, id int64) (*service.OpsErrorLogDetail, error) {
+	return r.GetErrorLogByIDWithVisibility(ctx, id, false)
+}
+
+func (r *opsRepository) GetErrorLogByIDWithVisibility(ctx context.Context, id int64, hideChannelMonitorLogs bool) (*service.OpsErrorLogDetail, error) {
 	if r == nil || r.db == nil {
 		return nil, fmt.Errorf("nil ops repository")
 	}
@@ -455,8 +459,8 @@ LEFT JOIN users u ON e.user_id = u.id
 LEFT JOIN accounts a ON e.account_id = a.id
 LEFT JOIN groups g ON e.group_id = g.id
 LEFT JOIN api_keys ak ON ak.id = e.api_key_id
-WHERE e.id = $1
-LIMIT 1`
+WHERE e.id = $1`
+	q = appendChannelMonitorUsageLogFilter(q, hideChannelMonitorLogs, "e") + " LIMIT 1"
 
 	var out service.OpsErrorLogDetail
 	var statusCode sql.NullInt64
