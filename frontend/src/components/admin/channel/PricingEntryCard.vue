@@ -68,8 +68,8 @@
     >
       <div class="collapsible-inner">
         <!-- Header: Models + Billing Mode -->
-        <div class="mt-3 flex items-start gap-2">
-          <div class="flex-1">
+        <div class="mt-3 flex flex-col gap-2 sm:flex-row sm:items-start">
+          <div class="w-full min-w-0 sm:flex-1">
             <label class="text-xs font-medium text-gray-500 dark:text-gray-400">
               {{ t('admin.channels.form.models') }} <span class="text-red-500">*</span>
             </label>
@@ -81,7 +81,7 @@
               class="mt-1"
             />
           </div>
-          <div class="w-40">
+          <div class="w-full sm:w-40 sm:flex-shrink-0">
             <label class="text-xs font-medium text-gray-500 dark:text-gray-400">
               {{ t('admin.channels.form.billingMode') }}
             </label>
