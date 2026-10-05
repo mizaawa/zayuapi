@@ -895,6 +895,10 @@ func buildOpsErrorLogsWhere(filter *service.OpsErrorLogFilter) (string, []any) {
 	clauses := make([]string, 0, 12)
 	args := make([]any, 0, 12)
 	clauses = append(clauses, "1=1")
+	if filter != nil && filter.ExcludeChannelMonitor {
+		args = append(args, service.APIKeyPurposeChannelMonitor)
+		clauses = append(clauses, "NOT EXISTS (SELECT 1 FROM api_keys monitor_key WHERE monitor_key.id = e.api_key_id AND monitor_key.purpose = $"+itoa(len(args))+")")
+	}
 
 	phaseFilter := ""
 	if filter != nil {

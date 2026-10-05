@@ -443,6 +443,7 @@ const loadModelStats = async (source: ModelDistributionSource, force = false) =>
     const requestType = filters.value.request_type
     const legacyStream = requestType ? requestTypeToLegacyStream(requestType) : filters.value.stream
     const baseParams = {
+      usage_view: true,
       start_date: filters.value.start_date || startDate.value,
       end_date: filters.value.end_date || endDate.value,
       user_id: filters.value.user_id,
@@ -492,6 +493,7 @@ const loadChartData = async () => {
     const requestType = filters.value.request_type
     const legacyStream = requestType ? requestTypeToLegacyStream(requestType) : filters.value.stream
     const snapshot = await adminAPI.dashboard.getSnapshotV2({
+      usage_view: true,
       start_date: filters.value.start_date || startDate.value,
       end_date: filters.value.end_date || endDate.value,
       granularity: granularity.value,
@@ -827,6 +829,7 @@ const loadAdminErrors = async () => {
   errLoading.value = true
   try {
     const resp = await listErrorLogs({
+      usage_view: true,
       page: errPage.value,
       page_size: errPageSize.value,
       view: 'all',

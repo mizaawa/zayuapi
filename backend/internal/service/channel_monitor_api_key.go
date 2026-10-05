@@ -27,6 +27,9 @@ func (s *APIKeyService) CreateChannelMonitorKey(ctx context.Context, userID, gro
 	if user == nil || !user.IsActive() {
 		return nil, ErrUserNotActive
 	}
+	if !user.IsAdmin() {
+		return nil, ErrInsufficientPerms
+	}
 	group, err := s.groupRepo.GetByIDLite(ctx, groupID)
 	if err != nil {
 		return nil, fmt.Errorf("get channel monitor group: %w", err)

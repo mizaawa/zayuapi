@@ -290,6 +290,8 @@ type UsageLogFilters struct {
 	EndTime               *time.Time
 	// ExactTotal requests exact COUNT(*) for pagination. Default false for fast large-table paging.
 	ExactTotal bool
+	// HideChannelMonitorLogs is an internal display filter, never a billing filter.
+	HideChannelMonitorLogs bool `json:"-"`
 }
 
 // UsageStats represents usage statistics

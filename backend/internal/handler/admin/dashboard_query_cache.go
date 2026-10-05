@@ -18,32 +18,34 @@ var (
 )
 
 type dashboardTrendCacheKey struct {
-	StartTime             string `json:"start_time"`
-	EndTime               string `json:"end_time"`
-	Granularity           string `json:"granularity"`
-	UserID                int64  `json:"user_id"`
-	APIKeyID              int64  `json:"api_key_id"`
-	AccountID             int64  `json:"account_id"`
-	GroupID               int64  `json:"group_id"`
-	Model                 string `json:"model"`
-	RequestType           *int16 `json:"request_type"`
-	Stream                *bool  `json:"stream"`
-	BillingType           *int8  `json:"billing_type"`
-	UpstreamModelMismatch *bool  `json:"upstream_model_mismatch"`
+	HideChannelMonitorLogs bool   `json:"hide_channel_monitor_logs"`
+	StartTime              string `json:"start_time"`
+	EndTime                string `json:"end_time"`
+	Granularity            string `json:"granularity"`
+	UserID                 int64  `json:"user_id"`
+	APIKeyID               int64  `json:"api_key_id"`
+	AccountID              int64  `json:"account_id"`
+	GroupID                int64  `json:"group_id"`
+	Model                  string `json:"model"`
+	RequestType            *int16 `json:"request_type"`
+	Stream                 *bool  `json:"stream"`
+	BillingType            *int8  `json:"billing_type"`
+	UpstreamModelMismatch  *bool  `json:"upstream_model_mismatch"`
 }
 
 type dashboardModelGroupCacheKey struct {
-	StartTime             string `json:"start_time"`
-	EndTime               string `json:"end_time"`
-	UserID                int64  `json:"user_id"`
-	APIKeyID              int64  `json:"api_key_id"`
-	AccountID             int64  `json:"account_id"`
-	GroupID               int64  `json:"group_id"`
-	ModelSource           string `json:"model_source,omitempty"`
-	RequestType           *int16 `json:"request_type"`
-	Stream                *bool  `json:"stream"`
-	BillingType           *int8  `json:"billing_type"`
-	UpstreamModelMismatch *bool  `json:"upstream_model_mismatch"`
+	HideChannelMonitorLogs bool   `json:"hide_channel_monitor_logs"`
+	StartTime              string `json:"start_time"`
+	EndTime                string `json:"end_time"`
+	UserID                 int64  `json:"user_id"`
+	APIKeyID               int64  `json:"api_key_id"`
+	AccountID              int64  `json:"account_id"`
+	GroupID                int64  `json:"group_id"`
+	ModelSource            string `json:"model_source,omitempty"`
+	RequestType            *int16 `json:"request_type"`
+	Stream                 *bool  `json:"stream"`
+	BillingType            *int8  `json:"billing_type"`
+	UpstreamModelMismatch  *bool  `json:"upstream_model_mismatch"`
 }
 
 type dashboardEntityTrendCacheKey struct {
@@ -89,22 +91,24 @@ func (h *DashboardHandler) getUsageTrendCached(
 	upstreamModelMismatch *bool,
 ) ([]usagestats.TrendDataPoint, bool, error) {
 	key := mustMarshalDashboardCacheKey(dashboardTrendCacheKey{
-		StartTime:             startTime.UTC().Format(time.RFC3339),
-		EndTime:               endTime.UTC().Format(time.RFC3339),
-		Granularity:           granularity,
-		UserID:                userID,
-		APIKeyID:              apiKeyID,
-		AccountID:             accountID,
-		GroupID:               groupID,
-		Model:                 model,
-		RequestType:           requestType,
-		Stream:                stream,
-		BillingType:           billingType,
-		UpstreamModelMismatch: upstreamModelMismatch,
+		HideChannelMonitorLogs: dashboardUsageLogsHidden(ctx),
+		StartTime:              startTime.UTC().Format(time.RFC3339),
+		EndTime:                endTime.UTC().Format(time.RFC3339),
+		Granularity:            granularity,
+		UserID:                 userID,
+		APIKeyID:               apiKeyID,
+		AccountID:              accountID,
+		GroupID:                groupID,
+		Model:                  model,
+		RequestType:            requestType,
+		Stream:                 stream,
+		BillingType:            billingType,
+		UpstreamModelMismatch:  upstreamModelMismatch,
 	})
 	entry, hit, err := dashboardTrendCache.GetOrLoad(key, func() (any, error) {
 		return h.dashboardService.GetUsageTrendWithUsageFilters(ctx, startTime, endTime, granularity, usagestats.UsageLogFilters{
-			UserID: userID, APIKeyID: apiKeyID, AccountID: accountID, GroupID: groupID,
+			HideChannelMonitorLogs: dashboardUsageLogsHidden(ctx),
+			UserID:                 userID, APIKeyID: apiKeyID, AccountID: accountID, GroupID: groupID,
 			Model: model, RequestType: requestType, Stream: stream, BillingType: billingType,
 			UpstreamModelMismatch: upstreamModelMismatch,
 		})
@@ -127,21 +131,23 @@ func (h *DashboardHandler) getModelStatsCached(
 	upstreamModelMismatch *bool,
 ) ([]usagestats.ModelStat, bool, error) {
 	key := mustMarshalDashboardCacheKey(dashboardModelGroupCacheKey{
-		StartTime:             startTime.UTC().Format(time.RFC3339),
-		EndTime:               endTime.UTC().Format(time.RFC3339),
-		UserID:                userID,
-		APIKeyID:              apiKeyID,
-		AccountID:             accountID,
-		GroupID:               groupID,
-		ModelSource:           usagestats.NormalizeModelSource(modelSource),
-		RequestType:           requestType,
-		Stream:                stream,
-		BillingType:           billingType,
-		UpstreamModelMismatch: upstreamModelMismatch,
+		HideChannelMonitorLogs: dashboardUsageLogsHidden(ctx),
+		StartTime:              startTime.UTC().Format(time.RFC3339),
+		EndTime:                endTime.UTC().Format(time.RFC3339),
+		UserID:                 userID,
+		APIKeyID:               apiKeyID,
+		AccountID:              accountID,
+		GroupID:                groupID,
+		ModelSource:            usagestats.NormalizeModelSource(modelSource),
+		RequestType:            requestType,
+		Stream:                 stream,
+		BillingType:            billingType,
+		UpstreamModelMismatch:  upstreamModelMismatch,
 	})
 	entry, hit, err := dashboardModelStatsCache.GetOrLoad(key, func() (any, error) {
 		return h.dashboardService.GetModelStatsWithUsageFiltersBySource(ctx, startTime, endTime, usagestats.UsageLogFilters{
-			UserID: userID, APIKeyID: apiKeyID, AccountID: accountID, GroupID: groupID,
+			HideChannelMonitorLogs: dashboardUsageLogsHidden(ctx),
+			UserID:                 userID, APIKeyID: apiKeyID, AccountID: accountID, GroupID: groupID,
 			RequestType: requestType, Stream: stream, BillingType: billingType,
 			UpstreamModelMismatch: upstreamModelMismatch,
 		}, modelSource)
@@ -163,20 +169,22 @@ func (h *DashboardHandler) getGroupStatsCached(
 	upstreamModelMismatch *bool,
 ) ([]usagestats.GroupStat, bool, error) {
 	key := mustMarshalDashboardCacheKey(dashboardModelGroupCacheKey{
-		StartTime:             startTime.UTC().Format(time.RFC3339),
-		EndTime:               endTime.UTC().Format(time.RFC3339),
-		UserID:                userID,
-		APIKeyID:              apiKeyID,
-		AccountID:             accountID,
-		GroupID:               groupID,
-		RequestType:           requestType,
-		Stream:                stream,
-		BillingType:           billingType,
-		UpstreamModelMismatch: upstreamModelMismatch,
+		HideChannelMonitorLogs: dashboardUsageLogsHidden(ctx),
+		StartTime:              startTime.UTC().Format(time.RFC3339),
+		EndTime:                endTime.UTC().Format(time.RFC3339),
+		UserID:                 userID,
+		APIKeyID:               apiKeyID,
+		AccountID:              accountID,
+		GroupID:                groupID,
+		RequestType:            requestType,
+		Stream:                 stream,
+		BillingType:            billingType,
+		UpstreamModelMismatch:  upstreamModelMismatch,
 	})
 	entry, hit, err := dashboardGroupStatsCache.GetOrLoad(key, func() (any, error) {
 		return h.dashboardService.GetGroupStatsWithUsageFilters(ctx, startTime, endTime, usagestats.UsageLogFilters{
-			UserID: userID, APIKeyID: apiKeyID, AccountID: accountID, GroupID: groupID,
+			HideChannelMonitorLogs: dashboardUsageLogsHidden(ctx),
+			UserID:                 userID, APIKeyID: apiKeyID, AccountID: accountID, GroupID: groupID,
 			RequestType: requestType, Stream: stream, BillingType: billingType,
 			UpstreamModelMismatch: upstreamModelMismatch,
 		})

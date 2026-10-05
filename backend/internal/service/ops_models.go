@@ -135,6 +135,10 @@ type OpsErrorLogFilter struct {
 	// ExcludeCountTokens drops count_tokens probe errors (is_count_tokens=true).
 	ExcludeCountTokens bool
 
+	// UsageView applies usage-page visibility without hiding operational diagnostics.
+	UsageView             bool
+	ExcludeChannelMonitor bool
+
 	// IncludeRecoveredUpstream explicitly exempts provider-health phases
 	// (upstream and account_auth) from the status>=400 guard. Ops provider
 	// health lists need status<400 recovered rows; request-error endpoints do

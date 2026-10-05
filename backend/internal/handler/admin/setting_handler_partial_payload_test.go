@@ -3,14 +3,65 @@
 package admin
 
 import (
+	"encoding/json"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
 	"github.com/Wei-Shaw/sub2api/internal/service"
 
+	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 )
+
+func TestUpdateSettingsChannelMonitorHideUsageLogsPreservesOmittedAndCanDisable(t *testing.T) {
+	h, repo := newStepUpSwitchTestHandler(t, map[string]string{
+		service.SettingKeyChannelMonitorHideUsageLogs: "true",
+	})
+
+	for _, test := range []struct {
+		body map[string]any
+		want bool
+	}{
+		{body: map[string]any{"risk_control_enabled": true}, want: true},
+		{body: map[string]any{"channel_monitor_hide_usage_logs": false}},
+		{body: map[string]any{"risk_control_enabled": false}},
+		{body: map[string]any{"channel_monitor_hide_usage_logs": true}, want: true},
+	} {
+		rec := doUpdateSettings(t, h, test.body, nil)
+		require.Equal(t, http.StatusOK, rec.Code)
+		require.Equal(t, test.want, repo.values[service.SettingKeyChannelMonitorHideUsageLogs] == "true")
+		var response struct {
+			Data map[string]any `json:"data"`
+		}
+		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &response))
+		require.Equal(t, test.want, response.Data["channel_monitor_hide_usage_logs"])
+	}
+}
+
+func TestDiffSettingsChannelMonitorHideUsageLogs(t *testing.T) {
+	changed := diffSettings(&service.SystemSettings{}, &service.SystemSettings{
+		ChannelMonitorHideUsageLogs: true,
+	}, nil, nil, UpdateSettingsRequest{})
+	require.Contains(t, changed, "channel_monitor_hide_usage_logs")
+}
+
+func TestGetSettingsChannelMonitorHideUsageLogs(t *testing.T) {
+	h, _ := newStepUpSwitchTestHandler(t, map[string]string{
+		service.SettingKeyChannelMonitorHideUsageLogs: "true",
+	})
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = httptest.NewRequest(http.MethodGet, "/api/v1/admin/settings", nil)
+	h.GetSettings(c)
+	require.Equal(t, http.StatusOK, rec.Code)
+	var response struct {
+		Data map[string]any `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &response))
+	require.Equal(t, true, response.Data["channel_monitor_hide_usage_logs"])
+}
 
 // Saving settings is a whole-document PUT. A client that sends only the field it
 // cares about must not reset everything else: a payload as small as

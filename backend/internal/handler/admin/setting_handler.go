@@ -374,6 +374,7 @@ func (h *SettingHandler) GetSettings(c *gin.Context) {
 		PaymentAlipayMobilePrecreateDeepLink:                   paymentCfg.AlipayMobilePrecreateDeepLink,
 
 		ChannelMonitorEnabled:                settings.ChannelMonitorEnabled,
+		ChannelMonitorHideUsageLogs:          settings.ChannelMonitorHideUsageLogs,
 		ChannelMonitorDefaultIntervalSeconds: settings.ChannelMonitorDefaultIntervalSeconds,
 		ChannelMonitorAnnouncement:           settings.ChannelMonitorAnnouncement,
 

@@ -188,6 +188,7 @@ func (s *SettingService) InitializeDefaultSettings(ctx context.Context) error {
 
 		// Channel monitor defaults (enabled, 60s)
 		SettingKeyChannelMonitorEnabled:                "true",
+		SettingKeyChannelMonitorHideUsageLogs:          "false",
 		SettingKeyChannelMonitorDefaultIntervalSeconds: "60",
 		SettingKeyChannelMonitorAnnouncement:           "",
 
@@ -792,6 +793,7 @@ func (s *SettingService) parseSettings(settings map[string]string) *SystemSettin
 
 	// Channel monitor feature (default: enabled, 60s)
 	result.ChannelMonitorEnabled = !isFalseSettingValue(settings[SettingKeyChannelMonitorEnabled])
+	result.ChannelMonitorHideUsageLogs = settings[SettingKeyChannelMonitorHideUsageLogs] == "true"
 	result.ChannelMonitorDefaultIntervalSeconds = parseChannelMonitorInterval(
 		settings[SettingKeyChannelMonitorDefaultIntervalSeconds],
 	)

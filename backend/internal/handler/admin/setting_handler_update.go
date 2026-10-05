@@ -334,6 +334,7 @@ type UpdateSettingsRequest struct {
 
 	// Channel Monitor feature switch
 	ChannelMonitorEnabled                *bool   `json:"channel_monitor_enabled"`
+	ChannelMonitorHideUsageLogs          *bool   `json:"channel_monitor_hide_usage_logs"`
 	ChannelMonitorDefaultIntervalSeconds *int    `json:"channel_monitor_default_interval_seconds"`
 	ChannelMonitorAnnouncement           *string `json:"channel_monitor_announcement"`
 
@@ -1884,6 +1885,12 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 			}
 			return previousSettings.ChannelMonitorEnabled
 		}(),
+		ChannelMonitorHideUsageLogs: func() bool {
+			if req.ChannelMonitorHideUsageLogs != nil {
+				return *req.ChannelMonitorHideUsageLogs
+			}
+			return previousSettings.ChannelMonitorHideUsageLogs
+		}(),
 		ChannelMonitorDefaultIntervalSeconds: func() int {
 			if req.ChannelMonitorDefaultIntervalSeconds != nil {
 				return *req.ChannelMonitorDefaultIntervalSeconds
@@ -2343,6 +2350,7 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		PaymentAlipayMobilePrecreateDeepLink:                   updatedPaymentCfg.AlipayMobilePrecreateDeepLink,
 
 		ChannelMonitorEnabled:                updatedSettings.ChannelMonitorEnabled,
+		ChannelMonitorHideUsageLogs:          updatedSettings.ChannelMonitorHideUsageLogs,
 		ChannelMonitorDefaultIntervalSeconds: updatedSettings.ChannelMonitorDefaultIntervalSeconds,
 		ChannelMonitorAnnouncement:           updatedSettings.ChannelMonitorAnnouncement,
 

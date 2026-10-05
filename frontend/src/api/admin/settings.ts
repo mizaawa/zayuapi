@@ -673,6 +673,7 @@ export interface SystemSettings {
 
   // Channel Monitor feature switch
   channel_monitor_enabled: boolean;
+  channel_monitor_hide_usage_logs: boolean;
   channel_monitor_default_interval_seconds: number;
   channel_monitor_announcement: string;
 
@@ -974,6 +975,7 @@ export interface UpdateSettingsRequest {
 
   // Channel Monitor feature switch
   channel_monitor_enabled?: boolean;
+  channel_monitor_hide_usage_logs?: boolean;
   channel_monitor_default_interval_seconds?: number;
   channel_monitor_announcement?: string;
 
