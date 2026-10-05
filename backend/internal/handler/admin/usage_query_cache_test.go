@@ -25,4 +25,8 @@ func TestUsageStatsCacheKey_StableAndDistinct(t *testing.T) {
 	withUser := base
 	withUser.UserID = 7
 	require.NotEqual(t, k1, usageStatsCacheKey(withUser), "different user must change key")
+
+	hidden := base
+	hidden.HideChannelMonitorLogs = true
+	require.NotEqual(t, k1, usageStatsCacheKey(hidden), "visibility setting must isolate cached stats")
 }

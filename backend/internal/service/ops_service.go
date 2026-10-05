@@ -624,6 +624,11 @@ func (s *OpsService) GetErrorLogs(ctx context.Context, filter *OpsErrorLogFilter
 	if s.opsRepo == nil {
 		return &OpsErrorLogList{Errors: []*OpsErrorLog{}, Total: 0, Page: 1, PageSize: 20}, nil
 	}
+	if filter != nil && filter.UsageView {
+		copy := *filter
+		copy.ExcludeChannelMonitor = s.channelMonitorUsageLogsHidden(ctx)
+		filter = &copy
+	}
 	result, err := s.opsRepo.ListErrorLogs(ctx, filter)
 	if err != nil {
 		log.Printf("[Ops] GetErrorLogs failed: %v", err)
@@ -647,6 +652,7 @@ func (s *OpsService) ListUserErrorRequests(ctx context.Context, userID int64, fi
 	// "user_id = 自己 AND api_key_id = X" 双重约束保证——传入他人 key 只会得到空集，无泄露。
 	filter.View = "all"
 	filter.ExcludeCountTokens = true
+	filter.ExcludeChannelMonitor = s.channelMonitorUsageLogsHidden(ctx)
 	filter.ModelFuzzy = true // 用户端模型过滤走 ILIKE 模糊；管理端不设此字段，保持精确
 	// 防御：用户端不接受这些 admin-only / 特殊维度
 	filter.UserQuery = ""
@@ -716,6 +722,14 @@ func (s *OpsService) GetUserErrorRequestDetail(ctx context.Context, userID, id i
 		return nil, infraerrors.NotFound("OPS_ERROR_NOT_FOUND", "ops error log not found")
 	}
 	return ToUserErrorRequestDetail(detail), nil
+}
+
+func (s *OpsService) channelMonitorUsageLogsHidden(ctx context.Context) bool {
+	if s.settingRepo == nil {
+		return false
+	}
+	value, err := s.settingRepo.GetValue(ctx, SettingKeyChannelMonitorHideUsageLogs)
+	return err == nil && value == "true"
 }
 
 func (s *OpsService) UpdateErrorResolution(ctx context.Context, errorID int64, resolved bool, resolvedByUserID *int64) error {

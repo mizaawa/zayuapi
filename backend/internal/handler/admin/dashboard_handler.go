@@ -1,6 +1,7 @@
 package admin
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"strconv"
@@ -19,6 +20,7 @@ import (
 type DashboardHandler struct {
 	dashboardService   *service.DashboardService
 	aggregationService *service.DashboardAggregationService
+	settingService     *service.SettingService
 	startTime          time.Time // Server start time for uptime calculation
 }
 
@@ -29,6 +31,24 @@ func NewDashboardHandler(dashboardService *service.DashboardService, aggregation
 		aggregationService: aggregationService,
 		startTime:          time.Now(),
 	}
+}
+
+func ProvideDashboardHandler(dashboardService *service.DashboardService, aggregationService *service.DashboardAggregationService, settingService *service.SettingService) *DashboardHandler {
+	h := NewDashboardHandler(dashboardService, aggregationService)
+	h.settingService = settingService
+	return h
+}
+
+type dashboardUsageVisibilityContextKey struct{}
+
+func (h *DashboardHandler) prepareUsageViewContext(c *gin.Context) {
+	hidden := parseBoolQueryWithDefault(c.Query("usage_view"), false) && h.settingService.IsChannelMonitorUsageLogsHidden(c.Request.Context())
+	c.Request = c.Request.WithContext(context.WithValue(c.Request.Context(), dashboardUsageVisibilityContextKey{}, hidden))
+}
+
+func dashboardUsageLogsHidden(ctx context.Context) bool {
+	hidden, _ := ctx.Value(dashboardUsageVisibilityContextKey{}).(bool)
+	return hidden
 }
 
 // parseTimeRange parses start_date, end_date query parameters
@@ -206,6 +226,7 @@ func (h *DashboardHandler) GetRealtimeMetrics(c *gin.Context) {
 // GET /api/v1/admin/dashboard/trend
 // Query params: start_date, end_date (YYYY-MM-DD), granularity (day/hour), user_id, api_key_id, model, account_id, group_id, request_type, stream, billing_type
 func (h *DashboardHandler) GetUsageTrend(c *gin.Context) {
+	h.prepareUsageViewContext(c)
 	startTime, endTime := parseTimeRange(c)
 	granularity := c.DefaultQuery("granularity", "day")
 
@@ -290,6 +311,7 @@ func (h *DashboardHandler) GetUsageTrend(c *gin.Context) {
 // GET /api/v1/admin/dashboard/models
 // Query params: start_date, end_date (YYYY-MM-DD), user_id, api_key_id, account_id, group_id, request_type, stream, billing_type
 func (h *DashboardHandler) GetModelStats(c *gin.Context) {
+	h.prepareUsageViewContext(c)
 	startTime, endTime := parseTimeRange(c)
 
 	// Parse optional filter params
@@ -376,6 +398,7 @@ func (h *DashboardHandler) GetModelStats(c *gin.Context) {
 // GET /api/v1/admin/dashboard/groups
 // Query params: start_date, end_date (YYYY-MM-DD), user_id, api_key_id, account_id, group_id, request_type, stream, billing_type
 func (h *DashboardHandler) GetGroupStats(c *gin.Context) {
+	h.prepareUsageViewContext(c)
 	startTime, endTime := parseTimeRange(c)
 
 	var userID, apiKeyID, accountID, groupID int64

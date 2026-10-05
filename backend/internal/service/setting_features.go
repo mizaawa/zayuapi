@@ -13,6 +13,14 @@ import (
 	"strings"
 )
 
+func (s *SettingService) IsChannelMonitorUsageLogsHidden(ctx context.Context) bool {
+	if s == nil || s.settingRepo == nil {
+		return false
+	}
+	value, err := s.settingRepo.GetValue(ctx, SettingKeyChannelMonitorHideUsageLogs)
+	return err == nil && value == "true"
+}
+
 // IsRegistrationEnabled 检查是否开放注册
 func (s *SettingService) IsRegistrationEnabled(ctx context.Context) bool {
 	value, err := s.settingRepo.GetValue(ctx, SettingKeyRegistrationEnabled)

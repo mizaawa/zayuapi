@@ -4,6 +4,7 @@ package middleware
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -27,6 +28,8 @@ func TestAPIKeyAuthManagedMonitorRequiresAttestationAndBypassesCreatorBilling(t 
 		router := gin.New()
 		router.Use(gin.HandlerFunc(NewAPIKeyAuthMiddleware(svc, nil, cfg)))
 		router.POST("/v1/messages", func(c *gin.Context) {
+			require.Empty(t, c.GetHeader(service.ChannelMonitorTimestampHeader))
+			require.Empty(t, c.GetHeader(service.ChannelMonitorSignatureHeader))
 			subject, _ = GetAuthSubjectFromContext(c)
 			gotBody, _ = io.ReadAll(c.Request.Body)
 			c.Status(http.StatusOK)
@@ -75,6 +78,8 @@ func TestGoogleAPIKeyAuthManagedMonitorRequiresAttestationAndBypassesCreatorBill
 		router := gin.New()
 		router.Use(APIKeyAuthWithSubscriptionGoogle(svc, nil, cfg))
 		router.POST("/v1beta/models/*modelAction", func(c *gin.Context) {
+			require.Empty(t, c.GetHeader(service.ChannelMonitorTimestampHeader))
+			require.Empty(t, c.GetHeader(service.ChannelMonitorSignatureHeader))
 			subject, _ = GetAuthSubjectFromContext(c)
 			c.Status(http.StatusOK)
 		})
@@ -94,6 +99,48 @@ func TestGoogleAPIKeyAuthManagedMonitorRequiresAttestationAndBypassesCreatorBill
 	require.Equal(t, http.StatusOK, w.Code)
 	require.Equal(t, key.User.ID, subject.UserID)
 	require.Zero(t, subject.Concurrency)
+}
+
+func TestManagedMonitorAuthRejectsNonAdminOwnerAndSpoofedOrdinaryKey(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	for _, google := range []bool{false, true} {
+		for _, scenario := range []string{"demoted owner", "owner mismatch", "ordinary key with monitor name and signature"} {
+			t.Run(fmt.Sprintf("google=%t/%s", google, scenario), func(t *testing.T) {
+				key, cfg, svc, attestor := managedMonitorAuthFixture(t, service.PlatformGemini)
+				wantStatus := http.StatusUnauthorized
+				switch scenario {
+				case "demoted owner":
+					key.User.Role = service.RoleUser
+				case "owner mismatch":
+					key.UserID++
+				case "ordinary key with monitor name and signature":
+					key.Purpose = ""
+					key.Name = "[channel-monitor] spoofed"
+					key.Group.SubscriptionType = service.SubscriptionTypeStandard
+					key.Group.IsExclusive = false
+					key.User.BlockedGroups = nil
+					wantStatus = http.StatusForbidden
+				}
+				router := gin.New()
+				if google {
+					router.Use(APIKeyAuthWithSubscriptionGoogle(svc, nil, cfg))
+				} else {
+					router.Use(gin.HandlerFunc(NewAPIKeyAuthMiddleware(svc, nil, cfg)))
+				}
+				router.POST("/v1/messages", func(c *gin.Context) {
+					t.Error("untrusted request reached gateway handler")
+					c.Status(http.StatusOK)
+				})
+				body := []byte(`{"model":"test"}`)
+				req := httptest.NewRequest(http.MethodPost, "/v1/messages", strings.NewReader(string(body)))
+				req.Header.Set("Authorization", "Bearer "+key.Key)
+				require.NoError(t, attestor.SignRequest(req, key.Key, body))
+				w := httptest.NewRecorder()
+				router.ServeHTTP(w, req)
+				require.Equal(t, wantStatus, w.Code, w.Body.String())
+			})
+		}
+	}
 }
 
 func TestAPIKeyAuthManagedCustomStillRejectsInactiveKeyAndGroup(t *testing.T) {

@@ -38,8 +38,11 @@ func TestChannelMonitorAttestationRejectsTamperingAndExpiry(t *testing.T) {
 		{name: "body", mutate: func(req *http.Request) { req.Body = io.NopCloser(strings.NewReader(`{"model":"other"}`)) }, key: "sk-managed"},
 		{name: "method", mutate: func(req *http.Request) { req.Method = http.MethodPut }, key: "sk-managed"},
 		{name: "path", mutate: func(req *http.Request) { req.URL.Path = "/v1/responses" }, key: "sk-managed"},
+		{name: "query", mutate: func(req *http.Request) { req.URL.RawQuery = "alt=sse" }, key: "sk-managed"},
+		{name: "forged signature", mutate: func(req *http.Request) { req.Header.Set(ChannelMonitorSignatureHeader, strings.Repeat("a", 43)) }, key: "sk-managed"},
 		{name: "key", key: "sk-leaked-copy"},
 		{name: "expired", key: "sk-managed", at: time.Now().Add(-2 * channelMonitorAttestationSkew)},
+		{name: "future", key: "sk-managed", at: time.Now().Add(2 * channelMonitorAttestationSkew)},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

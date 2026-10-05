@@ -75,6 +75,7 @@ type UsageService struct {
 	userRepo             UserRepository
 	entClient            *dbent.Client
 	authCacheInvalidator APIKeyAuthCacheInvalidator
+	settingService       *SettingService
 }
 
 // NewUsageService 创建使用统计服务实例
@@ -85,6 +86,25 @@ func NewUsageService(usageRepo UsageLogRepository, userRepo UserRepository, entC
 		entClient:            entClient,
 		authCacheInvalidator: authCacheInvalidator,
 	}
+}
+
+func ProvideUsageService(usageRepo UsageLogRepository, userRepo UserRepository, entClient *dbent.Client, authCacheInvalidator APIKeyAuthCacheInvalidator, settingService *SettingService) *UsageService {
+	s := NewUsageService(usageRepo, userRepo, entClient, authCacheInvalidator)
+	s.settingService = settingService
+	return s
+}
+
+type usageLogVisibilityContextKey struct{}
+
+// PrepareLogFilters snapshots visibility so cache keys and their queries use the same setting.
+func (s *UsageService) PrepareLogFilters(ctx context.Context, filters usagestats.UsageLogFilters) (context.Context, usagestats.UsageLogFilters) {
+	hidden, resolved := ctx.Value(usageLogVisibilityContextKey{}).(bool)
+	if !resolved {
+		hidden = s.settingService.IsChannelMonitorUsageLogsHidden(ctx)
+		ctx = context.WithValue(ctx, usageLogVisibilityContextKey{}, hidden)
+	}
+	filters.HideChannelMonitorLogs = hidden
+	return ctx, filters
 }
 
 // Create 创建使用日志
@@ -174,6 +194,16 @@ func (s *UsageService) invalidateUsageCaches(ctx context.Context, userID int64, 
 
 // GetByID 根据ID获取使用日志
 func (s *UsageService) GetByID(ctx context.Context, id int64) (*UsageLog, error) {
+	ctx, filters := s.PrepareLogFilters(ctx, usagestats.UsageLogFilters{})
+	if filters.HideChannelMonitorLogs {
+		type filteredUsageLogReader interface {
+			GetByIDWithFilters(context.Context, int64, usagestats.UsageLogFilters) (*UsageLog, error)
+		}
+		if repo, ok := s.usageRepo.(filteredUsageLogReader); ok {
+			return repo.GetByIDWithFilters(ctx, id, filters)
+		}
+		return nil, ErrUsageLogNotFound
+	}
 	log, err := s.usageRepo.GetByID(ctx, id)
 	if err != nil {
 		return nil, fmt.Errorf("get usage log: %w", err)
@@ -183,6 +213,10 @@ func (s *UsageService) GetByID(ctx context.Context, id int64) (*UsageLog, error)
 
 // ListByUser 获取用户的使用日志列表
 func (s *UsageService) ListByUser(ctx context.Context, userID int64, params pagination.PaginationParams) ([]UsageLog, *pagination.PaginationResult, error) {
+	ctx, filters := s.PrepareLogFilters(ctx, usagestats.UsageLogFilters{UserID: userID})
+	if filters.HideChannelMonitorLogs {
+		return s.ListWithFilters(ctx, params, filters)
+	}
 	logs, pagination, err := s.usageRepo.ListByUser(ctx, userID, params)
 	if err != nil {
 		return nil, nil, fmt.Errorf("list usage logs: %w", err)
@@ -192,6 +226,10 @@ func (s *UsageService) ListByUser(ctx context.Context, userID int64, params pagi
 
 // ListByAPIKey 获取API Key的使用日志列表
 func (s *UsageService) ListByAPIKey(ctx context.Context, apiKeyID int64, params pagination.PaginationParams) ([]UsageLog, *pagination.PaginationResult, error) {
+	ctx, filters := s.PrepareLogFilters(ctx, usagestats.UsageLogFilters{APIKeyID: apiKeyID})
+	if filters.HideChannelMonitorLogs {
+		return s.ListWithFilters(ctx, params, filters)
+	}
 	logs, pagination, err := s.usageRepo.ListByAPIKey(ctx, apiKeyID, params)
 	if err != nil {
 		return nil, nil, fmt.Errorf("list usage logs: %w", err)
@@ -201,6 +239,10 @@ func (s *UsageService) ListByAPIKey(ctx context.Context, apiKeyID int64, params 
 
 // ListByAccount 获取账号的使用日志列表
 func (s *UsageService) ListByAccount(ctx context.Context, accountID int64, params pagination.PaginationParams) ([]UsageLog, *pagination.PaginationResult, error) {
+	ctx, filters := s.PrepareLogFilters(ctx, usagestats.UsageLogFilters{AccountID: accountID})
+	if filters.HideChannelMonitorLogs {
+		return s.ListWithFilters(ctx, params, filters)
+	}
 	logs, pagination, err := s.usageRepo.ListByAccount(ctx, accountID, params)
 	if err != nil {
 		return nil, nil, fmt.Errorf("list usage logs: %w", err)
@@ -395,6 +437,7 @@ func (s *UsageService) GetUserUsageTrendByUserID(ctx context.Context, userID int
 
 // GetUsageTrendWithFilters returns trend data using the shared usage filter shape.
 func (s *UsageService) GetUsageTrendWithFilters(ctx context.Context, startTime, endTime time.Time, granularity string, filters usagestats.UsageLogFilters) ([]usagestats.TrendDataPoint, error) {
+	ctx, filters = s.PrepareLogFilters(ctx, filters)
 	type usageTrendWithFiltersRepo interface {
 		GetUsageTrendWithUsageFilters(ctx context.Context, startTime, endTime time.Time, granularity string, filters usagestats.UsageLogFilters) ([]usagestats.TrendDataPoint, error)
 	}
@@ -423,6 +466,7 @@ func (s *UsageService) GetUserModelStats(ctx context.Context, userID int64, star
 
 // GetModelStatsWithFiltersBySource returns model stats using the shared usage filter shape.
 func (s *UsageService) GetModelStatsWithFiltersBySource(ctx context.Context, startTime, endTime time.Time, filters usagestats.UsageLogFilters, modelSource string) ([]usagestats.ModelStat, error) {
+	ctx, filters = s.PrepareLogFilters(ctx, filters)
 	normalizedSource := usagestats.NormalizeModelSource(modelSource)
 	type modelStatsWithUsageFiltersRepo interface {
 		GetModelStatsWithUsageFiltersBySource(ctx context.Context, startTime, endTime time.Time, filters usagestats.UsageLogFilters, source string) ([]usagestats.ModelStat, error)
@@ -453,6 +497,7 @@ func (s *UsageService) GetModelStatsWithFiltersBySource(ctx context.Context, sta
 
 // GetGroupStatsWithFilters returns group stats using the shared usage filter shape.
 func (s *UsageService) GetGroupStatsWithFilters(ctx context.Context, startTime, endTime time.Time, filters usagestats.UsageLogFilters) ([]usagestats.GroupStat, error) {
+	ctx, filters = s.PrepareLogFilters(ctx, filters)
 	type groupStatsWithUsageFiltersRepo interface {
 		GetGroupStatsWithUsageFilters(ctx context.Context, startTime, endTime time.Time, filters usagestats.UsageLogFilters) ([]usagestats.GroupStat, error)
 	}
@@ -531,6 +576,7 @@ func (s *UsageService) GetBatchAPIKeyUsageStatsWithTimezone(ctx context.Context,
 
 // ListWithFilters lists usage logs with admin filters.
 func (s *UsageService) ListWithFilters(ctx context.Context, params pagination.PaginationParams, filters usagestats.UsageLogFilters) ([]UsageLog, *pagination.PaginationResult, error) {
+	ctx, filters = s.PrepareLogFilters(ctx, filters)
 	logs, result, err := s.usageRepo.ListWithFilters(ctx, params, filters)
 	if err != nil {
 		return nil, nil, fmt.Errorf("list usage logs with filters: %w", err)
@@ -549,6 +595,7 @@ func (s *UsageService) GetGlobalStats(ctx context.Context, startTime, endTime ti
 
 // GetStatsWithFilters returns usage stats with optional filters.
 func (s *UsageService) GetStatsWithFilters(ctx context.Context, filters usagestats.UsageLogFilters) (*usagestats.UsageStats, error) {
+	ctx, filters = s.PrepareLogFilters(ctx, filters)
 	stats, err := s.usageRepo.GetStatsWithFilters(ctx, filters)
 	if err != nil {
 		return nil, fmt.Errorf("get usage stats with filters: %w", err)

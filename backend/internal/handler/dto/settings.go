@@ -304,6 +304,7 @@ type SystemSettings struct {
 
 	// Channel Monitor feature switch
 	ChannelMonitorEnabled                bool   `json:"channel_monitor_enabled"`
+	ChannelMonitorHideUsageLogs          bool   `json:"channel_monitor_hide_usage_logs"`
 	ChannelMonitorDefaultIntervalSeconds int    `json:"channel_monitor_default_interval_seconds"`
 	ChannelMonitorAnnouncement           string `json:"channel_monitor_announcement"`
 

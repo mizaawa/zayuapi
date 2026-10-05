@@ -1082,6 +1082,7 @@ export async function getOpenAITokenStats(
 export type OpsErrorListView = 'errors' | 'excluded' | 'all'
 
 export type OpsErrorListQueryParams = {
+  usage_view?: boolean
   page?: number
   page_size?: number
   time_range?: string

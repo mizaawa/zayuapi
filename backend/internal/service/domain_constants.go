@@ -397,7 +397,8 @@ const (
 
 	// SettingKeyChannelMonitorEnabled is a DB-backed soft switch for the channel monitor feature.
 	// When false: runner skips scheduling and user-facing endpoints return an empty list.
-	SettingKeyChannelMonitorEnabled = "channel_monitor_enabled"
+	SettingKeyChannelMonitorEnabled       = "channel_monitor_enabled"
+	SettingKeyChannelMonitorHideUsageLogs = "channel_monitor_hide_usage_logs"
 	// SettingKeyChannelMonitorAnnouncement is the public plain-text notice shown on the channel status page.
 	SettingKeyChannelMonitorAnnouncement = "channel_monitor_announcement"
 

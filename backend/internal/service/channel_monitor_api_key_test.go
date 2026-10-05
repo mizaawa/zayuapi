@@ -4,6 +4,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 	"testing"
 	"unicode/utf8"
@@ -67,7 +68,7 @@ func (r *channelMonitorKeyGroupRepoStub) GetByIDLite(_ context.Context, id int64
 
 func TestAPIKeyServiceCreatesAndReclaimsChannelMonitorKey(t *testing.T) {
 	repo := &channelMonitorAPIKeyRepoStub{}
-	userRepo := &channelMonitorKeyUserRepoStub{user: &User{ID: 9, Status: StatusActive}}
+	userRepo := &channelMonitorKeyUserRepoStub{user: &User{ID: 9, Role: RoleAdmin, Status: StatusActive}}
 	groupRepo := &channelMonitorKeyGroupRepoStub{group: &Group{ID: 7, Status: StatusActive}}
 	svc := NewAPIKeyService(repo, userRepo, groupRepo, nil, nil, nil, nil)
 	longUnsafeName := strings.Repeat("<", maxChannelMonitorNameRunes)
@@ -92,6 +93,52 @@ func TestAPIKeyServiceCreatesAndReclaimsChannelMonitorKey(t *testing.T) {
 
 	require.NoError(t, err)
 	require.Equal(t, []int64{41}, repo.deleted)
+}
+
+func TestAPIKeyServiceRefusesChannelMonitorKeyForOrdinaryUser(t *testing.T) {
+	repo := &channelMonitorAPIKeyRepoStub{}
+	userRepo := &channelMonitorKeyUserRepoStub{user: &User{ID: 9, Role: RoleUser, Status: StatusActive}}
+	groupRepo := &channelMonitorKeyGroupRepoStub{group: &Group{ID: 7, Status: StatusActive}}
+	svc := NewAPIKeyService(repo, userRepo, groupRepo, nil, nil, nil, nil)
+
+	key, err := svc.CreateChannelMonitorKey(context.Background(), 9, 7, "monitor")
+
+	require.ErrorIs(t, err, ErrInsufficientPerms)
+	require.Nil(t, key)
+	require.Nil(t, repo.created)
+}
+
+func TestAPIKeyServiceCreateCannotSpoofChannelMonitorPurpose(t *testing.T) {
+	repo := &channelMonitorAPIKeyRepoStub{}
+	userRepo := &channelMonitorKeyUserRepoStub{user: &User{ID: 9, Role: RoleUser, Status: StatusActive}}
+	svc := NewAPIKeyService(repo, userRepo, nil, nil, nil, nil, nil)
+	var request CreateAPIKeyRequest
+	require.NoError(t, json.Unmarshal([]byte(`{"name":"[channel-monitor] spoofed","purpose":"channel_monitor","quota":0}`), &request))
+
+	key, err := svc.Create(context.Background(), 9, request)
+
+	require.NoError(t, err)
+	require.Empty(t, key.Purpose)
+	require.Empty(t, repo.created.Purpose)
+	require.False(t, key.IsManaged())
+	cost := &CostBreakdown{ActualCost: 1}
+	makeManagedMonitorUsageFree(key, cost)
+	require.Equal(t, 1.0, cost.ActualCost)
+}
+
+func TestAPIKeyServiceUpdateCannotSpoofChannelMonitorPurpose(t *testing.T) {
+	repo := &apiKeyRepoStub{apiKey: &APIKey{ID: 41, UserID: 9, Key: "ordinary-key", Status: StatusActive}}
+	svc := NewAPIKeyService(repo, nil, nil, nil, nil, nil, nil)
+	var request UpdateAPIKeyRequest
+	require.NoError(t, json.Unmarshal([]byte(`{"name":"[channel-monitor] spoofed","purpose":"channel_monitor","quota":0}`), &request))
+
+	key, err := svc.Update(context.Background(), 41, 9, request)
+
+	require.NoError(t, err)
+	require.Empty(t, key.Purpose)
+	require.Len(t, repo.updatedKeys, 1)
+	require.Empty(t, repo.updatedKeys[0].Purpose)
+	require.False(t, key.IsManaged())
 }
 
 func TestAPIKeyServiceRefusesToDeleteOrdinaryKeyWithSpoofedMonitorName(t *testing.T) {

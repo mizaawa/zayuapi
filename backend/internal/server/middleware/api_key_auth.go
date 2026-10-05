@@ -323,7 +323,14 @@ func managedAPIKeyRequestIsValid(c *gin.Context, apiKey *service.APIKey, rawKey 
 	if apiKey.Purpose != service.APIKeyPurposeChannelMonitor || c == nil || c.Request == nil || attestor == nil {
 		return false
 	}
-	return attestor.ValidateRequest(c.Request, rawKey)
+	if apiKey.User == nil || !apiKey.User.IsAdmin() || apiKey.User.ID != apiKey.UserID {
+		return false
+	}
+	valid := attestor.ValidateRequest(c.Request, rawKey)
+	// Internal proof must not reach upstream providers or response diagnostics.
+	c.Request.Header.Del(service.ChannelMonitorTimestampHeader)
+	c.Request.Header.Del(service.ChannelMonitorSignatureHeader)
+	return valid
 }
 
 func managedAPIKeyMustBeActive(apiKey *service.APIKey) bool {

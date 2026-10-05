@@ -523,6 +523,7 @@ const baseSettingsResponse = {
   account_quota_notify_enabled: false,
   account_quota_notify_emails: [],
   channel_monitor_enabled: true,
+  channel_monitor_hide_usage_logs: false,
   channel_monitor_default_interval_seconds: 60,
   channel_monitor_announcement: "",
   disable_temp_unschedulable: false,
@@ -713,6 +714,45 @@ describe("admin SettingsView payment visible method controls", () => {
 
     expect(updateSettings).toHaveBeenCalledWith(
       expect.objectContaining({ compact_home_enabled: true }),
+    );
+  });
+
+  it("defaults monitor usage log hiding to off and saves the switch from extended features", async () => {
+    const wrapper = mountView();
+    await flushPromises();
+    await openFeaturesTab(wrapper);
+
+    const toggle = wrapper.get('[data-testid="channel-monitor-hide-usage-logs-toggle"]');
+    expect((toggle.element as HTMLInputElement).checked).toBe(false);
+    expect(toggle.element.closest(".card")?.textContent).toContain("拓展功能");
+
+    await toggle.setValue(true);
+    await wrapper.find("form").trigger("submit.prevent");
+    await flushPromises();
+
+    expect(updateSettings).toHaveBeenCalledWith(
+      expect.objectContaining({ channel_monitor_hide_usage_logs: true }),
+    );
+  });
+
+  it("loads monitor usage log hiding and saves explicit false while monitoring is disabled", async () => {
+    getSettings.mockResolvedValue({
+      ...baseSettingsResponse,
+      channel_monitor_enabled: false,
+      channel_monitor_hide_usage_logs: true,
+    });
+    const wrapper = mountView();
+    await flushPromises();
+    await openFeaturesTab(wrapper);
+
+    const toggle = wrapper.get('[data-testid="channel-monitor-hide-usage-logs-toggle"]');
+    expect((toggle.element as HTMLInputElement).checked).toBe(true);
+    await toggle.setValue(false);
+    await wrapper.find("form").trigger("submit.prevent");
+    await flushPromises();
+
+    expect(updateSettings).toHaveBeenCalledWith(
+      expect.objectContaining({ channel_monitor_hide_usage_logs: false }),
     );
   });
 

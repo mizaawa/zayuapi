@@ -6838,6 +6838,22 @@
               />
             </div>
 
+            <div class="flex items-center justify-between gap-4 border-t border-gray-100 pt-5 dark:border-dark-700">
+              <label
+                for="channel-monitor-hide-usage-logs"
+                class="min-w-0 flex-1 text-sm font-medium text-gray-700 dark:text-gray-300"
+              >
+                {{ t('admin.settings.features.channelMonitor.hideUsageLogs') }}
+              </label>
+              <Toggle
+                id="channel-monitor-hide-usage-logs"
+                v-model="form.channel_monitor_hide_usage_logs"
+                :aria-label="t('admin.settings.features.channelMonitor.hideUsageLogs')"
+                class="shrink-0"
+                data-testid="channel-monitor-hide-usage-logs-toggle"
+              />
+            </div>
+
             <div class="border-t border-gray-100 pt-5 dark:border-dark-700">
               <div class="flex items-center justify-between gap-4">
                 <div>
@@ -9601,6 +9617,7 @@ const form = reactive<SettingsForm>({
   account_quota_notify_emails: [] as NotifyEmailEntry[],
   // Channel Monitor feature switch
   channel_monitor_enabled: true,
+  channel_monitor_hide_usage_logs: false,
   channel_monitor_default_interval_seconds: 60,
   channel_monitor_announcement: "",
   // Available Channels feature switch
@@ -11253,6 +11270,7 @@ async function saveSettings() {
       ).filter((e) => e.email.trim() !== ""),
       // Channel Monitor feature switch
       channel_monitor_enabled: form.channel_monitor_enabled,
+      channel_monitor_hide_usage_logs: form.channel_monitor_hide_usage_logs,
       channel_monitor_default_interval_seconds:
         Number(form.channel_monitor_default_interval_seconds) || 60,
       channel_monitor_announcement: form.channel_monitor_announcement.trim(),

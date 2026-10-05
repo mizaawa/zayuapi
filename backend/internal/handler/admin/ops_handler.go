@@ -104,6 +104,7 @@ func (h *OpsHandler) GetErrorLogs(c *gin.Context) {
 	}
 
 	filter := &service.OpsErrorLogFilter{Page: page, PageSize: pageSize}
+	filter.UsageView = parseBoolQueryWithDefault(c.Query("usage_view"), false)
 
 	if !startTime.IsZero() {
 		filter.StartTime = &startTime

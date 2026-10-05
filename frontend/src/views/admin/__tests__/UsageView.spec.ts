@@ -213,6 +213,16 @@ describe('admin UsageView route filters', () => {
     expect(wrapper.find('[data-test="user-filter-label"]').text()).toBe('route-user@test.com')
   })
 
+  it('marks usage charts so they follow monitor log visibility', async () => {
+    const wrapper = mountRouteFilteredUsageView()
+    vi.advanceTimersByTime(120)
+    await flushPromises()
+
+    expect(getModelStats).toHaveBeenCalledWith(expect.objectContaining({ usage_view: true }))
+    expect(getSnapshotV2).toHaveBeenCalledWith(expect.objectContaining({ usage_view: true }))
+    wrapper.unmount()
+  })
+
   it('does not apply a stale routed user label after user_id changes', async () => {
     routeQuery.user_id = '42'
     let resolveLookup!: (user: { id: number; email: string }) => void

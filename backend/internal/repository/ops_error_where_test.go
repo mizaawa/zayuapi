@@ -7,6 +7,25 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/service"
 )
 
+func TestBuildOpsErrorLogsWhere_ChannelMonitorVisibility(t *testing.T) {
+	where, args := buildOpsErrorLogsWhere(&service.OpsErrorLogFilter{ExcludeChannelMonitor: true})
+	for _, want := range []string{"NOT EXISTS", "monitor_key.id = e.api_key_id", "monitor_key.purpose = $1"} {
+		if !strings.Contains(where, want) {
+			t.Fatalf("missing %q in %s", want, where)
+		}
+	}
+	if strings.Contains(where, "deleted_at") {
+		t.Fatal("deleted monitor keys must still identify historical records")
+	}
+	if len(args) != 1 || args[0] != service.APIKeyPurposeChannelMonitor {
+		t.Fatalf("unexpected arguments: %v", args)
+	}
+	where, _ = buildOpsErrorLogsWhere(&service.OpsErrorLogFilter{})
+	if strings.Contains(where, "monitor_key") {
+		t.Fatal("disabled setting must leave records visible")
+	}
+}
+
 func TestBuildOpsErrorLogsWhere_UserScopedFilters(t *testing.T) {
 	uid := int64(42)
 	kid := int64(7)
