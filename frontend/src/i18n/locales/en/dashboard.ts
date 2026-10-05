@@ -130,6 +130,15 @@ export default {
       invalidCooldown: 'Fallback cooldown must be an integer from 1 to 2147483647 seconds',
       supportedPlatforms: 'Fallback supports OpenAI Responses / Compact and Anthropic Messages protocols only. Custom groups are not supported.'
     },
+    customSystemPrompt: {
+      enable: 'Custom System Prompt',
+      hint: 'Some upstream responses may not support passing through system prompts. Prompts are prepended by default. You can force the system prompt protocol, but successful upstream transmission is not guaranteed.',
+      force: 'Force System Prompt Protocol',
+      label: 'Set System Prompt',
+      placeholder: '诶～杂鱼就是杂鱼♡果然不行呢(˃̶᷄ ⁻̫ ˂̶᷅)',
+      required: 'Set a system prompt',
+      tooLong: 'The system prompt cannot exceed 32768 bytes'
+    },
     noGroup: 'No group',
     searchGroup: 'Search groups...',
     noGroupFound: 'No groups found',

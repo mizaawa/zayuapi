@@ -58,6 +58,15 @@ func (s *OpenAIGatewayService) forwardCustomTransparent(
 		upstreamModel = mappedModel
 		forwardBody = ReplaceModelInBody(body, mappedModel)
 	}
+	promptProtocol := apiKeySystemPromptResponses
+	if endpoint == customMessagesEndpoint {
+		promptProtocol = apiKeySystemPromptAnthropic
+	}
+	var promptErr error
+	forwardBody, promptErr = applyAPIKeySystemPrompt(c, forwardBody, promptProtocol)
+	if promptErr != nil {
+		return nil, promptErr
+	}
 	stream := gjson.GetBytes(forwardBody, "stream").Bool()
 	serviceTier := extractOpenAIServiceTierFromBody(forwardBody)
 	reasoningEffort := extractOpenAIReasoningEffortFromBody(forwardBody, model)

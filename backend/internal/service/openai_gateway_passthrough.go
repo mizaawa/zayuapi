@@ -52,6 +52,14 @@ func (s *OpenAIGatewayService) forwardOpenAIPassthrough(
 	}
 
 	if account != nil && account.Type == AccountTypeOAuth {
+		// Forced API-key instructions also satisfy the Codex instructions check.
+		if key := getAPIKeyFromContext(c); key != nil && key.CustomSystemPromptForce {
+			var promptErr error
+			body, promptErr = applyAPIKeySystemPrompt(c, body, apiKeySystemPromptResponses)
+			if promptErr != nil {
+				return nil, promptErr
+			}
+		}
 		if rejectReason := detectOpenAIPassthroughInstructionsRejectReason(reqModel, body); rejectReason != "" {
 			rejectMsg := "OpenAI codex passthrough requires a non-empty instructions field"
 			MarkOpsClientBusinessLimited(c, OpsClientBusinessLimitedReasonLocalPolicyDenied)
@@ -343,6 +351,11 @@ func (s *OpenAIGatewayService) buildUpstreamRequestOpenAIPassthrough(
 	body []byte,
 	token string,
 ) (*http.Request, error) {
+	var promptErr error
+	body, promptErr = applyAPIKeySystemPrompt(c, body, apiKeySystemPromptResponses)
+	if promptErr != nil {
+		return nil, promptErr
+	}
 	targetURL := openaiPlatformAPIURL
 	switch account.Type {
 	case AccountTypeOAuth:

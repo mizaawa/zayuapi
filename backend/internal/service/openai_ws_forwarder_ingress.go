@@ -395,6 +395,10 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 			)
 		}
 		normalized = policyApplied
+		normalized, policyErr = applyAPIKeySystemPrompt(c, normalized, apiKeySystemPromptResponses)
+		if policyErr != nil {
+			return openAIWSClientPayload{}, NewOpenAIWSClientCloseError(coderws.StatusPolicyViolation, "invalid API key system prompt payload", policyErr)
+		}
 		ingressSessionOriginalModel = originalModel
 
 		return openAIWSClientPayload{

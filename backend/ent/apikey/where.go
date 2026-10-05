@@ -95,6 +95,21 @@ func GroupID(v int64) predicate.APIKey {
 	return predicate.APIKey(sql.FieldEQ(FieldGroupID, v))
 }
 
+// CustomSystemPromptEnabled applies equality check predicate on the "custom_system_prompt_enabled" field. It's identical to CustomSystemPromptEnabledEQ.
+func CustomSystemPromptEnabled(v bool) predicate.APIKey {
+	return predicate.APIKey(sql.FieldEQ(FieldCustomSystemPromptEnabled, v))
+}
+
+// CustomSystemPromptForce applies equality check predicate on the "custom_system_prompt_force" field. It's identical to CustomSystemPromptForceEQ.
+func CustomSystemPromptForce(v bool) predicate.APIKey {
+	return predicate.APIKey(sql.FieldEQ(FieldCustomSystemPromptForce, v))
+}
+
+// CustomSystemPrompt applies equality check predicate on the "custom_system_prompt" field. It's identical to CustomSystemPromptEQ.
+func CustomSystemPrompt(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldEQ(FieldCustomSystemPrompt, v))
+}
+
 // FailoverEnabled applies equality check predicate on the "failover_enabled" field. It's identical to FailoverEnabledEQ.
 func FailoverEnabled(v bool) predicate.APIKey {
 	return predicate.APIKey(sql.FieldEQ(FieldFailoverEnabled, v))
@@ -568,6 +583,91 @@ func GroupIDIsNil() predicate.APIKey {
 // GroupIDNotNil applies the NotNil predicate on the "group_id" field.
 func GroupIDNotNil() predicate.APIKey {
 	return predicate.APIKey(sql.FieldNotNull(FieldGroupID))
+}
+
+// CustomSystemPromptEnabledEQ applies the EQ predicate on the "custom_system_prompt_enabled" field.
+func CustomSystemPromptEnabledEQ(v bool) predicate.APIKey {
+	return predicate.APIKey(sql.FieldEQ(FieldCustomSystemPromptEnabled, v))
+}
+
+// CustomSystemPromptEnabledNEQ applies the NEQ predicate on the "custom_system_prompt_enabled" field.
+func CustomSystemPromptEnabledNEQ(v bool) predicate.APIKey {
+	return predicate.APIKey(sql.FieldNEQ(FieldCustomSystemPromptEnabled, v))
+}
+
+// CustomSystemPromptForceEQ applies the EQ predicate on the "custom_system_prompt_force" field.
+func CustomSystemPromptForceEQ(v bool) predicate.APIKey {
+	return predicate.APIKey(sql.FieldEQ(FieldCustomSystemPromptForce, v))
+}
+
+// CustomSystemPromptForceNEQ applies the NEQ predicate on the "custom_system_prompt_force" field.
+func CustomSystemPromptForceNEQ(v bool) predicate.APIKey {
+	return predicate.APIKey(sql.FieldNEQ(FieldCustomSystemPromptForce, v))
+}
+
+// CustomSystemPromptEQ applies the EQ predicate on the "custom_system_prompt" field.
+func CustomSystemPromptEQ(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldEQ(FieldCustomSystemPrompt, v))
+}
+
+// CustomSystemPromptNEQ applies the NEQ predicate on the "custom_system_prompt" field.
+func CustomSystemPromptNEQ(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldNEQ(FieldCustomSystemPrompt, v))
+}
+
+// CustomSystemPromptIn applies the In predicate on the "custom_system_prompt" field.
+func CustomSystemPromptIn(vs ...string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldIn(FieldCustomSystemPrompt, vs...))
+}
+
+// CustomSystemPromptNotIn applies the NotIn predicate on the "custom_system_prompt" field.
+func CustomSystemPromptNotIn(vs ...string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldNotIn(FieldCustomSystemPrompt, vs...))
+}
+
+// CustomSystemPromptGT applies the GT predicate on the "custom_system_prompt" field.
+func CustomSystemPromptGT(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldGT(FieldCustomSystemPrompt, v))
+}
+
+// CustomSystemPromptGTE applies the GTE predicate on the "custom_system_prompt" field.
+func CustomSystemPromptGTE(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldGTE(FieldCustomSystemPrompt, v))
+}
+
+// CustomSystemPromptLT applies the LT predicate on the "custom_system_prompt" field.
+func CustomSystemPromptLT(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldLT(FieldCustomSystemPrompt, v))
+}
+
+// CustomSystemPromptLTE applies the LTE predicate on the "custom_system_prompt" field.
+func CustomSystemPromptLTE(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldLTE(FieldCustomSystemPrompt, v))
+}
+
+// CustomSystemPromptContains applies the Contains predicate on the "custom_system_prompt" field.
+func CustomSystemPromptContains(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldContains(FieldCustomSystemPrompt, v))
+}
+
+// CustomSystemPromptHasPrefix applies the HasPrefix predicate on the "custom_system_prompt" field.
+func CustomSystemPromptHasPrefix(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldHasPrefix(FieldCustomSystemPrompt, v))
+}
+
+// CustomSystemPromptHasSuffix applies the HasSuffix predicate on the "custom_system_prompt" field.
+func CustomSystemPromptHasSuffix(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldHasSuffix(FieldCustomSystemPrompt, v))
+}
+
+// CustomSystemPromptEqualFold applies the EqualFold predicate on the "custom_system_prompt" field.
+func CustomSystemPromptEqualFold(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldEqualFold(FieldCustomSystemPrompt, v))
+}
+
+// CustomSystemPromptContainsFold applies the ContainsFold predicate on the "custom_system_prompt" field.
+func CustomSystemPromptContainsFold(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldContainsFold(FieldCustomSystemPrompt, v))
 }
 
 // FailoverEnabledEQ applies the EQ predicate on the "failover_enabled" field.

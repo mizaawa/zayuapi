@@ -71,6 +71,41 @@ func (s *APIKeyRepoSuite) TestUpdate_DoesNotRevertConcurrentRateLimitUsage() {
 	s.Require().InDelta(42, got.Usage7d, 1e-9, "usage_7d must not be reverted by a stale key edit")
 }
 
+func (s *APIKeyRepoSuite) TestPromptUpdate_DoesNotRevertConcurrentBilling() {
+	user := s.mustCreateUser("apikey-prompt-lost-update@example.com")
+	key := &service.APIKey{
+		UserID: user.ID, Key: "sk-prompt-lost-update", Name: "prompt", Status: service.StatusActive,
+		Quota: 100, RateLimit5h: 100,
+	}
+	s.Require().NoError(s.repo.Create(s.ctx, key))
+	stale, err := s.repo.GetByID(s.ctx, key.ID)
+	s.Require().NoError(err)
+	_, err = s.repo.IncrementQuotaUsed(s.ctx, key.ID, 30)
+	s.Require().NoError(err)
+	s.Require().NoError(s.repo.IncrementRateLimitUsage(s.ctx, key.ID, 42))
+	_, err = s.client.User.UpdateOneID(user.ID).SetBalance(73).Save(s.ctx)
+	s.Require().NoError(err)
+	stale.CustomSystemPromptEnabled = true
+	stale.CustomSystemPromptForce = true
+	stale.CustomSystemPrompt = "Project instructions"
+	s.Require().NoError(s.repo.Update(s.ctx, stale, service.APIKeyUpdateFields{
+		CustomSystemPromptEnabled: true, CustomSystemPromptForce: true, CustomSystemPrompt: true,
+	}))
+	got, err := s.repo.GetByID(s.ctx, key.ID)
+	s.Require().NoError(err)
+	s.Require().True(got.CustomSystemPromptEnabled)
+	s.Require().True(got.CustomSystemPromptForce)
+	s.Require().Equal(stale.CustomSystemPrompt, got.CustomSystemPrompt)
+	s.Require().InDelta(30, got.QuotaUsed, 1e-9)
+	s.Require().InDelta(42, got.Usage5h, 1e-9)
+	s.Require().InDelta(42, got.Usage1d, 1e-9)
+	s.Require().InDelta(42, got.Usage7d, 1e-9)
+	s.Require().NotNil(got.Window5hStart)
+	s.Require().NotNil(got.Window1dStart)
+	s.Require().NotNil(got.Window7dStart)
+	s.Require().InDelta(73, got.User.Balance, 1e-9)
+}
+
 // 显式重置仍然必须生效，避免收窄写入列时把功能改坏。
 func (s *APIKeyRepoSuite) TestUpdate_StillResetsUsageWhenDeclared() {
 	user := s.mustCreateUser("apikey-reset-usage@example.com")

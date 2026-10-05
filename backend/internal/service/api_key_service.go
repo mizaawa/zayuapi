@@ -23,16 +23,18 @@ import (
 )
 
 var (
-	ErrAPIKeyNotFound       = infraerrors.NotFound("API_KEY_NOT_FOUND", "api key not found")
-	ErrGroupNotAllowed      = infraerrors.Forbidden("GROUP_NOT_ALLOWED", "user is not allowed to bind this group")
-	ErrGroupBlocked         = infraerrors.Forbidden("GROUP_BLOCKED", "您已被禁用此分组，请联系站点管理员")
-	ErrAPIKeyExists         = infraerrors.Conflict("API_KEY_EXISTS", "api key already exists")
-	ErrAPIKeyTooShort       = infraerrors.BadRequest("API_KEY_TOO_SHORT", "api key must be at least 16 characters")
-	ErrAPIKeyInvalidChars   = infraerrors.BadRequest("API_KEY_INVALID_CHARS", "api key can only contain letters, numbers, underscores, and hyphens")
-	ErrAPIKeyRateLimited    = infraerrors.TooManyRequests("API_KEY_RATE_LIMITED", "too many failed attempts, please try again later")
-	ErrAPIKeyAuthOverloaded = infraerrors.ServiceUnavailable("API_KEY_AUTH_OVERLOADED", "api key authentication is temporarily overloaded")
-	ErrManagedAPIKey        = infraerrors.Forbidden("MANAGED_API_KEY", "managed api keys cannot be changed through ordinary api key management")
-	ErrInvalidIPPattern     = infraerrors.BadRequest("INVALID_IP_PATTERN", "invalid IP or CIDR pattern")
+	ErrAPIKeyNotFound            = infraerrors.NotFound("API_KEY_NOT_FOUND", "api key not found")
+	ErrGroupNotAllowed           = infraerrors.Forbidden("GROUP_NOT_ALLOWED", "user is not allowed to bind this group")
+	ErrGroupBlocked              = infraerrors.Forbidden("GROUP_BLOCKED", "您已被禁用此分组，请联系站点管理员")
+	ErrAPIKeyExists              = infraerrors.Conflict("API_KEY_EXISTS", "api key already exists")
+	ErrAPIKeyTooShort            = infraerrors.BadRequest("API_KEY_TOO_SHORT", "api key must be at least 16 characters")
+	ErrAPIKeyInvalidChars        = infraerrors.BadRequest("API_KEY_INVALID_CHARS", "api key can only contain letters, numbers, underscores, and hyphens")
+	ErrAPIKeyRateLimited         = infraerrors.TooManyRequests("API_KEY_RATE_LIMITED", "too many failed attempts, please try again later")
+	ErrAPIKeyAuthOverloaded      = infraerrors.ServiceUnavailable("API_KEY_AUTH_OVERLOADED", "api key authentication is temporarily overloaded")
+	ErrManagedAPIKey             = infraerrors.Forbidden("MANAGED_API_KEY", "managed api keys cannot be changed through ordinary api key management")
+	ErrInvalidIPPattern          = infraerrors.BadRequest("INVALID_IP_PATTERN", "invalid IP or CIDR pattern")
+	ErrAPIKeySystemPromptTooLong = infraerrors.BadRequest("API_KEY_SYSTEM_PROMPT_TOO_LONG", "custom system prompt must not exceed 32768 UTF-8 bytes")
+	ErrAPIKeySystemPromptEmpty   = infraerrors.BadRequest("API_KEY_SYSTEM_PROMPT_EMPTY", "custom system prompt must not be empty when enabled")
 	// ErrAPIKeyExpired        = infraerrors.Forbidden("API_KEY_EXPIRED", "api key has expired")
 	ErrAPIKeyExpired = infraerrors.Forbidden("API_KEY_EXPIRED", "api key 已过期")
 	// ErrAPIKeyQuotaExhausted = infraerrors.TooManyRequests("API_KEY_QUOTA_EXHAUSTED", "api key quota exhausted")
@@ -46,6 +48,7 @@ var (
 
 const (
 	MaxAPIKeyCredentialBytes     = 128
+	MaxAPIKeySystemPromptBytes   = 32768
 	defaultAuthLookupConcurrency = 64
 	defaultNegativeAuthCacheSize = 16384
 	apiKeyMaxErrorsPerHour       = 20
@@ -75,9 +78,12 @@ type APIKeyUpdateFields struct {
 	// 仅供"重置限流用量"路径声明；常规计费走 IncrementRateLimitUsage。
 	RateLimitUsage bool
 	// IPRules 覆盖 ip_whitelist 与 ip_blacklist。
-	IPRules          bool
-	FailoverConfig   bool
-	FailoverCooldown bool
+	IPRules                   bool
+	FailoverConfig            bool
+	FailoverCooldown          bool
+	CustomSystemPromptEnabled bool
+	CustomSystemPromptForce   bool
+	CustomSystemPrompt        bool
 }
 
 // IsEmpty 报告该次 Update 是否不写任何列。
@@ -212,11 +218,14 @@ type APIKeyAuthCacheInvalidator interface {
 
 // CreateAPIKeyRequest 创建API Key请求
 type CreateAPIKeyRequest struct {
-	Name        string   `json:"name"`
-	GroupID     *int64   `json:"group_id"`
-	CustomKey   *string  `json:"custom_key"`   // 可选的自定义key
-	IPWhitelist []string `json:"ip_whitelist"` // IP 白名单
-	IPBlacklist []string `json:"ip_blacklist"` // IP 黑名单
+	Name                      string   `json:"name"`
+	GroupID                   *int64   `json:"group_id"`
+	CustomKey                 *string  `json:"custom_key"`   // 可选的自定义key
+	IPWhitelist               []string `json:"ip_whitelist"` // IP 白名单
+	IPBlacklist               []string `json:"ip_blacklist"` // IP 黑名单
+	CustomSystemPromptEnabled bool     `json:"custom_system_prompt_enabled"`
+	CustomSystemPromptForce   bool     `json:"custom_system_prompt_force"`
+	CustomSystemPrompt        string   `json:"custom_system_prompt"`
 
 	// Quota fields
 	Quota         float64 `json:"quota"`           // Quota limit in USD (0 = unlimited)
@@ -230,16 +239,19 @@ type CreateAPIKeyRequest struct {
 
 // UpdateAPIKeyRequest 更新API Key请求
 type UpdateAPIKeyRequest struct {
-	Name                    *string   `json:"name"`
-	GroupID                 *int64    `json:"group_id"`
-	Status                  *string   `json:"status"`
-	IPWhitelist             *[]string `json:"ip_whitelist"` // IP 白名单（nil 不修改，空数组清空）
-	IPBlacklist             *[]string `json:"ip_blacklist"` // IP 黑名单（nil 不修改，空数组清空）
-	FailoverEnabled         *bool     `json:"failover_enabled"`
-	FailoverGroupID         *int64    `json:"failover_group_id"`
-	FailoverMaxRetries      *int      `json:"failover_max_retries"`
-	FailoverCooldownSeconds *int      `json:"failover_cooldown_seconds"`
-	ReleaseFailoverCooldown bool      `json:"release_failover_cooldown"`
+	Name                      *string   `json:"name"`
+	GroupID                   *int64    `json:"group_id"`
+	Status                    *string   `json:"status"`
+	IPWhitelist               *[]string `json:"ip_whitelist"` // IP 白名单（nil 不修改，空数组清空）
+	IPBlacklist               *[]string `json:"ip_blacklist"` // IP 黑名单（nil 不修改，空数组清空）
+	FailoverEnabled           *bool     `json:"failover_enabled"`
+	FailoverGroupID           *int64    `json:"failover_group_id"`
+	FailoverMaxRetries        *int      `json:"failover_max_retries"`
+	FailoverCooldownSeconds   *int      `json:"failover_cooldown_seconds"`
+	ReleaseFailoverCooldown   bool      `json:"release_failover_cooldown"`
+	CustomSystemPromptEnabled *bool     `json:"custom_system_prompt_enabled"`
+	CustomSystemPromptForce   *bool     `json:"custom_system_prompt_force"`
+	CustomSystemPrompt        *string   `json:"custom_system_prompt"`
 
 	// Quota fields
 	Quota           *float64   `json:"quota"`       // Quota limit in USD (nil = no change, 0 = unlimited)
@@ -440,6 +452,9 @@ func (s *APIKeyService) canUserBindGroup(ctx context.Context, user *User, group 
 
 // Create 创建API Key
 func (s *APIKeyService) Create(ctx context.Context, userID int64, req CreateAPIKeyRequest) (*APIKey, error) {
+	if err := validateAPIKeySystemPrompt(req.CustomSystemPromptEnabled, req.CustomSystemPrompt); err != nil {
+		return nil, err
+	}
 	// 验证用户存在
 	user, err := s.userRepo.GetByID(ctx, userID)
 	if err != nil {
@@ -513,20 +528,23 @@ func (s *APIKeyService) Create(ctx context.Context, userID int64, req CreateAPIK
 
 	// 创建API Key记录
 	apiKey := &APIKey{
-		UserID:                  userID,
-		Key:                     key,
-		Name:                    html.EscapeString(req.Name),
-		GroupID:                 req.GroupID,
-		Status:                  StatusActive,
-		IPWhitelist:             req.IPWhitelist,
-		IPBlacklist:             req.IPBlacklist,
-		Quota:                   req.Quota,
-		QuotaUsed:               0,
-		RateLimit5h:             req.RateLimit5h,
-		RateLimit1d:             req.RateLimit1d,
-		RateLimit7d:             req.RateLimit7d,
-		FailoverMaxRetries:      DefaultAPIKeyFailoverMaxRetries,
-		FailoverCooldownSeconds: DefaultAPIKeyFailoverCooldownSeconds,
+		UserID:                    userID,
+		Key:                       key,
+		Name:                      html.EscapeString(req.Name),
+		GroupID:                   req.GroupID,
+		Status:                    StatusActive,
+		IPWhitelist:               req.IPWhitelist,
+		IPBlacklist:               req.IPBlacklist,
+		CustomSystemPromptEnabled: req.CustomSystemPromptEnabled,
+		CustomSystemPromptForce:   req.CustomSystemPromptForce,
+		CustomSystemPrompt:        req.CustomSystemPrompt,
+		Quota:                     req.Quota,
+		QuotaUsed:                 0,
+		RateLimit5h:               req.RateLimit5h,
+		RateLimit1d:               req.RateLimit1d,
+		RateLimit7d:               req.RateLimit7d,
+		FailoverMaxRetries:        DefaultAPIKeyFailoverMaxRetries,
+		FailoverCooldownSeconds:   DefaultAPIKeyFailoverCooldownSeconds,
 	}
 
 	// Set expiration time if specified
@@ -798,6 +816,16 @@ func (s *APIKeyService) Update(ctx context.Context, id int64, userID int64, req 
 	if apiKey.IsManaged() {
 		return nil, ErrManagedAPIKey
 	}
+	promptEnabled, promptText := apiKey.CustomSystemPromptEnabled, apiKey.CustomSystemPrompt
+	if req.CustomSystemPromptEnabled != nil {
+		promptEnabled = *req.CustomSystemPromptEnabled
+	}
+	if req.CustomSystemPrompt != nil {
+		promptText = *req.CustomSystemPrompt
+	}
+	if err := validateAPIKeySystemPrompt(promptEnabled, promptText); err != nil {
+		return nil, err
+	}
 
 	// 验证 IP 白名单格式
 	if req.IPWhitelist != nil && len(*req.IPWhitelist) > 0 {
@@ -819,6 +847,18 @@ func (s *APIKeyService) Update(ctx context.Context, id int64, userID int64, req 
 	// 下面若干分支会顺带把 Status 改回 active（配额扩容、清除过期等），
 	// 所以用原始值比对来决定是否写 status，而不是只看 req.Status。
 	originalStatus := apiKey.Status
+	if req.CustomSystemPromptEnabled != nil {
+		apiKey.CustomSystemPromptEnabled = *req.CustomSystemPromptEnabled
+		fields.CustomSystemPromptEnabled = true
+	}
+	if req.CustomSystemPromptForce != nil {
+		apiKey.CustomSystemPromptForce = *req.CustomSystemPromptForce
+		fields.CustomSystemPromptForce = true
+	}
+	if req.CustomSystemPrompt != nil {
+		apiKey.CustomSystemPrompt = *req.CustomSystemPrompt
+		fields.CustomSystemPrompt = true
+	}
 
 	// 更新字段
 	if req.Name != nil {
@@ -946,6 +986,16 @@ func (s *APIKeyService) Update(ctx context.Context, id int64, userID int64, req 
 	}
 
 	return apiKey, nil
+}
+
+func validateAPIKeySystemPrompt(enabled bool, prompt string) error {
+	if len(prompt) > MaxAPIKeySystemPromptBytes {
+		return ErrAPIKeySystemPromptTooLong
+	}
+	if enabled && strings.TrimSpace(prompt) == "" {
+		return ErrAPIKeySystemPromptEmpty
+	}
+	return nil
 }
 
 // Delete 删除API Key

@@ -543,6 +543,85 @@ describe('user KeysView column settings', () => {
     expect(wrapper.find('[data-test="failover-toggle"]').exists()).toBe(false)
   })
 
+  it('offers custom system prompt configuration only in the edit dialog', async () => {
+    const key = { ...createApiKey(), group_id: 1, group: group(1) }
+    setKey(key, [group(1), group(2)])
+    const wrapper = await mountView()
+    await getButtonByText(wrapper, 'Create API Key').trigger('click')
+    expect(wrapper.find('[data-test="system-prompt-settings"]').exists()).toBe(false)
+    await getButtonByText(wrapper, 'common.cancel').trigger('click')
+    await getButtonByText(wrapper, 'common.edit').trigger('click')
+
+    const toggle = wrapper.get('[data-test="system-prompt-toggle"]')
+    expect(toggle.attributes('aria-checked')).toBe('false')
+    expect(wrapper.find('[data-test="system-prompt-controls"]').exists()).toBe(false)
+    const sections = wrapper.findAll('[data-test="failover-settings"], [data-test="system-prompt-settings"]')
+    expect(sections.map((section) => section.attributes('data-test'))).toEqual(['failover-settings', 'system-prompt-settings'])
+  })
+
+  it('saves the custom system prompt and protocol mode, and restores them when editing again', async () => {
+    let key: ApiKey = { ...createApiKey(), group_id: 1, group: group(1) }
+    getAvailableGroups.mockResolvedValue([group(1)])
+    listKeys.mockImplementation(async () => ({ items: [key], total: 1, page: 1, page_size: 20, pages: 1 }))
+    updateKey.mockImplementation(async (_id, updates) => { key = { ...key, ...updates }; return key })
+    const wrapper = await mountView()
+    await getButtonByText(wrapper, 'common.edit').trigger('click')
+    await wrapper.get('[data-test="system-prompt-toggle"]').trigger('click')
+    const forceToggle = wrapper.get('[data-test="system-prompt-force-toggle"]')
+    expect(forceToggle.attributes('aria-checked')).toBe('false')
+    await wrapper.get('[data-test="system-prompt-input"]').setValue('  Keep agent tools available.\nUse concise replies.  ')
+    await forceToggle.trigger('click')
+    expect(forceToggle.attributes('aria-checked')).toBe('true')
+    await wrapper.get('#key-form').trigger('submit')
+    await flushPromises()
+
+    expect(updateKey).toHaveBeenLastCalledWith(1, expect.objectContaining({
+      custom_system_prompt_enabled: true,
+      custom_system_prompt_force: true,
+      custom_system_prompt: '  Keep agent tools available.\nUse concise replies.  '
+    }))
+    await getButtonByText(wrapper, 'common.edit').trigger('click')
+    expect(wrapper.get('[data-test="system-prompt-toggle"]').attributes('aria-checked')).toBe('true')
+    expect(wrapper.get('[data-test="system-prompt-force-toggle"]').attributes('aria-checked')).toBe('true')
+    expect(wrapper.get('[data-test="system-prompt-input"]').element).toHaveProperty('value', key.custom_system_prompt)
+  })
+
+  it('retains stored prompt content and protocol choice when custom prompts are disabled', async () => {
+    const key = {
+      ...createApiKey(), group_id: 1, group: group(1),
+      custom_system_prompt_enabled: true, custom_system_prompt_force: true, custom_system_prompt: 'Saved prompt'
+    }
+    setKey(key, [group(1)])
+    const wrapper = await mountView()
+    await getButtonByText(wrapper, 'common.edit').trigger('click')
+    await wrapper.get('[data-test="system-prompt-toggle"]').trigger('click')
+    expect(wrapper.find('[data-test="system-prompt-controls"]').exists()).toBe(false)
+    await wrapper.get('#key-form').trigger('submit')
+    await flushPromises()
+    expect(updateKey).toHaveBeenLastCalledWith(1, expect.objectContaining({
+      custom_system_prompt_enabled: false,
+      custom_system_prompt_force: true,
+      custom_system_prompt: 'Saved prompt'
+    }))
+  })
+
+  it('rejects an enabled whitespace-only prompt and oversized UTF-8 content before saving', async () => {
+    const key = { ...createApiKey(), group_id: 1, group: group(1) }
+    setKey(key, [group(1)])
+    const wrapper = await mountView()
+    await getButtonByText(wrapper, 'common.edit').trigger('click')
+    await wrapper.get('[data-test="system-prompt-toggle"]').trigger('click')
+    await wrapper.get('[data-test="system-prompt-input"]').setValue(' \n ')
+    await wrapper.get('#key-form').trigger('submit')
+    expect(updateKey).not.toHaveBeenCalled()
+    expect(showError).toHaveBeenLastCalledWith('keys.customSystemPrompt.required')
+
+    await wrapper.get('[data-test="system-prompt-input"]').setValue('界'.repeat(10923))
+    await wrapper.get('#key-form').trigger('submit')
+    expect(updateKey).not.toHaveBeenCalled()
+    expect(showError).toHaveBeenLastCalledWith('keys.customSystemPrompt.tooLong')
+  })
+
   it('renders active failover in themed red and restores green when cooldown expires', async () => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date('2026-10-01T00:00:00Z'))

@@ -120,6 +120,48 @@ func (_u *APIKeyUpdate) ClearGroupID() *APIKeyUpdate {
 	return _u
 }
 
+// SetCustomSystemPromptEnabled sets the "custom_system_prompt_enabled" field.
+func (_u *APIKeyUpdate) SetCustomSystemPromptEnabled(v bool) *APIKeyUpdate {
+	_u.mutation.SetCustomSystemPromptEnabled(v)
+	return _u
+}
+
+// SetNillableCustomSystemPromptEnabled sets the "custom_system_prompt_enabled" field if the given value is not nil.
+func (_u *APIKeyUpdate) SetNillableCustomSystemPromptEnabled(v *bool) *APIKeyUpdate {
+	if v != nil {
+		_u.SetCustomSystemPromptEnabled(*v)
+	}
+	return _u
+}
+
+// SetCustomSystemPromptForce sets the "custom_system_prompt_force" field.
+func (_u *APIKeyUpdate) SetCustomSystemPromptForce(v bool) *APIKeyUpdate {
+	_u.mutation.SetCustomSystemPromptForce(v)
+	return _u
+}
+
+// SetNillableCustomSystemPromptForce sets the "custom_system_prompt_force" field if the given value is not nil.
+func (_u *APIKeyUpdate) SetNillableCustomSystemPromptForce(v *bool) *APIKeyUpdate {
+	if v != nil {
+		_u.SetCustomSystemPromptForce(*v)
+	}
+	return _u
+}
+
+// SetCustomSystemPrompt sets the "custom_system_prompt" field.
+func (_u *APIKeyUpdate) SetCustomSystemPrompt(v string) *APIKeyUpdate {
+	_u.mutation.SetCustomSystemPrompt(v)
+	return _u
+}
+
+// SetNillableCustomSystemPrompt sets the "custom_system_prompt" field if the given value is not nil.
+func (_u *APIKeyUpdate) SetNillableCustomSystemPrompt(v *string) *APIKeyUpdate {
+	if v != nil {
+		_u.SetCustomSystemPrompt(*v)
+	}
+	return _u
+}
+
 // SetFailoverEnabled sets the "failover_enabled" field.
 func (_u *APIKeyUpdate) SetFailoverEnabled(v bool) *APIKeyUpdate {
 	_u.mutation.SetFailoverEnabled(v)
@@ -727,6 +769,15 @@ func (_u *APIKeyUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	if value, ok := _u.mutation.Name(); ok {
 		_spec.SetField(apikey.FieldName, field.TypeString, value)
 	}
+	if value, ok := _u.mutation.CustomSystemPromptEnabled(); ok {
+		_spec.SetField(apikey.FieldCustomSystemPromptEnabled, field.TypeBool, value)
+	}
+	if value, ok := _u.mutation.CustomSystemPromptForce(); ok {
+		_spec.SetField(apikey.FieldCustomSystemPromptForce, field.TypeBool, value)
+	}
+	if value, ok := _u.mutation.CustomSystemPrompt(); ok {
+		_spec.SetField(apikey.FieldCustomSystemPrompt, field.TypeString, value)
+	}
 	if value, ok := _u.mutation.FailoverEnabled(); ok {
 		_spec.SetField(apikey.FieldFailoverEnabled, field.TypeBool, value)
 	}
@@ -1074,6 +1125,48 @@ func (_u *APIKeyUpdateOne) SetNillableGroupID(v *int64) *APIKeyUpdateOne {
 // ClearGroupID clears the value of the "group_id" field.
 func (_u *APIKeyUpdateOne) ClearGroupID() *APIKeyUpdateOne {
 	_u.mutation.ClearGroupID()
+	return _u
+}
+
+// SetCustomSystemPromptEnabled sets the "custom_system_prompt_enabled" field.
+func (_u *APIKeyUpdateOne) SetCustomSystemPromptEnabled(v bool) *APIKeyUpdateOne {
+	_u.mutation.SetCustomSystemPromptEnabled(v)
+	return _u
+}
+
+// SetNillableCustomSystemPromptEnabled sets the "custom_system_prompt_enabled" field if the given value is not nil.
+func (_u *APIKeyUpdateOne) SetNillableCustomSystemPromptEnabled(v *bool) *APIKeyUpdateOne {
+	if v != nil {
+		_u.SetCustomSystemPromptEnabled(*v)
+	}
+	return _u
+}
+
+// SetCustomSystemPromptForce sets the "custom_system_prompt_force" field.
+func (_u *APIKeyUpdateOne) SetCustomSystemPromptForce(v bool) *APIKeyUpdateOne {
+	_u.mutation.SetCustomSystemPromptForce(v)
+	return _u
+}
+
+// SetNillableCustomSystemPromptForce sets the "custom_system_prompt_force" field if the given value is not nil.
+func (_u *APIKeyUpdateOne) SetNillableCustomSystemPromptForce(v *bool) *APIKeyUpdateOne {
+	if v != nil {
+		_u.SetCustomSystemPromptForce(*v)
+	}
+	return _u
+}
+
+// SetCustomSystemPrompt sets the "custom_system_prompt" field.
+func (_u *APIKeyUpdateOne) SetCustomSystemPrompt(v string) *APIKeyUpdateOne {
+	_u.mutation.SetCustomSystemPrompt(v)
+	return _u
+}
+
+// SetNillableCustomSystemPrompt sets the "custom_system_prompt" field if the given value is not nil.
+func (_u *APIKeyUpdateOne) SetNillableCustomSystemPrompt(v *string) *APIKeyUpdateOne {
+	if v != nil {
+		_u.SetCustomSystemPrompt(*v)
+	}
 	return _u
 }
 
@@ -1713,6 +1806,15 @@ func (_u *APIKeyUpdateOne) sqlSave(ctx context.Context) (_node *APIKey, err erro
 	}
 	if value, ok := _u.mutation.Name(); ok {
 		_spec.SetField(apikey.FieldName, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.CustomSystemPromptEnabled(); ok {
+		_spec.SetField(apikey.FieldCustomSystemPromptEnabled, field.TypeBool, value)
+	}
+	if value, ok := _u.mutation.CustomSystemPromptForce(); ok {
+		_spec.SetField(apikey.FieldCustomSystemPromptForce, field.TypeBool, value)
+	}
+	if value, ok := _u.mutation.CustomSystemPrompt(); ok {
+		_spec.SetField(apikey.FieldCustomSystemPrompt, field.TypeString, value)
 	}
 	if value, ok := _u.mutation.FailoverEnabled(); ok {
 		_spec.SetField(apikey.FieldFailoverEnabled, field.TypeBool, value)

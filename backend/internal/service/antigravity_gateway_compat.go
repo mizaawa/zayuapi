@@ -205,6 +205,11 @@ func (s *AntigravityGatewayService) prepareAntigravityCompatCall(
 	account *Account,
 	request antigravityCompatRequest,
 ) (*antigravityCompatUpstreamCall, error) {
+	var promptErr error
+	request.claudeBody, promptErr = applyAPIKeySystemPrompt(c, request.claudeBody, apiKeySystemPromptAnthropic)
+	if promptErr != nil {
+		return nil, promptErr
+	}
 	var claudeRequest antigravity.ClaudeRequest
 	if json.Unmarshal(request.claudeBody, &claudeRequest) != nil {
 		return nil, s.writeAntigravityCompatError(c, http.StatusBadRequest, "invalid_request_error", "Invalid request body")
