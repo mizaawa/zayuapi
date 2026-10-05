@@ -26,6 +26,7 @@ export default {
           configureLink: 'Configure monitors in Channel Management > Channel Monitor',
           enabled: 'Enable Channel Monitor',
           hideUsageLogs: 'Hide channel monitor API key usage logs',
+          hideUsageLogsHint: 'When enabled, hide calls made with automatically created channel monitor keys from usage records, related statistics, and exports. Logs are retained and become visible again when disabled.',
           enabledHint: 'Disabling stops background checks; existing history is preserved.',
           defaultInterval: 'Default check interval (seconds)',
           defaultIntervalHint: 'Pre-fills the interval when creating a new monitor; each monitor can override it. Range 15 – 3600.',
