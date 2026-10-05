@@ -283,7 +283,7 @@ func TestAPIKeySystemPromptChatFallbackWireBody(t *testing.T) {
 		body := []byte(`{"model":"chat-only","messages":[{"role":"system","content":"agent tool guidance"},{"role":"assistant","tool_calls":[{"id":"call_one","type":"function","function":{"name":"read","arguments":"{}"}}]},{"role":"tool","tool_call_id":"call_one","content":"result"}],"vendor_number":9007199254740993}`)
 		resp, err := svc.sendCCUpstreamRequest(context.Background(), c, account, "http://upstream.test/v1/chat/completions", body, false, "key", "", "")
 		require.NoError(t, err)
-		defer resp.Body.Close()
+		defer func() { _ = resp.Body.Close() }()
 		require.Equal(t, "9007199254740993", gjson.GetBytes(upstream.lastBody, "vendor_number").Raw)
 		require.Contains(t, string(upstream.lastBody), "agent tool guidance")
 		require.Contains(t, string(upstream.lastBody), "Answer in Chinese.")
@@ -307,7 +307,7 @@ func TestAPIKeySystemPromptWebSocketPassthroughEveryTurn(t *testing.T) {
 					serverErr <- err
 					return
 				}
-				defer conn.CloseNow()
+				defer func() { _ = conn.CloseNow() }()
 				_, first, err := conn.Read(controlCtx)
 				if err != nil {
 					serverErr <- err
@@ -320,7 +320,7 @@ func TestAPIKeySystemPromptWebSocketPassthroughEveryTurn(t *testing.T) {
 			defer server.Close()
 			client, _, err := coderws.Dial(controlCtx, "ws"+strings.TrimPrefix(server.URL, "http")+"/v1/responses", nil)
 			require.NoError(t, err)
-			defer client.CloseNow()
+			defer func() { _ = client.CloseNow() }()
 			first := []byte(`{"type":"response.create","model":"gpt-5.5","instructions":"agent tool guidance","input":[{"role":"user","content":"question"}]}`)
 			require.NoError(t, client.Write(controlCtx, coderws.MessageText, first))
 			wire := requirePassthroughUpstreamWrite(t, upstream, 3*time.Second)
@@ -342,7 +342,7 @@ func TestAPIKeySystemPromptWebSocketPassthroughEveryTurn(t *testing.T) {
 				require.Equal(t, "user", gjson.GetBytes(wire, "input.1.role").String())
 			}
 			cancel()
-			client.CloseNow()
+			_ = client.CloseNow()
 			select {
 			case <-serverErr:
 			case <-time.After(3 * time.Second):
