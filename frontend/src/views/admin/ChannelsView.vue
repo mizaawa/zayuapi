@@ -147,7 +147,7 @@
     >
       <div class="channel-dialog-body">
         <!-- Tab Bar -->
-        <div class="flex items-center border-b border-gray-200 dark:border-dark-700 flex-shrink-0 -mx-4 sm:-mx-6 px-4 sm:px-6 -mt-3 sm:-mt-4">
+        <div class="channel-tabs flex items-center border-b border-gray-200 dark:border-dark-700 flex-shrink-0 -mx-4 sm:-mx-6 px-4 sm:px-6 -mt-3 sm:-mt-4">
           <!-- Basic Settings Tab -->
           <button
             type="button"
@@ -1657,10 +1657,45 @@ onUnmounted(() => {
   flex-direction: column;
   height: 70vh;
   min-height: 400px;
+  min-width: 0;
+}
+
+.channel-tabs {
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+}
+
+.channel-tabs::-webkit-scrollbar {
+  height: 8px;
+}
+
+.channel-tabs::-webkit-scrollbar-track {
+  @apply bg-gray-100 dark:bg-dark-800;
+}
+
+.channel-tabs::-webkit-scrollbar-thumb {
+  @apply rounded-full bg-gray-400 dark:bg-dark-500;
+}
+
+.channel-tabs::-webkit-scrollbar-thumb:hover {
+  @apply bg-gray-500 dark:bg-dark-400;
+}
+
+@supports (-moz-appearance: none) {
+  .channel-tabs {
+    scrollbar-width: thin;
+    scrollbar-color: theme('colors.gray.400') theme('colors.gray.100');
+  }
+
+  .dark .channel-tabs {
+    scrollbar-color: theme('colors.dark.500') theme('colors.dark.800');
+  }
 }
 
 .channel-tab {
-  @apply flex items-center gap-1.5 px-3 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap;
+  @apply flex flex-shrink-0 items-center gap-1.5 px-3 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap;
 }
 
 .channel-tab-active {
