@@ -113,6 +113,48 @@ func (_c *APIKeyCreate) SetNillableGroupID(v *int64) *APIKeyCreate {
 	return _c
 }
 
+// SetCustomSystemPromptEnabled sets the "custom_system_prompt_enabled" field.
+func (_c *APIKeyCreate) SetCustomSystemPromptEnabled(v bool) *APIKeyCreate {
+	_c.mutation.SetCustomSystemPromptEnabled(v)
+	return _c
+}
+
+// SetNillableCustomSystemPromptEnabled sets the "custom_system_prompt_enabled" field if the given value is not nil.
+func (_c *APIKeyCreate) SetNillableCustomSystemPromptEnabled(v *bool) *APIKeyCreate {
+	if v != nil {
+		_c.SetCustomSystemPromptEnabled(*v)
+	}
+	return _c
+}
+
+// SetCustomSystemPromptForce sets the "custom_system_prompt_force" field.
+func (_c *APIKeyCreate) SetCustomSystemPromptForce(v bool) *APIKeyCreate {
+	_c.mutation.SetCustomSystemPromptForce(v)
+	return _c
+}
+
+// SetNillableCustomSystemPromptForce sets the "custom_system_prompt_force" field if the given value is not nil.
+func (_c *APIKeyCreate) SetNillableCustomSystemPromptForce(v *bool) *APIKeyCreate {
+	if v != nil {
+		_c.SetCustomSystemPromptForce(*v)
+	}
+	return _c
+}
+
+// SetCustomSystemPrompt sets the "custom_system_prompt" field.
+func (_c *APIKeyCreate) SetCustomSystemPrompt(v string) *APIKeyCreate {
+	_c.mutation.SetCustomSystemPrompt(v)
+	return _c
+}
+
+// SetNillableCustomSystemPrompt sets the "custom_system_prompt" field if the given value is not nil.
+func (_c *APIKeyCreate) SetNillableCustomSystemPrompt(v *string) *APIKeyCreate {
+	if v != nil {
+		_c.SetCustomSystemPrompt(*v)
+	}
+	return _c
+}
+
 // SetFailoverEnabled sets the "failover_enabled" field.
 func (_c *APIKeyCreate) SetFailoverEnabled(v bool) *APIKeyCreate {
 	_c.mutation.SetFailoverEnabled(v)
@@ -485,6 +527,18 @@ func (_c *APIKeyCreate) defaults() error {
 		v := apikey.DefaultPurpose
 		_c.mutation.SetPurpose(v)
 	}
+	if _, ok := _c.mutation.CustomSystemPromptEnabled(); !ok {
+		v := apikey.DefaultCustomSystemPromptEnabled
+		_c.mutation.SetCustomSystemPromptEnabled(v)
+	}
+	if _, ok := _c.mutation.CustomSystemPromptForce(); !ok {
+		v := apikey.DefaultCustomSystemPromptForce
+		_c.mutation.SetCustomSystemPromptForce(v)
+	}
+	if _, ok := _c.mutation.CustomSystemPrompt(); !ok {
+		v := apikey.DefaultCustomSystemPrompt
+		_c.mutation.SetCustomSystemPrompt(v)
+	}
 	if _, ok := _c.mutation.FailoverEnabled(); !ok {
 		v := apikey.DefaultFailoverEnabled
 		_c.mutation.SetFailoverEnabled(v)
@@ -574,6 +628,15 @@ func (_c *APIKeyCreate) check() error {
 		if err := apikey.PurposeValidator(v); err != nil {
 			return &ValidationError{Name: "purpose", err: fmt.Errorf(`ent: validator failed for field "APIKey.purpose": %w`, err)}
 		}
+	}
+	if _, ok := _c.mutation.CustomSystemPromptEnabled(); !ok {
+		return &ValidationError{Name: "custom_system_prompt_enabled", err: errors.New(`ent: missing required field "APIKey.custom_system_prompt_enabled"`)}
+	}
+	if _, ok := _c.mutation.CustomSystemPromptForce(); !ok {
+		return &ValidationError{Name: "custom_system_prompt_force", err: errors.New(`ent: missing required field "APIKey.custom_system_prompt_force"`)}
+	}
+	if _, ok := _c.mutation.CustomSystemPrompt(); !ok {
+		return &ValidationError{Name: "custom_system_prompt", err: errors.New(`ent: missing required field "APIKey.custom_system_prompt"`)}
 	}
 	if _, ok := _c.mutation.FailoverEnabled(); !ok {
 		return &ValidationError{Name: "failover_enabled", err: errors.New(`ent: missing required field "APIKey.failover_enabled"`)}
@@ -682,6 +745,18 @@ func (_c *APIKeyCreate) createSpec() (*APIKey, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.Purpose(); ok {
 		_spec.SetField(apikey.FieldPurpose, field.TypeString, value)
 		_node.Purpose = value
+	}
+	if value, ok := _c.mutation.CustomSystemPromptEnabled(); ok {
+		_spec.SetField(apikey.FieldCustomSystemPromptEnabled, field.TypeBool, value)
+		_node.CustomSystemPromptEnabled = value
+	}
+	if value, ok := _c.mutation.CustomSystemPromptForce(); ok {
+		_spec.SetField(apikey.FieldCustomSystemPromptForce, field.TypeBool, value)
+		_node.CustomSystemPromptForce = value
+	}
+	if value, ok := _c.mutation.CustomSystemPrompt(); ok {
+		_spec.SetField(apikey.FieldCustomSystemPrompt, field.TypeString, value)
+		_node.CustomSystemPrompt = value
 	}
 	if value, ok := _c.mutation.FailoverEnabled(); ok {
 		_spec.SetField(apikey.FieldFailoverEnabled, field.TypeBool, value)
@@ -954,6 +1029,42 @@ func (u *APIKeyUpsert) UpdateGroupID() *APIKeyUpsert {
 // ClearGroupID clears the value of the "group_id" field.
 func (u *APIKeyUpsert) ClearGroupID() *APIKeyUpsert {
 	u.SetNull(apikey.FieldGroupID)
+	return u
+}
+
+// SetCustomSystemPromptEnabled sets the "custom_system_prompt_enabled" field.
+func (u *APIKeyUpsert) SetCustomSystemPromptEnabled(v bool) *APIKeyUpsert {
+	u.Set(apikey.FieldCustomSystemPromptEnabled, v)
+	return u
+}
+
+// UpdateCustomSystemPromptEnabled sets the "custom_system_prompt_enabled" field to the value that was provided on create.
+func (u *APIKeyUpsert) UpdateCustomSystemPromptEnabled() *APIKeyUpsert {
+	u.SetExcluded(apikey.FieldCustomSystemPromptEnabled)
+	return u
+}
+
+// SetCustomSystemPromptForce sets the "custom_system_prompt_force" field.
+func (u *APIKeyUpsert) SetCustomSystemPromptForce(v bool) *APIKeyUpsert {
+	u.Set(apikey.FieldCustomSystemPromptForce, v)
+	return u
+}
+
+// UpdateCustomSystemPromptForce sets the "custom_system_prompt_force" field to the value that was provided on create.
+func (u *APIKeyUpsert) UpdateCustomSystemPromptForce() *APIKeyUpsert {
+	u.SetExcluded(apikey.FieldCustomSystemPromptForce)
+	return u
+}
+
+// SetCustomSystemPrompt sets the "custom_system_prompt" field.
+func (u *APIKeyUpsert) SetCustomSystemPrompt(v string) *APIKeyUpsert {
+	u.Set(apikey.FieldCustomSystemPrompt, v)
+	return u
+}
+
+// UpdateCustomSystemPrompt sets the "custom_system_prompt" field to the value that was provided on create.
+func (u *APIKeyUpsert) UpdateCustomSystemPrompt() *APIKeyUpsert {
+	u.SetExcluded(apikey.FieldCustomSystemPrompt)
 	return u
 }
 
@@ -1490,6 +1601,48 @@ func (u *APIKeyUpsertOne) UpdateGroupID() *APIKeyUpsertOne {
 func (u *APIKeyUpsertOne) ClearGroupID() *APIKeyUpsertOne {
 	return u.Update(func(s *APIKeyUpsert) {
 		s.ClearGroupID()
+	})
+}
+
+// SetCustomSystemPromptEnabled sets the "custom_system_prompt_enabled" field.
+func (u *APIKeyUpsertOne) SetCustomSystemPromptEnabled(v bool) *APIKeyUpsertOne {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.SetCustomSystemPromptEnabled(v)
+	})
+}
+
+// UpdateCustomSystemPromptEnabled sets the "custom_system_prompt_enabled" field to the value that was provided on create.
+func (u *APIKeyUpsertOne) UpdateCustomSystemPromptEnabled() *APIKeyUpsertOne {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.UpdateCustomSystemPromptEnabled()
+	})
+}
+
+// SetCustomSystemPromptForce sets the "custom_system_prompt_force" field.
+func (u *APIKeyUpsertOne) SetCustomSystemPromptForce(v bool) *APIKeyUpsertOne {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.SetCustomSystemPromptForce(v)
+	})
+}
+
+// UpdateCustomSystemPromptForce sets the "custom_system_prompt_force" field to the value that was provided on create.
+func (u *APIKeyUpsertOne) UpdateCustomSystemPromptForce() *APIKeyUpsertOne {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.UpdateCustomSystemPromptForce()
+	})
+}
+
+// SetCustomSystemPrompt sets the "custom_system_prompt" field.
+func (u *APIKeyUpsertOne) SetCustomSystemPrompt(v string) *APIKeyUpsertOne {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.SetCustomSystemPrompt(v)
+	})
+}
+
+// UpdateCustomSystemPrompt sets the "custom_system_prompt" field to the value that was provided on create.
+func (u *APIKeyUpsertOne) UpdateCustomSystemPrompt() *APIKeyUpsertOne {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.UpdateCustomSystemPrompt()
 	})
 }
 
@@ -2257,6 +2410,48 @@ func (u *APIKeyUpsertBulk) UpdateGroupID() *APIKeyUpsertBulk {
 func (u *APIKeyUpsertBulk) ClearGroupID() *APIKeyUpsertBulk {
 	return u.Update(func(s *APIKeyUpsert) {
 		s.ClearGroupID()
+	})
+}
+
+// SetCustomSystemPromptEnabled sets the "custom_system_prompt_enabled" field.
+func (u *APIKeyUpsertBulk) SetCustomSystemPromptEnabled(v bool) *APIKeyUpsertBulk {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.SetCustomSystemPromptEnabled(v)
+	})
+}
+
+// UpdateCustomSystemPromptEnabled sets the "custom_system_prompt_enabled" field to the value that was provided on create.
+func (u *APIKeyUpsertBulk) UpdateCustomSystemPromptEnabled() *APIKeyUpsertBulk {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.UpdateCustomSystemPromptEnabled()
+	})
+}
+
+// SetCustomSystemPromptForce sets the "custom_system_prompt_force" field.
+func (u *APIKeyUpsertBulk) SetCustomSystemPromptForce(v bool) *APIKeyUpsertBulk {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.SetCustomSystemPromptForce(v)
+	})
+}
+
+// UpdateCustomSystemPromptForce sets the "custom_system_prompt_force" field to the value that was provided on create.
+func (u *APIKeyUpsertBulk) UpdateCustomSystemPromptForce() *APIKeyUpsertBulk {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.UpdateCustomSystemPromptForce()
+	})
+}
+
+// SetCustomSystemPrompt sets the "custom_system_prompt" field.
+func (u *APIKeyUpsertBulk) SetCustomSystemPrompt(v string) *APIKeyUpsertBulk {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.SetCustomSystemPrompt(v)
+	})
+}
+
+// UpdateCustomSystemPrompt sets the "custom_system_prompt" field to the value that was provided on create.
+func (u *APIKeyUpsertBulk) UpdateCustomSystemPrompt() *APIKeyUpsertBulk {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.UpdateCustomSystemPrompt()
 	})
 }
 

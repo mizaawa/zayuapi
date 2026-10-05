@@ -564,6 +564,15 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 	// 命中 WS 时仅走 WebSocket Mode；不再自动回退 HTTP。
 	if wsDecision.Transport == OpenAIUpstreamTransportResponsesWebsocketV2 {
 		// WS 分支需要结构化 payload 与重连恢复，命中后再触发 full-map decode。
+		promptBody, promptErr := applyAPIKeySystemPrompt(c, body, apiKeySystemPromptResponses)
+		if promptErr != nil {
+			return nil, promptErr
+		}
+		if !bytes.Equal(promptBody, body) {
+			body = promptBody
+			requestView = newOpenAIRequestView(body)
+			reqBody = nil
+		}
 		wsReqBody, err := ensureReqBody()
 		if err != nil {
 			return nil, err
@@ -1028,6 +1037,11 @@ func preserveOpenAIStreamingUsage(c *gin.Context, writerSizeBeforeStream int, us
 }
 
 func (s *OpenAIGatewayService) buildUpstreamRequest(ctx context.Context, c *gin.Context, account *Account, body []byte, token string, isStream bool, promptCacheKey string, isCodexCLI bool) (*http.Request, error) {
+	var promptErr error
+	body, promptErr = applyAPIKeySystemPrompt(c, body, apiKeySystemPromptResponses)
+	if promptErr != nil {
+		return nil, promptErr
+	}
 	// Determine target URL based on account type
 	var targetURL string
 	switch account.Type {

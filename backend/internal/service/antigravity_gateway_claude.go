@@ -33,6 +33,11 @@ func (s *AntigravityGatewayService) Forward(ctx context.Context, c *gin.Context,
 	if account.Type == AccountTypeUpstream {
 		return s.ForwardUpstream(ctx, c, account, body)
 	}
+	var promptErr error
+	body, promptErr = applyAPIKeySystemPrompt(c, body, apiKeySystemPromptAnthropic)
+	if promptErr != nil {
+		return nil, promptErr
+	}
 
 	startTime := time.Now()
 

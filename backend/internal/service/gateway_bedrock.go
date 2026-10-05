@@ -89,6 +89,10 @@ func (s *GatewayService) forwardBedrock(
 	if err != nil {
 		return nil, fmt.Errorf("prepare bedrock request body: %w", err)
 	}
+	bedrockBody, err = applyAPIKeySystemPrompt(c, bedrockBody, apiKeySystemPromptAnthropic)
+	if err != nil {
+		return nil, err
+	}
 
 	proxyURL := ""
 	if account.ProxyID != nil && account.Proxy != nil {

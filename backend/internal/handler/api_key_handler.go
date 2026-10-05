@@ -40,13 +40,16 @@ func NewAPIKeyHandler(apiKeyService *service.APIKeyService) *APIKeyHandler {
 
 // CreateAPIKeyRequest represents the create API key request payload
 type CreateAPIKeyRequest struct {
-	Name          string   `json:"name" binding:"required"`
-	GroupID       *int64   `json:"group_id"`        // nullable
-	CustomKey     *string  `json:"custom_key"`      // 可选的自定义key
-	IPWhitelist   []string `json:"ip_whitelist"`    // IP 白名单
-	IPBlacklist   []string `json:"ip_blacklist"`    // IP 黑名单
-	Quota         *float64 `json:"quota"`           // 配额限制 (USD)
-	ExpiresInDays *int     `json:"expires_in_days"` // 过期天数
+	Name                      string   `json:"name" binding:"required"`
+	GroupID                   *int64   `json:"group_id"`        // nullable
+	CustomKey                 *string  `json:"custom_key"`      // 可选的自定义key
+	IPWhitelist               []string `json:"ip_whitelist"`    // IP 白名单
+	IPBlacklist               []string `json:"ip_blacklist"`    // IP 黑名单
+	Quota                     *float64 `json:"quota"`           // 配额限制 (USD)
+	ExpiresInDays             *int     `json:"expires_in_days"` // 过期天数
+	CustomSystemPromptEnabled bool     `json:"custom_system_prompt_enabled"`
+	CustomSystemPromptForce   bool     `json:"custom_system_prompt_force"`
+	CustomSystemPrompt        string   `json:"custom_system_prompt"`
 
 	// Rate limit fields (0 = unlimited)
 	RateLimit5h *float64 `json:"rate_limit_5h"`
@@ -56,19 +59,22 @@ type CreateAPIKeyRequest struct {
 
 // UpdateAPIKeyRequest represents the update API key request payload
 type UpdateAPIKeyRequest struct {
-	Name                    string    `json:"name"`
-	GroupID                 *int64    `json:"group_id"`
-	Status                  string    `json:"status" binding:"omitempty,oneof=active inactive"`
-	IPWhitelist             *[]string `json:"ip_whitelist"` // IP 白名单（nil 不修改，空数组清空）
-	IPBlacklist             *[]string `json:"ip_blacklist"` // IP 黑名单（nil 不修改，空数组清空）
-	Quota                   *float64  `json:"quota"`        // 配额限制 (USD), 0=无限制
-	ExpiresAt               *string   `json:"expires_at"`   // 过期时间 (ISO 8601)
-	ResetQuota              *bool     `json:"reset_quota"`  // 重置已用配额
-	FailoverEnabled         *bool     `json:"failover_enabled"`
-	FailoverGroupID         *int64    `json:"failover_group_id"`
-	FailoverMaxRetries      *int      `json:"failover_max_retries" binding:"omitempty,min=1,max=10"`
-	FailoverCooldownSeconds *int      `json:"failover_cooldown_seconds" binding:"omitempty,min=1"`
-	ReleaseFailoverCooldown bool      `json:"release_failover_cooldown"`
+	Name                      string    `json:"name"`
+	GroupID                   *int64    `json:"group_id"`
+	Status                    string    `json:"status" binding:"omitempty,oneof=active inactive"`
+	IPWhitelist               *[]string `json:"ip_whitelist"` // IP 白名单（nil 不修改，空数组清空）
+	IPBlacklist               *[]string `json:"ip_blacklist"` // IP 黑名单（nil 不修改，空数组清空）
+	Quota                     *float64  `json:"quota"`        // 配额限制 (USD), 0=无限制
+	ExpiresAt                 *string   `json:"expires_at"`   // 过期时间 (ISO 8601)
+	ResetQuota                *bool     `json:"reset_quota"`  // 重置已用配额
+	FailoverEnabled           *bool     `json:"failover_enabled"`
+	FailoverGroupID           *int64    `json:"failover_group_id"`
+	FailoverMaxRetries        *int      `json:"failover_max_retries" binding:"omitempty,min=1,max=10"`
+	FailoverCooldownSeconds   *int      `json:"failover_cooldown_seconds" binding:"omitempty,min=1"`
+	ReleaseFailoverCooldown   bool      `json:"release_failover_cooldown"`
+	CustomSystemPromptEnabled *bool     `json:"custom_system_prompt_enabled"`
+	CustomSystemPromptForce   *bool     `json:"custom_system_prompt_force"`
+	CustomSystemPrompt        *string   `json:"custom_system_prompt"`
 
 	// Rate limit fields (nil = no change, 0 = unlimited)
 	RateLimit5h         *float64 `json:"rate_limit_5h"`
@@ -172,12 +178,15 @@ func (h *APIKeyHandler) Create(c *gin.Context) {
 	}
 
 	svcReq := service.CreateAPIKeyRequest{
-		Name:          req.Name,
-		GroupID:       req.GroupID,
-		CustomKey:     req.CustomKey,
-		IPWhitelist:   req.IPWhitelist,
-		IPBlacklist:   req.IPBlacklist,
-		ExpiresInDays: req.ExpiresInDays,
+		Name:                      req.Name,
+		GroupID:                   req.GroupID,
+		CustomKey:                 req.CustomKey,
+		IPWhitelist:               req.IPWhitelist,
+		IPBlacklist:               req.IPBlacklist,
+		ExpiresInDays:             req.ExpiresInDays,
+		CustomSystemPromptEnabled: req.CustomSystemPromptEnabled,
+		CustomSystemPromptForce:   req.CustomSystemPromptForce,
+		CustomSystemPrompt:        req.CustomSystemPrompt,
 	}
 	if req.Quota != nil {
 		svcReq.Quota = *req.Quota
@@ -224,19 +233,22 @@ func (h *APIKeyHandler) Update(c *gin.Context) {
 	}
 
 	svcReq := service.UpdateAPIKeyRequest{
-		IPWhitelist:             req.IPWhitelist,
-		IPBlacklist:             req.IPBlacklist,
-		Quota:                   req.Quota,
-		ResetQuota:              req.ResetQuota,
-		RateLimit5h:             req.RateLimit5h,
-		RateLimit1d:             req.RateLimit1d,
-		RateLimit7d:             req.RateLimit7d,
-		ResetRateLimitUsage:     req.ResetRateLimitUsage,
-		FailoverEnabled:         req.FailoverEnabled,
-		FailoverGroupID:         req.FailoverGroupID,
-		FailoverMaxRetries:      req.FailoverMaxRetries,
-		FailoverCooldownSeconds: req.FailoverCooldownSeconds,
-		ReleaseFailoverCooldown: req.ReleaseFailoverCooldown,
+		IPWhitelist:               req.IPWhitelist,
+		IPBlacklist:               req.IPBlacklist,
+		Quota:                     req.Quota,
+		ResetQuota:                req.ResetQuota,
+		RateLimit5h:               req.RateLimit5h,
+		RateLimit1d:               req.RateLimit1d,
+		RateLimit7d:               req.RateLimit7d,
+		ResetRateLimitUsage:       req.ResetRateLimitUsage,
+		FailoverEnabled:           req.FailoverEnabled,
+		FailoverGroupID:           req.FailoverGroupID,
+		FailoverMaxRetries:        req.FailoverMaxRetries,
+		FailoverCooldownSeconds:   req.FailoverCooldownSeconds,
+		ReleaseFailoverCooldown:   req.ReleaseFailoverCooldown,
+		CustomSystemPromptEnabled: req.CustomSystemPromptEnabled,
+		CustomSystemPromptForce:   req.CustomSystemPromptForce,
+		CustomSystemPrompt:        req.CustomSystemPrompt,
 	}
 	if req.Name != "" {
 		svcReq.Name = &req.Name

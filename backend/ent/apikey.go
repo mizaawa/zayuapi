@@ -36,6 +36,12 @@ type APIKey struct {
 	Purpose string `json:"purpose,omitempty"`
 	// GroupID holds the value of the "group_id" field.
 	GroupID *int64 `json:"group_id,omitempty"`
+	// CustomSystemPromptEnabled holds the value of the "custom_system_prompt_enabled" field.
+	CustomSystemPromptEnabled bool `json:"custom_system_prompt_enabled,omitempty"`
+	// CustomSystemPromptForce holds the value of the "custom_system_prompt_force" field.
+	CustomSystemPromptForce bool `json:"custom_system_prompt_force,omitempty"`
+	// CustomSystemPrompt holds the value of the "custom_system_prompt" field.
+	CustomSystemPrompt string `json:"custom_system_prompt,omitempty"`
 	// FailoverEnabled holds the value of the "failover_enabled" field.
 	FailoverEnabled bool `json:"failover_enabled,omitempty"`
 	// FailoverGroupID holds the value of the "failover_group_id" field.
@@ -137,13 +143,13 @@ func (*APIKey) scanValues(columns []string) ([]any, error) {
 		switch columns[i] {
 		case apikey.FieldIPWhitelist, apikey.FieldIPBlacklist:
 			values[i] = new([]byte)
-		case apikey.FieldFailoverEnabled:
+		case apikey.FieldCustomSystemPromptEnabled, apikey.FieldCustomSystemPromptForce, apikey.FieldFailoverEnabled:
 			values[i] = new(sql.NullBool)
 		case apikey.FieldQuota, apikey.FieldQuotaUsed, apikey.FieldRateLimit5h, apikey.FieldRateLimit1d, apikey.FieldRateLimit7d, apikey.FieldUsage5h, apikey.FieldUsage1d, apikey.FieldUsage7d:
 			values[i] = new(sql.NullFloat64)
 		case apikey.FieldID, apikey.FieldUserID, apikey.FieldGroupID, apikey.FieldFailoverGroupID, apikey.FieldFailoverMaxRetries, apikey.FieldFailoverCooldownSeconds, apikey.FieldFailoverRevision:
 			values[i] = new(sql.NullInt64)
-		case apikey.FieldKey, apikey.FieldName, apikey.FieldPurpose, apikey.FieldStatus:
+		case apikey.FieldKey, apikey.FieldName, apikey.FieldPurpose, apikey.FieldCustomSystemPrompt, apikey.FieldStatus:
 			values[i] = new(sql.NullString)
 		case apikey.FieldCreatedAt, apikey.FieldUpdatedAt, apikey.FieldDeletedAt, apikey.FieldFailoverCooldownUntil, apikey.FieldLastUsedAt, apikey.FieldExpiresAt, apikey.FieldWindow5hStart, apikey.FieldWindow1dStart, apikey.FieldWindow7dStart:
 			values[i] = new(sql.NullTime)
@@ -217,6 +223,24 @@ func (_m *APIKey) assignValues(columns []string, values []any) error {
 			} else if value.Valid {
 				_m.GroupID = new(int64)
 				*_m.GroupID = value.Int64
+			}
+		case apikey.FieldCustomSystemPromptEnabled:
+			if value, ok := values[i].(*sql.NullBool); !ok {
+				return fmt.Errorf("unexpected type %T for field custom_system_prompt_enabled", values[i])
+			} else if value.Valid {
+				_m.CustomSystemPromptEnabled = value.Bool
+			}
+		case apikey.FieldCustomSystemPromptForce:
+			if value, ok := values[i].(*sql.NullBool); !ok {
+				return fmt.Errorf("unexpected type %T for field custom_system_prompt_force", values[i])
+			} else if value.Valid {
+				_m.CustomSystemPromptForce = value.Bool
+			}
+		case apikey.FieldCustomSystemPrompt:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field custom_system_prompt", values[i])
+			} else if value.Valid {
+				_m.CustomSystemPrompt = value.String
 			}
 		case apikey.FieldFailoverEnabled:
 			if value, ok := values[i].(*sql.NullBool); !ok {
@@ -439,6 +463,15 @@ func (_m *APIKey) String() string {
 		builder.WriteString("group_id=")
 		builder.WriteString(fmt.Sprintf("%v", *v))
 	}
+	builder.WriteString(", ")
+	builder.WriteString("custom_system_prompt_enabled=")
+	builder.WriteString(fmt.Sprintf("%v", _m.CustomSystemPromptEnabled))
+	builder.WriteString(", ")
+	builder.WriteString("custom_system_prompt_force=")
+	builder.WriteString(fmt.Sprintf("%v", _m.CustomSystemPromptForce))
+	builder.WriteString(", ")
+	builder.WriteString("custom_system_prompt=")
+	builder.WriteString(_m.CustomSystemPrompt)
 	builder.WriteString(", ")
 	builder.WriteString("failover_enabled=")
 	builder.WriteString(fmt.Sprintf("%v", _m.FailoverEnabled))

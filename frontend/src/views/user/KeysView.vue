@@ -636,6 +636,13 @@
           :disabled="submitting"
         />
 
+        <SystemPromptSettings
+          v-if="showEditModal"
+          id="edit-key-system-prompt"
+          v-model="systemPromptSettings"
+          :disabled="submitting"
+        />
+
         <!-- IP Restriction Section -->
         <div class="space-y-3">
           <div class="flex items-center justify-between">
@@ -1234,10 +1241,11 @@ import TablePageLayout from '@/components/layout/TablePageLayout.vue'
 	import Icon from '@/components/icons/Icon.vue'
 	import UseKeyModal from '@/components/keys/UseKeyModal.vue'
 	import FailoverSettings from '@/components/keys/FailoverSettings.vue'
+	import SystemPromptSettings from '@/components/keys/SystemPromptSettings.vue'
 	import EndpointPopover from '@/components/keys/EndpointPopover.vue'
 	import GroupBadge from '@/components/common/GroupBadge.vue'
 	import GroupOptionItem from '@/components/common/GroupOptionItem.vue'
-	import type { ApiKey, ApiKeyFailoverSettings, Group, PublicSettings, SubscriptionType, GroupPlatform, UpdateApiKeyRequest } from '@/types'
+	import type { ApiKey, ApiKeyFailoverSettings, ApiKeySystemPromptSettings, Group, PublicSettings, SubscriptionType, GroupPlatform, UpdateApiKeyRequest } from '@/types'
 import type { Column } from '@/components/common/types'
 import type { BatchApiKeyUsageStats } from '@/api/usage'
 import { formatDateTime } from '@/utils/format'
@@ -1466,6 +1474,12 @@ const getFailoverSettings = (key?: ApiKey): ApiKeyFailoverSettings => ({
   failover_cooldown_seconds: key?.failover_cooldown_seconds ?? 300
 })
 const failoverSettings = ref<ApiKeyFailoverSettings>(getFailoverSettings())
+const getSystemPromptSettings = (key?: ApiKey): ApiKeySystemPromptSettings => ({
+  custom_system_prompt_enabled: key?.custom_system_prompt_enabled ?? false,
+  custom_system_prompt_force: key?.custom_system_prompt_force ?? false,
+  custom_system_prompt: key?.custom_system_prompt ?? ''
+})
+const systemPromptSettings = ref<ApiKeySystemPromptSettings>(getSystemPromptSettings())
 const supportsFailover = (group?: Group) => Boolean(group && group.platform !== 'custom' && group.platform !== 'composite')
 const editPrimaryGroup = computed(() =>
   groups.value.find((group) => group.id === formData.value.group_id) ??
@@ -1719,6 +1733,7 @@ const handleSort = (key: string, order: 'asc' | 'desc') => {
 const editKey = (key: ApiKey) => {
   selectedKey.value = key
   failoverSettings.value = getFailoverSettings(key)
+  systemPromptSettings.value = getSystemPromptSettings(key)
   const hasIPRestriction = (key.ip_whitelist?.length > 0) || (key.ip_blacklist?.length > 0)
   const hasExpiration = !!key.expires_at
   formData.value = {
@@ -1927,6 +1942,17 @@ const handleSubmit = async () => {
     return
   }
   if (showEditModal.value && !validateFailoverSettings(editPrimaryGroup.value)) return
+  if (showEditModal.value && systemPromptSettings.value.custom_system_prompt_enabled) {
+    const prompt = systemPromptSettings.value.custom_system_prompt
+    if (!prompt.trim()) {
+      appStore.showError(t('keys.customSystemPrompt.required'))
+      return
+    }
+    if (new TextEncoder().encode(prompt).length > 32768) {
+      appStore.showError(t('keys.customSystemPrompt.tooLong'))
+      return
+    }
+  }
 
   // Validate custom key if enabled
   if (!showEditModal.value && formData.value.use_custom_key) {
@@ -1981,6 +2007,7 @@ const handleSubmit = async () => {
     if (showEditModal.value && selectedKey.value) {
       const updates: UpdateApiKeyRequest = {
         ...failoverSettings.value,
+        ...systemPromptSettings.value,
         name: formData.value.name,
         group_id: formData.value.group_id,
         ip_whitelist: ipWhitelist,
@@ -2055,6 +2082,7 @@ const closeModals = () => {
   showEditModal.value = false
   selectedKey.value = null
   failoverSettings.value = getFailoverSettings()
+  systemPromptSettings.value = getSystemPromptSettings()
   formData.value = {
     name: '',
     group_id: null,

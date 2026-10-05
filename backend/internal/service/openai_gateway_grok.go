@@ -1053,6 +1053,11 @@ func addOpenAIUsage(dst *OpenAIUsage, usage OpenAIUsage) {
 }
 
 func buildGrokResponsesRequest(ctx context.Context, c *gin.Context, account *Account, body []byte, token, cacheIdentity string, cfg *config.Config) (*http.Request, error) {
+	var promptErr error
+	body, promptErr = applyAPIKeySystemPrompt(c, body, apiKeySystemPromptResponses)
+	if promptErr != nil {
+		return nil, promptErr
+	}
 	targetURL, err := buildGrokResponsesURL(account, cfg)
 	if err != nil {
 		return nil, err

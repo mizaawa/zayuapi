@@ -49,6 +49,9 @@ func (APIKey) Fields() []ent.Field {
 		field.Int64("group_id").
 			Optional().
 			Nillable(),
+		field.Bool("custom_system_prompt_enabled").Default(false),
+		field.Bool("custom_system_prompt_force").Default(false),
+		field.Text("custom_system_prompt").Default(""),
 		field.Bool("failover_enabled").Default(false),
 		field.Int64("failover_group_id").Optional().Nillable(),
 		field.Int("failover_max_retries").Default(3).Min(1).Max(10),

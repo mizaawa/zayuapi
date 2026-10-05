@@ -329,6 +329,11 @@ func (s *GatewayService) buildUpstreamRequestAnthropicAPIKeyPassthrough(
 	body []byte,
 	token string,
 ) (*http.Request, []byte, error) {
+	var promptErr error
+	body, promptErr = applyAPIKeySystemPrompt(c, body, apiKeySystemPromptAnthropic)
+	if promptErr != nil {
+		return nil, nil, promptErr
+	}
 	targetURL := claudeAPIURL
 	baseURL := account.GetBaseURL()
 	if baseURL != "" {

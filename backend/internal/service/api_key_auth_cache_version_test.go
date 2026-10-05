@@ -1,6 +1,38 @@
 package service
 
-import "testing"
+import (
+	"encoding/json"
+	"testing"
+
+	"github.com/stretchr/testify/require"
+)
+
+func TestAPIKeyService_RejectsV22AuthSnapshotWithoutCustomSystemPrompt(t *testing.T) {
+	svc := &APIKeyService{}
+	key, ok, err := svc.applyAuthCacheEntry("legacy-prompt", &APIKeyAuthCacheEntry{
+		Snapshot: &APIKeyAuthSnapshot{Version: 22},
+	})
+	require.NoError(t, err)
+	require.False(t, ok)
+	require.Nil(t, key)
+}
+
+func TestAPIKeyService_AuthSnapshotPreservesCustomSystemPrompt(t *testing.T) {
+	svc := &APIKeyService{}
+	source := &APIKey{
+		ID: 1, UserID: 2, Key: "sk-custom-prompt", Status: StatusActive,
+		CustomSystemPromptEnabled: true, CustomSystemPromptForce: true, CustomSystemPrompt: "  Project instructions\n",
+		User: &User{ID: 2, Status: StatusActive},
+	}
+	encoded, err := json.Marshal(svc.snapshotFromAPIKey(t.Context(), source))
+	require.NoError(t, err)
+	var snapshot APIKeyAuthSnapshot
+	require.NoError(t, json.Unmarshal(encoded, &snapshot))
+	got := svc.snapshotToAPIKey(source.Key, &snapshot)
+	require.True(t, got.CustomSystemPromptEnabled)
+	require.True(t, got.CustomSystemPromptForce)
+	require.Equal(t, source.CustomSystemPrompt, got.CustomSystemPrompt)
+}
 
 func TestAPIKeyService_RejectsV10AuthSnapshotWithoutModelsListConfig(t *testing.T) {
 	groupID := int64(9)

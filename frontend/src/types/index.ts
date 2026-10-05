@@ -718,6 +718,9 @@ export interface ApiKey {
   failover_max_retries?: number
   failover_cooldown_seconds?: number
   failover_cooldown_until?: string | null
+  custom_system_prompt_enabled?: boolean
+  custom_system_prompt_force?: boolean
+  custom_system_prompt?: string
   rate_limit_5h: number
   rate_limit_1d: number
   rate_limit_7d: number
@@ -737,6 +740,12 @@ export interface ApiKeyFailoverSettings {
   failover_group_id: number | null
   failover_max_retries: number
   failover_cooldown_seconds: number
+}
+
+export interface ApiKeySystemPromptSettings {
+  custom_system_prompt_enabled: boolean
+  custom_system_prompt_force: boolean
+  custom_system_prompt: string
 }
 
 export interface CreateApiKeyRequest {
@@ -770,6 +779,9 @@ export interface UpdateApiKeyRequest {
   failover_max_retries?: number
   failover_cooldown_seconds?: number
   release_failover_cooldown?: boolean
+  custom_system_prompt_enabled?: boolean
+  custom_system_prompt_force?: boolean
+  custom_system_prompt?: string
 }
 
 export interface CreateGroupRequest {

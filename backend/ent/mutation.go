@@ -117,6 +117,9 @@ type APIKeyMutation struct {
 	key                          *string
 	name                         *string
 	purpose                      *string
+	custom_system_prompt_enabled *bool
+	custom_system_prompt_force   *bool
+	custom_system_prompt         *string
 	failover_enabled             *bool
 	failover_group_id            *int64
 	addfailover_group_id         *int64
@@ -576,6 +579,114 @@ func (m *APIKeyMutation) GroupIDCleared() bool {
 func (m *APIKeyMutation) ResetGroupID() {
 	m.group = nil
 	delete(m.clearedFields, apikey.FieldGroupID)
+}
+
+// SetCustomSystemPromptEnabled sets the "custom_system_prompt_enabled" field.
+func (m *APIKeyMutation) SetCustomSystemPromptEnabled(b bool) {
+	m.custom_system_prompt_enabled = &b
+}
+
+// CustomSystemPromptEnabled returns the value of the "custom_system_prompt_enabled" field in the mutation.
+func (m *APIKeyMutation) CustomSystemPromptEnabled() (r bool, exists bool) {
+	v := m.custom_system_prompt_enabled
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCustomSystemPromptEnabled returns the old "custom_system_prompt_enabled" field's value of the APIKey entity.
+// If the APIKey object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *APIKeyMutation) OldCustomSystemPromptEnabled(ctx context.Context) (v bool, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCustomSystemPromptEnabled is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCustomSystemPromptEnabled requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCustomSystemPromptEnabled: %w", err)
+	}
+	return oldValue.CustomSystemPromptEnabled, nil
+}
+
+// ResetCustomSystemPromptEnabled resets all changes to the "custom_system_prompt_enabled" field.
+func (m *APIKeyMutation) ResetCustomSystemPromptEnabled() {
+	m.custom_system_prompt_enabled = nil
+}
+
+// SetCustomSystemPromptForce sets the "custom_system_prompt_force" field.
+func (m *APIKeyMutation) SetCustomSystemPromptForce(b bool) {
+	m.custom_system_prompt_force = &b
+}
+
+// CustomSystemPromptForce returns the value of the "custom_system_prompt_force" field in the mutation.
+func (m *APIKeyMutation) CustomSystemPromptForce() (r bool, exists bool) {
+	v := m.custom_system_prompt_force
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCustomSystemPromptForce returns the old "custom_system_prompt_force" field's value of the APIKey entity.
+// If the APIKey object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *APIKeyMutation) OldCustomSystemPromptForce(ctx context.Context) (v bool, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCustomSystemPromptForce is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCustomSystemPromptForce requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCustomSystemPromptForce: %w", err)
+	}
+	return oldValue.CustomSystemPromptForce, nil
+}
+
+// ResetCustomSystemPromptForce resets all changes to the "custom_system_prompt_force" field.
+func (m *APIKeyMutation) ResetCustomSystemPromptForce() {
+	m.custom_system_prompt_force = nil
+}
+
+// SetCustomSystemPrompt sets the "custom_system_prompt" field.
+func (m *APIKeyMutation) SetCustomSystemPrompt(s string) {
+	m.custom_system_prompt = &s
+}
+
+// CustomSystemPrompt returns the value of the "custom_system_prompt" field in the mutation.
+func (m *APIKeyMutation) CustomSystemPrompt() (r string, exists bool) {
+	v := m.custom_system_prompt
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCustomSystemPrompt returns the old "custom_system_prompt" field's value of the APIKey entity.
+// If the APIKey object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *APIKeyMutation) OldCustomSystemPrompt(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCustomSystemPrompt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCustomSystemPrompt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCustomSystemPrompt: %w", err)
+	}
+	return oldValue.CustomSystemPrompt, nil
+}
+
+// ResetCustomSystemPrompt resets all changes to the "custom_system_prompt" field.
+func (m *APIKeyMutation) ResetCustomSystemPrompt() {
+	m.custom_system_prompt = nil
 }
 
 // SetFailoverEnabled sets the "failover_enabled" field.
@@ -1902,7 +2013,7 @@ func (m *APIKeyMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *APIKeyMutation) Fields() []string {
-	fields := make([]string, 0, 30)
+	fields := make([]string, 0, 33)
 	if m.created_at != nil {
 		fields = append(fields, apikey.FieldCreatedAt)
 	}
@@ -1926,6 +2037,15 @@ func (m *APIKeyMutation) Fields() []string {
 	}
 	if m.group != nil {
 		fields = append(fields, apikey.FieldGroupID)
+	}
+	if m.custom_system_prompt_enabled != nil {
+		fields = append(fields, apikey.FieldCustomSystemPromptEnabled)
+	}
+	if m.custom_system_prompt_force != nil {
+		fields = append(fields, apikey.FieldCustomSystemPromptForce)
+	}
+	if m.custom_system_prompt != nil {
+		fields = append(fields, apikey.FieldCustomSystemPrompt)
 	}
 	if m.failover_enabled != nil {
 		fields = append(fields, apikey.FieldFailoverEnabled)
@@ -2017,6 +2137,12 @@ func (m *APIKeyMutation) Field(name string) (ent.Value, bool) {
 		return m.Purpose()
 	case apikey.FieldGroupID:
 		return m.GroupID()
+	case apikey.FieldCustomSystemPromptEnabled:
+		return m.CustomSystemPromptEnabled()
+	case apikey.FieldCustomSystemPromptForce:
+		return m.CustomSystemPromptForce()
+	case apikey.FieldCustomSystemPrompt:
+		return m.CustomSystemPrompt()
 	case apikey.FieldFailoverEnabled:
 		return m.FailoverEnabled()
 	case apikey.FieldFailoverGroupID:
@@ -2086,6 +2212,12 @@ func (m *APIKeyMutation) OldField(ctx context.Context, name string) (ent.Value, 
 		return m.OldPurpose(ctx)
 	case apikey.FieldGroupID:
 		return m.OldGroupID(ctx)
+	case apikey.FieldCustomSystemPromptEnabled:
+		return m.OldCustomSystemPromptEnabled(ctx)
+	case apikey.FieldCustomSystemPromptForce:
+		return m.OldCustomSystemPromptForce(ctx)
+	case apikey.FieldCustomSystemPrompt:
+		return m.OldCustomSystemPrompt(ctx)
 	case apikey.FieldFailoverEnabled:
 		return m.OldFailoverEnabled(ctx)
 	case apikey.FieldFailoverGroupID:
@@ -2194,6 +2326,27 @@ func (m *APIKeyMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetGroupID(v)
+		return nil
+	case apikey.FieldCustomSystemPromptEnabled:
+		v, ok := value.(bool)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCustomSystemPromptEnabled(v)
+		return nil
+	case apikey.FieldCustomSystemPromptForce:
+		v, ok := value.(bool)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCustomSystemPromptForce(v)
+		return nil
+	case apikey.FieldCustomSystemPrompt:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCustomSystemPrompt(v)
 		return nil
 	case apikey.FieldFailoverEnabled:
 		v, ok := value.(bool)
@@ -2637,6 +2790,15 @@ func (m *APIKeyMutation) ResetField(name string) error {
 		return nil
 	case apikey.FieldGroupID:
 		m.ResetGroupID()
+		return nil
+	case apikey.FieldCustomSystemPromptEnabled:
+		m.ResetCustomSystemPromptEnabled()
+		return nil
+	case apikey.FieldCustomSystemPromptForce:
+		m.ResetCustomSystemPromptForce()
+		return nil
+	case apikey.FieldCustomSystemPrompt:
+		m.ResetCustomSystemPrompt()
 		return nil
 	case apikey.FieldFailoverEnabled:
 		m.ResetFailoverEnabled()

@@ -31,6 +31,12 @@ const (
 	FieldPurpose = "purpose"
 	// FieldGroupID holds the string denoting the group_id field in the database.
 	FieldGroupID = "group_id"
+	// FieldCustomSystemPromptEnabled holds the string denoting the custom_system_prompt_enabled field in the database.
+	FieldCustomSystemPromptEnabled = "custom_system_prompt_enabled"
+	// FieldCustomSystemPromptForce holds the string denoting the custom_system_prompt_force field in the database.
+	FieldCustomSystemPromptForce = "custom_system_prompt_force"
+	// FieldCustomSystemPrompt holds the string denoting the custom_system_prompt field in the database.
+	FieldCustomSystemPrompt = "custom_system_prompt"
 	// FieldFailoverEnabled holds the string denoting the failover_enabled field in the database.
 	FieldFailoverEnabled = "failover_enabled"
 	// FieldFailoverGroupID holds the string denoting the failover_group_id field in the database.
@@ -117,6 +123,9 @@ var Columns = []string{
 	FieldName,
 	FieldPurpose,
 	FieldGroupID,
+	FieldCustomSystemPromptEnabled,
+	FieldCustomSystemPromptForce,
+	FieldCustomSystemPrompt,
 	FieldFailoverEnabled,
 	FieldFailoverGroupID,
 	FieldFailoverMaxRetries,
@@ -173,6 +182,12 @@ var (
 	DefaultPurpose string
 	// PurposeValidator is a validator for the "purpose" field. It is called by the builders before save.
 	PurposeValidator func(string) error
+	// DefaultCustomSystemPromptEnabled holds the default value on creation for the "custom_system_prompt_enabled" field.
+	DefaultCustomSystemPromptEnabled bool
+	// DefaultCustomSystemPromptForce holds the default value on creation for the "custom_system_prompt_force" field.
+	DefaultCustomSystemPromptForce bool
+	// DefaultCustomSystemPrompt holds the default value on creation for the "custom_system_prompt" field.
+	DefaultCustomSystemPrompt string
 	// DefaultFailoverEnabled holds the default value on creation for the "failover_enabled" field.
 	DefaultFailoverEnabled bool
 	// DefaultFailoverMaxRetries holds the default value on creation for the "failover_max_retries" field.
@@ -253,6 +268,21 @@ func ByPurpose(opts ...sql.OrderTermOption) OrderOption {
 // ByGroupID orders the results by the group_id field.
 func ByGroupID(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldGroupID, opts...).ToFunc()
+}
+
+// ByCustomSystemPromptEnabled orders the results by the custom_system_prompt_enabled field.
+func ByCustomSystemPromptEnabled(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldCustomSystemPromptEnabled, opts...).ToFunc()
+}
+
+// ByCustomSystemPromptForce orders the results by the custom_system_prompt_force field.
+func ByCustomSystemPromptForce(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldCustomSystemPromptForce, opts...).ToFunc()
+}
+
+// ByCustomSystemPrompt orders the results by the custom_system_prompt field.
+func ByCustomSystemPrompt(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldCustomSystemPrompt, opts...).ToFunc()
 }
 
 // ByFailoverEnabled orders the results by the failover_enabled field.

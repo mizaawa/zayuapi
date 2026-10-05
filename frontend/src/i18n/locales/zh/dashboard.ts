@@ -130,6 +130,15 @@ export default {
       invalidCooldown: '兜底冷却时间必须为 1 至 2147483647 秒的整数',
       supportedPlatforms: '兜底分组仅支持 OpenAI Responses / Compact 和 Anthropic Messages 协议。不支持 Custom 类型分组。'
     },
+    customSystemPrompt: {
+      enable: '自定义系统提示词',
+      hint: '部分上游响应可能不支持系统提示词透传，默认为追加提示词策略。可选择强制使用系统提示词协议，不保证成功透传至上游响应',
+      force: '强制使用系统提示词协议',
+      label: '设置系统提示词',
+      placeholder: '诶～杂鱼就是杂鱼♡果然不行呢(˃̶᷄ ⁻̫ ˂̶᷅)',
+      required: '请设置系统提示词',
+      tooLong: '系统提示词不能超过 32768 字节'
+    },
     noGroup: '无分组',
     searchGroup: '搜索分组...',
     noGroupFound: '未找到匹配的分组',

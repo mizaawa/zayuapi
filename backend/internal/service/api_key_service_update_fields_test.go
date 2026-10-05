@@ -45,12 +45,29 @@ func TestAPIKeyUpdate_OnlyDeclaresRequestedColumns(t *testing.T) {
 	quota := 500.0
 	rateLimit := 42.0
 	whitelist := []string{"10.0.0.1"}
+	prompt := "Project instructions"
+	enabled := true
 
 	tests := []struct {
 		name string
 		req  UpdateAPIKeyRequest
 		want APIKeyUpdateFields
 	}{
+		{
+			name: "prompt text only",
+			req:  UpdateAPIKeyRequest{CustomSystemPrompt: &prompt},
+			want: APIKeyUpdateFields{CustomSystemPrompt: true},
+		},
+		{
+			name: "prompt enabled and text",
+			req:  UpdateAPIKeyRequest{CustomSystemPromptEnabled: &enabled, CustomSystemPrompt: &prompt},
+			want: APIKeyUpdateFields{CustomSystemPromptEnabled: true, CustomSystemPrompt: true},
+		},
+		{
+			name: "prompt force only",
+			req:  UpdateAPIKeyRequest{CustomSystemPromptForce: &enabled},
+			want: APIKeyUpdateFields{CustomSystemPromptForce: true},
+		},
 		{
 			name: "name only",
 			req:  UpdateAPIKeyRequest{Name: &name},

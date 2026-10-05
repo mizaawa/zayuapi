@@ -65,6 +65,21 @@ func TestAuthCacheInvalidationTriggers_CoverSecurityMutationsOnly(t *testing.T) 
 		WHERE id = $1`, key.ID)
 	require.NoError(t, err)
 	require.Zero(t, count(), "usage-only key updates must not enqueue")
+	for _, change := range []struct {
+		field string
+		value any
+	}{
+		{"custom_system_prompt", "Project instructions"},
+		{"custom_system_prompt_force", true},
+		{"custom_system_prompt_enabled", true},
+		{"custom_system_prompt_enabled", false},
+	} {
+		_, err := integrationDB.ExecContext(ctx,
+			fmt.Sprintf("UPDATE api_keys SET %s = $1 WHERE id = $2", change.field), change.value, key.ID)
+		require.NoError(t, err)
+		require.Equal(t, 1, count(), "prompt configuration change must enqueue: %s", change.field)
+		clear()
+	}
 
 	_, err = integrationDB.ExecContext(ctx, "UPDATE api_keys SET status = 'disabled' WHERE id = $1", key.ID)
 	require.NoError(t, err)
