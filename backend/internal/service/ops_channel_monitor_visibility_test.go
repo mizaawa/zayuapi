@@ -64,7 +64,7 @@ func TestOpsChannelMonitorUsageVisibility(t *testing.T) {
 		{name: "enabled", value: "true", hide: true},
 		{name: "disabled", value: "false"},
 		{name: "unset", err: ErrSettingNotFound},
-		{name: "read failure", value: "true", err: errors.New("unavailable")},
+		{name: "read failure", err: errors.New("unavailable"), hide: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			repo := &stubOpsRepoForUserErr{}
@@ -86,4 +86,51 @@ func TestOpsChannelMonitorUsageVisibility(t *testing.T) {
 			require.Equal(t, int64(42), *repo.gotFilter.UserID)
 		})
 	}
+}
+
+func TestOpsChannelMonitorReadFailureHidesUserLogsUntilExplicitDisable(t *testing.T) {
+	ctx := context.Background()
+	owner := int64(42)
+	settings := &channelMonitorUsageLogSettingRepo{err: errors.New("settings unavailable")}
+	repo := &monitorErrorDetailRepo{monitor: true, stubOpsRepoForUserErr: stubOpsRepoForUserErr{
+		detailToReturn: &OpsErrorLogDetail{OpsErrorLog: OpsErrorLog{ID: 7, UserID: &owner, StatusCode: 500}},
+	}}
+	svc := &OpsService{opsRepo: repo, settingRepo: settings}
+
+	_, err := svc.GetErrorLogs(ctx, &OpsErrorLogFilter{UsageView: true})
+	require.NoError(t, err)
+	require.True(t, repo.gotFilter.ExcludeChannelMonitor)
+	_, err = svc.ListUserErrorRequests(ctx, owner, nil)
+	require.NoError(t, err)
+	require.True(t, repo.gotFilter.ExcludeChannelMonitor)
+	detail, err := svc.GetUserErrorRequestDetail(ctx, owner, 7)
+	require.True(t, infraerrors.IsNotFound(err))
+	require.Nil(t, detail)
+
+	_, err = svc.GetErrorLogs(ctx, &OpsErrorLogFilter{})
+	require.NoError(t, err)
+	require.False(t, repo.gotFilter.ExcludeChannelMonitor)
+	opsDetail, err := svc.GetErrorLogByID(ctx, 7)
+	require.NoError(t, err)
+	require.NotNil(t, opsDetail)
+
+	repo.monitor = false
+	detail, err = svc.GetUserErrorRequestDetail(ctx, owner, 7)
+	require.NoError(t, err)
+	require.NotNil(t, detail, "ordinary user error details remain visible")
+	_, err = svc.GetUserErrorRequestDetail(ctx, owner+1, 7)
+	require.True(t, infraerrors.IsNotFound(err), "ownership remains enforced")
+
+	repo.monitor = true
+	settings.err = nil
+	settings.value = "false"
+	_, err = svc.GetErrorLogs(ctx, &OpsErrorLogFilter{UsageView: true})
+	require.NoError(t, err)
+	require.False(t, repo.gotFilter.ExcludeChannelMonitor)
+	_, err = svc.ListUserErrorRequests(ctx, owner, nil)
+	require.NoError(t, err)
+	require.False(t, repo.gotFilter.ExcludeChannelMonitor)
+	detail, err = svc.GetUserErrorRequestDetail(ctx, owner, 7)
+	require.NoError(t, err)
+	require.NotNil(t, detail)
 }
