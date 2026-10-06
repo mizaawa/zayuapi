@@ -738,11 +738,7 @@ func (s *OpsService) GetUserErrorRequestDetail(ctx context.Context, userID, id i
 }
 
 func (s *OpsService) channelMonitorUsageLogsHidden(ctx context.Context) bool {
-	if s.settingRepo == nil {
-		return false
-	}
-	value, err := s.settingRepo.GetValue(ctx, SettingKeyChannelMonitorHideUsageLogs)
-	return err == nil && value == "true"
+	return channelMonitorUsageLogsHidden(ctx, s.settingRepo)
 }
 
 func (s *OpsService) UpdateErrorResolution(ctx context.Context, errorID int64, resolved bool, resolvedByUserID *int64) error {

@@ -14,11 +14,22 @@ import (
 )
 
 func (s *SettingService) IsChannelMonitorUsageLogsHidden(ctx context.Context) bool {
-	if s == nil || s.settingRepo == nil {
+	if s == nil {
 		return false
 	}
-	value, err := s.settingRepo.GetValue(ctx, SettingKeyChannelMonitorHideUsageLogs)
-	return err == nil && value == "true"
+	return channelMonitorUsageLogsHidden(ctx, s.settingRepo)
+}
+
+func channelMonitorUsageLogsHidden(ctx context.Context, repo SettingRepository) bool {
+	if repo == nil {
+		return false
+	}
+	value, err := repo.GetValue(ctx, SettingKeyChannelMonitorHideUsageLogs)
+	if err != nil {
+		// A failed settings read must not reveal logs that may have been hidden.
+		return !errors.Is(err, ErrSettingNotFound)
+	}
+	return value == "true"
 }
 
 // IsRegistrationEnabled 检查是否开放注册

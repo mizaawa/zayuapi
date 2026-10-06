@@ -4,6 +4,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -99,4 +100,34 @@ func TestChannelMonitorUsageVisibility_CacheSnapshotAndDefault(t *testing.T) {
 	legacy := NewUsageService(repo, nil, nil, nil)
 	_, defaultFilters := legacy.PrepareLogFilters(ctx, filters)
 	require.False(t, defaultFilters.HideChannelMonitorLogs)
+}
+
+func TestChannelMonitorUsageVisibility_SettingReadFailureAndRecovery(t *testing.T) {
+	ctx := context.Background()
+	settings := &channelMonitorUsageLogSettingRepo{err: errors.New("settings unavailable")}
+	repo := &monitorUsageVisibilityRepo{}
+	s := ProvideUsageService(repo, nil, nil, nil, NewSettingService(settings, nil))
+	params := pagination.PaginationParams{Page: 1, PageSize: 20}
+	filters := usagestats.UsageLogFilters{UserID: 9, ExactTotal: true}
+
+	_, _, err := s.ListWithFilters(ctx, params, filters)
+	require.NoError(t, err)
+	_, err = s.GetByID(ctx, 1)
+	require.ErrorIs(t, err, ErrUsageLogNotFound)
+	snapshotCtx, prepared := s.PrepareLogFilters(ctx, filters)
+	require.True(t, prepared.HideChannelMonitorLogs)
+
+	settings.err = nil
+	settings.value = "false"
+	_, err = s.GetStatsWithFilters(snapshotCtx, prepared)
+	require.NoError(t, err)
+	for _, captured := range repo.filters {
+		require.True(t, captured.HideChannelMonitorLogs)
+	}
+	require.Equal(t, int64(9), repo.filters[0].UserID)
+	require.True(t, repo.filters[0].ExactTotal)
+
+	_, err = s.GetStatsWithFilters(ctx, filters)
+	require.NoError(t, err)
+	require.False(t, repo.filters[len(repo.filters)-1].HideChannelMonitorLogs)
 }

@@ -35,7 +35,9 @@ func TestSettingService_ChannelMonitorUsageLogsHidden(t *testing.T) {
 		{name: "enabled", value: "true", want: true},
 		{name: "disabled", value: "false"},
 		{name: "missing", err: ErrSettingNotFound},
-		{name: "read failure", value: "true", err: errors.New("read failed")},
+		{name: "read failure", err: errors.New("read failed"), want: true},
+		{name: "canceled read", err: context.Canceled, want: true},
+		{name: "timed out read", err: context.DeadlineExceeded, want: true},
 		{name: "invalid", value: "invalid"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
