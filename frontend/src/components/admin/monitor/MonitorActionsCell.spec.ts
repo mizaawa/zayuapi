@@ -22,6 +22,7 @@ function makeMonitor(overrides: Partial<ChannelMonitor> = {}): ChannelMonitor {
     group_name: '',
     group_rate_multiplier: null,
     enabled: true,
+    simulate_requests: false,
     interval_seconds: 60,
     jitter_seconds: 0,
     last_checked_at: null,

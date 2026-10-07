@@ -73,6 +73,7 @@ function makeMonitor(overrides: Partial<ChannelMonitor> = {}): ChannelMonitor {
     group_name: 'OpenAI group',
     group_rate_multiplier: 0.1,
     enabled: true,
+    simulate_requests: false,
     interval_seconds: 60,
     jitter_seconds: 0,
     last_checked_at: null,

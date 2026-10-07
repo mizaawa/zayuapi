@@ -110,6 +110,11 @@ func Enabled(v bool) predicate.ChannelMonitor {
 	return predicate.ChannelMonitor(sql.FieldEQ(FieldEnabled, v))
 }
 
+// SimulateRequests applies equality check predicate on the "simulate_requests" field. It's identical to SimulateRequestsEQ.
+func SimulateRequests(v bool) predicate.ChannelMonitor {
+	return predicate.ChannelMonitor(sql.FieldEQ(FieldSimulateRequests, v))
+}
+
 // IntervalSeconds applies equality check predicate on the "interval_seconds" field. It's identical to IntervalSecondsEQ.
 func IntervalSeconds(v int) predicate.ChannelMonitor {
 	return predicate.ChannelMonitor(sql.FieldEQ(FieldIntervalSeconds, v))
@@ -718,6 +723,16 @@ func EnabledEQ(v bool) predicate.ChannelMonitor {
 // EnabledNEQ applies the NEQ predicate on the "enabled" field.
 func EnabledNEQ(v bool) predicate.ChannelMonitor {
 	return predicate.ChannelMonitor(sql.FieldNEQ(FieldEnabled, v))
+}
+
+// SimulateRequestsEQ applies the EQ predicate on the "simulate_requests" field.
+func SimulateRequestsEQ(v bool) predicate.ChannelMonitor {
+	return predicate.ChannelMonitor(sql.FieldEQ(FieldSimulateRequests, v))
+}
+
+// SimulateRequestsNEQ applies the NEQ predicate on the "simulate_requests" field.
+func SimulateRequestsNEQ(v bool) predicate.ChannelMonitor {
+	return predicate.ChannelMonitor(sql.FieldNEQ(FieldSimulateRequests, v))
 }
 
 // IntervalSecondsEQ applies the EQ predicate on the "interval_seconds" field.

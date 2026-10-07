@@ -538,6 +538,7 @@ export default {
         jitterSeconds: 'Random Jitter (± seconds)',
         jitterSecondsHint: 'Each check fires at interval ± a random offset within this value; 0 means fixed interval. Interval minus jitter must be ≥ 15s',
         enabled: 'Enable monitor',
+        simulateRequests: 'Simulate monitor requests',
         kindRequired: 'Please select a provider'
       },
       runResultTitle: 'Check Result',

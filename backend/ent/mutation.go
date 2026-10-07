@@ -15383,6 +15383,7 @@ type ChannelMonitorMutation struct {
 	sort_order              *int
 	addsort_order           *int
 	enabled                 *bool
+	simulate_requests       *bool
 	interval_seconds        *int
 	addinterval_seconds     *int
 	jitter_seconds          *int
@@ -16036,6 +16037,42 @@ func (m *ChannelMonitorMutation) ResetEnabled() {
 	m.enabled = nil
 }
 
+// SetSimulateRequests sets the "simulate_requests" field.
+func (m *ChannelMonitorMutation) SetSimulateRequests(b bool) {
+	m.simulate_requests = &b
+}
+
+// SimulateRequests returns the value of the "simulate_requests" field in the mutation.
+func (m *ChannelMonitorMutation) SimulateRequests() (r bool, exists bool) {
+	v := m.simulate_requests
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldSimulateRequests returns the old "simulate_requests" field's value of the ChannelMonitor entity.
+// If the ChannelMonitor object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ChannelMonitorMutation) OldSimulateRequests(ctx context.Context) (v bool, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldSimulateRequests is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldSimulateRequests requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldSimulateRequests: %w", err)
+	}
+	return oldValue.SimulateRequests, nil
+}
+
+// ResetSimulateRequests resets all changes to the "simulate_requests" field.
+func (m *ChannelMonitorMutation) ResetSimulateRequests() {
+	m.simulate_requests = nil
+}
+
 // SetIntervalSeconds sets the "interval_seconds" field.
 func (m *ChannelMonitorMutation) SetIntervalSeconds(i int) {
 	m.interval_seconds = &i
@@ -16632,7 +16669,7 @@ func (m *ChannelMonitorMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *ChannelMonitorMutation) Fields() []string {
-	fields := make([]string, 0, 21)
+	fields := make([]string, 0, 22)
 	if m.created_at != nil {
 		fields = append(fields, channelmonitor.FieldCreatedAt)
 	}
@@ -16671,6 +16708,9 @@ func (m *ChannelMonitorMutation) Fields() []string {
 	}
 	if m.enabled != nil {
 		fields = append(fields, channelmonitor.FieldEnabled)
+	}
+	if m.simulate_requests != nil {
+		fields = append(fields, channelmonitor.FieldSimulateRequests)
 	}
 	if m.interval_seconds != nil {
 		fields = append(fields, channelmonitor.FieldIntervalSeconds)
@@ -16730,6 +16770,8 @@ func (m *ChannelMonitorMutation) Field(name string) (ent.Value, bool) {
 		return m.SortOrder()
 	case channelmonitor.FieldEnabled:
 		return m.Enabled()
+	case channelmonitor.FieldSimulateRequests:
+		return m.SimulateRequests()
 	case channelmonitor.FieldIntervalSeconds:
 		return m.IntervalSeconds()
 	case channelmonitor.FieldJitterSeconds:
@@ -16781,6 +16823,8 @@ func (m *ChannelMonitorMutation) OldField(ctx context.Context, name string) (ent
 		return m.OldSortOrder(ctx)
 	case channelmonitor.FieldEnabled:
 		return m.OldEnabled(ctx)
+	case channelmonitor.FieldSimulateRequests:
+		return m.OldSimulateRequests(ctx)
 	case channelmonitor.FieldIntervalSeconds:
 		return m.OldIntervalSeconds(ctx)
 	case channelmonitor.FieldJitterSeconds:
@@ -16896,6 +16940,13 @@ func (m *ChannelMonitorMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetEnabled(v)
+		return nil
+	case channelmonitor.FieldSimulateRequests:
+		v, ok := value.(bool)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetSimulateRequests(v)
 		return nil
 	case channelmonitor.FieldIntervalSeconds:
 		v, ok := value.(int)
@@ -17124,6 +17175,9 @@ func (m *ChannelMonitorMutation) ResetField(name string) error {
 		return nil
 	case channelmonitor.FieldEnabled:
 		m.ResetEnabled()
+		return nil
+	case channelmonitor.FieldSimulateRequests:
+		m.ResetSimulateRequests()
 		return nil
 	case channelmonitor.FieldIntervalSeconds:
 		m.ResetIntervalSeconds()

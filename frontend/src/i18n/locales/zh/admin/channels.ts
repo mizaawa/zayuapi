@@ -538,6 +538,7 @@ export default {
         jitterSeconds: '随机抖动 (± 秒)',
         jitterSecondsHint: '每次检测在间隔基础上正负随机偏移该秒数，0 表示固定间隔；需满足 间隔 - 抖动 ≥ 15 秒',
         enabled: '启用监控',
+        simulateRequests: '模拟监控请求',
         kindRequired: '请选择供应商'
       },
       runResultTitle: '检测结果',

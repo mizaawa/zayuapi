@@ -42,6 +42,7 @@ type ChannelMonitor struct {
 	GroupPlatform       string
 	SortOrder           int
 	Enabled             bool
+	SimulateRequests    bool
 	IntervalSeconds     int
 	JitterSeconds       int // 每次调度 ± [0, jitter] 的随机偏移（秒），0 = 固定间隔
 	LastCheckedAt       *time.Time
@@ -93,6 +94,7 @@ type ChannelMonitorCreateParams struct {
 	ExtraModels      []string
 	GroupName        string
 	Enabled          bool
+	SimulateRequests bool
 	IntervalSeconds  int
 	JitterSeconds    int
 	CreatedBy        int64
@@ -104,18 +106,19 @@ type ChannelMonitorCreateParams struct {
 
 // ChannelMonitorUpdateParams 更新参数（指针字段表示"未提供则不更新"）。
 type ChannelMonitorUpdateParams struct {
-	Name            *string
-	Provider        *string
-	GroupID         *int64
-	APIMode         *string
-	Endpoint        *string
-	APIKey          *string // 空字符串表示不修改；非空字符串覆盖
-	PrimaryModel    *string
-	ExtraModels     *[]string
-	GroupName       *string
-	Enabled         *bool
-	IntervalSeconds *int
-	JitterSeconds   *int
+	Name             *string
+	Provider         *string
+	GroupID          *int64
+	APIMode          *string
+	Endpoint         *string
+	APIKey           *string // 空字符串表示不修改；非空字符串覆盖
+	PrimaryModel     *string
+	ExtraModels      *[]string
+	GroupName        *string
+	Enabled          *bool
+	SimulateRequests *bool
+	IntervalSeconds  *int
+	JitterSeconds    *int
 	// 自定义快照字段：指针为 nil 表示不更新，非 nil 覆盖
 	// TemplateID *(*int64)：用 ** 表达三态：nil=不更新；&nil=清空；&&id=设为 id。
 	// 简化处理：用 ClearTemplate 显式标志 + TemplateID（普通指针）

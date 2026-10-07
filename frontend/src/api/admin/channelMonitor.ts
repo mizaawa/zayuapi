@@ -29,6 +29,7 @@ export interface ChannelMonitor {
   group_name: string
   group_rate_multiplier: number | null
   enabled: boolean
+  simulate_requests: boolean
   interval_seconds: number
   /** 每次调度在 interval 基础上 ± [0, jitter] 的随机偏移（秒），0 = 固定间隔 */
   jitter_seconds: number
@@ -87,6 +88,7 @@ export interface CreateParams {
   primary_model: string
   extra_models?: string[]
   enabled?: boolean
+  simulate_requests?: boolean
   interval_seconds: number
   jitter_seconds?: number
   template_id?: number | null

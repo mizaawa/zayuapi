@@ -48,6 +48,7 @@ func (r *channelMonitorRepository) Create(ctx context.Context, m *service.Channe
 		SetGroupName(m.GroupName).
 		SetSortOrder(m.SortOrder).
 		SetEnabled(m.Enabled).
+		SetSimulateRequests(m.SimulateRequests).
 		SetIntervalSeconds(m.IntervalSeconds).
 		SetJitterSeconds(m.JitterSeconds).
 		SetCreatedBy(m.CreatedBy).
@@ -121,6 +122,7 @@ func (r *channelMonitorRepository) Update(ctx context.Context, m *service.Channe
 		SetExtraModels(emptySliceIfNil(m.ExtraModels)).
 		SetGroupName(m.GroupName).
 		SetEnabled(m.Enabled).
+		SetSimulateRequests(m.SimulateRequests).
 		SetIntervalSeconds(m.IntervalSeconds).
 		SetJitterSeconds(m.JitterSeconds).
 		SetExtraHeaders(channelMonitorHeadersForPersistence(m)).
@@ -840,6 +842,7 @@ func entToServiceMonitor(row *dbent.ChannelMonitor) *service.ChannelMonitor {
 		GroupName:            row.GroupName,
 		SortOrder:            row.SortOrder,
 		Enabled:              row.Enabled,
+		SimulateRequests:     row.SimulateRequests,
 		IntervalSeconds:      row.IntervalSeconds,
 		JitterSeconds:        row.JitterSeconds,
 		LastCheckedAt:        row.LastCheckedAt,
