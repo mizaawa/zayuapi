@@ -237,6 +237,7 @@ func (s *ChannelMonitorService) Create(ctx context.Context, p ChannelMonitorCrea
 		ExtraModels:      normalizeModels(p.ExtraModels),
 		GroupName:        strings.TrimSpace(p.GroupName),
 		Enabled:          p.Enabled,
+		SimulateRequests: p.SimulateRequests,
 		IntervalSeconds:  p.IntervalSeconds,
 		JitterSeconds:    p.JitterSeconds,
 		CreatedBy:        p.CreatedBy,
@@ -348,6 +349,7 @@ func (s *ChannelMonitorService) Duplicate(
 		GroupName:            source.GroupName,
 		SortOrder:            source.SortOrder,
 		Enabled:              false,
+		SimulateRequests:     source.SimulateRequests,
 		IntervalSeconds:      source.IntervalSeconds,
 		JitterSeconds:        source.JitterSeconds,
 		CreatedBy:            createdBy,
@@ -737,6 +739,11 @@ func (s *ChannelMonitorService) RunCheck(ctx context.Context, id int64) ([]*Chec
 	if err != nil {
 		return nil, err
 	}
+	if m.SimulateRequests {
+		results := simulatedMonitorResults(m)
+		s.persistCheckResults(ctx, m, results)
+		return results, nil
+	}
 	if m.GroupID != nil {
 		if _, groupErr := s.resolveMonitorGroup(ctx, *m.GroupID, m.Provider); groupErr != nil {
 			results := monitorConfigurationErrorResults(m, groupErr)
@@ -755,6 +762,24 @@ func (s *ChannelMonitorService) RunCheck(ctx context.Context, id int64) ([]*Chec
 	results := s.runChecksConcurrent(ctx, m)
 	s.persistCheckResults(ctx, m, results)
 	return results, nil
+}
+
+func simulatedMonitorResults(m *ChannelMonitor) []*CheckResult {
+	models := append([]string{m.PrimaryModel}, m.ExtraModels...)
+	checkedAt := time.Now()
+	results := make([]*CheckResult, 0, len(models))
+	for _, model := range models {
+		latencyMs, pingLatencyMs := 0, 0
+		results = append(results, &CheckResult{
+			Model:         model,
+			Status:        MonitorStatusOperational,
+			LatencyMs:     &latencyMs,
+			PingLatencyMs: &pingLatencyMs,
+			Message:       "Simulated monitor check succeeded; no upstream request sent",
+			CheckedAt:     checkedAt,
+		})
+	}
+	return results
 }
 
 func monitorConfigurationErrorResults(m *ChannelMonitor, cause error) []*CheckResult {
@@ -972,6 +997,11 @@ func (s *ChannelMonitorService) getForExecution(ctx context.Context, id int64) (
 	if err != nil {
 		return nil, err
 	}
+	// Simulation never needs credentials or network access.
+	if m.SimulateRequests {
+		m.APIKey = ""
+		return m, nil
+	}
 	s.decryptInPlace(m)
 	return m, nil
 }
@@ -1067,6 +1097,9 @@ func applyMonitorUpdate(existing *ChannelMonitor, p ChannelMonitorUpdateParams) 
 	}
 	if p.Enabled != nil {
 		existing.Enabled = *p.Enabled
+	}
+	if p.SimulateRequests != nil {
+		existing.SimulateRequests = *p.SimulateRequests
 	}
 	if p.IntervalSeconds != nil {
 		if err := validateInterval(*p.IntervalSeconds); err != nil {

@@ -42,6 +42,7 @@ type channelMonitorCreateRequest struct {
 	PrimaryModel     string            `json:"primary_model" binding:"max=200"`
 	ExtraModels      []string          `json:"extra_models"`
 	Enabled          *bool             `json:"enabled"`
+	SimulateRequests bool              `json:"simulate_requests"`
 	IntervalSeconds  int               `json:"interval_seconds" binding:"required,min=15,max=3600"`
 	JitterSeconds    int               `json:"jitter_seconds" binding:"omitempty,min=0,max=3585"`
 	TemplateID       *int64            `json:"template_id"`
@@ -59,6 +60,7 @@ type channelMonitorUpdateRequest struct {
 	PrimaryModel     *string            `json:"primary_model" binding:"omitempty,max=200"`
 	ExtraModels      *[]string          `json:"extra_models"`
 	Enabled          *bool              `json:"enabled"`
+	SimulateRequests *bool              `json:"simulate_requests"`
 	IntervalSeconds  *int               `json:"interval_seconds" binding:"omitempty,min=15,max=3600"`
 	JitterSeconds    *int               `json:"jitter_seconds" binding:"omitempty,min=0,max=3585"`
 	TemplateID       *int64             `json:"template_id"`
@@ -89,6 +91,7 @@ type channelMonitorResponse struct {
 	GroupRateMultiplier *float64                             `json:"group_rate_multiplier"`
 	SortOrder           int                                  `json:"sort_order"`
 	Enabled             bool                                 `json:"enabled"`
+	SimulateRequests    bool                                 `json:"simulate_requests"`
 	IntervalSeconds     int                                  `json:"interval_seconds"`
 	JitterSeconds       int                                  `json:"jitter_seconds"`
 	LastCheckedAt       *string                              `json:"last_checked_at"`
@@ -150,6 +153,7 @@ func channelMonitorToResponse(m *service.ChannelMonitor) *channelMonitorResponse
 		GroupName:           m.GroupName,
 		SortOrder:           m.SortOrder,
 		Enabled:             m.Enabled,
+		SimulateRequests:    m.SimulateRequests,
 		IntervalSeconds:     m.IntervalSeconds,
 		JitterSeconds:       m.JitterSeconds,
 		CreatedBy:           m.CreatedBy,
@@ -292,6 +296,9 @@ func (h *ChannelMonitorHandler) batchSummaryFor(c *gin.Context, items []*service
 
 // buildListItemResponse 把 monitor + summary 装成 admin list 的响应行。
 func buildListItemResponse(m *service.ChannelMonitor, summary service.MonitorStatusSummary) *channelMonitorResponse {
+	if m.SimulateRequests {
+		summary = service.SimulatedMonitorStatusSummary(m)
+	}
 	resp := channelMonitorToResponse(m)
 	resp.PrimaryStatus = summary.PrimaryStatus
 	resp.PrimaryLatencyMs = summary.PrimaryLatencyMs
@@ -345,6 +352,7 @@ func (h *ChannelMonitorHandler) Create(c *gin.Context) {
 		PrimaryModel:     req.PrimaryModel,
 		ExtraModels:      req.ExtraModels,
 		Enabled:          enabled,
+		SimulateRequests: req.SimulateRequests,
 		IntervalSeconds:  req.IntervalSeconds,
 		JitterSeconds:    req.JitterSeconds,
 		CreatedBy:        subject.UserID,
@@ -438,6 +446,7 @@ func (h *ChannelMonitorHandler) Update(c *gin.Context) {
 		PrimaryModel:     req.PrimaryModel,
 		ExtraModels:      req.ExtraModels,
 		Enabled:          req.Enabled,
+		SimulateRequests: req.SimulateRequests,
 		IntervalSeconds:  req.IntervalSeconds,
 		JitterSeconds:    req.JitterSeconds,
 		TemplateID:       req.TemplateID,

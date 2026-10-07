@@ -138,13 +138,17 @@ func (s *ChannelMonitorService) GetUserDetail(ctx context.Context, id int64) (*U
 		return nil, ErrChannelMonitorNotFound
 	}
 
-	latest, err := s.repo.ListLatestPerModel(ctx, id)
-	if err != nil {
-		return nil, fmt.Errorf("list latest per model: %w", err)
-	}
-	availMap, err := s.collectAvailabilityWindows(ctx, id)
-	if err != nil {
-		return nil, err
+	var latest []*ChannelMonitorLatest
+	var availMap map[int]map[string]*ChannelMonitorAvailability
+	if !m.SimulateRequests {
+		latest, err = s.repo.ListLatestPerModel(ctx, id)
+		if err != nil {
+			return nil, fmt.Errorf("list latest per model: %w", err)
+		}
+		availMap, err = s.collectAvailabilityWindows(ctx, id)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	models := mergeModelDetails(m, latest, availMap)
@@ -221,6 +225,25 @@ func buildStatusSummary(
 	return summary
 }
 
+// SimulatedMonitorStatusSummary reports the configured simulated result without changing stored history.
+func SimulatedMonitorStatusSummary(m *ChannelMonitor) MonitorStatusSummary {
+	zero := 0
+	summary := MonitorStatusSummary{
+		PrimaryStatus:    MonitorStatusOperational,
+		PrimaryLatencyMs: &zero,
+		Availability7d:   100,
+		ExtraModels:      make([]ExtraModelStatus, 0, len(m.ExtraModels)),
+	}
+	for _, model := range m.ExtraModels {
+		summary.ExtraModels = append(summary.ExtraModels, ExtraModelStatus{
+			Model:     model,
+			Status:    MonitorStatusOperational,
+			LatencyMs: &zero,
+		})
+	}
+	return summary
+}
+
 // buildUserViewFromSummary 用预聚合好的 MonitorStatusSummary + 主模型 latest + timeline 装填 UserMonitorView（无 IO）。
 // primaryLatest 可能为 nil（该监控尚无历史）；timelineEntries 可能为空。
 func buildUserViewFromSummary(
@@ -229,6 +252,9 @@ func buildUserViewFromSummary(
 	primaryLatest *ChannelMonitorLatest,
 	timelineEntries []*ChannelMonitorHistoryEntry,
 ) *UserMonitorView {
+	if m.SimulateRequests {
+		summary = SimulatedMonitorStatusSummary(m)
+	}
 	view := &UserMonitorView{
 		ID:                  m.ID,
 		Name:                m.Name,
@@ -243,7 +269,10 @@ func buildUserViewFromSummary(
 		ExtraModels:         summary.ExtraModels,
 		Timeline:            buildTimelinePoints(timelineEntries),
 	}
-	if primaryLatest != nil {
+	if m.SimulateRequests {
+		zero := 0
+		view.PrimaryPingLatencyMs = &zero
+	} else if primaryLatest != nil {
 		view.PrimaryPingLatencyMs = primaryLatest.PingLatencyMs
 	}
 	return view
@@ -286,6 +315,17 @@ func mergeModelDetails(
 	out := make([]ModelDetail, 0, len(all))
 	for _, model := range all {
 		d := ModelDetail{Model: model}
+		if m.SimulateRequests {
+			zero := 0
+			d.LatestStatus = MonitorStatusOperational
+			d.LatestLatencyMs = &zero
+			d.Availability7d = 100
+			d.Availability15d = 100
+			d.Availability30d = 100
+			d.AvgLatency7dMs = &zero
+			out = append(out, d)
+			continue
+		}
 		if l, ok := latestByModel[model]; ok {
 			d.LatestStatus = l.Status
 			d.LatestLatencyMs = l.LatencyMs

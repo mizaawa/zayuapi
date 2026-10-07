@@ -41,6 +41,8 @@ const (
 	FieldSortOrder = "sort_order"
 	// FieldEnabled holds the string denoting the enabled field in the database.
 	FieldEnabled = "enabled"
+	// FieldSimulateRequests holds the string denoting the simulate_requests field in the database.
+	FieldSimulateRequests = "simulate_requests"
 	// FieldIntervalSeconds holds the string denoting the interval_seconds field in the database.
 	FieldIntervalSeconds = "interval_seconds"
 	// FieldJitterSeconds holds the string denoting the jitter_seconds field in the database.
@@ -113,6 +115,7 @@ var Columns = []string{
 	FieldGroupName,
 	FieldSortOrder,
 	FieldEnabled,
+	FieldSimulateRequests,
 	FieldIntervalSeconds,
 	FieldJitterSeconds,
 	FieldLastCheckedAt,
@@ -162,6 +165,8 @@ var (
 	DefaultSortOrder int
 	// DefaultEnabled holds the default value on creation for the "enabled" field.
 	DefaultEnabled bool
+	// DefaultSimulateRequests holds the default value on creation for the "simulate_requests" field.
+	DefaultSimulateRequests bool
 	// IntervalSecondsValidator is a validator for the "interval_seconds" field. It is called by the builders before save.
 	IntervalSecondsValidator func(int) error
 	// DefaultJitterSeconds holds the default value on creation for the "jitter_seconds" field.
@@ -268,6 +273,11 @@ func BySortOrder(opts ...sql.OrderTermOption) OrderOption {
 // ByEnabled orders the results by the enabled field.
 func ByEnabled(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldEnabled, opts...).ToFunc()
+}
+
+// BySimulateRequests orders the results by the simulate_requests field.
+func BySimulateRequests(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldSimulateRequests, opts...).ToFunc()
 }
 
 // ByIntervalSeconds orders the results by the interval_seconds field.

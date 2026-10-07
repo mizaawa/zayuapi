@@ -210,6 +210,20 @@ func (_u *ChannelMonitorUpdate) SetNillableEnabled(v *bool) *ChannelMonitorUpdat
 	return _u
 }
 
+// SetSimulateRequests sets the "simulate_requests" field.
+func (_u *ChannelMonitorUpdate) SetSimulateRequests(v bool) *ChannelMonitorUpdate {
+	_u.mutation.SetSimulateRequests(v)
+	return _u
+}
+
+// SetNillableSimulateRequests sets the "simulate_requests" field if the given value is not nil.
+func (_u *ChannelMonitorUpdate) SetNillableSimulateRequests(v *bool) *ChannelMonitorUpdate {
+	if v != nil {
+		_u.SetSimulateRequests(*v)
+	}
+	return _u
+}
+
 // SetIntervalSeconds sets the "interval_seconds" field.
 func (_u *ChannelMonitorUpdate) SetIntervalSeconds(v int) *ChannelMonitorUpdate {
 	_u.mutation.ResetIntervalSeconds()
@@ -605,6 +619,9 @@ func (_u *ChannelMonitorUpdate) sqlSave(ctx context.Context) (_node int, err err
 	if value, ok := _u.mutation.Enabled(); ok {
 		_spec.SetField(channelmonitor.FieldEnabled, field.TypeBool, value)
 	}
+	if value, ok := _u.mutation.SimulateRequests(); ok {
+		_spec.SetField(channelmonitor.FieldSimulateRequests, field.TypeBool, value)
+	}
 	if value, ok := _u.mutation.IntervalSeconds(); ok {
 		_spec.SetField(channelmonitor.FieldIntervalSeconds, field.TypeInt, value)
 	}
@@ -982,6 +999,20 @@ func (_u *ChannelMonitorUpdateOne) SetEnabled(v bool) *ChannelMonitorUpdateOne {
 func (_u *ChannelMonitorUpdateOne) SetNillableEnabled(v *bool) *ChannelMonitorUpdateOne {
 	if v != nil {
 		_u.SetEnabled(*v)
+	}
+	return _u
+}
+
+// SetSimulateRequests sets the "simulate_requests" field.
+func (_u *ChannelMonitorUpdateOne) SetSimulateRequests(v bool) *ChannelMonitorUpdateOne {
+	_u.mutation.SetSimulateRequests(v)
+	return _u
+}
+
+// SetNillableSimulateRequests sets the "simulate_requests" field if the given value is not nil.
+func (_u *ChannelMonitorUpdateOne) SetNillableSimulateRequests(v *bool) *ChannelMonitorUpdateOne {
+	if v != nil {
+		_u.SetSimulateRequests(*v)
 	}
 	return _u
 }
@@ -1410,6 +1441,9 @@ func (_u *ChannelMonitorUpdateOne) sqlSave(ctx context.Context) (_node *ChannelM
 	}
 	if value, ok := _u.mutation.Enabled(); ok {
 		_spec.SetField(channelmonitor.FieldEnabled, field.TypeBool, value)
+	}
+	if value, ok := _u.mutation.SimulateRequests(); ok {
+		_spec.SetField(channelmonitor.FieldSimulateRequests, field.TypeBool, value)
 	}
 	if value, ok := _u.mutation.IntervalSeconds(); ok {
 		_spec.SetField(channelmonitor.FieldIntervalSeconds, field.TypeInt, value)

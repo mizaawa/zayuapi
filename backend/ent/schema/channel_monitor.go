@@ -66,6 +66,9 @@ func (ChannelMonitor) Fields() []ent.Field {
 			Comment("渠道监控显示排序，数值越小越靠前"),
 		field.Bool("enabled").
 			Default(true),
+		field.Bool("simulate_requests").
+			Default(false).
+			Comment("Return successful simulated checks without sending upstream requests"),
 		field.Int("interval_seconds").
 			Range(15, 3600),
 		field.Int("jitter_seconds").

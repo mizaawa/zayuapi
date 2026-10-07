@@ -132,6 +132,17 @@
         <Toggle v-model="form.enabled" />
       </div>
 
+      <div class="flex items-center justify-between gap-3">
+        <label for="channel-monitor-simulate-requests" class="input-label mb-0">
+          {{ t('admin.channelMonitor.form.simulateRequests') }}
+        </label>
+        <Toggle
+          id="channel-monitor-simulate-requests"
+          v-model="form.simulate_requests"
+          :aria-label="t('admin.channelMonitor.form.simulateRequests')"
+        />
+      </div>
+
       <!-- 高级设置区：请求模板 + 自定义 headers/body -->
       <details class="rounded-lg border border-gray-200 bg-gray-50/50 p-3 dark:border-dark-700 dark:bg-dark-900/30">
         <summary class="cursor-pointer text-sm font-medium text-gray-700 dark:text-gray-300">
@@ -257,6 +268,7 @@ interface MonitorForm {
   interval_seconds: number
   jitter_seconds: number
   enabled: boolean
+  simulate_requests: boolean
   // 高级设置快照
   template_id: number | null
   extra_headers: Record<string, string>
@@ -274,6 +286,7 @@ const form = reactive<MonitorForm>({
   interval_seconds: systemDefaultInterval.value,
   jitter_seconds: 0,
   enabled: true,
+  simulate_requests: false,
   template_id: null,
   extra_headers: {},
   body_override_mode: 'off',
@@ -511,6 +524,7 @@ function resetForm() {
   form.interval_seconds = systemDefaultInterval.value
   form.jitter_seconds = 0
   form.enabled = true
+  form.simulate_requests = false
   form.template_id = null
   form.extra_headers = {}
   form.body_override_mode = 'off'
@@ -529,6 +543,7 @@ function loadFromMonitor(m: ChannelMonitor) {
   form.interval_seconds = m.interval_seconds || systemDefaultInterval.value
   form.jitter_seconds = m.jitter_seconds || 0
   form.enabled = m.enabled
+  form.simulate_requests = m.simulate_requests ?? false
   form.template_id = m.template_id ?? null
   form.extra_headers = { ...(m.extra_headers || {}) }
   form.body_override_mode = m.body_override_mode || 'off'
@@ -559,6 +574,7 @@ function buildPayload(): CreateParams {
     primary_model: form.primary_model.trim(),
     extra_models: form.extra_models,
     enabled: form.enabled,
+    simulate_requests: form.simulate_requests,
     interval_seconds: form.interval_seconds,
     jitter_seconds: form.jitter_seconds || 0,
     template_id: form.template_id,

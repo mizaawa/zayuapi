@@ -160,6 +160,20 @@ func (_c *ChannelMonitorCreate) SetNillableEnabled(v *bool) *ChannelMonitorCreat
 	return _c
 }
 
+// SetSimulateRequests sets the "simulate_requests" field.
+func (_c *ChannelMonitorCreate) SetSimulateRequests(v bool) *ChannelMonitorCreate {
+	_c.mutation.SetSimulateRequests(v)
+	return _c
+}
+
+// SetNillableSimulateRequests sets the "simulate_requests" field if the given value is not nil.
+func (_c *ChannelMonitorCreate) SetNillableSimulateRequests(v *bool) *ChannelMonitorCreate {
+	if v != nil {
+		_c.SetSimulateRequests(*v)
+	}
+	return _c
+}
+
 // SetIntervalSeconds sets the "interval_seconds" field.
 func (_c *ChannelMonitorCreate) SetIntervalSeconds(v int) *ChannelMonitorCreate {
 	_c.mutation.SetIntervalSeconds(v)
@@ -357,6 +371,10 @@ func (_c *ChannelMonitorCreate) defaults() {
 		v := channelmonitor.DefaultEnabled
 		_c.mutation.SetEnabled(v)
 	}
+	if _, ok := _c.mutation.SimulateRequests(); !ok {
+		v := channelmonitor.DefaultSimulateRequests
+		_c.mutation.SetSimulateRequests(v)
+	}
 	if _, ok := _c.mutation.JitterSeconds(); !ok {
 		v := channelmonitor.DefaultJitterSeconds
 		_c.mutation.SetJitterSeconds(v)
@@ -440,6 +458,9 @@ func (_c *ChannelMonitorCreate) check() error {
 	}
 	if _, ok := _c.mutation.Enabled(); !ok {
 		return &ValidationError{Name: "enabled", err: errors.New(`ent: missing required field "ChannelMonitor.enabled"`)}
+	}
+	if _, ok := _c.mutation.SimulateRequests(); !ok {
+		return &ValidationError{Name: "simulate_requests", err: errors.New(`ent: missing required field "ChannelMonitor.simulate_requests"`)}
 	}
 	if _, ok := _c.mutation.IntervalSeconds(); !ok {
 		return &ValidationError{Name: "interval_seconds", err: errors.New(`ent: missing required field "ChannelMonitor.interval_seconds"`)}
@@ -545,6 +566,10 @@ func (_c *ChannelMonitorCreate) createSpec() (*ChannelMonitor, *sqlgraph.CreateS
 	if value, ok := _c.mutation.Enabled(); ok {
 		_spec.SetField(channelmonitor.FieldEnabled, field.TypeBool, value)
 		_node.Enabled = value
+	}
+	if value, ok := _c.mutation.SimulateRequests(); ok {
+		_spec.SetField(channelmonitor.FieldSimulateRequests, field.TypeBool, value)
+		_node.SimulateRequests = value
 	}
 	if value, ok := _c.mutation.IntervalSeconds(); ok {
 		_spec.SetField(channelmonitor.FieldIntervalSeconds, field.TypeInt, value)
@@ -851,6 +876,18 @@ func (u *ChannelMonitorUpsert) SetEnabled(v bool) *ChannelMonitorUpsert {
 // UpdateEnabled sets the "enabled" field to the value that was provided on create.
 func (u *ChannelMonitorUpsert) UpdateEnabled() *ChannelMonitorUpsert {
 	u.SetExcluded(channelmonitor.FieldEnabled)
+	return u
+}
+
+// SetSimulateRequests sets the "simulate_requests" field.
+func (u *ChannelMonitorUpsert) SetSimulateRequests(v bool) *ChannelMonitorUpsert {
+	u.Set(channelmonitor.FieldSimulateRequests, v)
+	return u
+}
+
+// UpdateSimulateRequests sets the "simulate_requests" field to the value that was provided on create.
+func (u *ChannelMonitorUpsert) UpdateSimulateRequests() *ChannelMonitorUpsert {
+	u.SetExcluded(channelmonitor.FieldSimulateRequests)
 	return u
 }
 
@@ -1217,6 +1254,20 @@ func (u *ChannelMonitorUpsertOne) SetEnabled(v bool) *ChannelMonitorUpsertOne {
 func (u *ChannelMonitorUpsertOne) UpdateEnabled() *ChannelMonitorUpsertOne {
 	return u.Update(func(s *ChannelMonitorUpsert) {
 		s.UpdateEnabled()
+	})
+}
+
+// SetSimulateRequests sets the "simulate_requests" field.
+func (u *ChannelMonitorUpsertOne) SetSimulateRequests(v bool) *ChannelMonitorUpsertOne {
+	return u.Update(func(s *ChannelMonitorUpsert) {
+		s.SetSimulateRequests(v)
+	})
+}
+
+// UpdateSimulateRequests sets the "simulate_requests" field to the value that was provided on create.
+func (u *ChannelMonitorUpsertOne) UpdateSimulateRequests() *ChannelMonitorUpsertOne {
+	return u.Update(func(s *ChannelMonitorUpsert) {
+		s.UpdateSimulateRequests()
 	})
 }
 
@@ -1771,6 +1822,20 @@ func (u *ChannelMonitorUpsertBulk) SetEnabled(v bool) *ChannelMonitorUpsertBulk 
 func (u *ChannelMonitorUpsertBulk) UpdateEnabled() *ChannelMonitorUpsertBulk {
 	return u.Update(func(s *ChannelMonitorUpsert) {
 		s.UpdateEnabled()
+	})
+}
+
+// SetSimulateRequests sets the "simulate_requests" field.
+func (u *ChannelMonitorUpsertBulk) SetSimulateRequests(v bool) *ChannelMonitorUpsertBulk {
+	return u.Update(func(s *ChannelMonitorUpsert) {
+		s.SetSimulateRequests(v)
+	})
+}
+
+// UpdateSimulateRequests sets the "simulate_requests" field to the value that was provided on create.
+func (u *ChannelMonitorUpsertBulk) UpdateSimulateRequests() *ChannelMonitorUpsertBulk {
+	return u.Update(func(s *ChannelMonitorUpsert) {
+		s.UpdateSimulateRequests()
 	})
 }
 
