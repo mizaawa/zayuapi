@@ -82,7 +82,11 @@ func (s *PaymentService) confirmPayment(ctx context.Context, oid int64, tradeNo 
 		return nil
 	}
 	instanceProviderKey := ""
-	if inst, instErr := s.getOrderProviderInstance(ctx, o); instErr == nil && inst != nil {
+	inst, instErr := s.getOrderProviderInstance(ctx, o)
+	if instErr != nil {
+		return fmt.Errorf("load order provider instance: %w", instErr)
+	}
+	if inst != nil {
 		instanceProviderKey = inst.ProviderKey
 	}
 	expectedProviderKey := expectedNotificationProviderKeyForOrder(s.registry, o, instanceProviderKey)
@@ -94,7 +98,7 @@ func (s *PaymentService) confirmPayment(ctx context.Context, oid int64, tradeNo 
 		})
 		return fmt.Errorf("provider mismatch: expected %s, got %s", expectedProviderKey, pk)
 	}
-	if err := validateProviderNotificationMetadata(o, pk, metadata); err != nil {
+	if err := s.validateOrderNotificationMetadata(ctx, o, inst, expectedProviderKey, metadata); err != nil {
 		s.writeAuditLog(ctx, o.ID, "PAYMENT_PROVIDER_METADATA_MISMATCH", pk, map[string]any{
 			"detail":  err.Error(),
 			"tradeNo": tradeNo,
@@ -129,6 +133,10 @@ func isValidProviderAmount(amount float64) bool {
 }
 
 func validateProviderNotificationMetadata(order *dbent.PaymentOrder, providerKey string, metadata map[string]string) error {
+	if snapshot := psOrderProviderSnapshot(order); snapshot != nil && len(metadata) == 0 &&
+		(snapshot.MerchantAppID != "" || snapshot.MerchantID != "" || snapshot.Currency != "") {
+		return fmt.Errorf("payment notification missing provider metadata")
+	}
 	return validateProviderSnapshotMetadata(order, providerKey, metadata)
 }
 

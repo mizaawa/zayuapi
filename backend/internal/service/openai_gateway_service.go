@@ -258,6 +258,9 @@ type OpenAIForwardResult struct {
 	// ServiceTier records the OpenAI Responses API service tier, e.g. "priority" / "flex".
 	// Nil means the request did not specify a recognized tier.
 	ServiceTier *string
+	// UpstreamServiceTier is reported by the upstream response, never the request.
+	// Only this value may select discounted or premium billing.
+	UpstreamServiceTier *string
 	// ReasoningEffort is extracted from request body (reasoning.effort) or derived from model suffix.
 	// Stored for usage records display; nil means not provided / not applicable.
 	ReasoningEffort *string

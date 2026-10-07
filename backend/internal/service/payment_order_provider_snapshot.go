@@ -126,6 +126,98 @@ func expectedNotificationProviderKeyForOrder(registry *payment.Registry, order *
 	return expectedNotificationProviderKey(registry, order.PaymentType, orderProviderKey, instanceProviderKey)
 }
 
+func (s *PaymentService) validateOrderNotificationMetadata(ctx context.Context, order *dbent.PaymentOrder, inst *dbent.PaymentProviderInstance, providerKey string, metadata map[string]string) error {
+	var requiredFields []string
+	var optionalFields []string
+	switch providerKey {
+	case payment.TypeWxpay:
+		requiredFields = []string{"merchant_app_id", "merchant_id", "currency"}
+	case payment.TypeAlipay:
+		requiredFields = []string{"merchant_app_id"}
+	case payment.TypeEasyPay:
+		requiredFields = []string{"merchant_id"}
+	case payment.TypeStripe:
+		requiredFields = []string{"currency"}
+	case payment.TypeAirwallex:
+		requiredFields = []string{"currency"}
+		optionalFields = []string{"merchant_id"}
+	}
+
+	validationOrder := *order
+	validationOrder.ProviderSnapshot = make(map[string]any, len(order.ProviderSnapshot))
+	for key, value := range order.ProviderSnapshot {
+		validationOrder.ProviderSnapshot[key] = value
+	}
+	needsFallback := false
+	for _, key := range append(requiredFields, optionalFields...) {
+		if psSnapshotStringValue(validationOrder.ProviderSnapshot[key]) == "" {
+			needsFallback = true
+		}
+	}
+	if needsFallback {
+		// Legacy callbacks still need a unique merchant binding after signature
+		// verification, especially when multiple WeChat instances can decrypt them.
+		var fallback map[string]any
+		if inst != nil && s.loadBalancer != nil {
+			config, err := s.loadBalancer.GetInstanceConfig(ctx, inst.ID)
+			if err != nil {
+				return fmt.Errorf("load notification merchant identity: %w", err)
+			}
+			fallback = buildPaymentOrderProviderSnapshot(&payment.InstanceSelection{
+				InstanceID:  strconv.FormatInt(inst.ID, 10),
+				ProviderKey: inst.ProviderKey,
+				PaymentMode: inst.PaymentMode,
+				Config:      config,
+			}, CreateOrderRequest{})
+			// Older WeChat orders do not record whether they used the configured MP
+			// AppID. Accept either configured AppID, but still require the merchant ID.
+			if providerKey == payment.TypeWxpay && strings.TrimSpace(config["mpAppId"]) != "" &&
+				strings.TrimSpace(metadata["appid"]) == strings.TrimSpace(config["mpAppId"]) {
+				fallback["merchant_app_id"] = strings.TrimSpace(config["mpAppId"])
+			}
+		} else if inst == nil && s.registry != nil && s.webhookRegistryFallbackAllowed(ctx, providerKey) {
+			instanceCount, err := s.entClient.PaymentProviderInstance.Query().Count(ctx)
+			if err != nil || instanceCount != 0 {
+				return fmt.Errorf("order %d notification merchant identity is ambiguous", order.ID)
+			}
+			prov, err := s.registry.GetProviderByKey(providerKey)
+			if err != nil {
+				return fmt.Errorf("load legacy notification provider: %w", err)
+			}
+			identity := providerMerchantIdentityMetadata(prov)
+			fallback = map[string]any{"currency": identity["currency"]}
+			switch providerKey {
+			case payment.TypeWxpay:
+				fallback["merchant_app_id"] = identity["appid"]
+				fallback["merchant_id"] = identity["mchid"]
+			case payment.TypeAlipay:
+				fallback["merchant_app_id"] = identity["app_id"]
+			case payment.TypeEasyPay:
+				fallback["merchant_id"] = identity["pid"]
+			case payment.TypeAirwallex:
+				fallback["merchant_id"] = identity["account_id"]
+			}
+		} else {
+			return fmt.Errorf("order %d notification merchant identity is unavailable", order.ID)
+		}
+		// Airwallex accountId is optional, but must be checked whenever configured.
+		for _, key := range optionalFields {
+			if psSnapshotStringValue(validationOrder.ProviderSnapshot[key]) == "" {
+				validationOrder.ProviderSnapshot[key] = fallback[key]
+			}
+		}
+		for _, key := range requiredFields {
+			if psSnapshotStringValue(validationOrder.ProviderSnapshot[key]) == "" {
+				validationOrder.ProviderSnapshot[key] = fallback[key]
+			}
+			if psSnapshotStringValue(validationOrder.ProviderSnapshot[key]) == "" {
+				return fmt.Errorf("order %d notification merchant identity is missing %s", order.ID, key)
+			}
+		}
+	}
+	return validateProviderNotificationMetadata(&validationOrder, providerKey, metadata)
+}
+
 func validateProviderSnapshotMetadata(order *dbent.PaymentOrder, providerKey string, metadata map[string]string) error {
 	if order == nil || len(metadata) == 0 {
 		return nil

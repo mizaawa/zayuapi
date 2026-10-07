@@ -384,6 +384,7 @@ func (s *OpenAIGatewayService) streamRawChatCompletions(
 		UpstreamResponseModelConflict: observedUpstreamResponseModelConflict(c),
 		ReasoningEffort:               reasoningEffort,
 		ServiceTier:                   serviceTier,
+		UpstreamServiceTier:           observedUpstreamServiceTier(c),
 		Stream:                        true,
 		Duration:                      time.Since(startTime),
 		FirstTokenMs:                  firstTokenMs,
@@ -482,6 +483,7 @@ func (s *OpenAIGatewayService) bufferRawChatCompletions(
 		UpstreamResponseModelConflict: observedUpstreamResponseModelConflict(c),
 		ReasoningEffort:               reasoningEffort,
 		ServiceTier:                   serviceTier,
+		UpstreamServiceTier:           observedUpstreamServiceTier(c),
 		Stream:                        false,
 		Duration:                      time.Since(startTime),
 	}, nil

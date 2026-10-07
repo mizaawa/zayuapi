@@ -236,7 +236,8 @@ func (s *OpenAIGatewayService) sendCCUpstreamRequest(
 type ccStreamScanState struct {
 	// Usage 为 include_usage chunk 中最近一次出现的用量（上游可能重复发送，
 	// 总是保留最新值）；终态事件中的用量由调用方在 finalize 阶段自行覆盖。
-	Usage OpenAIUsage
+	Usage       OpenAIUsage
+	ServiceTier *string
 	// FirstTokenMs 为首个实际输出 chunk（排除 usage-only chunk）的到达时延。
 	FirstTokenMs *int
 	// SawDone 表示上游发出了 [DONE] 哨兵。
@@ -278,6 +279,9 @@ func (s *OpenAIGatewayService) scanCCStream(
 
 		if u := extractCCStreamUsage(payload); u != nil {
 			st.Usage = *u
+		}
+		if tier := extractOpenAIServiceTierFromBody([]byte(payload)); tier != nil {
+			st.ServiceTier = tier
 		}
 
 		var chunk apicompat.ChatCompletionsChunk
@@ -336,6 +340,11 @@ func (s *OpenAIGatewayService) readCCUpstreamJSONResponse(
 	}
 
 	usage := OpenAIUsage{}
+	observer := upstreamResponseModelObserverFromContext(c)
+	if observer == nil {
+		observer = beginUpstreamResponseModelObservation(c)
+	}
+	observer.ObserveOpenAI(respBody, "")
 	if parsed, ok := extractOpenAIUsageFromJSONBytes(respBody); ok {
 		usage = parsed
 	}

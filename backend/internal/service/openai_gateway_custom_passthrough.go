@@ -184,6 +184,7 @@ func (s *OpenAIGatewayService) forwardCustomTransparent(
 		UpstreamResponseModelConflict: observedUpstreamResponseModelConflict(c),
 		UpstreamEndpoint:              endpoint,
 		ServiceTier:                   serviceTier,
+		UpstreamServiceTier:           observedUpstreamServiceTier(c),
 		ReasoningEffort:               reasoningEffort,
 		Stream:                        stream,
 		Duration:                      time.Since(startTime),
@@ -410,9 +411,7 @@ func (s *OpenAIGatewayService) forwardCustomBufferedResponse(
 			observeCustomSSEBody(observer, string(body), endpointForCustomObserver(c))
 		} else {
 			observer.ObserveAnthropic(body)
-			if strings.TrimSpace(gjson.GetBytes(body, "type").String()) != "" {
-				observer.ObserveOpenAI(body, strings.TrimSpace(gjson.GetBytes(body, "type").String()))
-			}
+			observer.ObserveOpenAI(body, strings.TrimSpace(gjson.GetBytes(body, "type").String()))
 		}
 	}
 	if c != nil {

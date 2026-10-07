@@ -539,7 +539,9 @@ func (h *GatewayHandler) GeminiV1BetaModels(c *gin.Context) {
 			}
 			// ForwardNative already wrote the response
 			reqLog.Error("gemini.forward_failed", zap.Int64("account_id", account.ID), zap.Error(err))
-			return
+			if result == nil {
+				return
+			}
 		}
 
 		// 捕获请求信息（用于异步记录，避免在 goroutine 中访问 gin.Context）

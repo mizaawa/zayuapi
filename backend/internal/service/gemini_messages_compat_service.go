@@ -1346,7 +1346,9 @@ func (s *GeminiMessagesCompatService) ForwardNative(ctx context.Context, c *gin.
 
 	var resp *http.Response
 	for attempt := 1; attempt <= geminiMaxRetries; attempt++ {
-		upstreamReq, idHeader, err := buildReq(ctx)
+		upstreamCtx, releaseUpstreamCtx := detachStreamUpstreamContext(ctx, stream)
+		upstreamReq, idHeader, err := buildReq(upstreamCtx)
+		releaseUpstreamCtx()
 		if err != nil {
 			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 				return nil, err
@@ -1667,11 +1669,14 @@ func (s *GeminiMessagesCompatService) ForwardNative(ctx context.Context, c *gin.
 	var usage *ClaudeUsage
 	var firstTokenMs *int
 
+	var responseErr error
 	if stream {
+		// Preserve metered usage when the upstream stream ends with a read error.
 		streamRes, err := s.handleNativeStreamingResponse(c, resp, startTime, isOAuth, responseModel, mappedModel)
-		if err != nil {
+		if err != nil && (streamRes == nil || !streamRes.usage.hasObservedTokens()) {
 			return nil, err
 		}
+		responseErr = err
 		usage = streamRes.usage
 		firstTokenMs = streamRes.firstTokenMs
 	} else {
@@ -1721,7 +1726,7 @@ func (s *GeminiMessagesCompatService) ForwardNative(ctx context.Context, c *gin.
 		ImageCount:                    imageCount,
 		ImageSize:                     imageSize,
 		ImageInputSize:                imageInputSize,
-	}, nil
+	}, responseErr
 }
 
 // checkErrorPolicyInLoop 在重试循环内预检查错误策略。
@@ -2747,6 +2752,17 @@ func (s *GeminiMessagesCompatService) handleNativeStreamingResponse(c *gin.Conte
 	}
 	var firstTokenMs *int
 
+	clientDisconnected := false
+	writeLine := func(line string) {
+		if clientDisconnected {
+			return
+		}
+		if _, err := io.WriteString(c.Writer, line); err != nil {
+			clientDisconnected = true
+			return
+		}
+		flusher.Flush()
+	}
 	for {
 		line, err := reader.ReadString('\n')
 		if len(line) > 0 {
@@ -2755,8 +2771,7 @@ func (s *GeminiMessagesCompatService) handleNativeStreamingResponse(c *gin.Conte
 				payload := strings.TrimSpace(strings.TrimPrefix(trimmed, "data:"))
 				// Keepalive / done markers
 				if payload == "" || payload == "[DONE]" {
-					_, _ = io.WriteString(c.Writer, line)
-					flusher.Flush()
+					writeLine(line)
 				} else {
 					var rawToWrite string
 					rawToWrite = payload
@@ -2791,16 +2806,14 @@ func (s *GeminiMessagesCompatService) handleNativeStreamingResponse(c *gin.Conte
 
 					if isOAuth {
 						// SSE format requires double newline (\n\n) to separate events
-						_, _ = fmt.Fprintf(c.Writer, "data: %s\n\n", rawToWrite)
+						writeLine("data: " + rawToWrite + "\n\n")
 					} else {
 						// Pass-through for AI Studio responses.
-						_, _ = io.WriteString(c.Writer, line)
+						writeLine(line)
 					}
-					flusher.Flush()
 				}
 			} else {
-				_, _ = io.WriteString(c.Writer, line)
-				flusher.Flush()
+				writeLine(line)
 			}
 		}
 
@@ -2808,7 +2821,7 @@ func (s *GeminiMessagesCompatService) handleNativeStreamingResponse(c *gin.Conte
 			break
 		}
 		if err != nil {
-			return nil, err
+			return &geminiNativeStreamResult{usage: usage, firstTokenMs: firstTokenMs}, err
 		}
 	}
 

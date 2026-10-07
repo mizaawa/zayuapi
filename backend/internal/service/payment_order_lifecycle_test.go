@@ -64,9 +64,27 @@ func (p *paymentOrderLifecycleQueryProvider) QueryOrder(_ context.Context, trade
 		if len(p.responses) > 1 {
 			p.responses = p.responses[1:]
 		}
+		p.addMerchantMetadata(resp)
 		return resp, nil
 	}
+	p.addMerchantMetadata(p.resp)
 	return p.resp, nil
+}
+
+func (p *paymentOrderLifecycleQueryProvider) MerchantIdentityMetadata() map[string]string {
+	return map[string]string{"app_id": "test-alipay-app", "appid": "test-wx-app", "mchid": "test-mch", "currency": "CNY"}
+}
+
+func (p *paymentOrderLifecycleQueryProvider) addMerchantMetadata(resp *payment.QueryOrderResponse) {
+	if resp == nil {
+		return
+	}
+	if resp.Metadata == nil {
+		resp.Metadata = map[string]string{}
+	}
+	for key, value := range p.MerchantIdentityMetadata() {
+		resp.Metadata[key] = value
+	}
 }
 
 func (p *paymentOrderLifecycleQueryProvider) VerifyNotification(context.Context, string, map[string]string) (*payment.PaymentNotification, error) {

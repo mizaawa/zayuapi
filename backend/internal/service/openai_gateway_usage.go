@@ -217,8 +217,8 @@ func (s *OpenAIGatewayService) RecordUsage(ctx context.Context, input *OpenAIRec
 		result.Model,
 	)
 	serviceTier := ""
-	if result.ServiceTier != nil {
-		serviceTier = strings.TrimSpace(*result.ServiceTier)
+	if result.UpstreamServiceTier != nil {
+		serviceTier = strings.TrimSpace(*result.UpstreamServiceTier)
 	}
 	billingAccount := account
 	if account.IsShadow() {
@@ -305,7 +305,7 @@ func (s *OpenAIGatewayService) RecordUsage(ctx context.Context, input *OpenAIRec
 		UpstreamModel:         optionalTrimmedStringPtr(result.UpstreamModel),
 		UpstreamResponseModel: optionalTrimmedStringPtr(result.UpstreamResponseModel),
 		UpstreamModelMismatch: upstreamModelMismatch(sentModel, result.UpstreamResponseModel),
-		ServiceTier:           result.ServiceTier,
+		ServiceTier:           result.UpstreamServiceTier,
 		ReasoningEffort:       result.ReasoningEffort,
 		InboundEndpoint:       optionalTrimmedStringPtr(input.InboundEndpoint),
 		UpstreamEndpoint:      optionalTrimmedStringPtr(input.UpstreamEndpoint),

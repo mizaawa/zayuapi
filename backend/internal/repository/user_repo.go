@@ -149,6 +149,17 @@ func (r *userRepository) create(ctx context.Context, userIn *service.User, guard
 	return nil
 }
 
+func (r *userRepository) IncrementTokenVersion(ctx context.Context, id int64) error {
+	affected, err := r.client.User.Update().Where(dbuser.IDEQ(id)).AddTokenVersion(1).Save(ctx)
+	if err != nil {
+		return err
+	}
+	if affected == 0 {
+		return service.ErrUserNotFound
+	}
+	return nil
+}
+
 func (r *userRepository) GetByID(ctx context.Context, id int64) (*service.User, error) {
 	m, err := r.client.User.Query().Where(dbuser.IDEQ(id)).Only(ctx)
 	if err != nil {

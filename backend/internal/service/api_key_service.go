@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"html"
+	"math"
 	"sort"
 	"strconv"
 	"strings"
@@ -35,6 +36,8 @@ var (
 	ErrInvalidIPPattern          = infraerrors.BadRequest("INVALID_IP_PATTERN", "invalid IP or CIDR pattern")
 	ErrAPIKeySystemPromptTooLong = infraerrors.BadRequest("API_KEY_SYSTEM_PROMPT_TOO_LONG", "custom system prompt must not exceed 32768 UTF-8 bytes")
 	ErrAPIKeySystemPromptEmpty   = infraerrors.BadRequest("API_KEY_SYSTEM_PROMPT_EMPTY", "custom system prompt must not be empty when enabled")
+	ErrAPIKeyInvalidLimit        = infraerrors.BadRequest("API_KEY_INVALID_LIMIT", "api key quota and rate limits must be finite nonnegative numbers")
+	ErrAPIKeyInvalidExpiry       = infraerrors.BadRequest("API_KEY_INVALID_EXPIRY", "api key expiry days must be between 0 and 36500")
 	// ErrAPIKeyExpired        = infraerrors.Forbidden("API_KEY_EXPIRED", "api key has expired")
 	ErrAPIKeyExpired = infraerrors.Forbidden("API_KEY_EXPIRED", "api key 已过期")
 	// ErrAPIKeyQuotaExhausted = infraerrors.TooManyRequests("API_KEY_QUOTA_EXHAUSTED", "api key quota exhausted")
@@ -452,6 +455,12 @@ func (s *APIKeyService) canUserBindGroup(ctx context.Context, user *User, group 
 
 // Create 创建API Key
 func (s *APIKeyService) Create(ctx context.Context, userID int64, req CreateAPIKeyRequest) (*APIKey, error) {
+	if err := validateAPIKeyLimits(&req.Quota, &req.RateLimit5h, &req.RateLimit1d, &req.RateLimit7d); err != nil {
+		return nil, err
+	}
+	if req.ExpiresInDays != nil && (*req.ExpiresInDays < 0 || *req.ExpiresInDays > MaxValidityDays) {
+		return nil, ErrAPIKeyInvalidExpiry
+	}
 	if err := validateAPIKeySystemPrompt(req.CustomSystemPromptEnabled, req.CustomSystemPrompt); err != nil {
 		return nil, err
 	}
@@ -804,6 +813,9 @@ func (s *APIKeyService) GetByKey(ctx context.Context, key string) (*APIKey, erro
 
 // Update 更新API Key
 func (s *APIKeyService) Update(ctx context.Context, id int64, userID int64, req UpdateAPIKeyRequest) (*APIKey, error) {
+	if err := validateAPIKeyLimits(req.Quota, req.RateLimit5h, req.RateLimit1d, req.RateLimit7d); err != nil {
+		return nil, err
+	}
 	apiKey, err := s.apiKeyRepo.GetByID(ctx, id)
 	if err != nil {
 		return nil, fmt.Errorf("get api key: %w", err)
@@ -895,10 +907,6 @@ func (s *APIKeyService) Update(ctx context.Context, id int64, userID int64, req 
 	if req.Status != nil {
 		apiKey.Status = *req.Status
 		fields.Status = true
-		// 如果状态改变，清除Redis缓存
-		if s.cache != nil {
-			_ = s.cache.DeleteCreateAttemptCount(ctx, apiKey.UserID)
-		}
 	}
 
 	// Update quota fields
@@ -988,6 +996,15 @@ func (s *APIKeyService) Update(ctx context.Context, id int64, userID int64, req 
 	return apiKey, nil
 }
 
+func validateAPIKeyLimits(limits ...*float64) error {
+	for _, limit := range limits {
+		if limit != nil && (*limit < 0 || math.IsNaN(*limit) || math.IsInf(*limit, 0)) {
+			return ErrAPIKeyInvalidLimit
+		}
+	}
+	return nil
+}
+
 func validateAPIKeySystemPrompt(enabled bool, prompt string) error {
 	if len(prompt) > MaxAPIKeySystemPromptBytes {
 		return ErrAPIKeySystemPromptTooLong
@@ -1018,10 +1035,7 @@ func (s *APIKeyService) Delete(ctx context.Context, id int64, userID int64) erro
 		return fmt.Errorf("delete api key: %w", err)
 	}
 
-	// 删除成功后再清理缓存,避免"缓存已清但删除失败"的竞态。
-	if s.cache != nil {
-		_ = s.cache.DeleteCreateAttemptCount(ctx, userID)
-	}
+	// User-controlled key changes must not reset the custom-key conflict throttle.
 	s.InvalidateAuthCacheByKey(ctx, apiKey.Key)
 	s.lastUsedTouchL1.Delete(id)
 

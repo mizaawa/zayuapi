@@ -671,8 +671,51 @@ func (refundProviderTestDouble) Refund(context.Context, payment.RefundRequest) (
 type refundQueryProviderTestDouble struct {
 	refundProviderTestDouble
 	refundResponse *payment.RefundResponse
+	queryRequest   payment.RefundQueryRequest
 }
 
-func (p *refundQueryProviderTestDouble) QueryRefund(context.Context, payment.RefundQueryRequest) (*payment.RefundResponse, error) {
+func (p *refundQueryProviderTestDouble) QueryRefund(_ context.Context, req payment.RefundQueryRequest) (*payment.RefundResponse, error) {
+	p.queryRequest = req
 	return p.refundResponse, nil
+}
+
+func TestQueryAndFinalizeRefundUsesGatewayAmount(t *testing.T) {
+	ctx := context.Background()
+	client := newPaymentConfigServiceTestClient(t)
+	order := createPendingRefundOrderForTest(t, ctx, client, "query-converted-amount")
+	order, err := client.PaymentOrder.UpdateOneID(order.ID).
+		SetPayAmount(12.34).
+		SetRefundAmount(40).
+		Save(ctx)
+	require.NoError(t, err)
+	prov := &refundQueryProviderTestDouble{
+		refundResponse: &payment.RefundResponse{Status: payment.ProviderStatusPending},
+	}
+	restore := replacePaymentProviderFactoryForTest(t, prov)
+	defer restore()
+	svc := &PaymentService{entClient: client, loadBalancer: &captureLoadBalancer{}}
+
+	result, err := svc.QueryAndFinalizeRefund(ctx, order.ID)
+	require.NoError(t, err)
+	require.False(t, result.Success)
+	require.Equal(t, "4.94", prov.queryRequest.Amount)
+	reloaded, err := client.PaymentOrder.Get(ctx, order.ID)
+	require.NoError(t, err)
+	require.Equal(t, 40.0, reloaded.RefundAmount)
+}
+
+func TestPrepareRefundRejectsAlreadyPartiallyRefundedOrder(t *testing.T) {
+	ctx := context.Background()
+	client := newPaymentConfigServiceTestClient(t)
+	order := createPendingRefundOrderForTest(t, ctx, client, "partial-already-refunded")
+	_, err := client.PaymentOrder.UpdateOneID(order.ID).
+		SetStatus(OrderStatusPartiallyRefunded).
+		SetRefundAmount(40).
+		Save(ctx)
+	require.NoError(t, err)
+
+	plan, result, err := (&PaymentService{entClient: client}).PrepareRefund(ctx, order.ID, 40, "retry", false, false)
+	require.Nil(t, plan)
+	require.Nil(t, result)
+	require.Equal(t, "INVALID_STATUS", infraerrors.Reason(err))
 }

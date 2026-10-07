@@ -19,6 +19,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/service"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
+	"github.com/tidwall/sjson"
 )
 
 type partialUsageUpstream struct {
@@ -48,16 +49,23 @@ func (r *partialUsageBillingRepo) Apply(_ context.Context, cmd *service.UsageBil
 
 func TestOpenAIHandlersBillCommittedPartialUsage(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	for _, protocol := range []string{"responses", "responses_passthrough", "chat", "messages", "responses_priority", "responses_passthrough_priority", "chat_priority", "messages_priority"} {
-		baseProtocol := strings.TrimSuffix(protocol, "_priority")
-		priority := strings.HasSuffix(protocol, "_priority")
+	for _, protocol := range []string{"responses", "responses_passthrough", "chat", "messages", "responses_priority", "responses_passthrough_priority", "chat_priority", "messages_priority", "responses_priority_unconfirmed", "responses_passthrough_priority_unconfirmed", "chat_priority_unconfirmed", "messages_priority_unconfirmed"} {
+		baseProtocol := strings.TrimSuffix(strings.TrimSuffix(protocol, "_unconfirmed"), "_priority")
+		priority := strings.Contains(protocol, "_priority")
+		confirmedPriority := priority && !strings.HasSuffix(protocol, "_unconfirmed")
 		for _, beforeOutput := range []bool{false, true} {
 			name := protocol + "/after_output"
 			if beforeOutput {
 				name = protocol + "/before_output"
 			}
 			t.Run(name, func(t *testing.T) {
-				failed := `data: {"type":"response.failed","response":{"id":"resp_partial","model":"gpt-5.1","status":"failed","error":{"type":"server_error","code":"server_error","message":"upstream processing failed"},"usage":{"input_tokens":7,"output_tokens":2,"total_tokens":9}}}` + "\n\n"
+				failed := `{"type":"response.failed","response":{"id":"resp_partial","model":"gpt-5.1","status":"failed","error":{"type":"server_error","code":"server_error","message":"upstream processing failed"},"usage":{"input_tokens":7,"output_tokens":2,"total_tokens":9}}}`
+				if confirmedPriority {
+					var err error
+					failed, err = sjson.Set(failed, "response.service_tier", "priority")
+					require.NoError(t, err)
+				}
+				failed = "data: " + failed + "\n\n"
 				payload := failed
 				if !beforeOutput {
 					payload = `data: {"type":"response.created","response":{"id":"resp_partial","model":"gpt-5.1","status":"in_progress","output":[]}}` + "\n\n" +
@@ -144,14 +152,18 @@ func TestOpenAIHandlersBillCommittedPartialUsage(t *testing.T) {
 					require.Equal(t, int64(2), *usage.GroupID)
 					require.Equal(t, float64(4), usage.RateMultiplier)
 					require.Equal(t, usage.ActualCost, cmd.BalanceCost)
-					if priority {
+					tier := ""
+					if confirmedPriority {
 						require.NotNil(t, usage.ServiceTier)
 						require.Equal(t, "priority", *usage.ServiceTier)
-						want, err := service.NewBillingService(&billingCfg, nil).CalculateCostWithServiceTier(
-							"gpt-5.1", service.UsageTokens{InputTokens: 7, OutputTokens: 2}, 4, "priority")
-						require.NoError(t, err)
-						require.Equal(t, service.QuantizeUsageBillingAmount(want.ActualCost), cmd.BalanceCost)
+						tier = "priority"
+					} else {
+						require.Nil(t, usage.ServiceTier)
 					}
+					want, err := service.NewBillingService(&billingCfg, nil).CalculateCostWithServiceTier(
+						"gpt-5.1", service.UsageTokens{InputTokens: 7, OutputTokens: 2}, 4, tier)
+					require.NoError(t, err)
+					require.Equal(t, service.QuantizeUsageBillingAmount(want.ActualCost), cmd.BalanceCost)
 				default:
 					t.Fatal("missing partial usage log")
 				}

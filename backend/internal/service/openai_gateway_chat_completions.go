@@ -329,7 +329,7 @@ func (s *OpenAIGatewayService) ForwardAsChatCompletions(
 		return nil, handleErr
 	}
 
-	// Propagate ServiceTier and ReasoningEffort to result for billing
+	// Preserve request metadata separately from the confirmed upstream billing tier.
 	if result != nil {
 		if responsesReq.ServiceTier != "" {
 			st := responsesReq.ServiceTier
@@ -504,6 +504,7 @@ func (s *OpenAIGatewayService) handleChatBufferedStreamingResponse(
 		UpstreamModel:                 upstreamModel,
 		UpstreamResponseModel:         observedUpstreamResponseModel(c),
 		UpstreamResponseModelConflict: observedUpstreamResponseModelConflict(c),
+		UpstreamServiceTier:           observedUpstreamServiceTier(c),
 		Stream:                        false,
 		Duration:                      time.Since(startTime),
 	}, nil
@@ -569,6 +570,7 @@ func (s *OpenAIGatewayService) handleChatStreamingResponse(
 			UpstreamModel:                 upstreamModel,
 			UpstreamResponseModel:         observedUpstreamResponseModel(c),
 			UpstreamResponseModelConflict: observedUpstreamResponseModelConflict(c),
+			UpstreamServiceTier:           observedUpstreamServiceTier(c),
 			Stream:                        true,
 			Duration:                      time.Since(startTime),
 			FirstTokenMs:                  firstTokenMs,
