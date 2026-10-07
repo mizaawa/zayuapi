@@ -262,9 +262,10 @@ func (s *SettingService) IsSessionBindingEnabled(ctx context.Context) bool {
 func (s *SettingService) IsStepUpEnabled(ctx context.Context) bool {
 	value, err := s.settingRepo.GetValue(ctx, SettingKeyStepUpEnabled)
 	if err != nil {
-		return false // 默认关闭
+		// A missing setting retains the documented default; outages must not disable protection.
+		return !errors.Is(err, ErrSettingNotFound)
 	}
-	return value == "true"
+	return value != "false"
 }
 
 // defaultAuditLogRetentionDays 审计日志默认保留天数。

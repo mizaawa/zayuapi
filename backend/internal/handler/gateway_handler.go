@@ -2392,16 +2392,15 @@ func (h *GatewayHandler) submitUsageRecordTask(parent context.Context, task serv
 	}
 	task = wrapUsageRecordTaskContext(parent, task)
 	if h.usageRecordWorkerPool != nil {
-		if mode := h.usageRecordWorkerPool.Submit(task); mode != service.UsageRecordSubmitModeDroppedStopped {
+		if mode := h.usageRecordWorkerPool.Submit(task); !mode.Dropped() {
 			return
 		}
-		// 池已停止（进程关停窗口）：计费任务不能静默丢失，降级为内联同步执行。
-		// 显式配置的 drop/sample 溢出丢弃仍按配置语义保留。
+		// Billing must survive both queue overflow and pool shutdown.
 		logger.L().With(
 			zap.String("component", "handler.gateway.messages"),
-		).Warn("gateway.usage_record_task_stopped_sync_fallback")
+		).Warn("gateway.usage_record_task_sync_fallback")
 	}
-	// 回退路径：worker 池未注入或已停止时同步执行，避免退回到无界 goroutine 模式。
+	// Execute rejected billing tasks inline with an independent deadline.
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	defer func() {

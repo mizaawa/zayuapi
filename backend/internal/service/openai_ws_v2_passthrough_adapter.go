@@ -1047,7 +1047,7 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 			//   - 不带 service_tier 的 response.create 会让
 			//     extractOpenAIServiceTierFromBody 返回 nil；这里有意
 			//     覆盖（Store(nil)），因为 OpenAI 上游对该帧实际不传
-			//     service_tier 时按 default 处理，billing 应如实反映。
+			//     service_tier 时清除上一轮请求元数据；计费独立使用上游回显。
 			if policyErr == nil && blocked == nil && isResponseCreate {
 				usageMeta.updateFromResponseCreate(out, model, requestModelForThisFrame)
 				acceptedTurn = true
@@ -1138,6 +1138,7 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 					UpstreamResponseModel:         turn.ResponseModel,
 					UpstreamResponseModelConflict: turn.ResponseModelConflict,
 					ServiceTier:                   usageMeta.serviceTier.Load(),
+					UpstreamServiceTier:           optionalTrimmedStringPtr(normalizedOpenAIServiceTierValue(turn.ServiceTier)),
 					ReasoningEffort:               usageMeta.reasoningEffort.Load(),
 					Stream:                        true,
 					OpenAIWSMode:                  true,
@@ -1265,6 +1266,7 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 		UpstreamResponseModel:         relayResult.ResponseModel,
 		UpstreamResponseModelConflict: relayResult.ResponseModelConflict,
 		ServiceTier:                   usageMeta.serviceTier.Load(),
+		UpstreamServiceTier:           optionalTrimmedStringPtr(normalizedOpenAIServiceTierValue(relayResult.ServiceTier)),
 		ReasoningEffort:               usageMeta.reasoningEffort.Load(),
 		Stream:                        true,
 		OpenAIWSMode:                  true,

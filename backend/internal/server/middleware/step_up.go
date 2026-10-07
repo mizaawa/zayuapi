@@ -2,7 +2,9 @@ package middleware
 
 import (
 	"context"
+	"crypto/sha256"
 	"fmt"
+	"strings"
 
 	"github.com/Wei-Shaw/sub2api/internal/service"
 
@@ -28,12 +30,16 @@ type stepUpSettingReader interface {
 }
 
 // StepUpSessionKey 计算 step-up 授权的会话键：
-// 优先绑定当前会话（refresh token family），无会话 ID 的旧 token 退化为用户级键。
+// Bind legacy tokens without a session ID to their own credential fingerprint.
 func StepUpSessionKey(c *gin.Context, userID int64) string {
 	if sid := c.GetString(ContextKeySessionID); sid != "" {
 		return sid
 	}
-	return fmt.Sprintf("u%d", userID)
+	parts := strings.SplitN(c.GetHeader("Authorization"), " ", 2)
+	if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") || strings.TrimSpace(parts[1]) == "" {
+		return ""
+	}
+	return fmt.Sprintf("legacy:%d:%x", userID, sha256.Sum256([]byte(strings.TrimSpace(parts[1]))))
 }
 
 // NewStepUpAuthMiddleware 创建敏感操作 step-up 2FA 门控中间件。
@@ -125,6 +131,10 @@ func enforceStepUp(c *gin.Context, grantChecker stepUpGrantChecker, userReader s
 	}
 
 	sessionKey := StepUpSessionKey(c, subject.UserID)
+	if sessionKey == "" {
+		AbortWithError(c, 401, "UNAUTHORIZED", "A verified user session is required")
+		return false
+	}
 	granted, err := grantChecker.HasStepUpGrant(c.Request.Context(), subject.UserID, sessionKey)
 	if err != nil {
 		// 安全门控故障时选择 fail-closed。

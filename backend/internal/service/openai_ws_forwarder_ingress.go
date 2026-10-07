@@ -1051,6 +1051,7 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 					UpstreamResponseModel:         responseModelObserver.Model(),
 					UpstreamResponseModelConflict: responseModelObserver.Conflict(),
 					ServiceTier:                   extractOpenAIServiceTierFromBody(payload),
+					UpstreamServiceTier:           responseModelObserver.ServiceTier(),
 					ReasoningEffort:               ApplyThinkingEnabledFallback(extractOpenAIReasoningEffortFromBody(payload, mappedModel, originalModel), payload, mappedModel),
 					Stream:                        reqStream,
 					OpenAIWSMode:                  true,

@@ -143,7 +143,7 @@ func TestGatewayServiceRecordUsage_BillingFingerprintIncludesRequestPayloadHash(
 	require.Equal(t, payloadHash, billingRepo.lastCmd.RequestPayloadHash)
 }
 
-func TestGatewayServiceRecordUsage_BillingFingerprintFallsBackToContextRequestID(t *testing.T) {
+func TestGatewayServiceRecordUsage_BillingFingerprintIgnoresUntrustedRequestID(t *testing.T) {
 	usageRepo := &openAIRecordUsageLogRepoStub{}
 	billingRepo := &openAIRecordUsageBillingRepoStub{result: &UsageBillingApplyResult{Applied: true}}
 	svc := newGatewayRecordUsageServiceWithBillingRepoForTest(usageRepo, billingRepo, &openAIRecordUsageUserRepoStub{}, &openAIRecordUsageSubRepoStub{})
@@ -165,7 +165,8 @@ func TestGatewayServiceRecordUsage_BillingFingerprintFallsBackToContextRequestID
 	})
 	require.NoError(t, err)
 	require.NotNil(t, billingRepo.lastCmd)
-	require.Equal(t, "local:req-local-123", billingRepo.lastCmd.RequestPayloadHash)
+	require.Empty(t, billingRepo.lastCmd.RequestPayloadHash)
+	require.Equal(t, "gateway_payload_fallback", billingRepo.lastCmd.RequestID)
 }
 
 func TestGatewayServiceRecordUsage_PreservesRequestedAndUpstreamModels(t *testing.T) {
@@ -487,7 +488,7 @@ func TestGatewayServiceRecordUsage_UsesFallbackRequestIDForUsageLog(t *testing.T
 
 	require.NoError(t, err)
 	require.NotNil(t, usageRepo.lastLog)
-	require.Equal(t, "local:gateway-local-fallback", usageRepo.lastLog.RequestID)
+	require.True(t, strings.HasPrefix(usageRepo.lastLog.RequestID, "generated:"))
 }
 
 func TestGatewayServiceRecordUsage_PrefersClientRequestIDOverUpstreamRequestID(t *testing.T) {

@@ -303,6 +303,7 @@ func (s *OpenAIGatewayService) proxyOpenAIWSHTTPBridgeTurn(
 			UpstreamResponseModel:         responseModelObserver.Model(),
 			UpstreamResponseModelConflict: responseModelObserver.Conflict(),
 			ServiceTier:                   extractOpenAIServiceTierFromBody(body),
+			UpstreamServiceTier:           responseModelObserver.ServiceTier(),
 			ReasoningEffort:               ApplyThinkingEnabledFallback(extractOpenAIReasoningEffortFromBody(body, mappedModel, originalModel), body, mappedModel),
 			Stream:                        reqStream,
 			OpenAIWSMode:                  true,

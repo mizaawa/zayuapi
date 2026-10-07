@@ -727,13 +727,16 @@ func TestDuplicatePaymentNotificationDoesNotReprocessCompletedBalanceOrder(t *te
 	}}
 	svc := &PaymentService{
 		entClient:     client,
+		registry:      payment.NewRegistry(),
 		redeemService: &RedeemService{redeemRepo: redeemRepo},
 	}
+	svc.registry.Register(&paymentOrderLifecycleQueryProvider{})
 	notification := &payment.PaymentNotification{
-		TradeNo: "alipay-trade-replayed",
-		OrderID: order.OutTradeNo,
-		Amount:  order.PayAmount,
-		Status:  payment.NotificationStatusSuccess,
+		TradeNo:  "alipay-trade-replayed",
+		OrderID:  order.OutTradeNo,
+		Amount:   order.PayAmount,
+		Status:   payment.NotificationStatusSuccess,
+		Metadata: map[string]string{"app_id": "test-alipay-app"},
 	}
 	require.NoError(t, svc.HandlePaymentNotification(ctx, notification, payment.TypeAlipay))
 	require.NoError(t, svc.HandlePaymentNotification(ctx, notification, payment.TypeAlipay))
@@ -756,12 +759,14 @@ func TestPaymentNotificationRejectsAmountMismatchBeforeFulfillment(t *testing.T)
 		Save(ctx)
 	require.NoError(t, err)
 
-	svc := &PaymentService{entClient: client}
+	svc := &PaymentService{entClient: client, registry: payment.NewRegistry()}
+	svc.registry.Register(&paymentOrderLifecycleQueryProvider{})
 	err = svc.HandlePaymentNotification(ctx, &payment.PaymentNotification{
-		TradeNo: "alipay-trade-wrong-amount",
-		OrderID: order.OutTradeNo,
-		Amount:  order.PayAmount - 1,
-		Status:  payment.NotificationStatusSuccess,
+		TradeNo:  "alipay-trade-wrong-amount",
+		OrderID:  order.OutTradeNo,
+		Amount:   order.PayAmount - 1,
+		Status:   payment.NotificationStatusSuccess,
+		Metadata: map[string]string{"app_id": "test-alipay-app"},
 	}, payment.TypeAlipay)
 	require.ErrorContains(t, err, "amount mismatch")
 

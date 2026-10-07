@@ -14,11 +14,15 @@ import (
 )
 
 type stubStepUpGrantChecker struct {
-	granted bool
-	err     error
+	granted    bool
+	err        error
+	sessionKey string
 }
 
 func (s stubStepUpGrantChecker) HasStepUpGrant(ctx context.Context, userID int64, sessionKey string) (bool, error) {
+	if s.sessionKey != "" && s.sessionKey != sessionKey {
+		return false, nil
+	}
 	return s.granted, s.err
 }
 
@@ -48,6 +52,7 @@ func newStepUpTestContext(t *testing.T) (*gin.Context, *httptest.ResponseRecorde
 	rec := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(rec)
 	c.Request = httptest.NewRequest(http.MethodPost, "/sensitive", nil)
+	c.Set(ContextKeySessionID, "test-session")
 	return c, rec
 }
 
@@ -61,6 +66,44 @@ func TestEnforceStepUpRejectsAdminAPIKey(t *testing.T) {
 	require.True(t, c.IsAborted())
 	require.Equal(t, http.StatusForbidden, rec.Code)
 	require.Contains(t, rec.Body.String(), "STEP_UP_ADMIN_API_KEY_FORBIDDEN")
+}
+
+func TestStepUpSessionKeyIsolatesLegacyCredentials(t *testing.T) {
+	c, _ := newStepUpTestContext(t)
+	c.Set(ContextKeySessionID, "")
+	c.Request.Header.Set("Authorization", "Bearer first-token")
+	first := StepUpSessionKey(c, 7)
+	c.Request.Header.Set("Authorization", "Bearer second-token")
+	second := StepUpSessionKey(c, 7)
+	require.NotEmpty(t, first)
+	require.NotEqual(t, first, second)
+	require.NotContains(t, first, "first-token")
+	c.Request.Header.Set("Authorization", "Bearer first-token")
+	require.Equal(t, first, StepUpSessionKey(c, 7))
+	c.Request.Header.Del("Authorization")
+	require.Empty(t, StepUpSessionKey(c, 7))
+}
+
+func TestEnforceStepUpRejectsMissingSession(t *testing.T) {
+	c, rec := newStepUpTestContext(t)
+	c.Set(ContextKeySessionID, "")
+	c.Set(string(ContextKeyUser), AuthSubject{UserID: 1})
+	ok := enforceStepUp(c, stubStepUpGrantChecker{granted: true}, stubStepUpUserReader{user: &service.User{ID: 1, TotpEnabled: true}}, stepUpEnabled)
+	require.False(t, ok)
+	require.Equal(t, http.StatusUnauthorized, rec.Code)
+}
+
+func TestEnforceStepUpRejectsGrantFromAnotherLegacyToken(t *testing.T) {
+	c, rec := newStepUpTestContext(t)
+	c.Set(ContextKeySessionID, "")
+	c.Set(string(ContextKeyUser), AuthSubject{UserID: 1})
+	c.Request.Header.Set("Authorization", "Bearer first-token")
+	grant := stubStepUpGrantChecker{granted: true, sessionKey: StepUpSessionKey(c, 1)}
+	c.Request.Header.Set("Authorization", "Bearer second-token")
+	ok := enforceStepUp(c, grant, stubStepUpUserReader{user: &service.User{ID: 1, TotpEnabled: true}}, stepUpEnabled)
+	require.False(t, ok)
+	require.Equal(t, http.StatusForbidden, rec.Code)
+	require.Contains(t, rec.Body.String(), "STEP_UP_REQUIRED")
 }
 
 func TestEnforceStepUpRequiresAuthSubject(t *testing.T) {

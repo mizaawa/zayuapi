@@ -44,8 +44,7 @@ const (
 	UsageRecordSubmitModeEnqueued UsageRecordSubmitMode = "enqueued"
 	UsageRecordSubmitModeDropped  UsageRecordSubmitMode = "dropped"
 	// UsageRecordSubmitModeDroppedStopped 表示任务因池已停止（进程关停窗口）被丢弃。
-	// 与显式 drop/sample 溢出策略的丢弃区分开：溢出丢弃是运维显式配置的取舍，
-	// 而关停窗口丢弃不是，计费关键任务应在调用侧降级为同步执行兜底。
+	// Billing callers must fall back synchronously for either dropped mode.
 	UsageRecordSubmitModeDroppedStopped UsageRecordSubmitMode = "dropped_stopped"
 	UsageRecordSubmitModeSync           UsageRecordSubmitMode = "sync_fallback"
 )
