@@ -85,8 +85,36 @@ func TestCanonicalizeReturnURL(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CanonicalizeReturnURL returned error: %v", err)
 	}
-	if got != "https://example.com/payment/result?b=2" {
-		t.Fatalf("CanonicalizeReturnURL = %q, want %q", got, "https://example.com/payment/result?b=2")
+	if got != "https://example.com/payment/result" {
+		t.Fatalf("CanonicalizeReturnURL = %q, want %q", got, "https://example.com/payment/result")
+	}
+}
+
+func TestCanonicalizeReturnURLStripsSmuggledTradeStatus(t *testing.T) {
+	t.Parallel()
+
+	canonical, err := CanonicalizeReturnURL(
+		"https://example.com/payment/result?trade_status=TRADE_SUCCESS&order_id=999&resume_token=forged",
+		"example.com", "",
+	)
+	if err != nil {
+		t.Fatalf("CanonicalizeReturnURL returned error: %v", err)
+	}
+	if canonical != "https://example.com/payment/result" {
+		t.Fatalf("CanonicalizeReturnURL kept client query parameters: %q", canonical)
+	}
+
+	got, err := buildPaymentReturnURL(canonical, 42, "sub2_42", "resume-token")
+	if err != nil {
+		t.Fatalf("buildPaymentReturnURL returned error: %v", err)
+	}
+	parsed, err := url.Parse(got)
+	if err != nil {
+		t.Fatalf("url.Parse returned error: %v", err)
+	}
+	query := parsed.Query()
+	if len(query) != 4 || query.Get("order_id") != "42" || query.Get("out_trade_no") != "sub2_42" || query.Get("resume_token") != "resume-token" || query.Get("status") != "success" {
+		t.Fatalf("expected only server-controlled return parameters, got %v", query)
 	}
 }
 
@@ -117,8 +145,8 @@ func TestCanonicalizeReturnURLAllowsConfiguredFrontendHost(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CanonicalizeReturnURL returned error: %v", err)
 	}
-	if got != "https://app.example.com/payment/result?from=checkout" {
-		t.Fatalf("CanonicalizeReturnURL = %q, want %q", got, "https://app.example.com/payment/result?from=checkout")
+	if got != "https://app.example.com/payment/result" {
+		t.Fatalf("CanonicalizeReturnURL = %q, want %q", got, "https://app.example.com/payment/result")
 	}
 }
 

@@ -32,7 +32,7 @@ bash start-private.sh
 
 起動スクリプトは非公開リポジトリの `.env` と Compose ファイルを読み込み、GHCR にログインしてサービスを起動します。データはローカルの `data`、`postgres_data`、`redis_data` に保存されます。
 
-コンテナが正常になったら `http://SERVER_IP:8080` を開きます。`.env` に `ADMIN_PASSWORD` を設定していない場合は、アプリケーションログで自動生成されたパスワードを確認してください。
+コンテナが正常になったら `http://SERVER_IP:8080` を開きます。`.env` の `ADMIN_EMAIL` または `ADMIN_PASSWORD` が空の場合は、アプリケーションログで自動生成された管理者メールアドレス（ログインユーザー名）とパスワードを確認してください。
 
 ### 手動デプロイ
 
@@ -45,7 +45,7 @@ mkdir -p data postgres_data redis_data
 docker compose -f docker-compose.local.yml up -d
 ```
 
-本番環境では、起動前に `.env` の `POSTGRES_PASSWORD`、`JWT_SECRET`、`TOTP_ENCRYPTION_KEY` に強力なランダム値を設定してください。必要に応じて `ADMIN_EMAIL`、`ADMIN_PASSWORD`、`SERVER_PORT` も設定できます。
+本番環境では、起動前に `.env` の `POSTGRES_PASSWORD`、`JWT_SECRET`、`TOTP_ENCRYPTION_KEY` に強力なランダム値を設定してください。必要に応じて `ADMIN_EMAIL`、`ADMIN_PASSWORD`、`SERVER_PORT` も設定できます。管理者メールアドレスはログイン可能な有効な形式、パスワードは 8-72 バイトである必要があります。アップグレードでは既存のアカウントは変更されません。
 
 ### 既存の上流版デプロイからデータを保持して移行
 

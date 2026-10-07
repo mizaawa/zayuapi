@@ -29,6 +29,7 @@ jobs:
           bash -n deploy/install.sh
           bash -n deploy/docker-deploy.sh
           bash -n deploy/start-private.sh
+          bash deploy/tests/admin-bootstrap-test.sh
           bash deploy/tests/install-github-token-test.sh
           bash deploy/tests/private-deployment-test.sh
           bash deploy/tests/start-private-test.sh
