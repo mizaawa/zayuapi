@@ -32,7 +32,7 @@ bash start-private.sh
 
 脚本读取私库中的 `.env` 和 Compose 文件，登录 GHCR 并启动服务，数据保存在本地 `data`、`postgres_data`、`redis_data` 目录。
 
-容器健康后访问 `http://服务器IP:8080`。如果 `.env` 未设置 `ADMIN_PASSWORD`，请从应用日志中查看首次生成的管理员密码。
+容器健康后访问 `http://服务器IP:8080`。如果 `.env` 中 `ADMIN_EMAIL` 或 `ADMIN_PASSWORD` 留空，请从应用日志中查看首次生成的管理员邮箱（登录用户名）和密码。
 
 ### 手动部署
 
@@ -45,7 +45,7 @@ mkdir -p data postgres_data redis_data
 docker compose -f docker-compose.local.yml up -d
 ```
 
-生产环境启动前，请在 `.env` 中设置强随机值 `POSTGRES_PASSWORD`、`JWT_SECRET` 和 `TOTP_ENCRYPTION_KEY`；可按需设置 `ADMIN_EMAIL`、`ADMIN_PASSWORD`、`SERVER_PORT`。
+生产环境启动前，请在 `.env` 中设置强随机值 `POSTGRES_PASSWORD`、`JWT_SECRET` 和 `TOTP_ENCRYPTION_KEY`；可按需设置 `ADMIN_EMAIL`、`ADMIN_PASSWORD`、`SERVER_PORT`。自行设置的管理员邮箱必须是可登录的合法邮箱，密码必须为 8-72 字节。升级不会修改已有账号。
 
 ### 从上游部署迁移并保留数据
 

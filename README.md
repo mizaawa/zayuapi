@@ -32,7 +32,7 @@ bash start-private.sh
 
 The startup script reads the private repository `.env` and Compose files, logs Docker into GHCR and starts the stack. Data stays in the local `data`, `postgres_data`, and `redis_data` directories.
 
-Open `http://SERVER_IP:8080` after the containers become healthy. If no `ADMIN_PASSWORD` is set in `.env`, inspect the application log for the generated password.
+Open `http://SERVER_IP:8080` after the containers become healthy. If `ADMIN_EMAIL` or `ADMIN_PASSWORD` is empty in `.env`, inspect the application log for the generated admin email (login username) and password.
 
 ### Manual deployment
 
@@ -45,7 +45,7 @@ mkdir -p data postgres_data redis_data
 docker compose -f docker-compose.local.yml up -d
 ```
 
-Before starting a production deployment, set strong values for `POSTGRES_PASSWORD`, `JWT_SECRET`, and `TOTP_ENCRYPTION_KEY` in `.env`. Optionally set `ADMIN_EMAIL`, `ADMIN_PASSWORD`, and `SERVER_PORT`.
+Before starting a production deployment, set strong values for `POSTGRES_PASSWORD`, `JWT_SECRET`, and `TOTP_ENCRYPTION_KEY` in `.env`. Optionally set `ADMIN_EMAIL`, `ADMIN_PASSWORD`, and `SERVER_PORT`. A supplied admin email must be a valid login email, and a supplied password must be 8-72 bytes. Existing accounts are not changed on upgrade.
 
 ### Migrate an existing upstream deployment
 

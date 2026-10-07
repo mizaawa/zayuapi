@@ -9,6 +9,7 @@ FRONTEND_CRITICAL_VITEST := \
 	src/views/user/__tests__/PaymentResultView.spec.ts \
 	src/components/user/profile/__tests__/ProfileInfoCard.spec.ts \
 	src/components/keys/__tests__/SystemPromptSettings.spec.ts \
+	src/components/keys/__tests__/UseKeyModal.spec.ts \
 	src/views/user/__tests__/KeysView.spec.ts \
 	src/views/admin/__tests__/SettingsView.spec.ts
 
