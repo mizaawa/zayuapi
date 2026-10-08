@@ -47,13 +47,15 @@ npm install -g pnpm
 
 | Workflow | 触发条件 | 检查内容 |
 |----------|----------|----------|
-| **backend-ci.yml** | push, pull_request | 单元测试 + 集成测试 + golangci-lint v2.7 |
-| **security-scan.yml** | push, pull_request, 每周一 | govulncheck + gosec + pnpm audit |
-| **release.yml** | tag `v*` | 构建发布（PR 不触发） |
+| **backend-ci.yml** | 仅由发布流程调用 | 单元测试 + 集成测试 + golangci-lint v2.9 + 前端检查 + 部署脚本测试 |
+| **release.yml** | tag `v*` 或手动发布 | 校验版本标签，对标签对应的提交运行完整 CI，通过后构建发布 |
+
+普通分支 push 和 PR 不触发 GitHub Actions。安全扫描、每周定时扫描和 CLA 工作流已移除。
+发布流程传入版本标签对应的提交 SHA，所有 CI 任务检查同一提交；CI 失败时不构建、不发布。
 
 ### CI 要求
 
-- Go 版本必须是 **1.25.7**
+- Go 版本必须是 **1.26.6**
 - 前端使用 `pnpm install --frozen-lockfile`，必须提交 `pnpm-lock.yaml`
 
 ### 本地测试命令

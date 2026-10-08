@@ -1,8 +1,12 @@
 name: CI
 
 on:
-  push:
-  pull_request:
+  workflow_call:
+    inputs:
+      ref:
+        description: 'Release commit to validate'
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -12,6 +16,8 @@ jobs:
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.ref }}
       - name: Check deployment scripts
         run: |
           /bin/bash -n deploy/apple-container.sh
@@ -24,6 +30,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.ref }}
       - name: Check private GitHub deployment workflows
         run: |
           bash -n deploy/install.sh
@@ -53,6 +61,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.ref }}
       - name: Setup pnpm
         uses: pnpm/action-setup@v6
         with:
@@ -73,6 +83,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.ref }}
       - uses: actions/setup-go@v6
         with:
           go-version-file: backend/go.mod

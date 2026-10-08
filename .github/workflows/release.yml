@@ -73,8 +73,15 @@ jobs:
           retention-days: 1
           if-no-files-found: error
 
-  build-frontend:
+  ci:
+    name: CI
     needs: [update-version]
+    uses: ./.github/workflows/backend-ci.yml
+    with:
+      ref: ${{ needs.update-version.outputs.commit }}
+
+  build-frontend:
+    needs: [update-version, ci]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout release commit
