@@ -3,6 +3,7 @@ package repository
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -43,11 +44,15 @@ func (t *testTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	return http.DefaultTransport.RoundTrip(newReq)
 }
 
-func newTestGitHubReleaseClient() *githubReleaseClient {
-	return &githubReleaseClient{
+func newTestGitHubReleaseClient(tokens ...string) *githubReleaseClient {
+	client := &githubReleaseClient{
 		httpClient:         &http.Client{},
 		downloadHTTPClient: &http.Client{},
 	}
+	if len(tokens) > 0 {
+		client.tokenResolver = func(context.Context) (string, error) { return tokens[0], nil }
+	}
+	return client
 }
 
 func TestGitHubReleaseClientAPIRequestAuthorization(t *testing.T) {
@@ -67,8 +72,7 @@ func TestGitHubReleaseClientAPIRequestAuthorization(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			client := newTestGitHubReleaseClient()
-			client.updateGitHubToken = "update-secret"
+			client := newTestGitHubReleaseClient("update-secret")
 			req, err := client.newAPIRequest(context.Background(), tt.url)
 			require.NoError(t, err)
 			require.Equal(t, tt.wantAuth, req.Header.Get("Authorization"))
@@ -79,6 +83,42 @@ func TestGitHubReleaseClientAPIRequestAuthorization(t *testing.T) {
 	req, err := client.newAPIRequest(context.Background(), "https://api.github.com/repos/test/repo")
 	require.NoError(t, err)
 	require.Empty(t, req.Header.Get("Authorization"))
+}
+
+func TestGitHubReleaseClientUsesLiveConfiguredToken(t *testing.T) {
+	t.Setenv("UPDATE_GITHUB_TOKEN", "environment-secret")
+	token := "  configured-secret  "
+	client := NewGitHubReleaseClient("", false, func(context.Context) (string, error) {
+		return token, nil
+	}).(*githubReleaseClient)
+	for _, test := range []struct {
+		token string
+		auth  string
+	}{
+		{token: "  configured-secret  ", auth: "Bearer configured-secret"},
+		{token: "replacement-secret", auth: "Bearer replacement-secret"},
+		{},
+	} {
+		token = test.token
+		req, err := client.newAPIRequest(context.Background(), "https://api.github.com/repos/test/repo/releases/latest")
+		require.NoError(t, err)
+		require.Equal(t, test.auth, req.Header.Get("Authorization"))
+	}
+}
+
+func TestGitHubReleaseClientTokenResolutionError(t *testing.T) {
+	wantErr := errors.New("settings unavailable")
+	client := newTestGitHubReleaseClient()
+	client.tokenResolver = func(context.Context) (string, error) { return "", wantErr }
+	for _, asset := range []bool{false, true} {
+		var err error
+		if asset {
+			_, err = client.newAssetRequest(context.Background(), "https://github.com/test/repo/releases/download/v1/asset.tar.gz")
+		} else {
+			_, err = client.newAPIRequest(context.Background(), "https://api.github.com/repos/test/repo/releases/latest")
+		}
+		require.ErrorIs(t, err, wantErr)
+	}
 }
 
 func TestGitHubReleaseClientRedirectAuthorization(t *testing.T) {
@@ -109,8 +149,7 @@ func TestGitHubReleaseClientRedirectAuthorization(t *testing.T) {
 }
 
 func TestGitHubReleaseClientDoesNotAuthorizeDownloads(t *testing.T) {
-	client := newTestGitHubReleaseClient()
-	client.updateGitHubToken = "update-secret"
+	client := newTestGitHubReleaseClient("update-secret")
 
 	var headers []http.Header
 	transport := githubReleaseRoundTripFunc(func(req *http.Request) (*http.Response, error) {
@@ -136,8 +175,7 @@ func TestGitHubReleaseClientDoesNotAuthorizeDownloads(t *testing.T) {
 }
 
 func TestGitHubReleaseClientPrivateAssetDownloads(t *testing.T) {
-	client := newTestGitHubReleaseClient()
-	client.updateGitHubToken = "update-secret"
+	client := newTestGitHubReleaseClient("update-secret")
 	transport := githubReleaseRoundTripFunc(func(req *http.Request) (*http.Response, error) {
 		require.Equal(t, "api.github.com", req.URL.Host)
 		require.Equal(t, "Bearer update-secret", req.Header.Get("Authorization"))
@@ -165,8 +203,7 @@ func TestGitHubReleaseClientPrivateAssetDownloads(t *testing.T) {
 func TestGitHubReleaseClientPrivateBrowserDownloadCompatibility(t *testing.T) {
 	for _, checksums := range []bool{false, true} {
 		t.Run(fmt.Sprint("checksums=", checksums), func(t *testing.T) {
-			client := newTestGitHubReleaseClient()
-			client.updateGitHubToken = "update-secret"
+			client := newTestGitHubReleaseClient("update-secret")
 			var paths []string
 			transport := githubReleaseRoundTripFunc(func(req *http.Request) (*http.Response, error) {
 				paths = append(paths, req.URL.EscapedPath())
@@ -197,8 +234,7 @@ func TestGitHubReleaseClientPrivateBrowserDownloadCompatibility(t *testing.T) {
 }
 
 func TestGitHubReleaseClientPrivateAssetRedirectDoesNotLeakToken(t *testing.T) {
-	client := newTestGitHubReleaseClient()
-	client.updateGitHubToken = "update-secret"
+	client := newTestGitHubReleaseClient("update-secret")
 	var hosts []string
 	client.downloadHTTPClient.Transport = githubReleaseRoundTripFunc(func(req *http.Request) (*http.Response, error) {
 		hosts = append(hosts, req.URL.Host)

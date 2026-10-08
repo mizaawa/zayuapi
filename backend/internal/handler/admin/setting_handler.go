@@ -133,6 +133,7 @@ func (h *SettingHandler) GetSettings(c *gin.Context) {
 	passkeyConfigured, passkeyRPID, passkeyRPOrigins := h.settingService.PasskeyConfiguration()
 
 	payload := dto.SystemSettings{
+		UpdateGitHubTokenConfigured:                            settings.UpdateGitHubTokenConfigured,
 		RegistrationEnabled:                                    settings.RegistrationEnabled,
 		RegistrationAnnouncementEnabled:                        settings.RegistrationAnnouncementEnabled,
 		RegistrationAnnouncementContent:                        settings.RegistrationAnnouncementContent,

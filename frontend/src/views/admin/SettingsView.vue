@@ -6795,7 +6795,42 @@
             </p>
           </div>
           <div class="space-y-5 p-6">
-            <div class="flex items-center justify-between">
+            <div>
+              <div class="mb-2 flex items-center justify-between gap-3">
+                <label for="update-github-token" class="input-label mb-0">
+                  {{ localText('GitHub 通行令牌', 'GitHub Access Token') }}
+                </label>
+                <div v-if="form.update_github_token_configured && !clearUpdateGitHubToken" class="flex shrink-0 items-center gap-2">
+                  <span class="text-xs text-gray-500 dark:text-gray-400">
+                    {{ localText('已配置', 'Configured') }}
+                  </span>
+                  <button
+                    type="button"
+                    class="rounded p-1 text-gray-500 hover:text-red-600 dark:text-gray-400 dark:hover:text-red-400"
+                    :title="localText('清除令牌', 'Clear token')"
+                    :aria-label="localText('清除令牌', 'Clear token')"
+                    data-testid="clear-update-github-token"
+                    @click="form.update_github_token = ''; clearUpdateGitHubToken = true"
+                  >
+                    <Icon name="trash" size="sm" />
+                  </button>
+                </div>
+                <span v-else-if="clearUpdateGitHubToken" class="text-xs text-gray-500 dark:text-gray-400">
+                  {{ localText('待清除', 'Pending removal') }}
+                </span>
+              </div>
+              <input
+                id="update-github-token"
+                v-model="form.update_github_token"
+                type="password"
+                autocomplete="new-password"
+                class="input"
+                :placeholder="localText('输入GitHub通行令牌以获得访问通路', 'Enter a GitHub access token to gain access')"
+                @input="clearUpdateGitHubToken = false"
+              />
+            </div>
+
+            <div class="flex items-center justify-between border-t border-gray-100 pt-5 dark:border-dark-700">
               <div>
                 <label class="text-sm font-medium text-gray-700 dark:text-gray-300">
                   {{ localText('绕过下游响应模型审计', 'Bypass downstream response-model audit') }}
@@ -9322,6 +9357,7 @@ type SettingsForm = Omit<
   | "wechat_connect_mp_enabled"
   | "wechat_connect_mobile_enabled"
 > & {
+  update_github_token: string;
   smtp_password: string;
   turnstile_secret_key: string;
   tencent_captcha_app_secret_key: string;
@@ -9361,7 +9397,11 @@ type SettingsForm = Omit<
   default_platform_quotas: DefaultPlatformQuotasMap;
 };
 
+const clearUpdateGitHubToken = ref(false);
+
 const form = reactive<SettingsForm>({
+  update_github_token: "",
+  update_github_token_configured: false,
   registration_enabled: true,
   registration_announcement_enabled: false,
   registration_announcement_content: "",
@@ -10670,6 +10710,8 @@ async function loadSettings() {
         : [10, 20, 50, 100],
     );
     registrationEmailSuffixWhitelistDraft.value = "";
+    form.update_github_token = "";
+    clearUpdateGitHubToken.value = false;
     form.smtp_password = "";
     smtpPasswordManuallyEdited.value = false;
     form.turnstile_secret_key = "";
@@ -11290,6 +11332,9 @@ async function saveSettings() {
       model_plaza_enabled: form.model_plaza_enabled,
       model_plaza_require_auth: form.model_plaza_require_auth,
       model_plaza_description: form.model_plaza_description,
+      update_github_token: clearUpdateGitHubToken.value
+        ? ""
+        : form.update_github_token.trim() || undefined,
       response_model_audit_bypass_enabled: form.response_model_audit_bypass_enabled,
       disable_temp_unschedulable: form.disable_temp_unschedulable,
       // Affiliate (邀请返利) feature switch
@@ -11357,6 +11402,8 @@ async function saveSettings() {
         : [10, 20, 50, 100],
     );
     registrationEmailSuffixWhitelistDraft.value = "";
+    form.update_github_token = "";
+    clearUpdateGitHubToken.value = false;
     form.smtp_password = "";
     smtpPasswordManuallyEdited.value = false;
     form.turnstile_secret_key = "";

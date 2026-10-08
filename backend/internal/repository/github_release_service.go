@@ -19,7 +19,7 @@ import (
 type githubReleaseClient struct {
 	httpClient         *http.Client
 	downloadHTTPClient *http.Client
-	updateGitHubToken  string
+	tokenResolver      func(context.Context) (string, error)
 }
 
 type githubReleaseClientError struct {
@@ -33,7 +33,7 @@ const maxChecksumSize = 1024 * 1024
 // 代理配置失败时行为由 allowDirectOnProxyError 控制：
 //   - false（默认）：返回错误占位客户端，禁止回退到直连
 //   - true：回退到直连（仅限管理员显式开启）
-func NewGitHubReleaseClient(proxyURL string, allowDirectOnProxyError bool) service.GitHubReleaseClient {
+func NewGitHubReleaseClient(proxyURL string, allowDirectOnProxyError bool, tokenResolver func(context.Context) (string, error)) service.GitHubReleaseClient {
 	// 安全说明：httpclient.GetClient 的错误链（url.Parse / proxyutil）不含明文代理凭据，
 	// 但仍通过 slog 仅在服务端日志记录，不会暴露给 HTTP 响应。
 	sharedClient, err := httpclient.GetClient(httpclient.Options{
@@ -67,7 +67,7 @@ func NewGitHubReleaseClient(proxyURL string, allowDirectOnProxyError bool) servi
 	return &githubReleaseClient{
 		httpClient:         apiClient,
 		downloadHTTPClient: downloadClient,
-		updateGitHubToken:  strings.TrimSpace(os.Getenv("UPDATE_GITHUB_TOKEN")),
+		tokenResolver:      tokenResolver,
 	}
 }
 
@@ -118,10 +118,27 @@ func (c *githubReleaseClient) newAPIRequest(ctx context.Context, url string) (*h
 	}
 	req.Header.Set("Accept", "application/vnd.github.v3+json")
 	req.Header.Set("User-Agent", "Sub2API-Updater")
-	if c.updateGitHubToken != "" && isGitHubAPIURL(req.URL) {
-		req.Header.Set("Authorization", "Bearer "+c.updateGitHubToken)
+	if isGitHubAPIURL(req.URL) {
+		token, err := c.githubToken(ctx)
+		if err != nil {
+			return nil, err
+		}
+		if token != "" {
+			req.Header.Set("Authorization", "Bearer "+token)
+		}
 	}
 	return req, nil
+}
+
+func (c *githubReleaseClient) githubToken(ctx context.Context) (string, error) {
+	if c.tokenResolver == nil {
+		return "", nil
+	}
+	token, err := c.tokenResolver(ctx)
+	if err != nil {
+		return "", fmt.Errorf("read GitHub access token: %w", err)
+	}
+	return strings.TrimSpace(token), nil
 }
 
 func (c *githubReleaseClient) newAssetRequest(ctx context.Context, rawURL string) (*http.Request, error) {
@@ -130,9 +147,20 @@ func (c *githubReleaseClient) newAssetRequest(ctx context.Context, rawURL string
 		return nil, err
 	}
 	// Older cached releases contain only browser URLs, which cannot download private assets.
-	if c.updateGitHubToken != "" && parsedURL.Scheme == "https" && parsedURL.Host == "github.com" && parsedURL.User == nil {
+	if parsedURL.Scheme == "https" && parsedURL.Host == "github.com" && parsedURL.User == nil {
 		parts := strings.Split(strings.TrimPrefix(parsedURL.EscapedPath(), "/"), "/")
 		if len(parts) == 6 && parts[2] == "releases" && parts[3] == "download" {
+			token, err := c.githubToken(ctx)
+			if err != nil {
+				return nil, err
+			}
+			if token == "" {
+				req, err := c.newAPIRequest(ctx, rawURL)
+				if err == nil {
+					req.Header.Set("Accept", "application/octet-stream")
+				}
+				return req, err
+			}
 			filename, err := url.PathUnescape(parts[5])
 			if err != nil {
 				return nil, err

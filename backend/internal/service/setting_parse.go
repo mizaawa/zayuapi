@@ -54,6 +54,7 @@ func (s *SettingService) InitializeDefaultSettings(ctx context.Context) error {
 
 	// 初始化默认设置
 	defaults := map[string]string{
+		SettingKeyUpdateGitHubToken:                         "",
 		SettingKeyRegistrationEnabled:                       "true",
 		SettingKeyRegistrationAnnouncementEnabled:           "false",
 		SettingKeyRegistrationAnnouncementContent:           "",
@@ -308,6 +309,8 @@ func (s *SettingService) parseSettings(settings map[string]string) *SystemSettin
 		}
 	}
 	result := &SystemSettings{
+		UpdateGitHubToken:                      strings.TrimSpace(settings[SettingKeyUpdateGitHubToken]),
+		UpdateGitHubTokenConfigured:            strings.TrimSpace(settings[SettingKeyUpdateGitHubToken]) != "",
 		RegistrationEnabled:                    settings[SettingKeyRegistrationEnabled] == "true",
 		RegistrationAnnouncementEnabled:        settings[SettingKeyRegistrationAnnouncementEnabled] == "true",
 		RegistrationAnnouncementContent:        strings.TrimSpace(settings[SettingKeyRegistrationAnnouncementContent]),

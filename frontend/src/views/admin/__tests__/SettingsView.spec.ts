@@ -717,6 +717,58 @@ describe("admin SettingsView payment visible method controls", () => {
     );
   });
 
+  it("saves a GitHub token from extended features and clears the password input after saving", async () => {
+    updateSettings.mockResolvedValue({
+      ...baseSettingsResponse,
+      update_github_token_configured: true,
+    });
+    const wrapper = mountView();
+    await flushPromises();
+    await openFeaturesTab(wrapper);
+
+    const input = wrapper.get("#update-github-token");
+    expect(input.element.closest(".card")?.textContent).toContain("GitHub 通行令牌");
+    expect(input.attributes("type")).toBe("password");
+    expect(input.attributes("placeholder")).toBe("输入GitHub通行令牌以获得访问通路");
+    await input.setValue("  configured-secret  ");
+    await wrapper.find("form").trigger("submit.prevent");
+    await flushPromises();
+
+    expect(updateSettings).toHaveBeenCalledWith(
+      expect.objectContaining({ update_github_token: "configured-secret" }),
+    );
+    expect((input.element as HTMLInputElement).value).toBe("");
+    expect(wrapper.find('[data-testid="clear-update-github-token"]').exists()).toBe(true);
+    wrapper.unmount();
+  });
+
+  it("preserves a configured GitHub token on ordinary saves and sends an explicit empty value when cleared", async () => {
+    let configured = true;
+    updateSettings.mockImplementation(async (payload) => {
+      if (payload.update_github_token !== undefined) {
+        configured = payload.update_github_token !== "";
+      }
+      return { ...baseSettingsResponse, update_github_token_configured: configured };
+    });
+    getSettings.mockResolvedValue({
+      ...baseSettingsResponse,
+      update_github_token_configured: true,
+    });
+    const wrapper = mountView();
+    await flushPromises();
+    await openFeaturesTab(wrapper);
+    await wrapper.find("form").trigger("submit.prevent");
+    await flushPromises();
+    expect(updateSettings.mock.calls[0][0].update_github_token).toBeUndefined();
+
+    await wrapper.get('[data-testid="clear-update-github-token"]').trigger("click");
+    await wrapper.find("form").trigger("submit.prevent");
+    await flushPromises();
+    expect(updateSettings.mock.calls[1][0].update_github_token).toBe("");
+    expect(wrapper.find('[data-testid="clear-update-github-token"]').exists()).toBe(false);
+    wrapper.unmount();
+  });
+
   it("defaults monitor usage log hiding to off and saves the switch from extended features", async () => {
     const wrapper = mountView();
     await flushPromises();

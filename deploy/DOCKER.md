@@ -4,7 +4,7 @@ Sub2API is an AI API Gateway Platform for distributing and managing AI product s
 
 ## Quick Start
 
-This image is private. First log Docker into `ghcr.io` with a classic PAT that has `read:packages`. Configure `UPDATE_GITHUB_TOKEN` with repository Contents read access for in-app release checks. See [private deployment](./PRIVATE_REPOSITORY.md).
+This image is private. First log Docker into `ghcr.io` with a classic PAT that has `read:packages`. After starting the application, configure the GitHub Access Token under System Settings > Feature Toggles > Extended Features with repository Contents read access for in-app release checks. See [private deployment](./PRIVATE_REPOSITORY.md).
 
 ```bash
 docker run -d \
@@ -12,7 +12,6 @@ docker run -d \
   -p 8080:8080 \
   -e DATABASE_URL="postgres://user:pass@host:5432/sub2api" \
   -e REDIS_URL="redis://host:6379" \
-  -e UPDATE_GITHUB_TOKEN \
   ghcr.io/mizaawa/zayuapi:latest
 ```
 
@@ -29,7 +28,6 @@ services:
     environment:
       - DATABASE_URL=postgres://postgres:postgres@db:5432/sub2api?sslmode=disable
       - REDIS_URL=redis://redis:6379
-      - UPDATE_GITHUB_TOKEN=${UPDATE_GITHUB_TOKEN:-}
     depends_on:
       - db
       - redis

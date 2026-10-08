@@ -25,6 +25,7 @@ const maxChannelMonitorAnnouncementRunes = 4000
 
 // UpdateSettingsRequest 更新设置请求
 type UpdateSettingsRequest struct {
+	UpdateGitHubToken *string `json:"update_github_token"`
 	// 注册设置
 	RegistrationEnabled              bool                         `json:"registration_enabled"`
 	RegistrationAnnouncementEnabled  *bool                        `json:"registration_announcement_enabled"`
@@ -514,6 +515,10 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 	registrationAnnouncementContent := previousSettings.RegistrationAnnouncementContent
 	if req.RegistrationAnnouncementContent != nil {
 		registrationAnnouncementContent = strings.TrimSpace(*req.RegistrationAnnouncementContent)
+	}
+	updateGitHubToken := previousSettings.UpdateGitHubToken
+	if req.UpdateGitHubToken != nil {
+		updateGitHubToken = strings.TrimSpace(*req.UpdateGitHubToken)
 	}
 
 	// 两个安全开关的请求字段为指针：省略字段=保持现值，避免旧客户端/脚本
@@ -1507,6 +1512,7 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		DefaultPlatformQuotas: req.DefaultPlatformQuotas,
 
 		RegistrationEnabled:              req.RegistrationEnabled,
+		UpdateGitHubToken:                updateGitHubToken,
 		RegistrationAnnouncementEnabled:  registrationAnnouncementEnabled,
 		RegistrationAnnouncementContent:  registrationAnnouncementContent,
 		EmailVerifyEnabled:               req.EmailVerifyEnabled,
@@ -2114,6 +2120,7 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 	passkeyConfigured, passkeyRPID, passkeyRPOrigins := h.settingService.PasskeyConfiguration()
 
 	payload := dto.SystemSettings{
+		UpdateGitHubTokenConfigured:                            updatedSettings.UpdateGitHubTokenConfigured,
 		RegistrationEnabled:                                    updatedSettings.RegistrationEnabled,
 		RegistrationAnnouncementEnabled:                        updatedSettings.RegistrationAnnouncementEnabled,
 		RegistrationAnnouncementContent:                        updatedSettings.RegistrationAnnouncementContent,
