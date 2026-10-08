@@ -27,7 +27,7 @@ type User struct {
 	// It is intentionally separate from AllowedGroups, which grants exclusive
 	// group access and preserves its legacy null/empty semantics.
 	BlockedGroups []int64
-	TokenVersion  int64 // Incremented on password change to invalidate existing tokens
+	TokenVersion  int64 // Persisted revocation version, combined with the password fingerprint.
 	// TokenVersionResolved indicates TokenVersion already contains the fingerprint-derived
 	// value expected in JWT claims and refresh-token state.
 	TokenVersionResolved bool

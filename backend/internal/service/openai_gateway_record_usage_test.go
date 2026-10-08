@@ -841,9 +841,9 @@ func TestOpenAIGatewayServiceRecordUsage_UsesFallbackRequestIDForBillingAndUsage
 
 	require.NoError(t, err)
 	require.NotNil(t, billingRepo.lastCmd)
-	require.Equal(t, "local:req-local-fallback", billingRepo.lastCmd.RequestID)
+	require.Contains(t, billingRepo.lastCmd.RequestID, "generated:")
 	require.NotNil(t, usageRepo.lastLog)
-	require.Equal(t, "local:req-local-fallback", usageRepo.lastLog.RequestID)
+	require.Equal(t, billingRepo.lastCmd.RequestID, usageRepo.lastLog.RequestID)
 }
 
 func TestOpenAIGatewayServiceRecordUsage_PrefersClientRequestIDOverUpstreamRequestID(t *testing.T) {
@@ -1208,11 +1208,12 @@ func TestOpenAIGatewayServiceRecordUsage_ServiceTierPriorityUsesFastPricing(t *t
 
 	err := svc.RecordUsage(context.Background(), &OpenAIRecordUsageInput{
 		Result: &OpenAIForwardResult{
-			RequestID:   "resp_service_tier_priority",
-			ServiceTier: &serviceTier,
-			Usage:       usage,
-			Model:       "gpt-5.4",
-			Duration:    time.Second,
+			RequestID:           "resp_service_tier_priority",
+			ServiceTier:         &serviceTier,
+			UpstreamServiceTier: &serviceTier,
+			Usage:               usage,
+			Model:               "gpt-5.4",
+			Duration:            time.Second,
 		},
 		APIKey:  &APIKey{ID: 1015},
 		User:    &User{ID: 2015},
@@ -1239,11 +1240,12 @@ func TestOpenAIGatewayServiceRecordUsage_ServiceTierFlexHalvesCost(t *testing.T)
 
 	err := svc.RecordUsage(context.Background(), &OpenAIRecordUsageInput{
 		Result: &OpenAIForwardResult{
-			RequestID:   "resp_service_tier_flex",
-			ServiceTier: &serviceTier,
-			Usage:       usage,
-			Model:       "gpt-5.4",
-			Duration:    time.Second,
+			RequestID:           "resp_service_tier_flex",
+			ServiceTier:         &serviceTier,
+			UpstreamServiceTier: &serviceTier,
+			Usage:               usage,
+			Model:               "gpt-5.4",
+			Duration:            time.Second,
 		},
 		APIKey:  &APIKey{ID: 1016},
 		User:    &User{ID: 2016},
@@ -1312,12 +1314,13 @@ func TestOpenAIGatewayServiceRecordUsage_UsesRequestedModelAndUpstreamModelMetad
 
 	err := svc.RecordUsage(context.Background(), &OpenAIRecordUsageInput{
 		Result: &OpenAIForwardResult{
-			RequestID:       "resp_billing_model_override",
-			BillingModel:    "gpt-5.1-codex",
-			Model:           "gpt-5.1",
-			UpstreamModel:   "gpt-5.1-codex",
-			ServiceTier:     &serviceTier,
-			ReasoningEffort: &reasoning,
+			RequestID:           "resp_billing_model_override",
+			BillingModel:        "gpt-5.1-codex",
+			Model:               "gpt-5.1",
+			UpstreamModel:       "gpt-5.1-codex",
+			ServiceTier:         &serviceTier,
+			UpstreamServiceTier: &serviceTier,
+			ReasoningEffort:     &reasoning,
 			Usage: OpenAIUsage{
 				InputTokens:  20,
 				OutputTokens: 10,

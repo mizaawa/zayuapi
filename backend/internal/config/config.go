@@ -1263,6 +1263,7 @@ type GatewayUsageRecordConfig struct {
 	// TaskTimeoutSeconds: 单个使用量记录任务超时（秒）
 	TaskTimeoutSeconds int `mapstructure:"task_timeout_seconds"`
 	// OverflowPolicy: 队列满时策略（drop/sample/sync）
+	// Billing callers always execute rejected tasks synchronously.
 	OverflowPolicy string `mapstructure:"overflow_policy"`
 	// OverflowSamplePercent: sample 策略下，同步回写采样百分比（1-100）
 	OverflowSamplePercent int `mapstructure:"overflow_sample_percent"`
@@ -2360,8 +2361,7 @@ func setDefaults() {
 	viper.SetDefault("gateway.usage_record.queue_size", 16384)
 	viper.SetDefault("gateway.usage_record.task_timeout_seconds", 5)
 	// 默认 sync：队列满时由提交方内联执行（提交点在响应写出之后，不阻塞客户端）。
-	// sample/drop 会在溢出时静默丢弃计费任务，造成扣费与 usage_logs 对账缺口（issue #3656），
-	// 仅供显式配置的运维场景使用。
+	// Billing callers also fall back synchronously when sample/drop rejects a task.
 	viper.SetDefault("gateway.usage_record.overflow_policy", UsageRecordOverflowPolicySync)
 	viper.SetDefault("gateway.usage_record.overflow_sample_percent", 10)
 	viper.SetDefault("gateway.usage_record.auto_scale_enabled", true)
