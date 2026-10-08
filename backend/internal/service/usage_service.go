@@ -76,6 +76,7 @@ type UsageService struct {
 	entClient            *dbent.Client
 	authCacheInvalidator APIKeyAuthCacheInvalidator
 	settingService       *SettingService
+	userDashboardCache   *userDashboardCache
 }
 
 // NewUsageService 创建使用统计服务实例
@@ -85,6 +86,7 @@ func NewUsageService(usageRepo UsageLogRepository, userRepo UserRepository, entC
 		userRepo:             userRepo,
 		entClient:            entClient,
 		authCacheInvalidator: authCacheInvalidator,
+		userDashboardCache:   newUserDashboardCache(),
 	}
 }
 
@@ -410,11 +412,7 @@ func (s *UsageService) Delete(ctx context.Context, id int64) error {
 
 // GetUserDashboardStats returns per-user dashboard summary stats.
 func (s *UsageService) GetUserDashboardStats(ctx context.Context, userID int64) (*usagestats.UserDashboardStats, error) {
-	stats, err := s.usageRepo.GetUserDashboardStats(ctx, userID)
-	if err != nil {
-		return nil, fmt.Errorf("get user dashboard stats: %w", err)
-	}
-	return stats, nil
+	return s.getUserDashboardStatsCached(ctx, userID, true)
 }
 
 // GetAPIKeyDashboardStats returns dashboard summary stats filtered by API Key.

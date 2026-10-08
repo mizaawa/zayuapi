@@ -188,6 +188,9 @@ func appendChannelMonitorUsageLogFilter(query string, hidden bool, alias string)
 }
 
 func shouldUseFastUsageLogTotal(filters UsageLogFilters) bool {
+	if filters.SkipTotal {
+		return true
+	}
 	if filters.ExactTotal {
 		return false
 	}

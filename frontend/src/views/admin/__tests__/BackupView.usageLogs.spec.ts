@@ -163,23 +163,26 @@ describe('admin BackupView Usage_logs management', () => {
     expect(getDatabaseStorageStats).toHaveBeenCalledTimes(2)
   })
 
-  it('saves the cleanup interval separately from the selected retention period', async () => {
+  it('saves the cleanup interval while preserving the stored cleanup range', async () => {
     const wrapper = mountView()
     await flushPromises()
     const panel = usagePanel(wrapper)
 
     expect(panel.text()).not.toContain('admin.backup.usageLogs.intervalDays')
-    expect(numberInputByLabel(panel, 'admin.backup.usageLogs.retentionDays').element.value).toBe('45')
+    expect(panel.text()).not.toContain('admin.backup.usageLogs.retentionDays')
+    expect(panel.text()).not.toContain('admin.backup.usageLogs.deleteAll')
+    expect(panel.text()).not.toContain('admin.backup.usageLogs.retentionHint')
     await panel.get('input[type="checkbox"]').setValue(true)
     await numberInputByLabel(panel, 'admin.backup.usageLogs.intervalDays').setValue(14)
-    await numberInputByLabel(panel, 'admin.backup.usageLogs.retentionDays').setValue(30)
+    expect(panel.find('#usage-cleanup-retention').exists()).toBe(false)
+    expect(panel.findAll('input[type="checkbox"]')).toHaveLength(1)
     await buttonByText(panel, 'common.save').trigger('click')
     await flushPromises()
 
     expect(updateRetentionSettings).toHaveBeenCalledWith({
       enabled: true,
       interval_days: 14,
-      retention_days: 30,
+      retention_days: 45,
       delete_all: false,
     })
     expect(showSuccess).toHaveBeenCalledWith('admin.backup.usageLogs.settingsSaved')
@@ -204,21 +207,27 @@ describe('admin BackupView Usage_logs management', () => {
     const wrapper = mountView()
     await flushPromises()
     const panel = usagePanel(wrapper)
-    await buttonByText(panel, 'admin.backup.usageLogs.manualCleanup').trigger('click')
+    const manualCleanup = buttonByText(panel, 'admin.backup.usageLogs.manualCleanup')
+    expect(manualCleanup.classes()).toContain('btn-primary')
+    expect(manualCleanup.classes()).not.toContain('btn-danger')
+    await manualCleanup.trigger('click')
 
     expect(createRetentionCleanup).not.toHaveBeenCalled()
     expect(wrapper.get<HTMLInputElement>('#manual-usage-retention').element.value).toBe('45')
     await wrapper.get('#manual-usage-retention').setValue(30)
     expect(wrapper.get('[role="dialog"]').text()).toContain('admin.backup.usageLogs.confirmMessage 30')
-    await buttonByText(wrapper.get('[role="dialog"]'), 'admin.backup.usageLogs.confirmCleanup').trigger('click')
+    const confirmCleanup = buttonByText(wrapper.get('[role="dialog"]'), 'admin.backup.usageLogs.confirmCleanup')
+    expect(confirmCleanup.classes()).toContain('btn-danger')
+    await confirmCleanup.trigger('click')
     await flushPromises()
 
     expect(createRetentionCleanup).toHaveBeenCalledTimes(1)
     expect(createRetentionCleanup).toHaveBeenCalledWith(30, false)
     expect(showSuccess).toHaveBeenCalledWith('admin.backup.usageLogs.cleanupQueued 11')
     expect(wrapper.find('[role="dialog"]').exists()).toBe(false)
-    expect(numberInputByLabel(panel, 'admin.backup.usageLogs.retentionDays').element.value).toBe('45')
     expect(updateRetentionSettings).not.toHaveBeenCalled()
+    await manualCleanup.trigger('click')
+    expect(wrapper.get<HTMLInputElement>('#manual-usage-retention').element.value).toBe('45')
   })
 
   it('keeps cleanup unavailable when persisted settings cannot be loaded', async () => {
@@ -234,34 +243,40 @@ describe('admin BackupView Usage_logs management', () => {
     expect(createRetentionCleanup).not.toHaveBeenCalled()
   })
 
-  it('saves delete-all mode and retains the previous days when toggled off', async () => {
+  it('preserves the stored delete-all setting when the manual range is changed', async () => {
+    getRetentionSettings.mockResolvedValueOnce({ enabled: false, interval_days: 7, retention_days: 45, delete_all: true })
     const wrapper = mountView()
     await flushPromises()
     const panel = usagePanel(wrapper)
-    const deleteAll = panel.findAll('input[type="checkbox"]')[1]
-    const days = panel.get<HTMLInputElement>('#usage-cleanup-retention')
+    await buttonByText(panel, 'admin.backup.usageLogs.manualCleanup').trigger('click')
+    const dialog = wrapper.get('[role="dialog"]')
+    const deleteAll = dialog.get('input[type="checkbox"]')
+    const days = dialog.get<HTMLInputElement>('#manual-usage-retention')
 
-    await deleteAll.setValue(true)
     expect(days.element.disabled).toBe(true)
+    await deleteAll.setValue(false)
+    expect(days.element.disabled).toBe(false)
+    expect(days.element.value).toBe('45')
+    await days.setValue(30)
+    await buttonByText(dialog, 'admin.backup.usageLogs.confirmCleanup').trigger('click')
+    await flushPromises()
+    expect(createRetentionCleanup).toHaveBeenCalledWith(30, false)
+
     await buttonByText(panel, 'common.save').trigger('click')
     await flushPromises()
     expect(updateRetentionSettings).toHaveBeenCalledWith({
       enabled: false, interval_days: 7, retention_days: 45, delete_all: true,
     })
-
-    await deleteAll.setValue(false)
-    expect(days.element.disabled).toBe(false)
-    expect(days.element.value).toBe('45')
   })
 
   it('requires confirmation before enabling scheduled delete-all cleanup', async () => {
+    getRetentionSettings.mockResolvedValueOnce({ enabled: false, interval_days: 7, retention_days: 45, delete_all: true })
     const wrapper = mountView()
     await flushPromises()
     const panel = usagePanel(wrapper)
-    const [enabled, deleteAll] = panel.findAll<HTMLInputElement>('input[type="checkbox"]')
+    const enabled = panel.get<HTMLInputElement>('input[type="checkbox"]')
 
     await enabled.setValue(true)
-    await deleteAll.setValue(true)
     await buttonByText(panel, 'common.save').trigger('click')
     await flushPromises()
 

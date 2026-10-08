@@ -430,34 +430,6 @@
                 {{ t('admin.backup.usageLogs.intervalHint', { days: usageCleanupSettings.interval_days }) }}
               </p>
             </div>
-            <div class="max-w-xs">
-              <div class="mb-1 flex flex-wrap items-center gap-x-3 gap-y-1">
-                <label for="usage-cleanup-retention" class="text-xs font-medium text-gray-600 dark:text-gray-400">
-                  {{ t('admin.backup.usageLogs.retentionDays') }}
-                </label>
-                <label class="inline-flex items-center gap-1.5 text-xs text-gray-600 dark:text-gray-400">
-                  <input v-model="usageCleanupSettings.delete_all" type="checkbox" :disabled="!usageCleanupSettingsReady || savingUsageCleanupSettings" />
-                  <span>{{ t('admin.backup.usageLogs.deleteAll') }}</span>
-                </label>
-              </div>
-              <input
-                id="usage-cleanup-retention"
-                v-model.number="usageCleanupSettings.retention_days"
-                type="number"
-                min="1"
-                max="3650"
-                step="1"
-                class="input w-full"
-                :disabled="usageCleanupSettings.delete_all || !usageCleanupSettingsReady || savingUsageCleanupSettings"
-              />
-            </div>
-            <p class="text-xs text-gray-500 dark:text-gray-400">
-              {{ usageCleanupSettings.delete_all
-                ? t('admin.backup.usageLogs.deleteAllHint')
-                : usageCleanupSettings.enabled
-                ? t('admin.backup.usageLogs.retentionHint', { days: usageCleanupSettings.retention_days })
-                : t('admin.backup.usageLogs.disabledHint') }}
-            </p>
           </div>
         </div>
 
@@ -465,7 +437,7 @@
           <button type="button" class="btn btn-primary btn-sm" :disabled="!usageCleanupSettingsReady || savingUsageCleanupSettings" @click="saveUsageCleanupSettings">
             {{ savingUsageCleanupSettings ? t('common.loading') : t('common.save') }}
           </button>
-          <button type="button" class="btn btn-danger btn-sm" :disabled="!usageCleanupSettingsReady || creatingUsageCleanup" @click="openUsageCleanupConfirm">
+          <button type="button" class="btn btn-primary btn-sm" :disabled="!usageCleanupSettingsReady || creatingUsageCleanup" @click="openUsageCleanupConfirm">
             <Icon name="trash" size="sm" />
             {{ creatingUsageCleanup ? t('common.loading') : t('admin.backup.usageLogs.manualCleanup') }}
           </button>

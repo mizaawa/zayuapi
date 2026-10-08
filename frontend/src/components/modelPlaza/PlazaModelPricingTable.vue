@@ -91,10 +91,10 @@
                 <div
                   v-for="(iv, idx) in tokenIntervals(m)"
                   :key="idx"
-                  class="whitespace-nowrap text-xs leading-5"
+                  class="pz-token-tier flex flex-wrap content-start items-baseline gap-x-1 text-xs leading-5"
                 >
-                  <span class="mr-1 font-sans font-normal text-gray-400 dark:text-dark-500">{{ tierLabel(iv) }}</span>
-                  {{ paidPerMillion(iv.input_price) }}
+                  <span class="whitespace-nowrap font-sans font-normal text-gray-400 dark:text-dark-500">{{ tierLabel(iv) }}</span>
+                  <span class="whitespace-nowrap">{{ paidPerMillion(iv.input_price) }}</span>
                 </div>
               </template>
               <template v-else>{{ paidPerMillion(m.pricing?.input_price) }}</template>
@@ -104,17 +104,33 @@
                 <div
                   v-for="(iv, idx) in tokenIntervals(m)"
                   :key="idx"
-                  class="whitespace-nowrap text-xs leading-5"
+                  class="pz-token-tier flex flex-wrap content-start items-baseline gap-x-1 text-xs leading-5"
                 >
-                  <span class="mr-1 font-sans font-normal text-gray-400 dark:text-dark-500">{{ tierLabel(iv) }}</span>
-                  {{ paidPerMillion(iv.output_price) }}
+                  <span class="whitespace-nowrap font-sans font-normal text-gray-400 dark:text-dark-500">{{ tierLabel(iv) }}</span>
+                  <span class="whitespace-nowrap">{{ paidPerMillion(iv.output_price) }}</span>
                 </div>
               </template>
               <template v-else>{{ paidPerMillion(m.pricing?.output_price) }}</template>
             </td>
             <td class="pz-cell px-3 py-2.5 align-middle">
               <div
-                v-if="hasCachePricing(m)"
+                v-if="tokenIntervals(m).length && hasCachePricing(m)"
+                class="font-mono text-xs text-gray-800 dark:text-gray-200"
+              >
+                <div v-for="(iv, idx) in tokenIntervals(m)" :key="idx" class="pz-token-tier">
+                  <span class="block font-sans font-normal text-gray-400 dark:text-dark-500">{{ tierLabel(iv) }}</span>
+                  <div class="flex flex-wrap items-baseline gap-x-1">
+                    <span class="font-sans font-normal text-gray-400 dark:text-dark-500">{{ t('modelPlaza.table.cacheWrite') }}</span>
+                    <span class="whitespace-nowrap">{{ paidPerMillion(iv.cache_write_price) }}</span>
+                  </div>
+                  <div class="flex flex-wrap items-baseline gap-x-1">
+                    <span class="font-sans font-normal text-gray-400 dark:text-dark-500">{{ t('modelPlaza.table.cacheRead') }}</span>
+                    <span class="whitespace-nowrap">{{ paidPerMillion(iv.cache_read_price) }}</span>
+                  </div>
+                </div>
+              </div>
+              <div
+                v-else-if="hasCachePricing(m)"
                 class="space-y-0.5 font-mono text-xs text-gray-800 dark:text-gray-200"
               >
                 <div>
@@ -315,6 +331,10 @@ function perUnitSuffix(m: PlazaModel): string {
 }
 
 function hasCachePricing(m: PlazaModel): boolean {
+  const intervals = tokenIntervals(m)
+  if (intervals.length) {
+    return intervals.some((iv) => iv.cache_write_price != null || iv.cache_read_price != null)
+  }
   return m.pricing?.cache_write_price != null || m.pricing?.cache_read_price != null
 }
 
@@ -322,9 +342,24 @@ function hasOfficialCache(o: NonNullable<PlazaModel['official_pricing']>): boole
   return o.cache_write_price != null || o.cache_read_price != null || o.cache_write_1h_price != null
 }
 
-/** token 模式的阶梯定价(内联进输入/输出列)。 */
+/** Include the base range when the API only supplies long-context overrides. */
 function tokenIntervals(m: PlazaModel): UserPricingInterval[] {
-  return m.pricing?.intervals ?? []
+  const pricing = m.pricing
+  if (!pricing?.intervals?.length) return []
+  const intervals = [...pricing.intervals].sort((a, b) => a.min_tokens - b.min_tokens)
+  const firstMin = intervals[0].min_tokens
+  if (firstMin > 0) {
+    intervals.unshift({
+      min_tokens: 0,
+      max_tokens: firstMin,
+      input_price: pricing.input_price,
+      output_price: pricing.output_price,
+      cache_write_price: pricing.cache_write_price,
+      cache_read_price: pricing.cache_read_price,
+      per_request_price: null
+    })
+  }
+  return intervals
 }
 
 /** 按次/按图模式的阶梯定价(仅保留配了按次价的档位)。 */
@@ -373,6 +408,14 @@ function trimZero(n: number): string {
 
 .pz-cell {
   transition: background-color 150ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.pz-token-tier {
+  min-height: 3rem;
+}
+
+.pz-token-tier + .pz-token-tier {
+  margin-top: 0.375rem;
 }
 
 tbody tr:hover .pz-cell {

@@ -40,7 +40,7 @@
         <div>
           <p class="text-xs font-medium text-gray-500 dark:text-gray-400">{{ t('dashboard.todayRequests') }}</p>
           <p class="text-xl font-bold text-gray-900 dark:text-white">{{ stats?.today_requests || 0 }}</p>
-          <p class="text-xs text-gray-500 dark:text-gray-400">{{ t('common.total') }}: {{ formatNumber(stats?.total_requests || 0) }}</p>
+          <p class="text-xs text-gray-500 dark:text-gray-400" :title="stats.totals_updated_at">{{ t('common.total') }}: {{ formatTotal(stats?.total_requests, formatNumber) }}</p>
         </div>
       </div>
     </div>
@@ -59,8 +59,8 @@
           </p>
           <p class="text-xs">
             <span class="text-gray-500 dark:text-gray-400">{{ t('common.total') }}: </span>
-            <span class="text-purple-600 dark:text-purple-400" :title="t('dashboard.actual')">${{ formatCost(stats?.total_actual_cost || 0) }}</span>
-            <span class="text-gray-400 dark:text-gray-500" :title="t('dashboard.standard')"> / ${{ formatCost(stats?.total_cost || 0) }}</span>
+            <span class="text-purple-600 dark:text-purple-400" :title="stats.totals_updated_at || t('dashboard.actual')">{{ formatTotal(stats?.total_actual_cost, (value) => '$' + formatCost(value)) }}</span>
+            <span class="text-gray-400 dark:text-gray-500" :title="t('dashboard.standard')"> / {{ formatTotal(stats?.total_cost, (value) => '$' + formatCost(value)) }}</span>
           </p>
         </div>
       </div>
@@ -91,8 +91,8 @@
         </div>
         <div>
           <p class="text-xs font-medium text-gray-500 dark:text-gray-400">{{ t('dashboard.totalTokens') }}</p>
-          <p class="text-xl font-bold text-gray-900 dark:text-white">{{ formatTokens(stats?.total_tokens || 0) }}</p>
-          <p class="text-xs text-gray-500 dark:text-gray-400">{{ t('dashboard.input') }}: {{ formatTokens(stats?.total_input_tokens || 0) }} / {{ t('dashboard.output') }}: {{ formatTokens(stats?.total_output_tokens || 0) }}</p>
+          <p class="text-xl font-bold text-gray-900 dark:text-white" :title="stats.totals_updated_at">{{ formatTotal(stats?.total_tokens, formatTokens) }}</p>
+          <p class="text-xs text-gray-500 dark:text-gray-400">{{ t('dashboard.input') }}: {{ formatTotal(stats?.total_input_tokens, formatTokens) }} / {{ t('dashboard.output') }}: {{ formatTotal(stats?.total_output_tokens, formatTokens) }}</p>
         </div>
       </div>
     </div>
@@ -125,7 +125,7 @@
         </div>
         <div>
           <p class="text-xs font-medium text-gray-500 dark:text-gray-400">{{ t('dashboard.avgResponse') }}</p>
-          <p class="text-xl font-bold text-gray-900 dark:text-white">{{ formatDuration(stats?.average_duration_ms || 0) }}</p>
+          <p class="text-xl font-bold text-gray-900 dark:text-white">{{ formatTotal(stats?.average_duration_ms, formatDuration) }}</p>
           <p class="text-xs text-gray-500 dark:text-gray-400">{{ t('dashboard.averageTime') }}</p>
         </div>
       </div>
@@ -156,7 +156,7 @@
             {{ item.isOther ? t('dashboard.platformOther') : platformLabel(item.platform) }}
           </span>
           <span class="font-mono text-sm text-purple-600 dark:text-purple-400" :title="t('dashboard.actual')">
-            ${{ formatCost(item.total_actual_cost) }}
+            {{ formatTotal(item.total_actual_cost, (value) => '$' + formatCost(value)) }}
           </span>
         </div>
         <div class="mt-2 space-y-1 text-xs">
@@ -167,13 +167,13 @@
           <div class="flex items-center justify-between">
             <span class="text-gray-500 dark:text-gray-400">{{ t('dashboard.requests') }}</span>
             <span class="font-mono text-gray-700 dark:text-gray-300">
-              {{ item.total_requests > 0 ? formatNumber(item.total_requests) : '-' }}
+              {{ formatTotal(item.total_requests, formatNumber) }}
             </span>
           </div>
           <div class="flex items-center justify-between">
             <span class="text-gray-500 dark:text-gray-400">{{ t('dashboard.tokens') }}</span>
             <span class="font-mono text-gray-700 dark:text-gray-300">
-              {{ item.total_tokens > 0 ? formatTokens(item.total_tokens) : '-' }}
+              {{ formatTotal(item.total_tokens, formatTokens) }}
             </span>
           </div>
         </div>
@@ -246,6 +246,8 @@ const props = defineProps<{
   platformQuotas?: PlatformQuotaItem[] | null
 }>()
 const { t } = useI18n()
+const formatTotal = (value: number | undefined, formatter: (value: number) => string) =>
+  props.stats.totals_pending ? '-' : formatter(value ?? 0)
 
 const PLATFORM_LABELS: Record<string, string> = {
   anthropic: 'Claude',

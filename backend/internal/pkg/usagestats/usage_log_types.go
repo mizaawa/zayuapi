@@ -225,6 +225,8 @@ type APIKeyDailyUsagePoint struct {
 
 // UserDashboardStats 用户仪表盘统计
 type UserDashboardStats struct {
+	TotalsPending   bool   `json:"totals_pending,omitempty"`
+	TotalsUpdatedAt string `json:"totals_updated_at,omitempty"`
 	// API Key 统计
 	TotalAPIKeys  int64 `json:"total_api_keys"`
 	ActiveAPIKeys int64 `json:"active_api_keys"`
@@ -288,6 +290,8 @@ type UsageLogFilters struct {
 	UpstreamModelMismatch *bool
 	StartTime             *time.Time
 	EndTime               *time.Time
+	// SkipTotal is for bounded previews that do not display pagination totals.
+	SkipTotal bool
 	// ExactTotal requests exact COUNT(*) for pagination. Default false for fast large-table paging.
 	ExactTotal bool
 	// HideChannelMonitorLogs is an internal display filter, never a billing filter.
