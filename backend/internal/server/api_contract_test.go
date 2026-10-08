@@ -727,6 +727,7 @@ func TestAPIContracts(t *testing.T) {
 				"code": 0,
 				"message": "success",
 				"data": {
+					"update_github_token_configured": false,
 					"registration_enabled": true,
 					"registration_announcement_enabled": false,
 					"registration_announcement_content": "",
@@ -1074,6 +1075,7 @@ func TestAPIContracts(t *testing.T) {
 				"code": 0,
 				"message": "success",
 				"data": {
+					"update_github_token_configured": false,
 					"registration_enabled": true,
 					"registration_announcement_enabled": false,
 					"registration_announcement_content": "",
