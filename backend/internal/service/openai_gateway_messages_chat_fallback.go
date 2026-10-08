@@ -83,8 +83,6 @@ func (s *OpenAIGatewayService) forwardAnthropicViaRawChatCompletions(
 	} else {
 		reasoningEffort = ApplyThinkingEnabledFallback(reasoningEffort, body, billingModel)
 	}
-	serviceTier := extractOpenAIServiceTierFromBody(body)
-
 	chatBody, err := json.Marshal(chatReq)
 	if err != nil {
 		return nil, fmt.Errorf("marshal chat completions request: %w", err)
@@ -106,6 +104,7 @@ func (s *OpenAIGatewayService) forwardAnthropicViaRawChatCompletions(
 	// is intentionally skipped: Anthropic Messages bodies carry no service_tier,
 	// so the converted Chat Completions body never contains one and the policy
 	// would always be a no-op on this path.
+	serviceTier := extractOpenAIServiceTierFromBody(chatBody)
 
 	logger.L().Debug("openai messages: forwarding via raw chat completions",
 		zap.Int64("account_id", account.ID),
