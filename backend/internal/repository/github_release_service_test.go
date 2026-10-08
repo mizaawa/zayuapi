@@ -88,9 +88,10 @@ func TestGitHubReleaseClientAPIRequestAuthorization(t *testing.T) {
 func TestGitHubReleaseClientUsesLiveConfiguredToken(t *testing.T) {
 	t.Setenv("UPDATE_GITHUB_TOKEN", "environment-secret")
 	token := "  configured-secret  "
-	client := NewGitHubReleaseClient("", false, func(context.Context) (string, error) {
+	client, ok := NewGitHubReleaseClient("", false, func(context.Context) (string, error) {
 		return token, nil
 	}).(*githubReleaseClient)
+	require.True(t, ok)
 	for _, test := range []struct {
 		token string
 		auth  string
