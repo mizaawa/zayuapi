@@ -33,7 +33,7 @@ func TestUserDashboardQueryPreservesTotalsAndBoundsToday(t *testing.T) {
 				return sqlmock.QueryMatcherRegexp.Match(expected, actual)
 			})))
 			require.NoError(t, err)
-			defer db.Close()
+			t.Cleanup(func() { _ = db.Close() })
 			repo := newUsageLogRepositoryWithSQL(nil, db)
 			mock.ExpectQuery(`SELECT COUNT\(\*\), COUNT\(\*\) FILTER`).WithArgs(int64(7), service.StatusActive).
 				WillReturnRows(sqlmock.NewRows([]string{"total", "active"}).AddRow(3, 2))
@@ -70,7 +70,7 @@ func TestUserDashboardQueryPreservesTotalsAndBoundsToday(t *testing.T) {
 func TestUserDashboardRecentDoesNotCountHistory(t *testing.T) {
 	db, mock, err := sqlmock.New()
 	require.NoError(t, err)
-	defer db.Close()
+	t.Cleanup(func() { _ = db.Close() })
 	repo := newUsageLogRepositoryWithSQL(nil, db)
 	params := pagination.PaginationParams{Page: 1, PageSize: 5, SortBy: "created_at", SortOrder: "desc"}
 	query := "SELECT " + usageLogSelectColumns + " FROM usage_logs WHERE user_id = $1 ORDER BY created_at DESC, id DESC LIMIT $2 OFFSET $3"

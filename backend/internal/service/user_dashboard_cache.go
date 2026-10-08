@@ -182,6 +182,10 @@ func (s *UsageService) loadUserDashboardStats(ctx context.Context, userID int64,
 		if loaded.Err != nil {
 			return nil, loaded.Err
 		}
-		return cloneUserDashboardStats(loaded.Val.(*usagestats.UserDashboardStats)), nil
+		stats, ok := loaded.Val.(*usagestats.UserDashboardStats)
+		if !ok || stats == nil {
+			return nil, errUserDashboardBusy
+		}
+		return cloneUserDashboardStats(stats), nil
 	}
 }
