@@ -356,6 +356,7 @@ export function deriveWeChatConnectStoredMode(
  * System settings interface
  */
 export interface SystemSettings {
+  update_github_token_configured: boolean;
   // Registration settings
   registration_enabled: boolean;
   registration_announcement_enabled: boolean;
@@ -702,6 +703,7 @@ export interface SystemSettings {
 }
 
 export interface UpdateSettingsRequest {
+  update_github_token?: string;
   registration_enabled?: boolean;
   registration_announcement_enabled?: boolean;
   registration_announcement_content?: string;

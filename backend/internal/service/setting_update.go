@@ -160,6 +160,7 @@ func (s *SettingService) buildSystemSettingsUpdates(ctx context.Context, setting
 	}
 
 	updates := make(map[string]string)
+	updates[SettingKeyUpdateGitHubToken] = strings.TrimSpace(settings.UpdateGitHubToken)
 
 	// 注册设置
 	updates[SettingKeyRegistrationEnabled] = strconv.FormatBool(settings.RegistrationEnabled)

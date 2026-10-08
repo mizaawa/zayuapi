@@ -225,6 +225,17 @@ func (s *SettingService) SetProxyRepository(repo ProxyRepository) {
 	s.proxyRepo = repo
 }
 
+func (s *SettingService) GetUpdateGitHubToken(ctx context.Context) (string, error) {
+	token, err := s.settingRepo.GetValue(ctx, SettingKeyUpdateGitHubToken)
+	if errors.Is(err, ErrSettingNotFound) {
+		return "", nil
+	}
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(token), nil
+}
+
 func (s *SettingService) LoadForwardedClientIPSettings(ctx context.Context) error {
 	if s == nil || s.cfg == nil || s.settingRepo == nil {
 		return nil

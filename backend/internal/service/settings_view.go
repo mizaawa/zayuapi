@@ -12,6 +12,8 @@ func firstNonEmpty(values ...string) string {
 }
 
 type SystemSettings struct {
+	UpdateGitHubToken                string
+	UpdateGitHubTokenConfigured      bool
 	RegistrationEnabled              bool
 	RegistrationAnnouncementEnabled  bool
 	RegistrationAnnouncementContent  string

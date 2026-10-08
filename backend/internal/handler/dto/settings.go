@@ -27,6 +27,7 @@ type CustomEndpoint struct {
 
 // SystemSettings represents the admin settings API response payload.
 type SystemSettings struct {
+	UpdateGitHubTokenConfigured      bool                     `json:"update_github_token_configured"`
 	RegistrationEnabled              bool                     `json:"registration_enabled"`
 	RegistrationAnnouncementEnabled  bool                     `json:"registration_announcement_enabled"`
 	RegistrationAnnouncementContent  string                   `json:"registration_announcement_content"`

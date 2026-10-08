@@ -247,7 +247,7 @@ docker compose down -v
 | `ADMIN_EMAIL` | No | *(auto-generated)* | Admin email (valid login email) |
 | `ADMIN_PASSWORD` | No | *(auto-generated)* | Admin password (8-72 bytes) |
 | `TZ` | No | `Asia/Shanghai` | Timezone |
-| `UPDATE_GITHUB_TOKEN` | Yes for private releases | *(empty)* | Fine-grained PAT for this repository with Contents read access; used for release metadata and asset API downloads. |
+| `UPDATE_GITHUB_TOKEN` | Yes for private install script downloads | *(empty)* | Fine-grained PAT for this repository with Contents read access; the running application's release token is configured in System Settings > Feature Toggles > Extended Features. |
 | `GEMINI_OAUTH_CLIENT_ID` | No | *(builtin)* | Google OAuth client ID (Gemini OAuth). Leave empty to use the built-in Gemini CLI client. |
 | `GEMINI_OAUTH_CLIENT_SECRET` | No | *(builtin)* | Google OAuth client secret (Gemini OAuth). Leave empty to use the built-in Gemini CLI client. |
 | `GEMINI_OAUTH_SCOPES` | No | *(default)* | OAuth scopes (Gemini OAuth) |
@@ -393,7 +393,7 @@ sudo --preserve-env=UPDATE_GITHUB_TOKEN bash deploy/install.sh
 unset UPDATE_GITHUB_TOKEN
 ```
 
-For background update checks and downloads, the installer saves `UPDATE_GITHUB_TOKEN` in `/etc/sub2api/update.env` (root-owned, mode `600`) and restarts `sub2api`. The systemd unit reads this file.
+After installation, configure the GitHub Access Token in System Settings > Feature Toggles > Extended Features for background update checks and downloads. The running application reads this setting on each GitHub request; changes take effect without restarting. The install script uses `UPDATE_GITHUB_TOKEN` separately for its own downloads. Existing environment files are no longer used by the application's updater.
 
 ### Manual Installation
 

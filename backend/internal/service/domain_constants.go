@@ -432,6 +432,7 @@ const (
 	// SettingKeyResponseModelAuditBypass controls whether client-facing response
 	// model fields are restored to the originally requested model after routing.
 	SettingKeyResponseModelAuditBypass = "response_model_audit_bypass_enabled"
+	SettingKeyUpdateGitHubToken        = "update_github_token"
 
 	// SettingKeyUpstreamBillingProbeSettings stores the global enable switch and interval
 	// for probing remote Sub2API API-key billing metadata.
