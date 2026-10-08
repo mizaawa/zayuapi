@@ -135,9 +135,10 @@ const (
 // declaration is retained. Conflicts are diagnostic only and never affect the
 // forwarding or billing path.
 type upstreamResponseModelObserver struct {
-	first    string
-	terminal string
-	conflict bool
+	first       string
+	terminal    string
+	conflict    bool
+	serviceTier *string
 }
 
 func (o *upstreamResponseModelObserver) Observe(model string, terminal bool) {
@@ -179,6 +180,27 @@ func (o *upstreamResponseModelObserver) ObserveOpenAI(payload []byte, eventType 
 		gjson.GetBytes(payload, "model"),
 	)
 	o.Observe(model, isUpstreamResponseModelTerminalEvent(eventType))
+	// Created/in-progress Responses events can still describe requested intent.
+	// Only terminal responses or Chat Completions chunks can inform billing downgrades.
+	if eventType == "" || isUpstreamResponseModelTerminalEvent(eventType) {
+		response := gjson.GetBytes(payload, "response")
+		if response.IsObject() {
+			o.serviceTier = extractOpenAIServiceTierFromBody([]byte(response.Raw))
+		} else if tier := extractOpenAIServiceTierFromBody(payload); tier != nil {
+			o.serviceTier = tier
+		}
+	}
+}
+
+func (o *upstreamResponseModelObserver) ServiceTier() *string {
+	if o == nil {
+		return nil
+	}
+	return o.serviceTier
+}
+
+func observedUpstreamServiceTier(c *gin.Context) *string {
+	return upstreamResponseModelObserverFromContext(c).ServiceTier()
 }
 
 func (o *upstreamResponseModelObserver) ObserveAnthropic(payload []byte) {

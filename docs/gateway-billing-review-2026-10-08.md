@@ -4,9 +4,13 @@
 
 Reviewed checkout `8ce252a2b` and the recent changes in `1658843c7`,
 `1c7294d3d`, `30bb6006d`, `9fa6e1880`, `cd0f42048`, and `75a6f6797`.
+After fetching origin, the review also includes the v0.2.124 security changes
+in `409355e5d` and their test-fixture correction in `e48fc9831`. Those commits
+are retained in the merged history.
 The review covers usage validation, billing settlement, protocol conversion,
 stream failures, group failover, deleted API keys, payment callbacks, admin
-bootstrap, custom system prompts, and simulated monitoring.
+bootstrap, custom system prompts, simulated monitoring, API key limits,
+session revocation, and step-up authentication.
 
 ## Flex and Priority Pricing
 
@@ -41,6 +45,30 @@ bypass. This patch does not change pricing multipliers or replace the billing
 contract with unconditional response-echo pricing.
 
 ## Reproduced Findings and Fix
+
+### Response-only billing regression in v0.2.124
+
+Commit `409355e5d` made `RecordUsage` bill exclusively from
+`UpstreamServiceTier`. Missing response metadata therefore removed the Flex
+discount, a Codex `default` echo removed effective Fast pricing, and a more
+expensive response tier could raise the charge. These behaviors conflict with
+the upstream contract above.
+
+Settlement now resolves the final outbound tier against the observed response
+tier. The response may lower the charge, but cannot raise it; an absent or
+unknown tier preserves the outbound tier. For OpenAI OAuth and setup-token
+credentials, a `default` echo is non-authoritative. Shadow accounts resolve
+their credential account before this decision. Response observation is retained,
+and the usage log stores the tier actually used for settlement.
+
+`TestOpenAIRecordUsageServiceTierMatchesUpstreamContract` covers 21 cases,
+including missing and unknown echoes, API-key downgrades, prevention of upward
+repricing, normalization, OAuth and setup-token exceptions, and other OAuth
+providers. It checks total cost, actual cost, debit, and recorded tier.
+The 24 partial-usage handler cases also cover Priority requests with and without
+a response echo across Responses, passthrough, Chat Completions, and Messages.
+
+### Outbound tier after policy and protocol conversion
 
 Five compatibility forwarders used a stale or discarded tier for billing.
 The result now takes its tier from the request body after policy application
@@ -89,13 +117,30 @@ in the reviewed scope:
   rewriting, and usage reported by the upstream for billing.
 - WebDAV redirect authentication restrictions show no regression in the
   reviewed code.
+- Billing deduplication no longer trusts caller-supplied tracing IDs. Server
+  request identities remain stable across a request's settlement path. Queue
+  overflow and shutdown both fall back to bounded synchronous billing.
+- Gemini and OpenAI Messages retain observed usage after stream read failures
+  or client disconnects. Existing committed-output guards prevent replay.
+- API key quota and rate limits reject negative and nonfinite values; key
+  deletion and status changes no longer clear custom-key conflict throttles.
+- Access-token revocation atomically increments a persisted database version.
+  JWT middleware reads the latest user version from the repository, and refresh
+  tokens also verify that version. Password changes still invalidate the
+  credential fingerprint. Step-up grants for legacy tokens bind to the bearer
+  credential; settings failures do not disable the gate.
+- Payment notifications validate merchant identity and currency using the
+  order snapshot or a uniquely bound configured provider. Missing or ambiguous
+  legacy identity fails closed. Refund queries use the gateway refund amount.
 
 This is a source and regression-test review, not a production penetration test
 or a guarantee that the repository has no other vulnerabilities.
 
 ## Local Validation
 
-Validation ran on Windows with Go 1.26.6 and pnpm 9.15.9.
+Validation ran on Windows with Go 1.26.6 and pnpm 9.15.9. The table below records
+checks completed for the compatibility-route changes before merging v0.2.124;
+the final merged commit is also subject to the release gate described below.
 
 | Check | Result |
 | --- | --- |
@@ -113,5 +158,11 @@ Validation ran on Windows with Go 1.26.6 and pnpm 9.15.9.
 | Apple container lifecycle check | Cannot validate on Windows: requires macOS BSD `stat` and file permissions |
 
 Database integration and Apple deployment checks must run on the configured
-Linux/macOS GitHub Actions runners. At the time of this local review, GitHub
-authentication is unavailable, so no remote CI result or release is asserted.
+Linux/macOS GitHub Actions runners. Existing local GitHub credentials have been
+verified with repository push access. Publication is gated on successful CI and
+Security Scan runs for the final pushed commit, followed by a full release build.
+
+After merging v0.2.124, the corrected partial-usage handler cases passed locally.
+The full unit run initially hit the existing wall-clock SQL timing assertion;
+its isolated rerun passed without a production or test-code change. Final remote
+check results are linked from the release notes.

@@ -1258,7 +1258,9 @@ func (h *OpenAIGatewayHandler) Messages(c *gin.Context) {
 		if err == nil && result != nil && result.FirstTokenMs != nil {
 			service.SetOpsLatencyMs(c, service.OpsTimeToFirstTokenMsKey, int64(*result.FirstTokenMs))
 		}
-		if err != nil {
+		if err != nil && result != nil && result.ClientDisconnect {
+			reqLog.Info("openai_messages.client_disconnected", zap.Int64("account_id", account.ID), zap.Error(err))
+		} else if err != nil {
 			if result != nil && (result.ImageCount > 0 || openAIForwardHasBillablePartialUsage(c, result, err, writerSizeBeforeForward)) {
 				service.RecordAPIKeyFailoverUpstreamFailure(c.Request.Context(), http.StatusBadGateway, []byte(err.Error()))
 				if !openAIForwardErrorAlreadyCommunicated(c, writerSizeBeforeForward, err) {
@@ -1331,13 +1333,6 @@ func (h *OpenAIGatewayHandler) Messages(c *gin.Context) {
 						zap.Int("max_switches", maxAccountSwitches),
 					)
 					continue
-				}
-				if result != nil && result.ClientDisconnect {
-					reqLog.Info("openai_messages.client_disconnected",
-						zap.Int64("account_id", account.ID),
-						zap.Error(err),
-					)
-					return
 				}
 				h.gatewayService.ReportOpenAIAccountScheduleResult(account.ID, account.GetMappedModel(currentRoutingModel), false, nil)
 				wroteFallback := h.ensureAnthropicErrorResponse(c, streamStarted)
@@ -3047,16 +3042,15 @@ func (h *OpenAIGatewayHandler) submitUsageRecordTask(parent context.Context, tas
 	}
 	task = wrapUsageRecordTaskContext(parent, task)
 	if h.usageRecordWorkerPool != nil {
-		if mode := h.usageRecordWorkerPool.Submit(task); mode != service.UsageRecordSubmitModeDroppedStopped {
+		if mode := h.usageRecordWorkerPool.Submit(task); !mode.Dropped() {
 			return
 		}
-		// 池已停止（进程关停窗口）：计费任务不能静默丢失，降级为内联同步执行。
-		// 显式配置的 drop/sample 溢出丢弃仍按配置语义保留。
+		// Billing must survive both queue overflow and pool shutdown.
 		logger.L().With(
 			zap.String("component", "handler.openai_gateway.responses"),
-		).Warn("openai.usage_record_task_stopped_sync_fallback")
+		).Warn("openai.usage_record_task_sync_fallback")
 	}
-	// 回退路径：worker 池未注入或已停止时同步执行，避免退回到无界 goroutine 模式。
+	// Execute rejected billing tasks inline with an independent deadline.
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	defer func() {

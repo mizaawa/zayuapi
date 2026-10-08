@@ -35,6 +35,7 @@ type Usage struct {
 }
 
 type RelayResult struct {
+	ServiceTier             string
 	RequestModel            string
 	ResponseModel           string
 	ResponseModelConflict   bool
@@ -49,6 +50,7 @@ type RelayResult struct {
 }
 
 type RelayTurnResult struct {
+	ServiceTier           string
 	RequestModel          string
 	ResponseModel         string
 	ResponseModelConflict bool
@@ -130,6 +132,7 @@ type relayState struct {
 	requestModel        string
 	lastResponseID      string
 	lastResponseModel   string
+	lastServiceTier     string
 	responseConflict    bool
 	terminalEventType   string
 	firstTokenMs        *int
@@ -146,6 +149,7 @@ type relayExitSignal struct {
 }
 
 type observedUpstreamEvent struct {
+	serviceTier       string
 	terminal          bool
 	duplicateTerminal bool
 	eventType         string
@@ -838,6 +842,12 @@ func observeUpstreamMessageLocked(
 		observed.terminal = true
 		return observed
 	}
+	if terminal {
+		tier := gjson.GetBytes(message, "response.service_tier")
+		if tier.Type == gjson.String {
+			observed.serviceTier = tier.String()
+		}
+	}
 	// Mark an ID-less turn terminal before updating state. This closes the race
 	// where two anonymous terminal frames arrive back-to-back. ID-bearing
 	// terminals use the response-ID set instead, allowing distinct serial turns.
@@ -944,6 +954,7 @@ func finalizeObservedRelayTerminalLocked(state *relayState, observed observedUps
 	observed.usage = finalizeRelayTurnUsageLocked(state)
 	observed.terminal = true
 	responseID := strings.TrimSpace(observed.responseID)
+	state.lastServiceTier = observed.serviceTier
 	if responseID != "" {
 		markCompletedResponseID(state, responseID)
 		state.lastResponseID = responseID
@@ -1035,6 +1046,7 @@ func emitTurnComplete(
 		requestModel = state.currentRequestModel()
 	}
 	onTurnComplete(RelayTurnResult{
+		ServiceTier:           observed.serviceTier,
 		RequestModel:          requestModel,
 		ResponseModel:         observed.responseModel,
 		ResponseModelConflict: observed.responseConflict,
@@ -1425,6 +1437,7 @@ func enrichResultLocked(result *RelayResult, state *relayState) {
 	}
 	result.RequestModel = state.currentRequestModel()
 	result.ResponseModel = state.lastResponseModel
+	result.ServiceTier = state.lastServiceTier
 	result.ResponseModelConflict = state.responseConflict
 	result.Usage = state.usage
 	result.RequestID = state.lastResponseID

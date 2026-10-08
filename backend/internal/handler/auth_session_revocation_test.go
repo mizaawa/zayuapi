@@ -3,6 +3,7 @@
 package handler
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -37,6 +38,8 @@ func TestAuthHandlerRevokeAllSessionsInvalidatesAccessTokens(t *testing.T) {
 	}
 	authService := service.NewAuthService(nil, repo, nil, refreshTokenCache, cfg, nil, nil, nil, nil, nil, nil, nil, nil)
 	handler := &AuthHandler{authService: authService}
+	oldToken, err := authService.GenerateToken(context.Background(), repo.user)
+	require.NoError(t, err)
 
 	recorder := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(recorder)
@@ -47,11 +50,27 @@ func TestAuthHandlerRevokeAllSessionsInvalidatesAccessTokens(t *testing.T) {
 
 	require.Equal(t, http.StatusOK, recorder.Code)
 	require.Equal(t, []int64{29}, refreshTokenCache.revokedUserIDs)
-	// users 表没有 token_version 列（见 resolvedTokenVersion：JWT 里的值由
-	// email+password_hash 指纹推导），所以自增 TokenVersion 只停留在内存里。
-	// 此前紧跟其后的整行 Update 不写任何有效数据，却会用旧快照覆盖并发写入的列，
-	// 已移除。会话撤销由上面的 refresh session 清理承担。
-	require.Equal(t, int64(7), repo.user.TokenVersion)
+	require.Equal(t, int64(8), repo.user.TokenVersion)
+	_, err = authService.RefreshToken(context.Background(), oldToken)
+	require.ErrorIs(t, err, service.ErrTokenRevoked)
+
+	router := gin.New()
+	userService := service.NewUserService(repo, nil, nil, nil)
+	router.GET("/protected", gin.HandlerFunc(middleware2.NewJWTAuthMiddleware(authService, userService, nil, nil)), func(c *gin.Context) {
+		c.Status(http.StatusNoContent)
+	})
+	request := httptest.NewRequest(http.MethodGet, "/protected", nil)
+	request.Header.Set("Authorization", "Bearer "+oldToken)
+	accessRecorder := httptest.NewRecorder()
+	router.ServeHTTP(accessRecorder, request)
+	require.Equal(t, http.StatusUnauthorized, accessRecorder.Code)
+	require.Contains(t, accessRecorder.Body.String(), "TOKEN_REVOKED")
+	newToken, err := authService.GenerateToken(context.Background(), repo.user)
+	require.NoError(t, err)
+	request.Header.Set("Authorization", "Bearer "+newToken)
+	accessRecorder = httptest.NewRecorder()
+	router.ServeHTTP(accessRecorder, request)
+	require.Equal(t, http.StatusNoContent, accessRecorder.Code)
 
 	var resp struct {
 		Code int `json:"code"`

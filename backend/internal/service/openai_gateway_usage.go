@@ -216,16 +216,17 @@ func (s *OpenAIGatewayService) RecordUsage(ctx context.Context, input *OpenAIRec
 		result.UpstreamModel,
 		result.Model,
 	)
-	serviceTier := ""
-	if result.ServiceTier != nil {
-		serviceTier = strings.TrimSpace(*result.ServiceTier)
-	}
 	billingAccount := account
 	if account.IsShadow() {
 		billingAccount, err = resolveCredentialAccount(ctx, s.accountRepo, account)
 		if err != nil {
 			return err
 		}
+	}
+	billedServiceTier := resolveOpenAIBillingServiceTier(billingAccount, result.ServiceTier, result.UpstreamServiceTier)
+	serviceTier := ""
+	if billedServiceTier != nil {
+		serviceTier = *billedServiceTier
 	}
 	longContextBillingEnabled := billingAccount.IsOpenAILongContextBillingEnabled()
 	cost, err = s.calculateOpenAIRecordUsageCost(
@@ -305,7 +306,7 @@ func (s *OpenAIGatewayService) RecordUsage(ctx context.Context, input *OpenAIRec
 		UpstreamModel:         optionalTrimmedStringPtr(result.UpstreamModel),
 		UpstreamResponseModel: optionalTrimmedStringPtr(result.UpstreamResponseModel),
 		UpstreamModelMismatch: upstreamModelMismatch(sentModel, result.UpstreamResponseModel),
-		ServiceTier:           result.ServiceTier,
+		ServiceTier:           billedServiceTier,
 		ReasoningEffort:       result.ReasoningEffort,
 		InboundEndpoint:       optionalTrimmedStringPtr(input.InboundEndpoint),
 		UpstreamEndpoint:      optionalTrimmedStringPtr(input.UpstreamEndpoint),

@@ -183,6 +183,11 @@ type UserRepository interface {
 	DisableTotp(ctx context.Context, userID int64) error
 }
 
+// UserTokenVersionStore persists access-token revocations without rewriting user data.
+type UserTokenVersionStore interface {
+	IncrementTokenVersion(ctx context.Context, userID int64) error
+}
+
 // LeaderboardParticipationStore persists the user's explicit leaderboard opt-in.
 // It is kept separate from UserRepository so existing repository test doubles
 // remain compatible while older users default to private participation.
@@ -1019,7 +1024,7 @@ func maskOpaqueIdentity(value string) string {
 }
 
 // ChangePassword 修改密码
-// Security: Increments TokenVersion to invalidate all existing JWT tokens
+// Updating the password fingerprint invalidates existing JWT tokens.
 func (s *UserService) ChangePassword(ctx context.Context, userID int64, req ChangePasswordRequest) error {
 	user, err := s.userRepo.GetByID(ctx, userID)
 	if err != nil {
@@ -1035,12 +1040,7 @@ func (s *UserService) ChangePassword(ctx context.Context, userID int64, req Chan
 		return fmt.Errorf("set password: %w", err)
 	}
 
-	// Increment TokenVersion to invalidate all existing tokens
-	// This ensures that any tokens issued before the password change become invalid
-	user.TokenVersion++
-
-	// TokenVersion 没有对应的数据库列（见 resolvedTokenVersion：它由 email+password_hash
-	// 指纹推导），改密写回 password_hash 即可让旧 token 失效。
+	// Persist only the new password; the token fingerprint changes with it.
 	if err := s.userRepo.Update(ctx, user, UserUpdateFields{PasswordHash: true}); err != nil {
 		return fmt.Errorf("update user: %w", err)
 	}

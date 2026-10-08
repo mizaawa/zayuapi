@@ -328,8 +328,8 @@ func TestApiKeyService_Delete_Success(t *testing.T) {
 
 	err := svc.Delete(context.Background(), 42, 7) // API Key ID=42, 调用者 userID=7
 	require.NoError(t, err)
-	require.Equal(t, []int64{42}, repo.deletedIDs)  // 验证正确的 API Key 被删除
-	require.Equal(t, []int64{7}, cache.invalidated) // 验证所有者的缓存被清除
+	require.Equal(t, []int64{42}, repo.deletedIDs) // 验证正确的 API Key 被删除
+	require.Empty(t, cache.invalidated, "deleting a key must preserve the custom-key conflict throttle")
 	require.Equal(t, []string{svc.authCacheKey("k")}, cache.deleteAuthKeys)
 	_, exists := svc.lastUsedTouchL1.Load(int64(42))
 	require.False(t, exists, "delete should clear touch debounce cache")

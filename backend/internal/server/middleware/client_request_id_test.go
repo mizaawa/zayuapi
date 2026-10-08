@@ -31,6 +31,29 @@ func TestClientRequestIDGeneratesAndExposesID(t *testing.T) {
 	require.Equal(t, w.Body.String(), w.Header().Get(clientRequestIDHeader))
 }
 
+func TestClientRequestIDDoesNotTrustRepeatedHeaders(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	router.Use(RequestLogger(), ClientRequestID())
+	router.GET("/", func(c *gin.Context) {
+		value, _ := c.Request.Context().Value(ctxkey.ClientRequestID).(string)
+		c.String(http.StatusOK, value)
+	})
+	var previous string
+	for range 2 {
+		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		req.Header.Set(clientRequestIDHeader, "repeated-header")
+		req.Header.Set(requestIDHeader, "repeated-header")
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+		require.Equal(t, http.StatusOK, w.Code)
+		require.Len(t, w.Body.String(), 36)
+		require.NotEqual(t, "repeated-header", w.Body.String())
+		require.NotEqual(t, previous, w.Body.String())
+		previous = w.Body.String()
+	}
+}
+
 func TestClientRequestIDBoundsExistingContextID(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
