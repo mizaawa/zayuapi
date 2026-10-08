@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"net/http"
 	"strconv"
 	"strings"
@@ -584,18 +585,64 @@ func apiKeyDailyUsageRange(days int, userTZ string) (time.Time, time.Time) {
 // GET /api/v1/usage/dashboard/stats
 func (h *UsageHandler) DashboardStats(c *gin.Context) {
 	subject, ok := middleware2.GetAuthSubjectFromContext(c)
-	if !ok {
+	if !ok || subject.UserID <= 0 {
 		response.Unauthorized(c, "User not authenticated")
 		return
 	}
 
-	stats, err := h.usageService.GetUserDashboardStats(c.Request.Context(), subject.UserID)
+	includeTotals, ok := parseBoolQueryWithDefault(c, "include_totals", true)
+	if !ok {
+		return
+	}
+	var stats *usagestats.UserDashboardStats
+	var err error
+	timeout := 5 * time.Second
+	if includeTotals {
+		timeout = 17 * time.Second
+	}
+	ctx, cancel := context.WithTimeout(c.Request.Context(), timeout)
+	defer cancel()
+	c.Header("Cache-Control", "private, no-store")
+	if includeTotals {
+		stats, err = h.usageService.GetUserDashboardStats(ctx, subject.UserID)
+	} else {
+		stats, err = h.usageService.GetUserDashboardStatsToday(ctx, subject.UserID)
+	}
 	if err != nil {
 		response.ErrorFrom(c, err)
 		return
 	}
 
 	response.Success(c, stats)
+}
+
+// DashboardRecent returns a fixed-size preview without counting the user's history.
+func (h *UsageHandler) DashboardRecent(c *gin.Context) {
+	subject, ok := middleware2.GetAuthSubjectFromContext(c)
+	if !ok || subject.UserID <= 0 {
+		response.Unauthorized(c, "User not authenticated")
+		return
+	}
+	now := timezone.NowInUserLocation(c.Query("timezone"))
+	start := timezone.StartOfDayInUserLocation(now.AddDate(0, 0, -6), c.Query("timezone"))
+	end := timezone.StartOfDayInUserLocation(now.AddDate(0, 0, 1), c.Query("timezone"))
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
+	defer cancel()
+	c.Header("Cache-Control", "private, no-store")
+	records, _, err := h.usageService.ListWithFilters(ctx, pagination.PaginationParams{
+		Page: 1, PageSize: 5, SortBy: "created_at", SortOrder: "desc",
+	}, usagestats.UsageLogFilters{
+		UserID: subject.UserID, StartTime: &start, EndTime: &end, SkipTotal: true,
+	})
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	out := make([]dto.UsageLog, 0, len(records))
+	for i := range records {
+		out = append(out, *dto.UsageLogFromService(&records[i]))
+	}
+	response.Success(c, gin.H{"items": out})
 }
 
 // DashboardTrend handles getting user usage trend data
@@ -607,7 +654,9 @@ func (h *UsageHandler) DashboardTrend(c *gin.Context) {
 	}
 	granularity := c.DefaultQuery("granularity", "day")
 
-	trend, err := h.usageService.GetUsageTrendWithFilters(c.Request.Context(), parsed.StartTime, parsed.EndTime, granularity, parsed.Filters)
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 8*time.Second)
+	defer cancel()
+	trend, err := h.usageService.GetUsageTrendWithFilters(ctx, parsed.StartTime, parsed.EndTime, granularity, parsed.Filters)
 	if err != nil {
 		response.ErrorFrom(c, err)
 		return
@@ -635,7 +684,9 @@ func (h *UsageHandler) DashboardModels(c *gin.Context) {
 		return
 	}
 
-	stats, err := h.usageService.GetModelStatsWithFiltersBySource(c.Request.Context(), parsed.StartTime, parsed.EndTime, parsed.Filters, usagestats.ModelSourceRequested)
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 8*time.Second)
+	defer cancel()
+	stats, err := h.usageService.GetModelStatsWithFiltersBySource(ctx, parsed.StartTime, parsed.EndTime, parsed.Filters, usagestats.ModelSourceRequested)
 	if err != nil {
 		response.ErrorFrom(c, err)
 		return

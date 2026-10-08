@@ -31,6 +31,8 @@ export interface PlatformDashboardStats {
 }
 
 export interface UserDashboardStats {
+  totals_pending?: boolean
+  totals_updated_at?: string
   total_api_keys: number
   active_api_keys: number
   total_requests: number
@@ -256,8 +258,16 @@ export async function getById(id: number): Promise<UsageLog> {
  * Get user dashboard statistics
  * @returns Dashboard statistics for current user
  */
-export async function getDashboardStats(): Promise<UserDashboardStats> {
-  const { data } = await apiClient.get<UserDashboardStats>('/usage/dashboard/stats')
+export async function getDashboardStats(
+  params?: { include_totals?: boolean },
+  options?: { signal?: AbortSignal }
+): Promise<UserDashboardStats> {
+  const { data } = await apiClient.get<UserDashboardStats>('/usage/dashboard/stats', { params, ...options })
+  return data
+}
+
+export async function getDashboardRecent(options?: { signal?: AbortSignal }): Promise<{ items: UsageLog[] }> {
+  const { data } = await apiClient.get<{ items: UsageLog[] }>('/usage/dashboard/recent', options)
   return data
 }
 
@@ -266,8 +276,8 @@ export async function getDashboardStats(): Promise<UserDashboardStats> {
  * @param params - Query parameters for filtering
  * @returns Usage trend data for current user
  */
-export async function getDashboardTrend(params?: TrendParams): Promise<TrendResponse> {
-  const { data } = await apiClient.get<TrendResponse>('/usage/dashboard/trend', { params })
+export async function getDashboardTrend(params?: TrendParams, options?: { signal?: AbortSignal }): Promise<TrendResponse> {
+  const { data } = await apiClient.get<TrendResponse>('/usage/dashboard/trend', { params, ...options })
   return data
 }
 
@@ -288,8 +298,8 @@ export async function getDashboardModels(params?: {
   billing_type?: number | null
   billing_mode?: string | null
   timezone?: string
-}): Promise<ModelStatsResponse> {
-  const { data } = await apiClient.get<ModelStatsResponse>('/usage/dashboard/models', { params })
+}, options?: { signal?: AbortSignal }): Promise<ModelStatsResponse> {
+  const { data } = await apiClient.get<ModelStatsResponse>('/usage/dashboard/models', { params, ...options })
   return data
 }
 
@@ -384,6 +394,7 @@ export const usageAPI = {
   getById,
   // Dashboard
   getDashboardStats,
+  getDashboardRecent,
   getDashboardTrend,
   getDashboardModels,
   getMyApiKeyDailyUsage,

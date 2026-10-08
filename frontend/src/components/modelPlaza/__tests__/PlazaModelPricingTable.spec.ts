@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import PlazaModelPricingTable from '../PlazaModelPricingTable.vue'
 import type { PlazaModel } from '@/api/modelPlaza'
+import type { UserPricingInterval } from '@/api/channels'
 
 vi.mock('vue-i18n', async () => {
   const actual = await vi.importActual<typeof import('vue-i18n')>('vue-i18n')
@@ -48,6 +49,28 @@ function mountTable(
   return mount(PlazaModelPricingTable, {
     props: { models, rateMultiplier, userRateMultiplier: userRateMultiplier ?? null, ...extraProps }
   })
+}
+
+function longContextModel(): PlazaModel {
+  const model = tokenModel({ name: 'gpt-5.4', platform: 'openai' })
+  model.pricing = {
+    ...model.pricing!,
+    input_price: 2.5e-6,
+    output_price: 15e-6,
+    cache_write_price: null,
+    cache_read_price: 0.25e-6,
+    intervals: [{
+      min_tokens: 272000,
+      max_tokens: null,
+      tier_label: '',
+      input_price: 5e-6,
+      output_price: 22.5e-6,
+      cache_write_price: null,
+      cache_read_price: 0.5e-6,
+      per_request_price: null
+    }]
+  }
+  return model
 }
 
 describe('PlazaModelPricingTable', () => {
@@ -268,6 +291,67 @@ describe('PlazaModelPricingTable', () => {
     expect(text).toContain('$1.50')
     expect(text).toContain('$7.50')
     expect(text).toContain('$15.00')
+  })
+
+  it('shows base and long-context prices separately when only the >272K interval is returned', () => {
+    const wrapper = mountTable([longContextModel()], 0.5, 0.2)
+    const cells = wrapper.findAll('tbody td')
+
+    expect(cells[1].findAll('div').map((tier) => tier.text())).toEqual([
+      '≤272K$0.50',
+      '>272K$1.00'
+    ])
+    expect(cells[2].findAll('div').map((tier) => tier.text())).toEqual([
+      '≤272K$3.00',
+      '>272K$4.50'
+    ])
+    const cacheTiers = cells[3].findAll('.pz-token-tier')
+    expect(cacheTiers).toHaveLength(2)
+    expect(cacheTiers[0].text()).toContain('≤272K')
+    expect(cacheTiers[0].text()).toContain('$0.05')
+    expect(cacheTiers[1].text()).toContain('>272K')
+    expect(cacheTiers[1].text()).toContain('$0.10')
+  })
+
+  it('sorts explicit context tiers without duplicating the base tier or mutating the response', () => {
+    const model = longContextModel()
+    const base: UserPricingInterval = {
+      min_tokens: 0,
+      max_tokens: 272000,
+      tier_label: '',
+      input_price: 0,
+      output_price: 10e-6,
+      cache_write_price: null,
+      cache_read_price: 0,
+      per_request_price: null
+    }
+    model.pricing!.intervals.push(base)
+    const originalIntervals = [...model.pricing!.intervals]
+    const wrapper = mountTable([model], 0.5)
+    const cells = wrapper.findAll('tbody td')
+
+    expect(cells[1].findAll('div').map((tier) => tier.text())).toEqual([
+      '≤272K$0.00',
+      '>272K$2.50'
+    ])
+    expect(cells[2].findAll('div').map((tier) => tier.text())).toEqual([
+      '≤272K$5.00',
+      '>272K$11.25'
+    ])
+    expect(cells[3].text()).toContain('$0.00')
+    expect(model.pricing!.intervals).toEqual(originalIntervals)
+  })
+
+  it('shows cache prices configured only on the long-context interval', () => {
+    const model = longContextModel()
+    model.pricing!.cache_read_price = null
+    const wrapper = mountTable([model], 0.5)
+    const cacheCell = wrapper.findAll('tbody td')[3]
+
+    expect(cacheCell.text()).toContain('≤272K')
+    expect(cacheCell.text()).toContain('>272K')
+    expect(cacheCell.text()).toContain('$0.25')
+    expect(cacheCell.text()).toContain('modelPlaza.table.cacheRead')
   })
 
   it('生图独立倍率开启时,按图价格 × 独立倍率,不乘分组倍率;倍率列展示独立倍率', () => {

@@ -912,6 +912,52 @@ func (s *UsageLogRepoSuite) TestGetUserDashboardStats() {
 	s.Require().Equal(int64(1), stats.TotalRequests)
 }
 
+func (s *UsageLogRepoSuite) TestUserDashboardTodayHistoryAndVisibility() {
+	user := mustCreateUser(s.T(), s.client, &service.User{Email: "dashboard-scopes@test.com"})
+	other := mustCreateUser(s.T(), s.client, &service.User{Email: "dashboard-other@test.com"})
+	key := mustCreateApiKey(s.T(), s.client, &service.APIKey{UserID: user.ID, Key: "dashboard-normal", Name: "normal"})
+	monitor := mustCreateApiKey(s.T(), s.client, &service.APIKey{UserID: user.ID, Key: "dashboard-monitor", Name: "monitor", Purpose: service.APIKeyPurposeChannelMonitor})
+	otherKey := mustCreateApiKey(s.T(), s.client, &service.APIKey{UserID: other.ID, Key: "dashboard-other", Name: "other"})
+	account := mustCreateAccount(s.T(), s.client, &service.Account{Name: "dashboard-platform", Platform: "openai"})
+	now := timezone.Today().Add(time.Hour)
+	s.createUsageLog(user, key, account, 10, 20, 0.5, now.AddDate(0, 0, -1))
+	s.createUsageLog(user, key, account, 100, 200, 1.5, now)
+	s.createUsageLog(user, monitor, account, 1000, 2000, 5, now)
+	s.createUsageLog(other, otherKey, account, 10000, 20000, 50, now)
+	// Soft-deleting the monitor must not reveal its historical usage.
+	s.Require().NoError(s.client.APIKey.DeleteOneID(monitor.ID).Exec(s.ctx))
+
+	for _, totals := range []bool{false, true} {
+		for _, hidden := range []bool{false, true} {
+			stats, err := s.repo.GetUserDashboardStatsWithOptions(s.ctx, user.ID, totals, hidden)
+			s.Require().NoError(err)
+			s.Require().EqualValues(1, stats.TotalAPIKeys)
+			s.Require().Equal(!totals, stats.TotalsPending)
+			wantTodayRequests, wantTodayTokens, wantTodayCost := int64(1), int64(300), 1.5
+			if !hidden {
+				wantTodayRequests, wantTodayTokens, wantTodayCost = 2, 3300, 6.5
+			}
+			s.Require().Equal(wantTodayRequests, stats.TodayRequests)
+			s.Require().Equal(wantTodayTokens, stats.TodayTokens)
+			s.Require().Equal(wantTodayCost, stats.TodayActualCost)
+			s.Require().Len(stats.ByPlatform, 1)
+			s.Require().Equal("openai", stats.ByPlatform[0].Platform)
+			s.Require().Equal(wantTodayCost, stats.ByPlatform[0].TodayActualCost)
+			if totals {
+				s.Require().Equal(wantTodayRequests+1, stats.TotalRequests)
+				s.Require().Equal(wantTodayTokens+30, stats.TotalTokens)
+				s.Require().Equal(wantTodayCost+0.5, stats.TotalActualCost)
+				s.Require().Equal(stats.TotalActualCost, stats.ByPlatform[0].TotalActualCost)
+			} else {
+				s.Require().Zero(stats.TotalRequests)
+				s.Require().Zero(stats.TotalTokens)
+				s.Require().Zero(stats.TotalActualCost)
+				s.Require().Zero(stats.ByPlatform[0].TotalActualCost)
+			}
+		}
+	}
+}
+
 // --- GetAccountTodayStats ---
 
 func (s *UsageLogRepoSuite) TestGetAccountTodayStats() {
