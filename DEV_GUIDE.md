@@ -34,8 +34,8 @@
 ### 开发工具
 
 ```bash
-# golangci-lint v2.7
-go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.7
+# golangci-lint v2.14.0 (Go 1.27.2)
+go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.14.0
 
 # pnpm (前端包管理)
 npm install -g pnpm
@@ -47,7 +47,7 @@ npm install -g pnpm
 
 | Workflow | 触发条件 | 检查内容 |
 |----------|----------|----------|
-| **backend-ci.yml** | 仅由发布流程调用 | 单元测试 + 集成测试 + golangci-lint v2.9 + 前端检查 + 部署脚本测试 |
+| **backend-ci.yml** | 仅由发布流程调用 | 单元测试 + 集成测试 + golangci-lint v2.14.0 + 前端检查 + 部署脚本测试 |
 | **release.yml** | tag `v*` 或手动发布 | 校验版本标签，对标签对应的提交运行完整 CI，通过后构建发布 |
 
 普通分支 push 和 PR 不触发 GitHub Actions。安全扫描、每周定时扫描和 CLA 工作流已移除。
@@ -55,7 +55,7 @@ npm install -g pnpm
 
 ### CI 要求
 
-- Go 版本必须是 **1.26.6**
+- Go 版本必须是 **1.27.2**
 - 前端使用 `pnpm install --frozen-lockfile`，必须提交 `pnpm-lock.yaml`
 
 ### 本地测试命令

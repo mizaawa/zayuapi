@@ -28,6 +28,7 @@ type FrameConn interface {
 
 type Usage struct {
 	InputTokens              int
+	ImageInputTokens         int
 	OutputTokens             int
 	CacheCreationInputTokens int
 	CacheReadInputTokens     int
@@ -1236,6 +1237,31 @@ func parseUsageAndAccumulateLocked(
 		}
 	}
 
+	imageInputTokens, imageInputOK := parseUsageIntField(usageResult.Get("input_tokens_details.image_tokens"), false)
+	if imageInputOK && imageInputTokens == 0 {
+		imageInputTokens, imageInputOK = parseUsageIntField(usageResult.Get("prompt_tokens_details.image_tokens"), false)
+	}
+	imageGen := gjson.GetBytes(message, "response.tool_usage.image_gen")
+	if !imageGen.Exists() {
+		imageGen = gjson.GetBytes(message, "tool_usage.image_gen")
+	}
+	if imageGen.Exists() && !validateOpenAIUsageJSON(imageGen) {
+		imageInputOK = false
+	}
+	if imageInputOK && imageInputTokens == 0 {
+		imageInputTokens, imageInputOK = parseUsageIntField(imageGen.Get("input_tokens_details.image_tokens"), false)
+	}
+	if imageOK && imageTokens == 0 {
+		imageTokens, imageOK = parseUsageIntField(imageGen.Get("output_tokens_details.image_tokens"), false)
+	}
+	if !imageInputOK || !imageOK {
+		recordUsageParseFailure()
+		if onParseFailure != nil {
+			onParseFailure(eventType, string(message))
+		}
+		return Usage{}
+	}
+
 	// Only response terminal snapshots require both primary totals. Interim
 	// events are often partial (for example, input on response.in_progress and
 	// output on a later event), so absent fields remain zero and are merged into
@@ -1262,6 +1288,7 @@ func parseUsageAndAccumulateLocked(
 	}
 	parsedUsage := Usage{
 		InputTokens:              inputTokens,
+		ImageInputTokens:         imageInputTokens,
 		OutputTokens:             outputTokens,
 		CacheCreationInputTokens: cacheCreationTokens,
 		CacheReadInputTokens:     cachedTokens,
@@ -1269,10 +1296,10 @@ func parseUsageAndAccumulateLocked(
 	}
 	if parsedUsage.InputTokens < 0 || parsedUsage.OutputTokens < 0 ||
 		parsedUsage.CacheCreationInputTokens < 0 || parsedUsage.CacheReadInputTokens < 0 ||
-		parsedUsage.ImageOutputTokens < 0 ||
+		parsedUsage.ImageInputTokens < 0 || parsedUsage.ImageOutputTokens < 0 ||
 		parsedUsage.InputTokens > maxReportedUsageTokens || parsedUsage.OutputTokens > maxReportedUsageTokens ||
 		parsedUsage.CacheCreationInputTokens > maxReportedUsageTokens || parsedUsage.CacheReadInputTokens > maxReportedUsageTokens ||
-		parsedUsage.ImageOutputTokens > maxReportedUsageTokens {
+		parsedUsage.ImageInputTokens > maxReportedUsageTokens || parsedUsage.ImageOutputTokens > maxReportedUsageTokens {
 		recordUsageParseFailure()
 		if onParseFailure != nil {
 			onParseFailure(eventType, usageRaw)
@@ -1299,7 +1326,7 @@ func parseUsageAndAccumulateLocked(
 func relayUsageHasTokens(usage Usage) bool {
 	return usage.InputTokens > 0 || usage.OutputTokens > 0 ||
 		usage.CacheCreationInputTokens > 0 || usage.CacheReadInputTokens > 0 ||
-		usage.ImageOutputTokens > 0
+		usage.ImageInputTokens > 0 || usage.ImageOutputTokens > 0
 }
 
 func mergeRelayUsageNonZero(dst *Usage, src Usage) {
@@ -1317,6 +1344,9 @@ func mergeRelayUsageNonZero(dst *Usage, src Usage) {
 	}
 	if src.CacheReadInputTokens > 0 {
 		dst.CacheReadInputTokens = src.CacheReadInputTokens
+	}
+	if src.ImageInputTokens > 0 {
+		dst.ImageInputTokens = src.ImageInputTokens
 	}
 	if src.ImageOutputTokens > 0 {
 		dst.ImageOutputTokens = src.ImageOutputTokens
@@ -1346,6 +1376,7 @@ func finalizeRelayTurnUsageLocked(state *relayState) Usage {
 	}
 	next := state.usage
 	if !addUsageWithinLimit(&next.InputTokens, turnUsage.InputTokens) ||
+		!addUsageWithinLimit(&next.ImageInputTokens, turnUsage.ImageInputTokens) ||
 		!addUsageWithinLimit(&next.OutputTokens, turnUsage.OutputTokens) ||
 		!addUsageWithinLimit(&next.CacheCreationInputTokens, turnUsage.CacheCreationInputTokens) ||
 		!addUsageWithinLimit(&next.CacheReadInputTokens, turnUsage.CacheReadInputTokens) ||

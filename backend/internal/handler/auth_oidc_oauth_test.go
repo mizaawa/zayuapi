@@ -3,8 +3,11 @@ package handler
 import (
 	"bytes"
 	"context"
+	"crypto/ecdsa"
+	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/rsa"
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
 	"math/big"
@@ -38,6 +41,65 @@ func TestOIDCSyntheticEmailStableAndDistinct(t *testing.T) {
 	require.Equal(t, e1, e1Again)
 	require.NotEqual(t, e1, e2)
 	require.Contains(t, e1, "@oidc-connect.invalid")
+}
+
+func TestOIDCJWKPublicKeyEC(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		curve elliptic.Curve
+	}{
+		{name: "P-256", curve: elliptic.P256()},
+		{name: "P-384", curve: elliptic.P384()},
+		{name: "P-521", curve: elliptic.P521()},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			privateKey, err := ecdsa.GenerateKey(tc.curve, rand.Reader)
+			require.NoError(t, err)
+			encoded, err := privateKey.PublicKey.Bytes()
+			require.NoError(t, err)
+			byteLen := (len(encoded) - 1) / 2
+			key := oidcJWK{
+				Kty: "EC", Crv: tc.name,
+				X: base64.RawURLEncoding.EncodeToString(encoded[1 : 1+byteLen]),
+				Y: base64.RawURLEncoding.EncodeToString(encoded[1+byteLen:]),
+			}
+
+			t.Run("accepts_valid_point", func(t *testing.T) {
+				parsed, parseErr := key.publicKey()
+				require.NoError(t, parseErr)
+				publicKey, ok := parsed.(*ecdsa.PublicKey)
+				require.True(t, ok)
+				digest := sha256.Sum256([]byte("oidc-jwk-verification"))
+				signature, signErr := ecdsa.SignASN1(rand.Reader, privateKey, digest[:])
+				require.NoError(t, signErr)
+				require.True(t, ecdsa.VerifyASN1(publicKey, digest[:], signature))
+			})
+			t.Run("rejects_off_curve_point", func(t *testing.T) {
+				invalid := key
+				invalid.X = base64.RawURLEncoding.EncodeToString(make([]byte, byteLen))
+				invalid.Y = invalid.X
+				_, parseErr := invalid.publicKey()
+				require.Error(t, parseErr)
+			})
+			for _, coordinate := range []string{"X", "Y"} {
+				t.Run("rejects_oversized_"+coordinate, func(t *testing.T) {
+					invalid := key
+					oversized := make([]byte, byteLen+1)
+					oversized[0] = 1
+					value := base64.RawURLEncoding.EncodeToString(oversized)
+					if coordinate == "X" {
+						invalid.X = value
+					} else {
+						invalid.Y = value
+					}
+					require.NotPanics(t, func() {
+						_, parseErr := invalid.publicKey()
+						require.Error(t, parseErr)
+					})
+				})
+			}
+		})
+	}
 }
 
 func TestBuildOIDCAuthorizeURLIncludesNonceAndPKCE(t *testing.T) {

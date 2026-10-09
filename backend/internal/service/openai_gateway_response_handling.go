@@ -431,6 +431,13 @@ func (s *OpenAIGatewayService) handleStreamingResponseWithReasoning(ctx context.
 				}
 			}
 			forceFlushFailedEvent := false
+			if account != nil && (account.Platform == PlatformOpenAI || account.Platform == PlatformGrok) &&
+				(eventType == "response.completed" || eventType == "response.done") &&
+				!sawFailedEvent && !clientOutputStarted && !streamOutputAccumulator.HasContent() && len(streamImageOutputs) == 0 &&
+				openAIResponsesCompletedEventIsEmpty(dataBytes, usage) {
+				streamEarlyErr = s.newOpenAIStreamFailoverError(c, account, false, upstreamRequestID, dataBytes, "upstream returned an empty response.completed", resp.Header)
+				return
+			}
 			if eventType == "response.failed" {
 				failedMessage = extractOpenAISSEErrorMessage(dataBytes)
 				RecordAPIKeyFailoverUpstreamFailure(ctx, openAIStreamFailureStatus(dataBytes, failedMessage), dataBytes)
@@ -1927,4 +1934,25 @@ func (s *OpenAIGatewayService) replaceModelInSSEBody(body, fromModel, toModel st
 		lines[i] = s.replaceModelInSSELine(line, fromModel, toModel)
 	}
 	return strings.Join(lines, "\n")
+}
+
+func openAIResponsesCompletedEventIsEmpty(data []byte, usage *OpenAIUsage) bool {
+	if len(data) == 0 || !gjson.ValidBytes(data) {
+		return false
+	}
+	if usage != nil && (usage.InputTokens > 0 || usage.OutputTokens > 0 ||
+		usage.ImageInputTokens > 0 || usage.ImageOutputTokens > 0 ||
+		usage.CacheCreationInputTokens > 0 || usage.CacheReadInputTokens > 0) {
+		return false
+	}
+	if gjson.GetBytes(data, "usage").Exists() || gjson.GetBytes(data, "response.usage").Exists() {
+		return false
+	}
+	if gjson.GetBytes(data, "error").Exists() || gjson.GetBytes(data, "response.error").Exists() {
+		return false
+	}
+	if output := gjson.GetBytes(data, "response.output"); output.Exists() && output.IsArray() && len(output.Array()) > 0 {
+		return false
+	}
+	return true
 }

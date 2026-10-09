@@ -78,6 +78,11 @@ func (s *GatewayService) ForwardCountTokens(ctx context.Context, c *gin.Context,
 				return err
 			}
 		}
+		// Mimic-added tool breakpoints must satisfy the same count and TTL
+		// ordering constraints as regular message requests.
+		if err := replaceBody(enforceCacheControlLimit(body)); err != nil {
+			return err
+		}
 	}
 
 	// Antigravity 账户不支持 count_tokens，返回 404 让客户端 fallback 到本地估算。

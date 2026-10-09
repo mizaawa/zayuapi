@@ -233,6 +233,109 @@ func (c *codexModelsManifestCache) set(key string, manifest *CodexModelsManifest
 // passed through verbatim. Custom API key manifests receive only the narrowly
 // scoped compatibility adjustments required by custom-provider Codex clients.
 func (s *OpenAIGatewayService) FetchCodexModelsManifest(ctx context.Context, account *Account, clientVersion, ifNoneMatch string) (*CodexModelsManifest, error) {
+	if account == nil || account.IsOpenAIPassthroughEnabled() || len(account.GetModelMapping()) == 0 {
+		return s.fetchAccountCodexModelsManifest(ctx, account, clientVersion, ifNoneMatch)
+	}
+	// Mapping is applied after the account-scoped upstream cache. A mapped
+	// client ETag must never be sent upstream, and account edits must take effect
+	// immediately without rewriting the cached original manifest.
+	manifest, err := s.fetchAccountCodexModelsManifest(ctx, account, clientVersion, "")
+	if err != nil || manifest == nil {
+		return manifest, err
+	}
+	body, err := projectCodexModelsManifestForAccount(manifest.Body, account)
+	if err != nil {
+		return nil, infraerrors.Newf(http.StatusBadGateway, "OPENAI_CODEX_MODELS_MAPPING_FAILED", "project Codex models manifest: %v", err)
+	}
+	projected := *manifest
+	if !bytes.Equal(body, manifest.Body) {
+		projected.Body = body
+		projected.ETag = codexModelsManifestBodyETag(body)
+	}
+	return codexModelsManifestForClient(&projected, ifNoneMatch), nil
+}
+
+func projectCodexModelsManifestForAccount(body []byte, account *Account) ([]byte, error) {
+	var envelope map[string]json.RawMessage
+	if err := json.Unmarshal(body, &envelope); err != nil {
+		return nil, err
+	}
+	var entries []json.RawMessage
+	if err := json.Unmarshal(envelope["models"], &entries); err != nil {
+		return nil, err
+	}
+	byID := make(map[string]json.RawMessage, len(entries))
+	candidates := make([]string, 0, len(entries))
+	for _, raw := range entries {
+		var model struct {
+			Slug string `json:"slug"`
+		}
+		if json.Unmarshal(raw, &model) != nil {
+			continue
+		}
+		id := strings.TrimSpace(model.Slug)
+		if id == "" || strings.Contains(id, "*") {
+			continue
+		}
+		if _, exists := byID[id]; !exists {
+			byID[id] = raw
+			candidates = append(candidates, id)
+		}
+	}
+	aliases := make([]string, 0, len(account.GetModelMapping()))
+	for alias := range account.GetModelMapping() {
+		aliases = append(aliases, alias)
+	}
+	sort.Strings(aliases)
+	candidates = append(candidates, aliases...)
+	projected := make([]json.RawMessage, 0, len(candidates))
+	seen := make(map[string]struct{})
+	for _, id := range candidates {
+		id = strings.TrimSpace(id)
+		if id == "" || strings.Contains(id, "*") {
+			continue
+		}
+		if _, exists := seen[id]; exists {
+			continue
+		}
+		target, matched := account.ResolveMappedModel(id)
+		raw, available := byID[strings.TrimSpace(target)]
+		if !matched || !available {
+			continue
+		}
+		seen[id] = struct{}{}
+		if id == target {
+			projected = append(projected, raw)
+			continue
+		}
+		var entry map[string]json.RawMessage
+		if err := json.Unmarshal(raw, &entry); err != nil {
+			return nil, err
+		}
+		entry["slug"], _ = json.Marshal(id)
+		entry["display_name"], _ = json.Marshal(id)
+		encoded, err := json.Marshal(entry)
+		if err != nil {
+			return nil, err
+		}
+		projected = append(projected, encoded)
+	}
+	unchanged := len(entries) == len(projected)
+	for i := 0; unchanged && i < len(entries); i++ {
+		unchanged = bytes.Equal(entries[i], projected[i])
+	}
+	if unchanged {
+		return body, nil
+	}
+	var err error
+	envelope["models"], err = json.Marshal(projected)
+	if err != nil {
+		return nil, err
+	}
+	return json.Marshal(envelope)
+}
+
+func (s *OpenAIGatewayService) fetchAccountCodexModelsManifest(ctx context.Context, account *Account, clientVersion, ifNoneMatch string) (*CodexModelsManifest, error) {
 	if account == nil {
 		return nil, infraerrors.New(http.StatusInternalServerError, "OPENAI_CODEX_MODELS_ACCOUNT_REQUIRED", "account is required")
 	}

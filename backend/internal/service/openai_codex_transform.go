@@ -79,6 +79,7 @@ type codexTransformResult struct {
 }
 
 type codexOAuthTransformOptions struct {
+	ResponsesLite                       bool
 	IsCodexCLI                          bool
 	IsCompact                           bool
 	SkipDefaultInstructions             bool
@@ -305,6 +306,9 @@ func applyCodexOAuthTransformWithOptions(reqBody map[string]any, opts codexOAuth
 		result.Modified = true
 	}
 
+	if !opts.IsCompact && ensureOpenAIOAuthWebSearchToolForHistory(reqBody, opts.ResponsesLite) {
+		result.Modified = true
+	}
 	return result
 }
 

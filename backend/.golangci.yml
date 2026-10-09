@@ -11,6 +11,53 @@ linters:
     - staticcheck
     - unused
 
+  exclusions:
+    rules:
+      # Preserve the per-protocol HTTP/2 idle timeout and PING configuration.
+      - path: 'internal/(repository/http_upstream(_http2_keepalive_test)?|server/http)\.go$'
+        linters: [ staticcheck ]
+        text: 'SA1019: (\(golang\.org/x/net/http2\.(Server|Transport)\)\.|golang\.org/x/net/http2\.(ConfigureServer|ConfigureTransports|Server|Transport)\b)'
+      # Upstream libraries can still return the legacy typed GOAWAY error.
+      - path: 'internal/service/openai_codex_models_service(_test)?\.go$'
+        linters: [ staticcheck ]
+        text: 'SA1019: golang\.org/x/net/http2\.GoAwayError\b'
+      # Accept legacy group policy fields while the service normalizes/ignores them.
+      - path: 'internal/handler/admin/group_handler\.go$'
+        linters: [ staticcheck ]
+        text: 'SA1019: \(github\.com/Wei-Shaw/sub2api/internal/service\.(CreateGroupInput|UpdateGroupInput)\)\.MaxReasoningEffort\b'
+      # Keep the existing WebSocket hook contract for legacy policy callers.
+      - path: 'internal/handler/openai_gateway_handler\.go$'
+        linters: [ staticcheck ]
+        text: 'SA1019: \(github\.com/Wei-Shaw/sub2api/internal/service\.OpenAIWSIngressHooks\)\.MaxReasoningEffort\b'
+      # Timing only wraps HTTP calls: upstream callers validate hosts and
+      # Antigravity callers use fixed provider endpoints before entering here.
+      - path: 'internal/pkg/servertiming/http\.go$'
+        linters: [ gosec ]
+        text: 'G704:'
+        source: 'client\.Do\(req\)'
+      # This adapter sends only to the test's httptest server.
+      - path: 'internal/server/middleware/openai_fast_policy_forwarding_test\.go$'
+        linters: [ gosec ]
+        text: 'G704:'
+        source: 'u\.client\.Do\(req\)'
+      # This test transport rewrites every host to its httptest server.
+      - path: 'internal/repository/github_release_service_test\.go$'
+        linters: [ gosec ]
+        text: 'G704:'
+        source: 'http\.NewRequestWithContext\(req\.Context\(\), req\.Method, testURL, req\.Body\)'
+      # This debug log destination is read only from the operator-controlled
+      # SUB2API_DEBUG_GATEWAY_BODY environment variable during initialization.
+      - path: 'internal/service/gateway_service\.go$'
+        linters: [ gosec ]
+        text: 'G703:'
+        source: 'os\.(Stat\(path\)|MkdirAll\(dir, 0755\)|OpenFile\(path, os\.O_CREATE\|os\.O_WRONLY\|os\.O_APPEND, 0644\))'
+      # The destination is the fixed model_pricing.json filename under the
+      # operator-configured Pricing.DataDir, never a path from request data.
+      - path: 'internal/service/pricing_service\.go$'
+        linters: [ gosec ]
+        text: 'G703:'
+        source: 'os\.WriteFile\(pricingFile, data, 0644\)'
+
   settings:
     depguard:
       rules:
