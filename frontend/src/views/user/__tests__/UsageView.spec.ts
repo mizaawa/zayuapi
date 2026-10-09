@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 
 import UsageView from '../UsageView.vue'
@@ -178,6 +178,10 @@ function mountUsageView() {
 }
 
 describe('user UsageView', () => {
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
   beforeEach(() => {
     query.mockReset()
     getStats.mockReset()
@@ -271,8 +275,178 @@ describe('user UsageView', () => {
     wrapper.unmount()
   })
 
+  it('recovers first-entry statistics and distributions automatically without reloading healthy sections', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    getStats.mockRejectedValueOnce({ status: 0, code: 'ECONNABORTED' })
+    let modelAttempts = 0
+    let groupAttempts = 0
+    getDashboardSnapshotV2.mockImplementation((params) => {
+      if (params.include_model_stats && ++modelAttempts === 1) return Promise.reject({ status: 503 })
+      if (params.include_group_stats && ++groupAttempts === 1) return Promise.reject({ status: 504 })
+      return Promise.resolve({ models: modelStats, groups: groupStats, trend })
+    })
+    const wrapper = mountUsageView()
+    await flushPromises()
+    const vm = wrapper.vm as any
+
+    expect(wrapper.findAll('[data-usage-error]')).toHaveLength(0)
+    expect(vm.endpointStatsLoading).toBe(true)
+    expect(vm.modelStatsLoading).toBe(true)
+    expect(vm.groupStatsLoading).toBe(true)
+    expect(vm.usageLogs).toEqual([usageLog])
+    expect(vm.trendData).toEqual(trend)
+
+    await vi.advanceTimersByTimeAsync(500)
+    await flushPromises()
+
+    expect(vm.usageStats.total_requests).toBe(1)
+    expect(vm.requestedModelStats).toEqual(modelStats)
+    expect(vm.groupStats).toEqual(groupStats)
+    expect(vm.endpointStatsLoading).toBe(false)
+    expect(vm.modelStatsLoading).toBe(false)
+    expect(vm.groupStatsLoading).toBe(false)
+    expect(wrapper.findAll('[data-usage-error]')).toHaveLength(0)
+    expect(showError).not.toHaveBeenCalled()
+    expect(getStats).toHaveBeenCalledTimes(2)
+    expect(modelAttempts).toBe(2)
+    expect(groupAttempts).toBe(2)
+    expect(query).toHaveBeenCalledTimes(1)
+    expect(getDashboardSnapshotV2.mock.calls.filter(([params]) => params.include_trend)).toHaveLength(1)
+    wrapper.unmount()
+  })
+
+  it('loads all first-entry aggregates without overlapping database requests', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    let active = 0
+    let maxActive = 0
+    const read = (data: unknown) => {
+      active++
+      maxActive = Math.max(maxActive, active)
+      if (active > 1) {
+        active--
+        return Promise.reject({ status: 500, message: 'internal error' })
+      }
+      return new Promise((resolve) => setTimeout(() => { active--; resolve(data) }, 10))
+    }
+    getStats.mockImplementation(() => read({ total_requests: 1, endpoints: [] }))
+    getDashboardSnapshotV2.mockImplementation(() => read({ models: modelStats, groups: groupStats, trend }))
+    const wrapper = mountUsageView()
+    await flushPromises()
+    expect((wrapper.vm as any).usageLogs).toEqual([usageLog])
+    expect(getStats).toHaveBeenCalledTimes(1)
+    expect(getDashboardSnapshotV2).not.toHaveBeenCalled()
+
+    await vi.advanceTimersByTimeAsync(40)
+    await flushPromises()
+    const vm = wrapper.vm as any
+    expect(maxActive).toBe(1)
+    expect(vm.usageStats.total_requests).toBe(1)
+    expect(vm.requestedModelStats).toEqual(modelStats)
+    expect(vm.groupStats).toEqual(groupStats)
+    expect(vm.trendData).toEqual(trend)
+    expect(getStats).toHaveBeenCalledTimes(1)
+    expect(getDashboardSnapshotV2).toHaveBeenCalledTimes(3)
+    expect(wrapper.findAll('[data-usage-error]')).toHaveLength(0)
+    expect(vi.getTimerCount()).toBe(0)
+    wrapper.unmount()
+  })
+
+  it('shows a section error only after automatic retries are exhausted and still supports manual retry', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    getDashboardSnapshotV2.mockImplementation((params) => params.include_group_stats
+      ? Promise.reject({ status: 503 })
+      : Promise.resolve({ models: modelStats, trend }))
+    const wrapper = mountUsageView()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    const groupCalls = () => getDashboardSnapshotV2.mock.calls.filter(([params]) => params.include_group_stats)
+
+    expect(vm.groupStatsLoading).toBe(true)
+    expect(wrapper.find('[data-usage-error="groups"]').exists()).toBe(false)
+    await vi.advanceTimersByTimeAsync(500)
+    await flushPromises()
+    expect(groupCalls()).toHaveLength(2)
+    expect(wrapper.find('[data-usage-error="groups"]').exists()).toBe(false)
+    await vi.advanceTimersByTimeAsync(999)
+    expect(groupCalls()).toHaveLength(2)
+    await vi.advanceTimersByTimeAsync(1)
+    await flushPromises()
+
+    expect(groupCalls()).toHaveLength(3)
+    expect(vm.groupStatsLoading).toBe(false)
+    expect(wrapper.findAll('[data-usage-error]')).toHaveLength(1)
+    expect(wrapper.find('[data-usage-error="groups"]').exists()).toBe(true)
+    expect(vm.usageLogs).toEqual([usageLog])
+    expect(vm.requestedModelStats).toEqual(modelStats)
+    expect(vm.trendData).toEqual(trend)
+    await vi.advanceTimersByTimeAsync(10000)
+    expect(groupCalls()).toHaveLength(3)
+
+    getDashboardSnapshotV2.mockResolvedValue({ groups: groupStats })
+    await wrapper.get('[data-usage-error="groups"] button').trigger('click')
+    await flushPromises()
+    expect(vm.groupStats).toEqual(groupStats)
+    expect(wrapper.findAll('[data-usage-error]')).toHaveLength(0)
+    expect(groupCalls()).toHaveLength(4)
+    expect(query).toHaveBeenCalledTimes(1)
+    expect(getStats).toHaveBeenCalledTimes(1)
+    wrapper.unmount()
+  })
+
+  it('cancels pending retries when filters change and loads only the new filter values', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    getStats.mockRejectedValueOnce({ status: 503 })
+    getDashboardSnapshotV2.mockImplementation((params) => params.model === 'new-model'
+      ? Promise.resolve({ models: [{ ...modelStats[0], model: 'new-model' }], groups: groupStats, trend })
+      : Promise.reject({ status: 504 }))
+    const wrapper = mountUsageView()
+    await flushPromises()
+    const oldSignals = [getStats.mock.calls[0][2].signal,
+      ...getDashboardSnapshotV2.mock.calls.map((call) => call[1].signal)] as AbortSignal[]
+    const vm = wrapper.vm as any
+
+    vm.filters.model = 'new-model'
+    vm.applyFilters()
+    await flushPromises()
+    expect(oldSignals.every((signal) => signal.aborted)).toBe(true)
+    expect(vm.requestedModelStats[0].model).toBe('new-model')
+    expect(vm.usageStats.total_requests).toBe(1)
+    expect(wrapper.findAll('[data-usage-error]')).toHaveLength(0)
+    expect(getStats).toHaveBeenLastCalledWith(expect.objectContaining({ model: 'new-model' }), undefined, expect.anything())
+    expect(getDashboardSnapshotV2.mock.calls.slice(3).every(([params]) => params.model === 'new-model')).toBe(true)
+
+    await vi.advanceTimersByTimeAsync(10000)
+    await flushPromises()
+    expect(getStats).toHaveBeenCalledTimes(2)
+    expect(getDashboardSnapshotV2).toHaveBeenCalledTimes(6)
+    expect(query).toHaveBeenCalledTimes(2)
+    expect(showError).not.toHaveBeenCalled()
+    expect(wrapper.findAll('[data-usage-error]')).toHaveLength(0)
+    wrapper.unmount()
+  })
+
+  it('clears pending retries on unmount without issuing follow-up requests', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    query.mockRejectedValue({ status: 503 })
+    getStats.mockRejectedValue({ status: 503 })
+    getDashboardSnapshotV2.mockRejectedValue({ status: 504 })
+    const wrapper = mountUsageView()
+    await flushPromises()
+
+    expect(vi.getTimerCount()).toBe(5)
+    expect(showError).not.toHaveBeenCalled()
+    wrapper.unmount()
+    await flushPromises()
+    expect(vi.getTimerCount()).toBe(0)
+    await vi.advanceTimersByTimeAsync(10000)
+    expect(query).toHaveBeenCalledTimes(1)
+    expect(getStats).toHaveBeenCalledTimes(1)
+    expect(getDashboardSnapshotV2).toHaveBeenCalledTimes(3)
+    expect(showError).not.toHaveBeenCalled()
+  })
+
   it('recovers a failed list without reloading successful statistics and charts', async () => {
-    query.mockRejectedValueOnce({ status: 504 })
+    query.mockRejectedValueOnce({ status: 400 })
     const wrapper = mountUsageView()
     await flushPromises()
     const vm = wrapper.vm as any
@@ -293,7 +467,7 @@ describe('user UsageView', () => {
 
   it('keeps healthy charts visible when one section fails and retries just that section', async () => {
     getDashboardSnapshotV2.mockImplementation((params) => params.include_group_stats
-      ? Promise.reject({ status: 503 })
+      ? Promise.reject({ status: 400 })
       : Promise.resolve({ models: modelStats, trend }))
     const wrapper = mountUsageView()
     await flushPromises()
@@ -329,7 +503,7 @@ describe('user UsageView', () => {
     expect(vm.paginationTotal).toBe(85)
     expect(vm.paginationTotalIsExact).toBe(true)
 
-    getStats.mockRejectedValueOnce({ status: 503 })
+    getStats.mockRejectedValueOnce({ status: 400 })
     vm.filters.model = 'another-model'
     vm.applyFilters()
     await flushPromises()
@@ -347,11 +521,11 @@ describe('user UsageView', () => {
   it('aborts obsolete requests and ignores late failures after filters change', async () => {
     const oldLogs = deferred<unknown>()
     const oldStats = deferred<unknown>()
-    const oldCharts = [deferred<unknown>(), deferred<unknown>(), deferred<unknown>()]
     query.mockReturnValueOnce(oldLogs.promise)
     getStats.mockReturnValueOnce(oldStats.promise)
-    oldCharts.forEach((request) => getDashboardSnapshotV2.mockReturnValueOnce(request.promise))
     const wrapper = mountUsageView()
+    await flushPromises()
+    expect(getDashboardSnapshotV2).not.toHaveBeenCalled()
     const oldSignals = [query.mock.calls[0][1].signal, getStats.mock.calls[0][2].signal,
       ...getDashboardSnapshotV2.mock.calls.map((call) => call[1].signal)] as AbortSignal[]
     const vm = wrapper.vm as any
@@ -361,10 +535,9 @@ describe('user UsageView', () => {
     expect(oldSignals.every((signal) => signal.aborted)).toBe(true)
     oldLogs.reject(new Error('late network failure'))
     oldStats.resolve({ total_requests: 999 })
-    oldCharts[0].resolve({ models: [{ model: 'obsolete' }] })
-    oldCharts[1].reject(new Error('late group failure'))
-    oldCharts[2].resolve({ trend: [{ date: 'obsolete' }] })
     await flushPromises()
+    expect(getDashboardSnapshotV2).toHaveBeenCalledTimes(3)
+    expect(getDashboardSnapshotV2.mock.calls.every(([params]) => params.model === 'gpt-5.4')).toBe(true)
     expect(showError).not.toHaveBeenCalled()
     expect(wrapper.findAll('[data-usage-error]')).toHaveLength(0)
     expect(vm.usageStats.total_requests).toBe(1)
@@ -377,19 +550,18 @@ describe('user UsageView', () => {
   it('cancels page requests on unmount and suppresses late errors', async () => {
     const logs = deferred<unknown>()
     const stats = deferred<unknown>()
-    const charts = deferred<unknown>()
     query.mockReturnValue(logs.promise)
     getStats.mockReturnValue(stats.promise)
-    getDashboardSnapshotV2.mockReturnValue(charts.promise)
     const wrapper = mountUsageView()
+    await flushPromises()
     const signals = [query.mock.calls[0][1].signal, getStats.mock.calls[0][2].signal,
       ...getDashboardSnapshotV2.mock.calls.map((call) => call[1].signal)] as AbortSignal[]
     wrapper.unmount()
     expect(signals.every((signal) => signal.aborted)).toBe(true)
     logs.reject(new Error('after navigation'))
     stats.reject(new Error('after navigation'))
-    charts.reject(new Error('after navigation'))
     await flushPromises()
+    expect(getDashboardSnapshotV2).not.toHaveBeenCalled()
     expect(showError).not.toHaveBeenCalled()
   })
 
@@ -412,7 +584,7 @@ describe('user UsageView', () => {
   it('preserves existing chart data after a refresh failure', async () => {
     const wrapper = mountUsageView()
     await flushPromises()
-    getDashboardSnapshotV2.mockRejectedValue({ status: 503 })
+    getDashboardSnapshotV2.mockRejectedValue({ status: 400 })
     await (wrapper.vm as any).loadGroupStats()
     expect((wrapper.vm as any).groupStats).toEqual(groupStats)
     expect(wrapper.find('[data-usage-error="groups"]').exists()).toBe(true)
