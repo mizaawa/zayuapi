@@ -1,6 +1,10 @@
 <template>
   <AppLayout>
     <div class="space-y-6">
+      <div v-for="section in failedSections" :key="section.key" :data-usage-error="section.key" role="alert" class="flex items-center gap-3 text-sm text-red-600 dark:text-red-400">
+        <span>{{ t(section.message) }}</span>
+        <button type="button" class="btn btn-secondary" @click="section.retry">{{ t('common.refresh') }}</button>
+      </div>
       <UsageStatsCards :stats="usageStats" :show-account-cost="false" :strike-standard-cost="true" />
 
       <div class="space-y-4">
@@ -17,7 +21,7 @@
             <div class="ml-auto flex items-center gap-2">
               <span class="text-sm font-medium text-gray-700 dark:text-gray-300">{{ t('admin.dashboard.granularity') }}:</span>
               <div class="w-28">
-                <Select v-model="granularity" :options="granularityOptions" @change="loadChartData" />
+                <Select v-model="granularity" :options="granularityOptions" @change="loadTrendData" />
               </div>
             </div>
           </div>
@@ -38,7 +42,7 @@
           <GroupDistributionChart
             v-model:metric="groupDistributionMetric"
             :group-stats="groupStats"
-            :loading="chartsLoading"
+            :loading="groupStatsLoading"
             :show-metric-toggle="true"
             :enable-breakdown="false"
             :show-account-cost="false"
@@ -62,7 +66,7 @@
             :start-date="startDate"
             :end-date="endDate"
           />
-          <TokenUsageTrend :trend-data="trendData" :loading="chartsLoading" />
+          <TokenUsageTrend :trend-data="trendData" :loading="trendLoading" />
         </div>
       </div>
 
@@ -175,7 +179,12 @@
       </div>
 
       <template v-if="activeTab === 'usage'">
+        <div v-if="logsError" data-usage-error="logs" role="alert" class="flex items-center gap-3 text-sm text-red-600 dark:text-red-400">
+          <span>{{ t('usage.failedToLoad') }}</span>
+          <button type="button" class="btn btn-secondary" @click="loadLogs">{{ t('common.refresh') }}</button>
+        </div>
         <UsageTable
+          v-else
           :data="usageLogs"
           :loading="loading"
           :columns="visibleColumns"
@@ -189,9 +198,10 @@
         />
 
         <Pagination
-          v-if="pagination.total > 0"
+          v-if="!logsError && paginationTotal > 0"
           :page="pagination.page"
-          :total="pagination.total"
+          :total="paginationTotal"
+          :total-is-exact="paginationTotalIsExact"
           :page-size="pagination.page_size"
           @update:page="handlePageChange"
           @update:pageSize="handlePageSizeChange"
@@ -272,9 +282,14 @@ const upstreamEndpointStats = ref<EndpointStat[]>([])
 const endpointPathStats = ref<EndpointStat[]>([])
 
 const loading = ref(false)
-const chartsLoading = ref(false)
+const logsError = ref(false)
+const groupStatsLoading = ref(false)
+const trendLoading = ref(false)
 const modelStatsLoading = ref(false)
 const endpointStatsLoading = ref(false)
+const sectionErrors = reactive({ stats: false, models: false, groups: false, trend: false, filters: false })
+const statsErrorMessage = ref('usage.statsLoadFailed')
+const statsFiltersKey = ref<string | null>(null)
 const exporting = ref(false)
 let exportAbortController: AbortController | null = null
 const errorRows = ref<UserErrorRequest[]>([])
@@ -328,10 +343,20 @@ const applyErrorFilters = () => {
   void loadErrors()
 }
 
-let abortController: AbortController | null = null
-let chartReqSeq = 0
-let statsReqSeq = 0
-let modelStatsReqSeq = 0
+type RequestKey = 'logs' | 'stats' | 'models' | 'groups' | 'trend' | 'errors'
+const requests = new Map<RequestKey, AbortController>()
+let disposed = false
+let filterReqSeq = 0
+
+const startRequest = (key: RequestKey) => {
+  requests.get(key)?.abort()
+  const controller = new AbortController()
+  requests.set(key, controller)
+  return controller
+}
+
+const isCurrentRequest = (key: RequestKey, controller: AbortController) =>
+  !disposed && requests.get(key) === controller && !controller.signal.aborted
 
 const formatLocalDate = (date: Date): string =>
   `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
@@ -373,6 +398,7 @@ const pagination = reactive({
   page: 1,
   page_size: getPersistedPageSize(),
   total: 0,
+  total_is_exact: true,
 })
 const sortState = reactive({
   sort_by: 'created_at',
@@ -431,6 +457,18 @@ const normalizedFilters = computed<UsageQueryParams>(() => {
   }
 })
 
+const filtersKey = computed(() => JSON.stringify(normalizedFilters.value))
+const currentStatsTotal = computed(() =>
+  statsFiltersKey.value === filtersKey.value ? usageStats.value?.total_requests : undefined
+)
+const paginationTotal = computed(() => pagination.total_is_exact
+  ? pagination.total
+  : Math.max(pagination.total, currentStatsTotal.value ?? 0)
+)
+const paginationTotalIsExact = computed(() => pagination.total_is_exact ||
+  (currentStatsTotal.value !== undefined && currentStatsTotal.value >= pagination.total)
+)
+
 const buildUsageListParams = (page: number, pageSize: number): UsageQueryParams => ({
   page,
   page_size: pageSize,
@@ -440,90 +478,121 @@ const buildUsageListParams = (page: number, pageSize: number): UsageQueryParams 
 })
 
 const loadLogs = async () => {
-  abortController?.abort()
-  const controller = new AbortController()
-  abortController = controller
+  const controller = startRequest('logs')
   loading.value = true
+  logsError.value = false
   try {
-    const res = await usageAPI.query(buildUsageListParams(pagination.page, pagination.page_size), {
+    const res = await usageAPI.query({
+      ...buildUsageListParams(pagination.page, pagination.page_size),
+      exact_total: false,
+    }, {
       signal: controller.signal,
     })
-    if (!controller.signal.aborted) {
+    if (isCurrentRequest('logs', controller)) {
       usageLogs.value = res.items
       pagination.total = res.total
+      pagination.total_is_exact = res.total_is_exact ?? true
     }
-  } catch (error: any) {
-    if (error?.name !== 'AbortError' && error?.code !== 'ERR_CANCELED') {
+  } catch {
+    if (isCurrentRequest('logs', controller)) {
+      logsError.value = true
       appStore.showError(t('usage.failedToLoad'))
     }
   } finally {
-    if (abortController === controller) loading.value = false
+    if (isCurrentRequest('logs', controller)) loading.value = false
   }
 }
 
 const loadStats = async () => {
-  const seq = ++statsReqSeq
+  const controller = startRequest('stats')
+  const params = { ...normalizedFilters.value }
+  const key = filtersKey.value
   endpointStatsLoading.value = true
+  sectionErrors.stats = false
+  statsErrorMessage.value = 'usage.statsLoadFailed'
   try {
-    const stats = await usageAPI.getStats(normalizedFilters.value)
-    if (seq !== statsReqSeq) return
+    const stats = await usageAPI.getStats(params, undefined, { signal: controller.signal })
+    if (!isCurrentRequest('stats', controller)) return
     usageStats.value = stats
-    inboundEndpointStats.value = stats.endpoints || []
+    statsFiltersKey.value = key
+    sectionErrors.stats = stats.endpoints_unavailable === true
+    if (stats.endpoints_unavailable) {
+      statsErrorMessage.value = 'usage.endpointStatsLoadFailed'
+    } else {
+      inboundEndpointStats.value = stats.endpoints || []
+    }
     upstreamEndpointStats.value = []
     endpointPathStats.value = []
-  } catch (error) {
-    if (seq !== statsReqSeq) return
-    console.error('Failed to load usage stats:', error)
-    inboundEndpointStats.value = []
-    upstreamEndpointStats.value = []
-    endpointPathStats.value = []
+  } catch {
+    if (isCurrentRequest('stats', controller)) sectionErrors.stats = true
   } finally {
-    if (seq === statsReqSeq) endpointStatsLoading.value = false
+    if (isCurrentRequest('stats', controller)) endpointStatsLoading.value = false
   }
 }
 
 const loadModelStats = async () => {
-  const seq = ++modelStatsReqSeq
+  const controller = startRequest('models')
   modelStatsLoading.value = true
+  sectionErrors.models = false
   try {
-    const response = await usageAPI.getDashboardModels({
+    const response = await usageAPI.getDashboardSnapshotV2({
       ...normalizedFilters.value,
-      model_source: 'requested',
-    })
-    if (seq !== modelStatsReqSeq) return
+      include_trend: false,
+      include_model_stats: true,
+      include_group_stats: false,
+    }, { signal: controller.signal })
+    if (!isCurrentRequest('models', controller)) return
     requestedModelStats.value = response.models || []
     refreshModelOptions(response.models || [])
-  } catch (error) {
-    if (seq !== modelStatsReqSeq) return
-    console.error('Failed to load model stats:', error)
-    requestedModelStats.value = []
+  } catch {
+    if (isCurrentRequest('models', controller)) sectionErrors.models = true
   } finally {
-    if (seq === modelStatsReqSeq) modelStatsLoading.value = false
+    if (isCurrentRequest('models', controller)) modelStatsLoading.value = false
   }
 }
 
-const loadChartData = async () => {
-  const seq = ++chartReqSeq
-  chartsLoading.value = true
+const loadGroupStats = async () => {
+  const controller = startRequest('groups')
+  groupStatsLoading.value = true
+  sectionErrors.groups = false
+  try {
+    const snapshot = await usageAPI.getDashboardSnapshotV2({
+      ...normalizedFilters.value,
+      include_trend: false,
+      include_model_stats: false,
+      include_group_stats: true,
+    }, { signal: controller.signal })
+    if (isCurrentRequest('groups', controller)) groupStats.value = snapshot.groups || []
+  } catch {
+    if (isCurrentRequest('groups', controller)) sectionErrors.groups = true
+  } finally {
+    if (isCurrentRequest('groups', controller)) groupStatsLoading.value = false
+  }
+}
+
+const loadTrendData = async () => {
+  const controller = startRequest('trend')
+  trendLoading.value = true
+  sectionErrors.trend = false
   try {
     const snapshot = await usageAPI.getDashboardSnapshotV2({
       ...normalizedFilters.value,
       granularity: granularity.value,
       include_trend: true,
       include_model_stats: false,
-      include_group_stats: true,
-    })
-    if (seq !== chartReqSeq) return
-    trendData.value = snapshot.trend || []
-    groupStats.value = snapshot.groups || []
-  } catch (error) {
-    if (seq !== chartReqSeq) return
-    console.error('Failed to load chart data:', error)
-    trendData.value = []
-    groupStats.value = []
+      include_group_stats: false,
+    }, { signal: controller.signal })
+    if (isCurrentRequest('trend', controller)) trendData.value = snapshot.trend || []
+  } catch {
+    if (isCurrentRequest('trend', controller)) sectionErrors.trend = true
   } finally {
-    if (seq === chartReqSeq) chartsLoading.value = false
+    if (isCurrentRequest('trend', controller)) trendLoading.value = false
   }
+}
+
+const loadChartData = () => {
+  void loadGroupStats()
+  void loadTrendData()
 }
 
 const refreshModelOptions = (models: ModelStat[]) => {
@@ -538,6 +607,15 @@ const refreshModelOptions = (models: ModelStat[]) => {
 
 const applyFilters = () => {
   pagination.page = 1
+  pagination.total = 0
+  pagination.total_is_exact = true
+  usageLogs.value = []
+  usageStats.value = null
+  statsFiltersKey.value = null
+  requestedModelStats.value = []
+  groupStats.value = []
+  trendData.value = []
+  inboundEndpointStats.value = []
   void loadLogs()
   void loadStats()
   void loadModelStats()
@@ -639,7 +717,7 @@ const exportUsage = async (format: 'csv' | 'xlsx') => {
   exporting.value = true
   const c = new AbortController()
   exportAbortController = c
-  const params = buildUsageListParams(1, USAGE_EXPORT_PAGE_SIZE)
+  const params = { ...buildUsageListParams(1, USAGE_EXPORT_PAGE_SIZE), exact_total: true }
   const filename = `usage_${params.start_date}_to_${params.end_date}`
   appStore.showInfo(t('usage.preparingExport'))
   try {
@@ -849,17 +927,25 @@ const handleColumnClickOutside = (event: MouseEvent) => {
 }
 
 const loadFilterOptions = async () => {
-  try {
-    const [keys, availableGroups] = await Promise.all([
-      keysAPI.list(1, 100),
-      userGroupsAPI.getAvailable(),
-    ])
-    apiKeys.value = keys.items
-    groups.value = availableGroups
-  } catch (error) {
-    console.error('Failed to load usage filter options:', error)
-  }
+  const seq = ++filterReqSeq
+  sectionErrors.filters = false
+  const [keys, availableGroups] = await Promise.allSettled([
+    keysAPI.list(1, 100),
+    userGroupsAPI.getAvailable(),
+  ])
+  if (disposed || seq !== filterReqSeq) return
+  if (keys.status === 'fulfilled') apiKeys.value = keys.value.items
+  if (availableGroups.status === 'fulfilled') groups.value = availableGroups.value
+  sectionErrors.filters = keys.status === 'rejected' || availableGroups.status === 'rejected'
 }
+
+const failedSections = computed(() => [
+  { key: 'stats', message: statsErrorMessage.value, retry: loadStats },
+  { key: 'models', message: 'usage.modelsLoadFailed', retry: loadModelStats },
+  { key: 'groups', message: 'usage.groupsLoadFailed', retry: loadGroupStats },
+  { key: 'trend', message: 'usage.trendLoadFailed', retry: loadTrendData },
+  { key: 'filters', message: 'usage.filtersLoadFailed', retry: loadFilterOptions },
+].filter((section) => sectionErrors[section.key as keyof typeof sectionErrors]))
 
 const resetErrorRows = () => {
   errorPage.value = 1
@@ -872,6 +958,7 @@ const resetErrorRows = () => {
 }
 
 const loadErrors = async () => {
+  const controller = startRequest('errors')
   errorLoading.value = true
   try {
     const resp = await usageAPI.listMyErrorRequests({
@@ -885,14 +972,14 @@ const loadErrors = async () => {
       status_code: errorFilter.value.status_code ?? undefined,
       sort_by: errorSortBy.value,
       sort_order: errorSortOrder.value,
-    })
+    }, { signal: controller.signal })
+    if (!isCurrentRequest('errors', controller)) return
     errorRows.value = resp.items
     errorTotal.value = resp.total
-  } catch (error) {
-    console.error('[UsageView] loadErrors failed:', error)
-    appStore.showError(t('usage.errors.failedToLoad'))
+  } catch {
+    if (isCurrentRequest('errors', controller)) appStore.showError(t('usage.errors.failedToLoad'))
   } finally {
-    errorLoading.value = false
+    if (isCurrentRequest('errors', controller)) errorLoading.value = false
   }
 }
 
@@ -928,7 +1015,9 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
-  abortController?.abort()
+  disposed = true
+  requests.forEach((controller) => controller.abort())
+  requests.clear()
   exportAbortController?.abort()
   document.removeEventListener('click', handleColumnClickOutside)
 })

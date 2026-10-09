@@ -278,6 +278,11 @@ func (h *UsageHandler) List(c *gin.Context) {
 	if !ok {
 		return
 	}
+	exactTotal, ok := parseBoolQueryWithDefault(c, "exact_total", true)
+	if !ok {
+		return
+	}
+	parsed.Filters.SkipTotal = !exactTotal
 
 	params := pagination.PaginationParams{
 		Page:      page,
@@ -296,7 +301,19 @@ func (h *UsageHandler) List(c *gin.Context) {
 	for i := range records {
 		out = append(out, *dto.UsageLogFromService(&records[i]))
 	}
-	response.Paginated(c, out, result.Total, page, pageSize)
+	if exactTotal {
+		response.Paginated(c, out, result.Total, page, pageSize)
+		return
+	}
+	response.Success(c, struct {
+		response.PaginatedData
+		TotalIsExact bool `json:"total_is_exact"`
+	}{
+		PaginatedData: response.PaginatedData{
+			Items: out, Total: result.Total, Page: page, PageSize: pageSize, Pages: max(1, result.Pages),
+		},
+		TotalIsExact: (len(records) > 0 || page == 1) && result.Total == int64(params.Offset()+len(records)),
+	})
 }
 
 // ListErrors handles listing the current user's failed requests (redacted).
@@ -451,6 +468,9 @@ func (h *UsageHandler) Stats(c *gin.Context) {
 		return
 	}
 
+	// User responses only display inbound endpoints; avoid scanning the same
+	// history twice more for upstream breakdowns that are discarded below.
+	parsed.Filters.SkipUpstreamStats = true
 	stats, err := h.usageService.GetStatsWithFilters(c.Request.Context(), parsed.Filters)
 	if err != nil {
 		response.ErrorFrom(c, err)

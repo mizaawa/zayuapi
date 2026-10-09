@@ -290,10 +290,12 @@ type UsageLogFilters struct {
 	UpstreamModelMismatch *bool
 	StartTime             *time.Time
 	EndTime               *time.Time
-	// SkipTotal is for bounded previews that do not display pagination totals.
+	// SkipTotal returns a lower bound sufficient to determine whether a next page exists.
 	SkipTotal bool
 	// ExactTotal requests exact COUNT(*) for pagination. Default false for fast large-table paging.
 	ExactTotal bool
+	// SkipUpstreamStats omits admin-only endpoint breakdowns from user statistics queries.
+	SkipUpstreamStats bool `json:"-"`
 	// HideChannelMonitorLogs is an internal display filter, never a billing filter.
 	HideChannelMonitorLogs bool `json:"-"`
 }
@@ -312,6 +314,7 @@ type UsageStats struct {
 	TotalAccountCost         *float64       `json:"total_account_cost,omitempty"`
 	AverageDurationMs        float64        `json:"average_duration_ms"`
 	Endpoints                []EndpointStat `json:"endpoints,omitempty"`
+	EndpointsUnavailable     bool           `json:"endpoints_unavailable,omitempty"`
 	UpstreamEndpoints        []EndpointStat `json:"upstream_endpoints,omitempty"`
 	EndpointPaths            []EndpointStat `json:"endpoint_paths,omitempty"`
 }
