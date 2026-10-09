@@ -174,14 +174,16 @@ export const useAnnouncementStore = defineStore('announcements', () => {
   async function markAsRead(id: number) {
     const generation = sessionGeneration
     const userId = activeUserId
-    if (!isCurrentSession(generation, userId)) return
+    if (!isCurrentSession(generation, userId)) return false
     try {
       await announcementsAPI.markRead(id)
-      if (!isCurrentSession(generation, userId)) return
+      if (!isCurrentSession(generation, userId)) return false
       const ann = announcements.value.find((a) => a.id === id)
       if (ann) ann.read_at = new Date().toISOString()
+      return true
     } catch (err: unknown) {
       console.error('Failed to mark announcement as read:', err)
+      return false
     }
   }
 

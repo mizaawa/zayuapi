@@ -87,6 +87,13 @@ func (s *OpenAIGatewayService) forwardOpenAIPassthrough(
 		if normalized {
 			body = normalizedBody
 		}
+		if !isOpenAIResponsesCompactPath(c) {
+			webSearchBody, _, webSearchErr := ensureOpenAIOAuthWebSearchToolForHistoryBody(body, isOpenAIResponsesLiteHeader(c.GetHeader(responsesLiteHeader)))
+			if webSearchErr != nil {
+				return nil, webSearchErr
+			}
+			body = webSearchBody
+		}
 		reqStream = gjson.GetBytes(body, "stream").Bool()
 	}
 

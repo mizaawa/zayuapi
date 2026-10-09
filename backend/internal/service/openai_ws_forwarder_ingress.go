@@ -268,6 +268,13 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 			}
 			normalized = litePayload
 		}
+		if account.IsOpenAIOAuth() {
+			webSearchPayload, _, webSearchErr := ensureOpenAIOAuthWebSearchToolForHistoryBody(normalized, isOpenAIResponsesLiteWebSocketPayload(normalized))
+			if webSearchErr != nil {
+				return openAIWSClientPayload{}, NewOpenAIWSClientCloseError(coderws.StatusPolicyViolation, webSearchErr.Error(), webSearchErr)
+			}
+			normalized = webSearchPayload
+		}
 		apiKey := getAPIKeyFromContext(c)
 		imageGenerationAllowed := GroupAllowsImageGeneration(apiKeyGroup(apiKey))
 		codexImageGenerationExplicitToolPolicy := codexImageGenerationExplicitToolPolicyAllow

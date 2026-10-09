@@ -214,6 +214,50 @@ describe('ChannelsView Custom pricing', () => {
     expect(syncPricingModels).not.toHaveBeenCalled()
   })
 
+  it('keeps model sync scoped to its original platform and disables other sync buttons', async () => {
+    let resolveSync!: (value: { models: string[] }) => void
+    syncPricingModels.mockReturnValue(new Promise(resolve => { resolveSync = resolve }))
+    const wrapper = await openCreateDialog()
+    await enableOpenAIPlatform(wrapper)
+    const syncButton = () => wrapper.findAll('button').find(button => button.isVisible() && (
+      button.text() === 'admin.channels.form.syncLatestModels' || button.text() === 'admin.channels.form.syncingModels'
+    ))!
+    await syncButton().trigger('click')
+
+    const geminiLabel = wrapper.findAll('label').find(label => label.text() === 'Gemini')!
+    await geminiLabel.get('input[type="checkbox"]').setValue(true)
+    await wrapper.findAll('button.channel-tab').find(button => button.text() === 'Gemini')!.trigger('click')
+    expect(syncButton().attributes('disabled')).toBeDefined()
+    await syncButton().trigger('click')
+    expect(syncPricingModels).toHaveBeenCalledTimes(1)
+    expect(syncPricingModels).toHaveBeenCalledWith('openai')
+
+    resolveSync({ models: ['gpt-latest'] })
+    await flushPromises()
+    expect(wrapper.findAll('[data-testid="pricing-entry"]')).toHaveLength(1)
+    expect(wrapper.get('[data-testid="pricing-entry"]').attributes('data-platform')).toBe('openai')
+    expect(wrapper.get('[data-testid="pricing-entry"]').text()).toBe('gpt-latest')
+    expect(syncButton().attributes('disabled')).toBeUndefined()
+    wrapper.unmount()
+  })
+
+  it('discards a model sync response after the channel form has been replaced', async () => {
+    let resolveSync!: (value: { models: string[] }) => void
+    syncPricingModels.mockReturnValue(new Promise(resolve => { resolveSync = resolve }))
+    const wrapper = await openCreateDialog()
+    await enableOpenAIPlatform(wrapper)
+    await wrapper.findAll('button').find(button => button.text() === 'admin.channels.form.syncLatestModels')!.trigger('click')
+    await wrapper.findAll('button').find(button => button.text() === 'common.cancel')!.trigger('click')
+    await wrapper.findAll('button').find(button => button.text() === 'Create Channel')!.trigger('click')
+    await flushPromises()
+    await enableOpenAIPlatform(wrapper)
+
+    resolveSync({ models: ['old-channel-model'] })
+    await flushPromises()
+    expect(wrapper.findAll('[data-testid="pricing-entry"]')).toHaveLength(0)
+    wrapper.unmount()
+  })
+
   it('round-trips Custom group mapping and video pricing when editing', async () => {
     listChannels.mockResolvedValue({ items: [customChannel], total: 1 })
     const wrapper = mountView()

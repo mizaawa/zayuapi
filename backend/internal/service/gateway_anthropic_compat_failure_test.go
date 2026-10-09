@@ -47,7 +47,7 @@ func TestAnthropicCompatFailuresPreserveProtocolAndRetryBoundary(t *testing.T) {
 						name = strings.Replace(name, "before_output", "partial", 1)
 					}
 					t.Run(name, func(t *testing.T) {
-						payload := "event: ping\ndata: {\"type\":\"ping\"}\n\n"
+						payload := ""
 						if partial {
 							payload += anthropicCompatPartialStream
 						}
@@ -92,6 +92,43 @@ func TestAnthropicCompatFailuresPreserveProtocolAndRetryBoundary(t *testing.T) {
 				}
 			}
 		}
+	}
+}
+
+func TestAnthropicChatHeartbeatFailuresStayInCommittedStream(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	for _, failure := range []string{"error_event", "read_error", "missing_terminal"} {
+		t.Run(failure, func(t *testing.T) {
+			payload := "event: ping\ndata: {\"type\":\"ping\"}\n\n"
+			if failure == "error_event" {
+				payload += "event: error\ndata: " + `{"type":"error","error":{"type":"overloaded_error","message":"Upstream overloaded"}}` + "\n\n"
+			}
+			var reader io.Reader = strings.NewReader(payload)
+			if failure == "read_error" {
+				reader = io.MultiReader(reader, iotest.ErrReader(io.ErrUnexpectedEOF))
+			}
+			recorder := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(recorder)
+			ctx := WithAPIKeyFailoverAttempt(t.Context())
+			c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil).WithContext(ctx)
+			response := &http.Response{Header: http.Header{}, Body: io.NopCloser(reader)}
+			result, err := runAnthropicCompatResponse(&GatewayService{}, "chat", true, response, c)
+			require.Error(t, err)
+			var failoverErr *UpstreamFailoverError
+			require.NotErrorAs(t, err, &failoverErr, "a flushed heartbeat must not permit replay on another account")
+			require.NotNil(t, result)
+			require.Nil(t, result.FirstTokenMs, "heartbeat is not model output")
+			require.Zero(t, result.Usage.InputTokens)
+			require.Zero(t, result.Usage.OutputTokens)
+			require.True(t, APIKeyFailoverAttemptFailed(ctx))
+			require.True(t, c.Writer.Written())
+			require.True(t, IsResponseCommitted(c))
+			require.Equal(t, "text/event-stream", recorder.Header().Get("Content-Type"))
+			require.True(t, strings.HasPrefix(recorder.Body.String(), ": ping\n\n"))
+			require.Contains(t, recorder.Body.String(), `data: {"error":{"message":`)
+			require.Equal(t, 1, strings.Count(recorder.Body.String(), "data: [DONE]\n\n"))
+			require.NotContains(t, recorder.Body.String(), `"finish_reason":"stop"`)
+		})
 	}
 }
 
