@@ -146,6 +146,17 @@ const usageLog = {
   stream: false,
 }
 
+const modelStats = [{ model: 'gpt-5.4', requests: 1, input_tokens: 10, output_tokens: 20, cache_creation_tokens: 0, cache_read_tokens: 0, total_tokens: 30, cost: 0.1, actual_cost: 0.08 }]
+const groupStats = [{ group_id: 1, group_name: 'default', requests: 1, total_tokens: 30, cost: 0.1, actual_cost: 0.08 }]
+const trend = [{ date: '2026-03-08', requests: 1, total_tokens: 30 }]
+
+function deferred<T>() {
+  let resolve!: (value: T) => void
+  let reject!: (error: unknown) => void
+  const promise = new Promise<T>((res, rej) => { resolve = res; reject = rej })
+  return { promise, resolve, reject }
+}
+
 function mountUsageView() {
   return mount(UsageView, {
     global: {
@@ -207,8 +218,9 @@ describe('user UsageView', () => {
       start_date: '2026-03-08',
       end_date: '2026-03-08',
       granularity: 'hour',
-      trend: [],
-      groups: [],
+      models: modelStats,
+      trend,
+      groups: groupStats,
     })
     list.mockResolvedValue({ items: [{ id: 1, name: 'demo-key' }] })
     getAvailable.mockResolvedValue([{ id: 1, name: 'default' }])
@@ -239,20 +251,201 @@ describe('user UsageView', () => {
     restored.unmount()
   })
 
-  it('loads logs, stats, model stats, and snapshot on first render', async () => {
-    mountUsageView()
+  it('loads logs without counting history and loads each chart independently', async () => {
+    const wrapper = mountUsageView()
     await flushPromises()
 
-    expect(query).toHaveBeenCalled()
-    expect(getStats).toHaveBeenCalled()
-    expect(getDashboardModels).toHaveBeenCalled()
-    expect(getDashboardSnapshotV2).toHaveBeenCalledWith(expect.objectContaining({
-      include_trend: true,
-      include_model_stats: false,
-      include_group_stats: true,
-    }))
+    expect(query).toHaveBeenCalledWith(expect.objectContaining({ exact_total: false }), expect.objectContaining({ signal: expect.any(AbortSignal) }))
+    expect(getStats).toHaveBeenCalledWith(expect.any(Object), undefined, expect.objectContaining({ signal: expect.any(AbortSignal) }))
+    expect(getDashboardModels).not.toHaveBeenCalled()
+    expect(getDashboardSnapshotV2).toHaveBeenCalledTimes(3)
+    for (const key of ['include_trend', 'include_model_stats', 'include_group_stats']) {
+      expect(getDashboardSnapshotV2).toHaveBeenCalledWith(expect.objectContaining({
+        include_trend: key === 'include_trend',
+        include_model_stats: key === 'include_model_stats',
+        include_group_stats: key === 'include_group_stats',
+      }), expect.objectContaining({ signal: expect.any(AbortSignal) }))
+    }
     expect(list).toHaveBeenCalledWith(1, 100)
     expect(getAvailable).toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it('recovers a failed list without reloading successful statistics and charts', async () => {
+    query.mockRejectedValueOnce({ status: 504 })
+    const wrapper = mountUsageView()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    expect(wrapper.find('[data-usage-error="logs"]').exists()).toBe(true)
+    expect(vm.usageStats.total_requests).toBe(1)
+    expect(vm.requestedModelStats).toEqual(modelStats)
+    expect(vm.groupStats).toEqual(groupStats)
+    expect(vm.trendData).toEqual(trend)
+    await wrapper.get('[data-usage-error="logs"] button').trigger('click')
+    await flushPromises()
+    expect(wrapper.find('[data-usage-error="logs"]').exists()).toBe(false)
+    expect(vm.usageLogs).toEqual([usageLog])
+    expect(vm.loading).toBe(false)
+    expect(getStats).toHaveBeenCalledTimes(1)
+    expect(getDashboardSnapshotV2).toHaveBeenCalledTimes(3)
+    wrapper.unmount()
+  })
+
+  it('keeps healthy charts visible when one section fails and retries just that section', async () => {
+    getDashboardSnapshotV2.mockImplementation((params) => params.include_group_stats
+      ? Promise.reject({ status: 503 })
+      : Promise.resolve({ models: modelStats, trend }))
+    const wrapper = mountUsageView()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    expect(vm.usageLogs).toEqual([usageLog])
+    expect(vm.requestedModelStats).toEqual(modelStats)
+    expect(vm.trendData).toEqual(trend)
+    expect(wrapper.findAll('[data-usage-error]')).toHaveLength(1)
+    expect(wrapper.find('[data-usage-error="groups"]').exists()).toBe(true)
+    getDashboardSnapshotV2.mockResolvedValue({ groups: groupStats })
+    await wrapper.get('[data-usage-error="groups"] button').trigger('click')
+    await flushPromises()
+    expect(vm.groupStats).toEqual(groupStats)
+    expect(vm.requestedModelStats).toEqual(modelStats)
+    expect(vm.trendData).toEqual(trend)
+    expect(wrapper.findAll('[data-usage-error]')).toHaveLength(0)
+    expect(getDashboardSnapshotV2).toHaveBeenCalledTimes(4)
+    expect(query).toHaveBeenCalledTimes(1)
+    wrapper.unmount()
+  })
+
+  it('uses the matching stats count after logs arrive and still permits paging if stats fail', async () => {
+    const stats = deferred<{ total_requests: number }>()
+    getStats.mockReturnValueOnce(stats.promise)
+    query.mockResolvedValue({ items: [usageLog], total: 21, total_is_exact: false })
+    const wrapper = mountUsageView()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    expect(vm.paginationTotal).toBe(21)
+    expect(vm.paginationTotalIsExact).toBe(false)
+    stats.resolve({ total_requests: 85 })
+    await flushPromises()
+    expect(vm.paginationTotal).toBe(85)
+    expect(vm.paginationTotalIsExact).toBe(true)
+
+    getStats.mockRejectedValueOnce({ status: 503 })
+    vm.filters.model = 'another-model'
+    vm.applyFilters()
+    await flushPromises()
+    expect(vm.paginationTotal).toBe(21)
+    expect(vm.paginationTotalIsExact).toBe(false)
+    expect(wrapper.find('[data-usage-error="stats"]').exists()).toBe(true)
+    query.mockResolvedValueOnce({ items: [usageLog], total: 41, total_is_exact: false })
+    vm.handlePageChange(2)
+    await flushPromises()
+    expect(vm.pagination.page).toBe(2)
+    expect(vm.paginationTotal).toBe(41)
+    wrapper.unmount()
+  })
+
+  it('aborts obsolete requests and ignores late failures after filters change', async () => {
+    const oldLogs = deferred<unknown>()
+    const oldStats = deferred<unknown>()
+    const oldCharts = [deferred<unknown>(), deferred<unknown>(), deferred<unknown>()]
+    query.mockReturnValueOnce(oldLogs.promise)
+    getStats.mockReturnValueOnce(oldStats.promise)
+    oldCharts.forEach((request) => getDashboardSnapshotV2.mockReturnValueOnce(request.promise))
+    const wrapper = mountUsageView()
+    const oldSignals = [query.mock.calls[0][1].signal, getStats.mock.calls[0][2].signal,
+      ...getDashboardSnapshotV2.mock.calls.map((call) => call[1].signal)] as AbortSignal[]
+    const vm = wrapper.vm as any
+    vm.filters.model = 'gpt-5.4'
+    vm.applyFilters()
+    await flushPromises()
+    expect(oldSignals.every((signal) => signal.aborted)).toBe(true)
+    oldLogs.reject(new Error('late network failure'))
+    oldStats.resolve({ total_requests: 999 })
+    oldCharts[0].resolve({ models: [{ model: 'obsolete' }] })
+    oldCharts[1].reject(new Error('late group failure'))
+    oldCharts[2].resolve({ trend: [{ date: 'obsolete' }] })
+    await flushPromises()
+    expect(showError).not.toHaveBeenCalled()
+    expect(wrapper.findAll('[data-usage-error]')).toHaveLength(0)
+    expect(vm.usageStats.total_requests).toBe(1)
+    expect(vm.requestedModelStats).toEqual(modelStats)
+    expect(vm.trendData).toEqual(trend)
+    expect(vm.loading).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('cancels page requests on unmount and suppresses late errors', async () => {
+    const logs = deferred<unknown>()
+    const stats = deferred<unknown>()
+    const charts = deferred<unknown>()
+    query.mockReturnValue(logs.promise)
+    getStats.mockReturnValue(stats.promise)
+    getDashboardSnapshotV2.mockReturnValue(charts.promise)
+    const wrapper = mountUsageView()
+    const signals = [query.mock.calls[0][1].signal, getStats.mock.calls[0][2].signal,
+      ...getDashboardSnapshotV2.mock.calls.map((call) => call[1].signal)] as AbortSignal[]
+    wrapper.unmount()
+    expect(signals.every((signal) => signal.aborted)).toBe(true)
+    logs.reject(new Error('after navigation'))
+    stats.reject(new Error('after navigation'))
+    charts.reject(new Error('after navigation'))
+    await flushPromises()
+    expect(showError).not.toHaveBeenCalled()
+  })
+
+  it.each(['keys', 'groups'])('preserves available filter options when %s fail', async (failed) => {
+    const failingRequest = failed === 'keys' ? list : getAvailable
+    failingRequest.mockRejectedValueOnce(new Error('temporary failure'))
+    const wrapper = mountUsageView()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    expect(failed === 'keys' ? vm.groups : vm.apiKeys).toHaveLength(1)
+    expect(wrapper.find('[data-usage-error="filters"]').exists()).toBe(true)
+    await wrapper.get('[data-usage-error="filters"] button').trigger('click')
+    await flushPromises()
+    expect(vm.groups).toHaveLength(1)
+    expect(vm.apiKeys).toHaveLength(1)
+    expect(wrapper.find('[data-usage-error="filters"]').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('preserves existing chart data after a refresh failure', async () => {
+    const wrapper = mountUsageView()
+    await flushPromises()
+    getDashboardSnapshotV2.mockRejectedValue({ status: 503 })
+    await (wrapper.vm as any).loadGroupStats()
+    expect((wrapper.vm as any).groupStats).toEqual(groupStats)
+    expect(wrapper.find('[data-usage-error="groups"]').exists()).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('retains totals and retries when the server reports incomplete endpoint statistics', async () => {
+    getStats.mockResolvedValueOnce({ total_requests: 1, endpoints: [], endpoints_unavailable: true })
+    const wrapper = mountUsageView()
+    await flushPromises()
+    expect((wrapper.vm as any).usageStats.total_requests).toBe(1)
+    expect(wrapper.get('[data-usage-error="stats"]').text()).toContain('usage.endpointStatsLoadFailed')
+    await wrapper.get('[data-usage-error="stats"] button').trigger('click')
+    await flushPromises()
+    expect(wrapper.find('[data-usage-error="stats"]').exists()).toBe(false)
+    expect(query).toHaveBeenCalledTimes(1)
+    wrapper.unmount()
+  })
+
+  it('preserves loaded endpoints on partial failure and clears them for a successful empty result', async () => {
+    const endpoints = [{ endpoint: '/v1/responses', requests: 1, total_tokens: 30, cost: 0.1, actual_cost: 0.08 }]
+    getStats.mockResolvedValueOnce({ total_requests: 1, endpoints })
+    const wrapper = mountUsageView()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    getStats.mockResolvedValueOnce({ total_requests: 1, endpoints: [], endpoints_unavailable: true })
+    await vm.loadStats()
+    expect(vm.inboundEndpointStats).toEqual(endpoints)
+    expect(wrapper.get('[data-usage-error="stats"]').text()).toContain('usage.endpointStatsLoadFailed')
+    await vm.loadStats()
+    expect(vm.inboundEndpointStats).toEqual([])
+    expect(wrapper.find('[data-usage-error="stats"]').exists()).toBe(false)
+    wrapper.unmount()
   })
 
   it('exports csv with current filters and without admin-only fields', async () => {
@@ -280,6 +473,7 @@ describe('user UsageView', () => {
     expect(exportedBlob).not.toBeNull()
     expect(query).toHaveBeenCalledWith(expect.objectContaining({
       page_size: 1000,
+      exact_total: true,
       sort_by: 'created_at',
       sort_order: 'desc',
     }), expect.objectContaining({ signal: expect.any(AbortSignal), timeout: 120000 }))

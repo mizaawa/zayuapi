@@ -1861,6 +1861,7 @@ export interface UsageStatsResponse {
   average_duration_ms: number
   models?: Record<string, number>
   endpoints?: EndpointStat[]
+  endpoints_unavailable?: boolean
   upstream_endpoints?: EndpointStat[]
   endpoint_paths?: EndpointStat[]
 }
@@ -2089,6 +2090,7 @@ export interface UserErrorListParams {
 export interface UsageQueryParams {
   page?: number
   page_size?: number
+  exact_total?: boolean
   api_key_id?: number
   user_id?: number
   account_id?: number

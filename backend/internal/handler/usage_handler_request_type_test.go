@@ -282,6 +282,7 @@ func TestUserUsageStatsUsesScopedFilters(t *testing.T) {
 
 	require.Equal(t, http.StatusOK, rec.Code)
 	require.Equal(t, int64(42), repo.statsFilters.UserID)
+	require.True(t, repo.statsFilters.SkipUpstreamStats)
 	require.Equal(t, int64(9), repo.statsFilters.GroupID)
 	require.Equal(t, usagestats.ModelSourceRequested, repo.statsFilters.ModelFilterSource)
 	require.NotNil(t, repo.statsFilters.RequestType)

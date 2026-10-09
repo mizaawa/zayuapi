@@ -20,6 +20,15 @@ import type {
 
 // ==================== Dashboard Types ====================
 
+export interface UsageRequestOptions {
+  signal?: AbortSignal
+  timeout?: number
+}
+
+export interface UsageListResponse extends PaginatedResponse<UsageLog> {
+  total_is_exact?: boolean
+}
+
 export interface PlatformDashboardStats {
   platform: string
   total_requests: number
@@ -153,9 +162,9 @@ export async function list(
  */
 export async function query(
   params: UsageQueryParams & { sort_by?: string; sort_order?: 'asc' | 'desc' },
-  config: { signal?: AbortSignal; timeout?: number } = {}
-): Promise<PaginatedResponse<UsageLog>> {
-  const { data } = await apiClient.get<PaginatedResponse<UsageLog>>('/usage', {
+  config: UsageRequestOptions = {}
+): Promise<UsageListResponse> {
+  const { data } = await apiClient.get<UsageListResponse>('/usage', {
     ...config,
     params
   })
@@ -170,7 +179,8 @@ export async function query(
  */
 export async function getStats(
   paramsOrPeriod: (UsageQueryParams & { period?: string; timezone?: string }) | string = 'today',
-  apiKeyId?: number
+  apiKeyId?: number,
+  options?: UsageRequestOptions
 ): Promise<UsageStatsResponse> {
   const params: Record<string, unknown> = typeof paramsOrPeriod === 'string'
     ? { period: paramsOrPeriod }
@@ -181,6 +191,7 @@ export async function getStats(
   }
 
   const { data } = await apiClient.get<UsageStatsResponse>('/usage/stats', {
+    ...options,
     params
   })
   return data
@@ -321,11 +332,12 @@ export async function getMyApiKeyDailyUsage(
 }
 
 export async function getDashboardSnapshotV2(
-  params?: UsageDashboardSnapshotV2Params
+  params?: UsageDashboardSnapshotV2Params,
+  options?: UsageRequestOptions
 ): Promise<UsageDashboardSnapshotV2Response> {
   const { data } = await apiClient.get<UsageDashboardSnapshotV2Response>(
     '/usage/dashboard/snapshot-v2',
-    { params }
+    { params, ...options }
   )
   return data
 }
@@ -372,9 +384,11 @@ export async function getDashboardApiKeysUsage(
 }
 
 export async function listMyErrorRequests(
-  params: UserErrorListParams
+  params: UserErrorListParams,
+  options?: UsageRequestOptions
 ): Promise<PaginatedResponse<UserErrorRequest>> {
   const { data } = await apiClient.get<PaginatedResponse<UserErrorRequest>>('/usage/errors', {
+    ...options,
     params
   })
   return data

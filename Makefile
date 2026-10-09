@@ -11,6 +11,8 @@ FRONTEND_CRITICAL_VITEST := \
 	src/components/keys/__tests__/SystemPromptSettings.spec.ts \
 	src/components/keys/__tests__/UseKeyModal.spec.ts \
 	src/views/user/__tests__/KeysView.spec.ts \
+	src/views/user/__tests__/UsageView.spec.ts \
+	src/components/common/__tests__/Pagination.spec.ts \
 	src/views/admin/__tests__/SettingsView.spec.ts
 
 # 一键编译前后端

@@ -12,7 +12,7 @@
         {{ t('pagination.previous') }}
       </button>
       <span class="pagination-copy text-sm">
-        {{ t('pagination.pageOf', { page, total: totalPages }) }}
+        {{ t('pagination.pageOf', { page, total: totalPagesDisplay }) }}
       </span>
       <button
         @click="goToPage(page + 1)"
@@ -32,7 +32,7 @@
           {{ t('pagination.to') }}
           <span class="font-medium">{{ toItem }}</span>
           {{ t('pagination.of') }}
-          <span class="font-medium">{{ total }}</span>
+          <span class="font-medium">{{ totalDisplay }}</span>
           {{ t('pagination.results') }}
         </p>
 
@@ -129,6 +129,7 @@ const { t } = useI18n()
 
 interface Props {
   total: number
+  totalIsExact?: boolean
   page: number
   pageSize: number
   pageSizeOptions?: number[]
@@ -142,6 +143,7 @@ interface Emits {
 }
 
 const props = withDefaults(defineProps<Props>(), {
+  totalIsExact: true,
   pageSizeOptions: () => getConfiguredTablePageSizeOptions(),
   showPageSizeSelector: true,
   showJump: false
@@ -150,6 +152,8 @@ const props = withDefaults(defineProps<Props>(), {
 const emit = defineEmits<Emits>()
 
 const totalPages = computed(() => Math.ceil(props.total / props.pageSize))
+const totalDisplay = computed(() => props.totalIsExact ? props.total : `${props.total}+`)
+const totalPagesDisplay = computed(() => props.totalIsExact ? totalPages.value : `${totalPages.value}+`)
 
 const fromItem = computed(() => {
   if (props.total === 0) return 0

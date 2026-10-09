@@ -766,6 +766,7 @@ func (r *usageLogRepository) GetStatsWithFilters(ctx context.Context, filters Us
 	runEndpoints := func(c context.Context) {
 		res, err := r.getEndpointStatsByColumnWithFilters(c, "inbound_endpoint", start, end, filters.UserID, filters.APIKeyID, filters.AccountID, filters.GroupID, filters.Model, filters.ModelFilterSource, filters.RequestType, filters.Stream, filters.BillingType, filters.BillingMode, filters.HideChannelMonitorLogs)
 		if err != nil {
+			stats.EndpointsUnavailable = true
 			if !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
 				logger.LegacyPrintf("repository.usage_log", "GetEndpointStatsWithFilters failed in GetStatsWithFilters: %v", err)
 			}
@@ -799,8 +800,10 @@ func (r *usageLogRepository) GetStatsWithFilters(ctx context.Context, filters Us
 		g, gctx := errgroup.WithContext(ctx)
 		g.Go(func() error { return runSummary(gctx) })
 		g.Go(func() error { runEndpoints(gctx); return nil })
-		g.Go(func() error { runUpstream(gctx); return nil })
-		g.Go(func() error { runPaths(gctx); return nil })
+		if !filters.SkipUpstreamStats {
+			g.Go(func() error { runUpstream(gctx); return nil })
+			g.Go(func() error { runPaths(gctx); return nil })
+		}
 		if err := g.Wait(); err != nil {
 			return nil, err
 		}
@@ -810,8 +813,10 @@ func (r *usageLogRepository) GetStatsWithFilters(ctx context.Context, filters Us
 			return nil, err
 		}
 		runEndpoints(ctx)
-		runUpstream(ctx)
-		runPaths(ctx)
+		if !filters.SkipUpstreamStats {
+			runUpstream(ctx)
+			runPaths(ctx)
+		}
 	}
 
 	stats.TotalAccountCost = &totalAccountCost
