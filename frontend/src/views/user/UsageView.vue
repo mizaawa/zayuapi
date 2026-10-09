@@ -249,6 +249,8 @@ import { formatReasoningEffort } from '@/utils/format'
 import { formatCacheHitRate } from '@/utils/cacheHitRate'
 import { getEndToEndOutputSpeed } from '@/utils/outputSpeed'
 import { fetchUsageExportPage, USAGE_EXPORT_PAGE_SIZE, USAGE_EXPORT_TIMEOUT } from '@/utils/usageExport'
+import { fetchUsageWithRetry } from '@/utils/usageRequest'
+import { createUsageRequestQueue } from '@/utils/usageRequestQueue'
 import { BILLING_MODE_IMAGE, getBillingModeLabel } from '@/utils/billingMode'
 import { resolveUsageRequestType, requestTypeToLegacyStream } from '@/utils/usageRequestType'
 import type {
@@ -345,6 +347,7 @@ const applyErrorFilters = () => {
 
 type RequestKey = 'logs' | 'stats' | 'models' | 'groups' | 'trend' | 'errors'
 const requests = new Map<RequestKey, AbortController>()
+const queueAggregateRequest = createUsageRequestQueue()
 let disposed = false
 let filterReqSeq = 0
 
@@ -482,12 +485,13 @@ const loadLogs = async () => {
   loading.value = true
   logsError.value = false
   try {
-    const res = await usageAPI.query({
+    const params = {
       ...buildUsageListParams(pagination.page, pagination.page_size),
       exact_total: false,
-    }, {
+    }
+    const res = await fetchUsageWithRetry(() => usageAPI.query(params, {
       signal: controller.signal,
-    })
+    }), controller.signal)
     if (isCurrentRequest('logs', controller)) {
       usageLogs.value = res.items
       pagination.total = res.total
@@ -511,7 +515,10 @@ const loadStats = async () => {
   sectionErrors.stats = false
   statsErrorMessage.value = 'usage.statsLoadFailed'
   try {
-    const stats = await usageAPI.getStats(params, undefined, { signal: controller.signal })
+    const stats = await fetchUsageWithRetry(
+      () => queueAggregateRequest(() => usageAPI.getStats(params, undefined, { signal: controller.signal }), controller.signal),
+      controller.signal,
+    )
     if (!isCurrentRequest('stats', controller)) return
     usageStats.value = stats
     statsFiltersKey.value = key
@@ -535,12 +542,16 @@ const loadModelStats = async () => {
   modelStatsLoading.value = true
   sectionErrors.models = false
   try {
-    const response = await usageAPI.getDashboardSnapshotV2({
+    const params = {
       ...normalizedFilters.value,
       include_trend: false,
       include_model_stats: true,
       include_group_stats: false,
-    }, { signal: controller.signal })
+    }
+    const response = await fetchUsageWithRetry(
+      () => queueAggregateRequest(() => usageAPI.getDashboardSnapshotV2(params, { signal: controller.signal }), controller.signal),
+      controller.signal,
+    )
     if (!isCurrentRequest('models', controller)) return
     requestedModelStats.value = response.models || []
     refreshModelOptions(response.models || [])
@@ -556,12 +567,16 @@ const loadGroupStats = async () => {
   groupStatsLoading.value = true
   sectionErrors.groups = false
   try {
-    const snapshot = await usageAPI.getDashboardSnapshotV2({
+    const params = {
       ...normalizedFilters.value,
       include_trend: false,
       include_model_stats: false,
       include_group_stats: true,
-    }, { signal: controller.signal })
+    }
+    const snapshot = await fetchUsageWithRetry(
+      () => queueAggregateRequest(() => usageAPI.getDashboardSnapshotV2(params, { signal: controller.signal }), controller.signal),
+      controller.signal,
+    )
     if (isCurrentRequest('groups', controller)) groupStats.value = snapshot.groups || []
   } catch {
     if (isCurrentRequest('groups', controller)) sectionErrors.groups = true
@@ -575,13 +590,17 @@ const loadTrendData = async () => {
   trendLoading.value = true
   sectionErrors.trend = false
   try {
-    const snapshot = await usageAPI.getDashboardSnapshotV2({
+    const params = {
       ...normalizedFilters.value,
       granularity: granularity.value,
       include_trend: true,
       include_model_stats: false,
       include_group_stats: false,
-    }, { signal: controller.signal })
+    }
+    const snapshot = await fetchUsageWithRetry(
+      () => queueAggregateRequest(() => usageAPI.getDashboardSnapshotV2(params, { signal: controller.signal }), controller.signal),
+      controller.signal,
+    )
     if (isCurrentRequest('trend', controller)) trendData.value = snapshot.trend || []
   } catch {
     if (isCurrentRequest('trend', controller)) sectionErrors.trend = true
@@ -961,7 +980,7 @@ const loadErrors = async () => {
   const controller = startRequest('errors')
   errorLoading.value = true
   try {
-    const resp = await usageAPI.listMyErrorRequests({
+    const params = {
       page: errorPage.value,
       page_size: errorPageSize.value,
       start_date: startDate.value,
@@ -972,7 +991,11 @@ const loadErrors = async () => {
       status_code: errorFilter.value.status_code ?? undefined,
       sort_by: errorSortBy.value,
       sort_order: errorSortOrder.value,
-    }, { signal: controller.signal })
+    }
+    const resp = await fetchUsageWithRetry(
+      () => usageAPI.listMyErrorRequests(params, { signal: controller.signal }),
+      controller.signal,
+    )
     if (!isCurrentRequest('errors', controller)) return
     errorRows.value = resp.items
     errorTotal.value = resp.total
