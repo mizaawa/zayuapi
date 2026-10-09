@@ -19,6 +19,40 @@ describe('fetchUsageWithRetry', () => {
     expect(vi.getTimerCount()).toBe(0)
   })
 
+  it('recovers an incomplete HTTP-success result with the same bounded backoff', async () => {
+    const request = vi.fn()
+      .mockResolvedValueOnce({ incomplete: true })
+      .mockResolvedValueOnce({ incomplete: false })
+    const result = fetchUsageWithRetry(request, new AbortController().signal, (value) => value.incomplete)
+    await vi.advanceTimersByTimeAsync(499)
+    expect(request).toHaveBeenCalledTimes(1)
+    await vi.advanceTimersByTimeAsync(1)
+    await expect(result).resolves.toEqual({ incomplete: false })
+    expect(request).toHaveBeenCalledTimes(2)
+  })
+
+  it('returns the last incomplete result after exhausting retries', async () => {
+    const request = vi.fn().mockResolvedValue({ incomplete: true, total: 12 })
+    const result = fetchUsageWithRetry(request, new AbortController().signal, (value) => value.incomplete)
+    await vi.advanceTimersByTimeAsync(1500)
+    await expect(result).resolves.toEqual({ incomplete: true, total: 12 })
+    expect(request).toHaveBeenCalledTimes(3)
+    expect(vi.getTimerCount()).toBe(0)
+  })
+
+  it('cancels an incomplete-result retry without issuing another read', async () => {
+    const controller = new AbortController()
+    const request = vi.fn().mockResolvedValue({ incomplete: true })
+    const result = fetchUsageWithRetry(request, controller.signal, (value) => value.incomplete)
+    const rejected = expect(result).rejects.toMatchObject({ name: 'AbortError' })
+    await vi.advanceTimersByTimeAsync(0)
+    controller.abort()
+    await rejected
+    await vi.advanceTimersByTimeAsync(1500)
+    expect(request).toHaveBeenCalledTimes(1)
+    expect(vi.getTimerCount()).toBe(0)
+  })
+
   it.each([
     { status: 0 },
     { status: 500 },
