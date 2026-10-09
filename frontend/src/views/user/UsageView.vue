@@ -516,8 +516,17 @@ const loadStats = async () => {
   statsErrorMessage.value = 'usage.statsLoadFailed'
   try {
     const stats = await fetchUsageWithRetry(
-      () => queueAggregateRequest(() => usageAPI.getStats(params, undefined, { signal: controller.signal }), controller.signal),
+      async () => {
+        const result = await queueAggregateRequest(() => usageAPI.getStats(params, undefined, { signal: controller.signal }), controller.signal)
+        // Preserve valid totals while incomplete endpoint details recover.
+        if (isCurrentRequest('stats', controller)) {
+          usageStats.value = result
+          statsFiltersKey.value = key
+        }
+        return result
+      },
       controller.signal,
+      (result) => result.endpoints_unavailable === true,
     )
     if (!isCurrentRequest('stats', controller)) return
     usageStats.value = stats

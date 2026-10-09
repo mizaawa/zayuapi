@@ -56,16 +56,21 @@ function waitForRetry(milliseconds: number, signal: AbortSignal): Promise<void> 
   })
 }
 
-/** Retry transient usage-page read failures without restarting successful sections. */
+/** Retry transient failures and incomplete reads without restarting successful sections. */
 export async function fetchUsageWithRetry<T>(
   request: () => Promise<T>,
-  signal: AbortSignal
+  signal: AbortSignal,
+  shouldRetryResult?: (result: T) => boolean
 ): Promise<T> {
   for (let retries = 0; ; retries++) {
     if (signal.aborted) throw requestAborted()
     try {
       const result = await request()
       if (signal.aborted) throw requestAborted()
+      if (retries < MAX_RETRIES && shouldRetryResult?.(result)) {
+        await waitForRetry(INITIAL_RETRY_DELAY_MS * 2 ** retries, signal)
+        continue
+      }
       return result
     } catch (error) {
       if (signal.aborted) throw requestAborted()
