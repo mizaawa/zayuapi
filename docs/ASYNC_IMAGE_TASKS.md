@@ -4,6 +4,55 @@ Asynchronous image tasks let clients submit long-running OpenAI-compatible image
 
 ## Endpoints
 
+### User image workbench
+
+The user console includes `/image-workbench`, directly below API Keys. It uses
+the same asynchronous gateway, accounting, moderation and group permissions.
+Workbench submissions set `X-Sub2API-Image-Workbench: true` together with the
+selected API key and `X-Sub2API-User-Email`. They accept JSON generation or edit
+payloads, up to two reference images, and `n` equal to 1, 3, 5, 10 or 20.
+The selected upstream model still determines which sizes and quantities it supports.
+
+The panel session exposes the following user-scoped endpoints:
+
+```text
+GET    /api/v1/image-workbench/tasks
+DELETE /api/v1/image-workbench/tasks/{task_id}
+GET    /api/v1/image-workbench/tasks/{task_id}/images/{index}
+```
+
+The list returns `enabled`, `max_concurrent`, `user_max_concurrent`,
+`admin_exempt`, `retention_seconds`, `tutorial_url`, and `tasks`.
+Each workbench task contains `workbench` metadata with `api_key_id`, `prompt`,
+`model`, `quality`, `size` and `count`. Results include `data[].size_bytes`.
+Reference data and API key secrets are not retained in the task metadata.
+
+Redis atomically limits each user to five running workbench tasks across their
+keys by default. Administrators can configure the limit and exempt administrator
+users, for whom `max_concurrent: 0` means unlimited. Tasks continue after the
+browser disconnects and are recoverable through the list endpoint. Completed or
+failed workbench records expire after 15 minutes by default; an optional custom
+retention setting accepts 1 to 1440 minutes. The configured retention is applied
+when a task completes, independently of the standard async API's 24-hour retention.
+Generated files use
+an isolated `workbench/` storage prefix and a durable cleanup index. A worker
+checks expired files every 15 seconds and retries unsuccessful cleanup later.
+Downloads verify ownership and expiry before proxying the image, so the browser
+does not need object-storage CORS permissions. Running tasks cannot be deleted.
+
+Object storage must be enabled as described below. The console shows an
+unavailable state when storage is not configured.
+
+System Settings exposes `image_workbench_enabled`,
+`image_workbench_max_concurrent` (1 to 100), `image_workbench_admin_exempt`,
+`image_workbench_custom_retention_enabled`, `image_workbench_retention_minutes`,
+and `image_workbench_tutorial_url`. Disabling the workbench hides its console
+entry and rejects workbench submission, listing, polling, deletion, and download.
+Standard async API tasks remain available. Configured HTTP or HTTPS tutorial
+links open in a new window; an empty URL keeps the built-in guide.
+
+### Standard async API
+
 The authenticated gateway exposes both `/v1` paths and their existing no-prefix aliases:
 
 ```text

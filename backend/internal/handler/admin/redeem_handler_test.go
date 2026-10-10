@@ -2,6 +2,7 @@ package admin
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -13,6 +14,50 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+type generateRedeemCodesAdminStub struct {
+	service.AdminService
+	count int
+}
+
+func (s *generateRedeemCodesAdminStub) GenerateRedeemCodes(_ context.Context, input *service.GenerateRedeemCodesInput) ([]service.RedeemCode, error) {
+	s.count = input.Count
+	return []service.RedeemCode{}, nil
+}
+
+func TestGenerateRedeemCodes_CountValidation(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	for _, test := range []struct {
+		name   string
+		count  int
+		status int
+	}{
+		{name: "minimum", count: 1, status: http.StatusOK},
+		{name: "original maximum", count: 100, status: http.StatusOK},
+		{name: "above previous maximum", count: 301, status: http.StatusOK},
+		{name: "above legacy service maximum", count: 1001, status: http.StatusOK},
+		{name: "zero", count: 0, status: http.StatusBadRequest},
+		{name: "negative", count: -1, status: http.StatusBadRequest},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			adminSvc := &generateRedeemCodesAdminStub{}
+			h := NewRedeemHandler(adminSvc, nil)
+			rec := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(rec)
+			body, err := json.Marshal(map[string]any{"count": test.count, "type": "balance", "value": 10})
+			require.NoError(t, err)
+			c.Request = httptest.NewRequest(http.MethodPost, "/api/v1/admin/redeem-codes/generate", bytes.NewReader(body))
+			c.Request.Header.Set("Content-Type", "application/json")
+			h.Generate(c)
+			require.Equal(t, test.status, rec.Code, rec.Body.String())
+			if test.status == http.StatusOK {
+				require.Equal(t, test.count, adminSvc.count)
+			} else {
+				require.Zero(t, adminSvc.count)
+			}
+		})
+	}
+}
 
 // newCreateAndRedeemHandler creates a RedeemHandler with a non-nil (but minimal)
 // RedeemService so that CreateAndRedeem's nil guard passes and we can test the

@@ -787,6 +787,48 @@ describe("admin SettingsView payment visible method controls", () => {
     );
   });
 
+  it("defaults the redeem code limit switch to off and saves both states from extended features", async () => {
+    const wrapper = mountView();
+    await flushPromises();
+    await openFeaturesTab(wrapper);
+
+    const toggle = wrapper.get('[data-testid="disable-redeem-code-creation-limit-toggle"]');
+    expect((toggle.element as HTMLInputElement).checked).toBe(false);
+    expect(toggle.element.closest(".card")?.textContent).toContain("拓展功能");
+
+    await toggle.setValue(true);
+    await wrapper.find("form").trigger("submit.prevent");
+    await flushPromises();
+    expect(updateSettings).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({ disable_redeem_code_creation_limit: true }),
+    );
+    expect(adminSettingsFetch).toHaveBeenCalledWith(true);
+
+    await toggle.setValue(false);
+    await wrapper.find("form").trigger("submit.prevent");
+    await flushPromises();
+    expect(updateSettings).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ disable_redeem_code_creation_limit: false }),
+    );
+    wrapper.unmount();
+  });
+
+  it("loads an enabled redeem code limit switch", async () => {
+    getSettings.mockResolvedValue({
+      ...baseSettingsResponse,
+      disable_redeem_code_creation_limit: true,
+    });
+    const wrapper = mountView();
+    await flushPromises();
+    await openFeaturesTab(wrapper);
+
+    const toggle = wrapper.get('[data-testid="disable-redeem-code-creation-limit-toggle"]');
+    expect((toggle.element as HTMLInputElement).checked).toBe(true);
+    wrapper.unmount();
+  });
+
   it("loads monitor usage log hiding and saves explicit false while monitoring is disabled", async () => {
     getSettings.mockResolvedValue({
       ...baseSettingsResponse,
@@ -1636,7 +1678,6 @@ describe("admin SettingsView payment visible method controls", () => {
     getProviders.mockReset();
     getProviders.mockResolvedValue({ data: [providerWithNullTypes] });
 
-    let receivedProviders: Array<Record<string, unknown>> = [];
     const PaymentProviderListCapture = defineComponent({
       props: {
         providers: {
@@ -1644,8 +1685,7 @@ describe("admin SettingsView payment visible method controls", () => {
           default: () => [],
         },
       },
-      setup(props) {
-        receivedProviders = props.providers as Array<Record<string, unknown>>;
+      setup() {
         return () => h("div", { class: "provider-list-capture" });
       },
     });
@@ -1671,6 +1711,10 @@ describe("admin SettingsView payment visible method controls", () => {
 
     await flushPromises();
     await openPaymentTab(wrapper);
+
+    const receivedProviders = wrapper
+      .getComponent(PaymentProviderListCapture)
+      .props("providers") as Array<Record<string, unknown>>;
 
     // The provider should still be in the list
     expect(receivedProviders.length).toBe(1);

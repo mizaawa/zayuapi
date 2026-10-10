@@ -374,10 +374,18 @@ func (h *SettingHandler) GetSettings(c *gin.Context) {
 		PaymentAlipayForceQRCode:                               paymentCfg.AlipayForceQRCode,
 		PaymentAlipayMobilePrecreateDeepLink:                   paymentCfg.AlipayMobilePrecreateDeepLink,
 
+		DisableRedeemCodeCreationLimit: settings.DisableRedeemCodeCreationLimit,
+
 		ChannelMonitorEnabled:                settings.ChannelMonitorEnabled,
 		ChannelMonitorHideUsageLogs:          settings.ChannelMonitorHideUsageLogs,
 		ChannelMonitorDefaultIntervalSeconds: settings.ChannelMonitorDefaultIntervalSeconds,
 		ChannelMonitorAnnouncement:           settings.ChannelMonitorAnnouncement,
+		ImageWorkbenchEnabled:                settings.ImageWorkbenchEnabled,
+		ImageWorkbenchMaxConcurrent:          settings.ImageWorkbenchMaxConcurrent,
+		ImageWorkbenchAdminExempt:            settings.ImageWorkbenchAdminExempt,
+		ImageWorkbenchCustomRetentionEnabled: settings.ImageWorkbenchCustomRetentionEnabled,
+		ImageWorkbenchRetentionMinutes:       settings.ImageWorkbenchRetentionMinutes,
+		ImageWorkbenchTutorialURL:            settings.ImageWorkbenchTutorialURL,
 
 		AvailableChannelsEnabled: settings.AvailableChannelsEnabled,
 		LeaderboardEnabled:       settings.LeaderboardEnabled,

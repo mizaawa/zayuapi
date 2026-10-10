@@ -3,21 +3,26 @@ import { flushPromises, mount } from '@vue/test-utils'
 
 import RedeemView from '../RedeemView.vue'
 
-const { listRedeemCodes, batchUpdateRedeemCodes, getAllGroups, showSuccess, showError, showInfo } =
+const { listRedeemCodes, generateRedeemCodes, batchUpdateRedeemCodes, getAllGroups, showSuccess, showError, showInfo, adminSettingsStore } =
   vi.hoisted(() => ({
     listRedeemCodes: vi.fn(),
+    generateRedeemCodes: vi.fn(),
     batchUpdateRedeemCodes: vi.fn(),
     getAllGroups: vi.fn(),
     showSuccess: vi.fn(),
     showError: vi.fn(),
-    showInfo: vi.fn()
+    showInfo: vi.fn(),
+    adminSettingsStore: {
+      disableRedeemCodeCreationLimit: false,
+      fetch: vi.fn()
+    }
   }))
 
 vi.mock('@/api/admin', () => ({
   adminAPI: {
     redeem: {
       list: listRedeemCodes,
-      generate: vi.fn(),
+      generate: generateRedeemCodes,
       delete: vi.fn(),
       batchDelete: vi.fn(),
       batchUpdate: batchUpdateRedeemCodes,
@@ -35,6 +40,10 @@ vi.mock('@/stores/app', () => ({
     showError,
     showInfo
   })
+}))
+
+vi.mock('@/stores/adminSettings', () => ({
+  useAdminSettingsStore: () => adminSettingsStore
 }))
 
 vi.mock('@/composables/useClipboard', () => ({
@@ -99,17 +108,42 @@ const SelectStub = {
   `
 }
 
-describe('admin RedeemView batch update', () => {
+function mountView() {
+  return mount(RedeemView, {
+    attachTo: document.body,
+    global: {
+      stubs: {
+        AppLayout: { template: '<div><slot /></div>' },
+        TablePageLayout: {
+          template: '<div><slot name="filters" /><slot name="table" /><slot name="pagination" /></div>'
+        },
+        DataTable: DataTableStub,
+        Pagination: true,
+        ConfirmDialog: true,
+        Select: SelectStub,
+        GroupBadge: true,
+        GroupOptionItem: true,
+        Icon: true,
+        Teleport: true
+      }
+    }
+  })
+}
+
+describe('admin RedeemView', () => {
   beforeEach(() => {
     localStorage.clear()
     document.body.innerHTML = ''
 
     listRedeemCodes.mockReset()
+    generateRedeemCodes.mockReset()
     batchUpdateRedeemCodes.mockReset()
     getAllGroups.mockReset()
     showSuccess.mockReset()
     showError.mockReset()
     showInfo.mockReset()
+    adminSettingsStore.disableRedeemCodeCreationLimit = false
+    adminSettingsStore.fetch.mockReset().mockResolvedValue(undefined)
 
     listRedeemCodes.mockResolvedValue({
       items: [
@@ -142,29 +176,12 @@ describe('admin RedeemView batch update', () => {
       pages: 1
     })
     batchUpdateRedeemCodes.mockResolvedValue({ updated: 1, message: 'ok' })
+    generateRedeemCodes.mockResolvedValue([])
     getAllGroups.mockResolvedValue([])
   })
 
   it('submits only checked fields for selected redeem codes', async () => {
-    const wrapper = mount(RedeemView, {
-      attachTo: document.body,
-      global: {
-        stubs: {
-          AppLayout: { template: '<div><slot /></div>' },
-          TablePageLayout: {
-            template: '<div><slot name="filters" /><slot name="table" /><slot name="pagination" /></div>'
-          },
-          DataTable: DataTableStub,
-          Pagination: true,
-          ConfirmDialog: true,
-          Select: SelectStub,
-          GroupBadge: true,
-          GroupOptionItem: true,
-          Icon: true,
-          Teleport: true
-        }
-      }
-    })
+    const wrapper = mountView()
 
     await flushPromises()
     await wrapper.findAll('[data-test="select-code"]')[0].setValue(true)
@@ -183,5 +200,51 @@ describe('admin RedeemView batch update', () => {
       notes: 'maintenance'
     })
     expect(showSuccess).toHaveBeenCalledWith('admin.redeem.batchUpdateSuccess')
+    wrapper.unmount()
+  })
+
+  it('refreshes the setting and keeps the default maximum at 100', async () => {
+    const wrapper = mountView()
+    await flushPromises()
+    expect(adminSettingsStore.fetch).toHaveBeenCalledWith(true)
+    await wrapper.get('[data-test="generate-open"]').trigger('click')
+
+    const input = wrapper.get('[data-test="generate-count"]')
+    expect(input.attributes('max')).toBe('100')
+    await input.setValue('100')
+    expect((input.element as HTMLInputElement).validity.valid).toBe(true)
+    await input.setValue('101')
+    expect((input.element as HTMLInputElement).validity.rangeOverflow).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('allows generating more than 300 codes when the limit is disabled', async () => {
+    adminSettingsStore.disableRedeemCodeCreationLimit = true
+    const wrapper = mountView()
+    await flushPromises()
+    await wrapper.get('[data-test="generate-open"]').trigger('click')
+
+    const input = wrapper.get('[data-test="generate-count"]')
+    expect(input.attributes('max')).toBeUndefined()
+    await input.setValue('1001')
+    expect((input.element as HTMLInputElement).validity.valid).toBe(true)
+    await wrapper.get('[data-test="generate-form"]').trigger('submit')
+    await flushPromises()
+
+    expect(generateRedeemCodes).toHaveBeenCalledWith(1001, 'balance', 10, undefined, undefined, undefined)
+    wrapper.unmount()
+  })
+
+  it.each(['0', '-1', '1.5', ''])('still rejects invalid count %s when the limit is disabled', async (count) => {
+    adminSettingsStore.disableRedeemCodeCreationLimit = true
+    const wrapper = mountView()
+    await flushPromises()
+    await wrapper.get('[data-test="generate-open"]').trigger('click')
+
+    const input = wrapper.get('[data-test="generate-count"]')
+    await input.setValue(count)
+    expect((input.element as HTMLInputElement).validity.valid).toBe(false)
+    expect(generateRedeemCodes).not.toHaveBeenCalled()
+    wrapper.unmount()
   })
 })

@@ -41,6 +41,15 @@ export default {
           enabled: 'Enable Available Channels',
           enabledHint: 'When off, the sidebar entry is hidden and the endpoint returns an empty list.',
         },
+        imageWorkbench: {
+          title: 'Image Workbench',
+          enabled: 'Enable Image Workbench',
+          maxConcurrent: 'Maximum concurrent tasks per user',
+          adminExempt: 'Exempt administrators from concurrency limits',
+          customRetention: 'Set cloud image cache duration',
+          retentionMinutes: 'Cache duration (minutes)',
+          tutorialURL: 'Tutorial link',
+        },
         leaderboard: {
           title: 'Leaderboard',
           description: 'Show a privacy-protected usage leaderboard to signed-in users. Disabled by default.',

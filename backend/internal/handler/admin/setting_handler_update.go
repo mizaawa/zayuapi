@@ -333,11 +333,20 @@ type UpdateSettingsRequest struct {
 	// Use Alipay face-to-face precreate and an app deep link on mobile clients.
 	PaymentAlipayMobilePrecreateDeepLink *bool `json:"payment_alipay_mobile_precreate_deep_link"`
 
+	DisableRedeemCodeCreationLimit *bool `json:"disable_redeem_code_creation_limit"`
+
 	// Channel Monitor feature switch
 	ChannelMonitorEnabled                *bool   `json:"channel_monitor_enabled"`
 	ChannelMonitorHideUsageLogs          *bool   `json:"channel_monitor_hide_usage_logs"`
 	ChannelMonitorDefaultIntervalSeconds *int    `json:"channel_monitor_default_interval_seconds"`
 	ChannelMonitorAnnouncement           *string `json:"channel_monitor_announcement"`
+
+	ImageWorkbenchEnabled                *bool   `json:"image_workbench_enabled"`
+	ImageWorkbenchMaxConcurrent          *int    `json:"image_workbench_max_concurrent" binding:"omitempty,min=1,max=100"`
+	ImageWorkbenchAdminExempt            *bool   `json:"image_workbench_admin_exempt"`
+	ImageWorkbenchCustomRetentionEnabled *bool   `json:"image_workbench_custom_retention_enabled"`
+	ImageWorkbenchRetentionMinutes       *int    `json:"image_workbench_retention_minutes" binding:"omitempty,min=1,max=1440"`
+	ImageWorkbenchTutorialURL            *string `json:"image_workbench_tutorial_url"`
 
 	// Available Channels feature switch (user-facing)
 	AvailableChannelsEnabled *bool `json:"available_channels_enabled"`
@@ -500,6 +509,14 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		return
 	}
 	channelMonitorAnnouncement := previousSettings.ChannelMonitorAnnouncement
+	if req.ImageWorkbenchMaxConcurrent != nil && (*req.ImageWorkbenchMaxConcurrent < 1 || *req.ImageWorkbenchMaxConcurrent > 100) {
+		response.BadRequest(c, "Image workbench concurrency must be between 1 and 100")
+		return
+	}
+	if req.ImageWorkbenchRetentionMinutes != nil && (*req.ImageWorkbenchRetentionMinutes < 1 || *req.ImageWorkbenchRetentionMinutes > 1440) {
+		response.BadRequest(c, "Image workbench retention must be between 1 and 1440 minutes")
+		return
+	}
 	if req.ChannelMonitorAnnouncement != nil {
 		channelMonitorAnnouncement = strings.TrimSpace(*req.ChannelMonitorAnnouncement)
 		if utf8.RuneCountInString(channelMonitorAnnouncement) > maxChannelMonitorAnnouncementRunes {
@@ -1885,6 +1902,13 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 			}
 			return previousSettings.AccountQuotaNotifyEmails
 		}(),
+		DisableRedeemCodeCreationLimit: func() bool {
+			if req.DisableRedeemCodeCreationLimit != nil {
+				return *req.DisableRedeemCodeCreationLimit
+			}
+			return previousSettings.DisableRedeemCodeCreationLimit
+		}(),
+
 		ChannelMonitorEnabled: func() bool {
 			if req.ChannelMonitorEnabled != nil {
 				return *req.ChannelMonitorEnabled
@@ -1904,6 +1928,42 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 			return previousSettings.ChannelMonitorDefaultIntervalSeconds
 		}(),
 		ChannelMonitorAnnouncement: channelMonitorAnnouncement,
+		ImageWorkbenchEnabled: func() bool {
+			if req.ImageWorkbenchEnabled != nil {
+				return *req.ImageWorkbenchEnabled
+			}
+			return previousSettings.ImageWorkbenchEnabled
+		}(),
+		ImageWorkbenchMaxConcurrent: func() int {
+			if req.ImageWorkbenchMaxConcurrent != nil {
+				return *req.ImageWorkbenchMaxConcurrent
+			}
+			return previousSettings.ImageWorkbenchMaxConcurrent
+		}(),
+		ImageWorkbenchAdminExempt: func() bool {
+			if req.ImageWorkbenchAdminExempt != nil {
+				return *req.ImageWorkbenchAdminExempt
+			}
+			return previousSettings.ImageWorkbenchAdminExempt
+		}(),
+		ImageWorkbenchCustomRetentionEnabled: func() bool {
+			if req.ImageWorkbenchCustomRetentionEnabled != nil {
+				return *req.ImageWorkbenchCustomRetentionEnabled
+			}
+			return previousSettings.ImageWorkbenchCustomRetentionEnabled
+		}(),
+		ImageWorkbenchRetentionMinutes: func() int {
+			if req.ImageWorkbenchRetentionMinutes != nil {
+				return *req.ImageWorkbenchRetentionMinutes
+			}
+			return previousSettings.ImageWorkbenchRetentionMinutes
+		}(),
+		ImageWorkbenchTutorialURL: func() string {
+			if req.ImageWorkbenchTutorialURL != nil {
+				return strings.TrimSpace(*req.ImageWorkbenchTutorialURL)
+			}
+			return previousSettings.ImageWorkbenchTutorialURL
+		}(),
 		AvailableChannelsEnabled: func() bool {
 			if req.AvailableChannelsEnabled != nil {
 				return *req.AvailableChannelsEnabled
@@ -2356,10 +2416,18 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		PaymentAlipayForceQRCode:                               updatedPaymentCfg.AlipayForceQRCode,
 		PaymentAlipayMobilePrecreateDeepLink:                   updatedPaymentCfg.AlipayMobilePrecreateDeepLink,
 
+		DisableRedeemCodeCreationLimit: updatedSettings.DisableRedeemCodeCreationLimit,
+
 		ChannelMonitorEnabled:                updatedSettings.ChannelMonitorEnabled,
 		ChannelMonitorHideUsageLogs:          updatedSettings.ChannelMonitorHideUsageLogs,
 		ChannelMonitorDefaultIntervalSeconds: updatedSettings.ChannelMonitorDefaultIntervalSeconds,
 		ChannelMonitorAnnouncement:           updatedSettings.ChannelMonitorAnnouncement,
+		ImageWorkbenchEnabled:                updatedSettings.ImageWorkbenchEnabled,
+		ImageWorkbenchMaxConcurrent:          updatedSettings.ImageWorkbenchMaxConcurrent,
+		ImageWorkbenchAdminExempt:            updatedSettings.ImageWorkbenchAdminExempt,
+		ImageWorkbenchCustomRetentionEnabled: updatedSettings.ImageWorkbenchCustomRetentionEnabled,
+		ImageWorkbenchRetentionMinutes:       updatedSettings.ImageWorkbenchRetentionMinutes,
+		ImageWorkbenchTutorialURL:            updatedSettings.ImageWorkbenchTutorialURL,
 
 		AvailableChannelsEnabled: updatedSettings.AvailableChannelsEnabled,
 		LeaderboardEnabled:       updatedSettings.LeaderboardEnabled,

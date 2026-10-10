@@ -187,11 +187,20 @@ func (s *SettingService) InitializeDefaultSettings(ctx context.Context) error {
 		SettingKeyOpsQueryModeDefault:          "auto",
 		SettingKeyOpsMetricsIntervalSeconds:    "60",
 
+		SettingKeyDisableRedeemCodeCreationLimit: "false",
+
 		// Channel monitor defaults (enabled, 60s)
 		SettingKeyChannelMonitorEnabled:                "true",
 		SettingKeyChannelMonitorHideUsageLogs:          "false",
 		SettingKeyChannelMonitorDefaultIntervalSeconds: "60",
 		SettingKeyChannelMonitorAnnouncement:           "",
+
+		SettingKeyImageWorkbenchEnabled:                "true",
+		SettingKeyImageWorkbenchMaxConcurrent:          "5",
+		SettingKeyImageWorkbenchAdminExempt:            "false",
+		SettingKeyImageWorkbenchCustomRetentionEnabled: "false",
+		SettingKeyImageWorkbenchRetentionMinutes:       "15",
+		SettingKeyImageWorkbenchTutorialURL:            "",
 
 		// Available channels feature (default disabled; opt-in)
 		SettingKeyAvailableChannelsEnabled: "false",
@@ -794,6 +803,8 @@ func (s *SettingService) parseSettings(settings map[string]string) *SystemSettin
 		}
 	}
 
+	result.DisableRedeemCodeCreationLimit = settings[SettingKeyDisableRedeemCodeCreationLimit] == "true"
+
 	// Channel monitor feature (default: enabled, 60s)
 	result.ChannelMonitorEnabled = !isFalseSettingValue(settings[SettingKeyChannelMonitorEnabled])
 	result.ChannelMonitorHideUsageLogs = settings[SettingKeyChannelMonitorHideUsageLogs] == "true"
@@ -801,6 +812,13 @@ func (s *SettingService) parseSettings(settings map[string]string) *SystemSettin
 		settings[SettingKeyChannelMonitorDefaultIntervalSeconds],
 	)
 	result.ChannelMonitorAnnouncement = strings.TrimSpace(settings[SettingKeyChannelMonitorAnnouncement])
+	workbench := parseImageWorkbenchRuntime(settings)
+	result.ImageWorkbenchEnabled = workbench.Enabled
+	result.ImageWorkbenchMaxConcurrent = workbench.MaxConcurrent
+	result.ImageWorkbenchAdminExempt = workbench.AdminExempt
+	result.ImageWorkbenchCustomRetentionEnabled = workbench.CustomRetentionEnabled
+	result.ImageWorkbenchRetentionMinutes = parseImageWorkbenchNumber(settings[SettingKeyImageWorkbenchRetentionMinutes], 15, 1440)
+	result.ImageWorkbenchTutorialURL = workbench.TutorialURL
 
 	// Available channels feature (default: disabled; strict true)
 	result.AvailableChannelsEnabled = settings[SettingKeyAvailableChannelsEnabled] == "true"

@@ -50,6 +50,7 @@ declare module 'vue-router' {
     requiresPayment?: boolean
     /** 是否要求排行榜功能开关已启用 */
     requiresLeaderboard?: boolean
+    requiresImageWorkbench?: boolean
 
     /**
      * 是否要求风控中心功能开关已启用

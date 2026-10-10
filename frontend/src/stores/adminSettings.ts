@@ -49,6 +49,7 @@ export const useAdminSettingsStore = defineStore('adminSettings', () => {
   const opsRealtimeMonitoringEnabled = ref(readCachedBool('ops_realtime_monitoring_enabled_cached', true))
   const opsQueryModeDefault = ref(readCachedString('ops_query_mode_default_cached', 'auto'))
   const paymentEnabled = ref(readCachedBool('payment_enabled_cached', false))
+  const disableRedeemCodeCreationLimit = ref(false)
   const customMenuItems = ref<CustomMenuItem[]>([])
 
   async function fetch(force = false): Promise<void> {
@@ -59,7 +60,10 @@ export const useAdminSettingsStore = defineStore('adminSettings', () => {
     try {
       const [settings, paymentConfigResp] = await Promise.all([
         adminAPI.settings.getSettings(),
-        adminAPI.payment.getConfig()
+        adminAPI.payment.getConfig().catch((err) => {
+          console.error('[adminSettings] Failed to fetch payment config:', err)
+          return null
+        })
       ])
       opsMonitoringEnabled.value = settings.ops_monitoring_enabled ?? true
       writeCachedBool('ops_monitoring_enabled_cached', opsMonitoringEnabled.value)
@@ -71,9 +75,12 @@ export const useAdminSettingsStore = defineStore('adminSettings', () => {
       writeCachedString('ops_query_mode_default_cached', opsQueryModeDefault.value)
 
       customMenuItems.value = Array.isArray(settings.custom_menu_items) ? settings.custom_menu_items : []
+      disableRedeemCodeCreationLimit.value = settings.disable_redeem_code_creation_limit === true
 
-      paymentEnabled.value = paymentConfigResp.data?.enabled ?? false
-      writeCachedBool('payment_enabled_cached', paymentEnabled.value)
+      if (paymentConfigResp) {
+        paymentEnabled.value = paymentConfigResp.data?.enabled ?? false
+        writeCachedBool('payment_enabled_cached', paymentEnabled.value)
+      }
 
       loaded.value = true
     } catch (err) {
@@ -140,6 +147,7 @@ export const useAdminSettingsStore = defineStore('adminSettings', () => {
     opsRealtimeMonitoringEnabled,
     opsQueryModeDefault,
     paymentEnabled,
+    disableRedeemCodeCreationLimit,
     customMenuItems,
     fetch,
     setOpsMonitoringEnabledLocal,

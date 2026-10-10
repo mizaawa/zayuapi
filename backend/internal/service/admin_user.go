@@ -1271,6 +1271,13 @@ func (s *adminServiceImpl) GetRedeemCode(ctx context.Context, id int64) (*Redeem
 }
 
 func (s *adminServiceImpl) GenerateRedeemCodes(ctx context.Context, input *GenerateRedeemCodesInput) ([]RedeemCode, error) {
+	if input.Count < 1 {
+		return nil, infraerrors.BadRequest("REDEEM_CODE_COUNT_INVALID", "count must be greater than zero")
+	}
+	if input.Count > DefaultRedeemCodeCreationLimit && !s.settingService.IsRedeemCodeCreationLimitDisabled(ctx) {
+		return nil, infraerrors.BadRequest("REDEEM_CODE_CREATION_LIMIT_EXCEEDED", fmt.Sprintf("cannot generate more than %d codes at once", DefaultRedeemCodeCreationLimit))
+	}
+
 	if input.ExpiresAt != nil && !input.ExpiresAt.After(time.Now()) {
 		return nil, ErrRedeemCodeExpired
 	}

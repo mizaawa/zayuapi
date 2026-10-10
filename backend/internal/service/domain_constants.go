@@ -88,6 +88,8 @@ const (
 	RedeemTypeAffiliateBalance = "affiliate_balance"
 )
 
+const DefaultRedeemCodeCreationLimit = 100
+
 // PromoCode status constants
 const (
 	PromoCodeStatusActive   = domain.PromoCodeStatusActive
@@ -150,10 +152,11 @@ const (
 	SettingKeyCyberSessionBlockEnabled         = "cyber_session_block_enabled"         // cyber 命中后会话级自动屏蔽总开关(默认关)
 	SettingKeyCyberSessionBlockTTLSeconds      = "cyber_session_block_ttl_seconds"     // 会话屏蔽 TTL 秒数(默认 3600)
 	SettingKeyDisableTempUnschedulable         = "disable_temp_unschedulable"          // 忽略账号临时不可调度状态
-	SettingKeyLoginAgreementEnabled            = "login_agreement_enabled"             // 登录前是否要求同意条款
-	SettingKeyLoginAgreementMode               = "login_agreement_mode"                // 条款确认展示模式：modal / checkbox
-	SettingKeyLoginAgreementUpdatedAt          = "login_agreement_updated_at"          // 条款更新日期（展示用）
-	SettingKeyLoginAgreementDocuments          = "login_agreement_documents"           // 条款文档列表（JSON，Markdown 内容）
+	SettingKeyDisableRedeemCodeCreationLimit   = "disable_redeem_code_creation_limit"
+	SettingKeyLoginAgreementEnabled            = "login_agreement_enabled"    // 登录前是否要求同意条款
+	SettingKeyLoginAgreementMode               = "login_agreement_mode"       // 条款确认展示模式：modal / checkbox
+	SettingKeyLoginAgreementUpdatedAt          = "login_agreement_updated_at" // 条款更新日期（展示用）
+	SettingKeyLoginAgreementDocuments          = "login_agreement_documents"  // 条款文档列表（JSON，Markdown 内容）
 
 	// 邮件服务设置
 	SettingKeySMTPHost     = "smtp_host"      // SMTP服务器地址
@@ -405,6 +408,13 @@ const (
 	// SettingKeyChannelMonitorDefaultIntervalSeconds controls the default interval (seconds)
 	// pre-filled when creating a new channel monitor from the admin UI. Range: [15, 3600].
 	SettingKeyChannelMonitorDefaultIntervalSeconds = "channel_monitor_default_interval_seconds"
+
+	SettingKeyImageWorkbenchEnabled                = "image_workbench_enabled"
+	SettingKeyImageWorkbenchMaxConcurrent          = "image_workbench_max_concurrent"
+	SettingKeyImageWorkbenchAdminExempt            = "image_workbench_admin_exempt"
+	SettingKeyImageWorkbenchCustomRetentionEnabled = "image_workbench_custom_retention_enabled"
+	SettingKeyImageWorkbenchRetentionMinutes       = "image_workbench_retention_minutes"
+	SettingKeyImageWorkbenchTutorialURL            = "image_workbench_tutorial_url"
 
 	// SettingKeyAvailableChannelsEnabled is a DB-backed soft switch for the "Available Channels"
 	// user-facing aggregate view. When false: user endpoint returns an empty list and the

@@ -117,6 +117,9 @@ func (u *ImageResultUploader) RewriteForEmail(ctx context.Context, taskID, email
 			return nil, fmt.Errorf("image %d: encode url: %w", i, err)
 		}
 		item["url"] = urlRaw
+		if strings.HasSuffix(u.prefix, "/workbench/") {
+			item["size_bytes"] = json.RawMessage(strconv.Itoa(len(data)))
+		}
 		delete(item, "b64_json")
 		items[i] = item
 	}
@@ -150,6 +153,26 @@ func (u *ImageResultUploader) DeleteAll(ctx context.Context) (int64, error) {
 		return 0, nil
 	}
 	return cleaner.DeletePrefix(ctx, prefix)
+}
+
+func (u *ImageResultUploader) forWorkbench() *ImageResultUploader {
+	copy := *u
+	copy.prefix += "workbench/"
+	return &copy
+}
+
+func (u *ImageResultUploader) deleteTask(ctx context.Context, taskID, email string) error {
+	if u == nil || u.storage == nil {
+		return nil
+	}
+	cleaner, ok := u.storage.(ImageStorageCleaner)
+	if !ok {
+		return errors.New("image storage does not support task cleanup")
+	}
+	digest := sha256.Sum256([]byte(NormalizeImageOwnerEmail(email)))
+	prefix := u.prefix + "users/" + fmt.Sprintf("%x", digest[:]) + "/" + taskID + "-"
+	_, err := cleaner.DeletePrefix(ctx, prefix)
+	return err
 }
 
 func (u *ImageResultUploader) fetchImageBytes(ctx context.Context, item map[string]json.RawMessage) ([]byte, string, error) {
