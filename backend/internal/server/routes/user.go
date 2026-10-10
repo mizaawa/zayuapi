@@ -72,6 +72,11 @@ func RegisterUserRoutes(
 			}
 		}
 
+		// Image workbench
+		authenticated.GET("/image-workbench/tasks", h.AsyncImage.ListWorkbench)
+		authenticated.DELETE("/image-workbench/tasks/:task_id", h.AsyncImage.DeleteWorkbench)
+		authenticated.GET("/image-workbench/tasks/:task_id/images/:index", h.AsyncImage.DownloadWorkbenchImage)
+
 		// API Key管理
 		keys := authenticated.Group("/keys")
 		{

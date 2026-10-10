@@ -203,11 +203,20 @@ type SystemSettings struct {
 	OpsQueryModeDefault          string
 	OpsMetricsIntervalSeconds    int
 
+	DisableRedeemCodeCreationLimit bool `json:"disable_redeem_code_creation_limit"`
+
 	// Channel Monitor feature
 	ChannelMonitorEnabled                bool   `json:"channel_monitor_enabled"`
 	ChannelMonitorHideUsageLogs          bool   `json:"channel_monitor_hide_usage_logs"`
 	ChannelMonitorDefaultIntervalSeconds int    `json:"channel_monitor_default_interval_seconds"`
 	ChannelMonitorAnnouncement           string `json:"channel_monitor_announcement"`
+
+	ImageWorkbenchEnabled                bool   `json:"image_workbench_enabled"`
+	ImageWorkbenchMaxConcurrent          int    `json:"image_workbench_max_concurrent"`
+	ImageWorkbenchAdminExempt            bool   `json:"image_workbench_admin_exempt"`
+	ImageWorkbenchCustomRetentionEnabled bool   `json:"image_workbench_custom_retention_enabled"`
+	ImageWorkbenchRetentionMinutes       int    `json:"image_workbench_retention_minutes"`
+	ImageWorkbenchTutorialURL            string `json:"image_workbench_tutorial_url"`
 
 	// Available Channels feature (user-facing aggregate view)
 	AvailableChannelsEnabled bool `json:"available_channels_enabled"`
@@ -380,6 +389,13 @@ type PublicSettings struct {
 	ChannelMonitorEnabled                bool   `json:"channel_monitor_enabled"`
 	ChannelMonitorDefaultIntervalSeconds int    `json:"channel_monitor_default_interval_seconds"`
 	ChannelMonitorAnnouncement           string `json:"channel_monitor_announcement"`
+
+	ImageWorkbenchEnabled                bool   `json:"image_workbench_enabled"`
+	ImageWorkbenchMaxConcurrent          int    `json:"image_workbench_max_concurrent"`
+	ImageWorkbenchAdminExempt            bool   `json:"image_workbench_admin_exempt"`
+	ImageWorkbenchCustomRetentionEnabled bool   `json:"image_workbench_custom_retention_enabled"`
+	ImageWorkbenchRetentionMinutes       int    `json:"image_workbench_retention_minutes"`
+	ImageWorkbenchTutorialURL            string `json:"image_workbench_tutorial_url"`
 
 	// Available Channels feature (user-facing aggregate view)
 	AvailableChannelsEnabled bool `json:"available_channels_enabled"`

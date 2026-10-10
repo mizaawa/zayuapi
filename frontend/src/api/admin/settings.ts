@@ -672,11 +672,20 @@ export interface SystemSettings {
   account_quota_notify_enabled: boolean;
   account_quota_notify_emails: NotifyEmailEntry[];
 
+  disable_redeem_code_creation_limit: boolean;
+
   // Channel Monitor feature switch
   channel_monitor_enabled: boolean;
   channel_monitor_hide_usage_logs: boolean;
   channel_monitor_default_interval_seconds: number;
   channel_monitor_announcement: string;
+
+  image_workbench_enabled: boolean;
+  image_workbench_max_concurrent: number;
+  image_workbench_admin_exempt: boolean;
+  image_workbench_custom_retention_enabled: boolean;
+  image_workbench_retention_minutes: number;
+  image_workbench_tutorial_url: string;
 
   // Available Channels feature switch
   available_channels_enabled: boolean;
@@ -975,11 +984,20 @@ export interface UpdateSettingsRequest {
   account_quota_notify_enabled?: boolean;
   account_quota_notify_emails?: NotifyEmailEntry[];
 
+  disable_redeem_code_creation_limit?: boolean;
+
   // Channel Monitor feature switch
   channel_monitor_enabled?: boolean;
   channel_monitor_hide_usage_logs?: boolean;
   channel_monitor_default_interval_seconds?: number;
   channel_monitor_announcement?: string;
+
+  image_workbench_enabled?: boolean;
+  image_workbench_max_concurrent?: number;
+  image_workbench_admin_exempt?: boolean;
+  image_workbench_custom_retention_enabled?: boolean;
+  image_workbench_retention_minutes?: number;
+  image_workbench_tutorial_url?: string;
 
   // Available Channels feature switch
   available_channels_enabled?: boolean;

@@ -232,6 +232,12 @@ func (s *SettingService) GetPublicSettings(ctx context.Context) (*PublicSettings
 		SettingKeyChannelMonitorEnabled,
 		SettingKeyChannelMonitorDefaultIntervalSeconds,
 		SettingKeyChannelMonitorAnnouncement,
+		SettingKeyImageWorkbenchEnabled,
+		SettingKeyImageWorkbenchMaxConcurrent,
+		SettingKeyImageWorkbenchAdminExempt,
+		SettingKeyImageWorkbenchCustomRetentionEnabled,
+		SettingKeyImageWorkbenchRetentionMinutes,
+		SettingKeyImageWorkbenchTutorialURL,
 		SettingKeyAvailableChannelsEnabled,
 		SettingKeyLeaderboardEnabled,
 		SettingKeyModelPlazaEnabled,
@@ -296,6 +302,7 @@ func (s *SettingService) GetPublicSettings(ctx context.Context) (*PublicSettings
 		balanceLowNotifyThreshold = v
 	}
 
+	workbench := parseImageWorkbenchRuntime(settings)
 	return &PublicSettings{
 		RegistrationEnabled:              settings[SettingKeyRegistrationEnabled] == "true",
 		RegistrationAnnouncementEnabled:  settings[SettingKeyRegistrationAnnouncementEnabled] == "true",
@@ -358,6 +365,12 @@ func (s *SettingService) GetPublicSettings(ctx context.Context) (*PublicSettings
 		ChannelMonitorEnabled:                !isFalseSettingValue(settings[SettingKeyChannelMonitorEnabled]),
 		ChannelMonitorDefaultIntervalSeconds: parseChannelMonitorInterval(settings[SettingKeyChannelMonitorDefaultIntervalSeconds]),
 		ChannelMonitorAnnouncement:           strings.TrimSpace(settings[SettingKeyChannelMonitorAnnouncement]),
+		ImageWorkbenchEnabled:                workbench.Enabled,
+		ImageWorkbenchMaxConcurrent:          workbench.MaxConcurrent,
+		ImageWorkbenchAdminExempt:            workbench.AdminExempt,
+		ImageWorkbenchCustomRetentionEnabled: workbench.CustomRetentionEnabled,
+		ImageWorkbenchRetentionMinutes:       workbench.RetentionMinutes,
+		ImageWorkbenchTutorialURL:            workbench.TutorialURL,
 
 		AvailableChannelsEnabled: settings[SettingKeyAvailableChannelsEnabled] == "true",
 		LeaderboardEnabled:       settings[SettingKeyLeaderboardEnabled] == "true",
@@ -580,6 +593,12 @@ type PublicSettingsInjectionPayload struct {
 	ChannelMonitorEnabled                bool   `json:"channel_monitor_enabled"`
 	ChannelMonitorDefaultIntervalSeconds int    `json:"channel_monitor_default_interval_seconds"`
 	ChannelMonitorAnnouncement           string `json:"channel_monitor_announcement"`
+	ImageWorkbenchEnabled                bool   `json:"image_workbench_enabled"`
+	ImageWorkbenchMaxConcurrent          int    `json:"image_workbench_max_concurrent"`
+	ImageWorkbenchAdminExempt            bool   `json:"image_workbench_admin_exempt"`
+	ImageWorkbenchCustomRetentionEnabled bool   `json:"image_workbench_custom_retention_enabled"`
+	ImageWorkbenchRetentionMinutes       int    `json:"image_workbench_retention_minutes"`
+	ImageWorkbenchTutorialURL            string `json:"image_workbench_tutorial_url"`
 	AvailableChannelsEnabled             bool   `json:"available_channels_enabled"`
 	LeaderboardEnabled                   bool   `json:"leaderboard_enabled"`
 	ModelPlazaEnabled                    bool   `json:"model_plaza_enabled"`
@@ -661,6 +680,12 @@ func (s *SettingService) GetPublicSettingsForInjection(ctx context.Context) (any
 		ChannelMonitorEnabled:                settings.ChannelMonitorEnabled,
 		ChannelMonitorDefaultIntervalSeconds: settings.ChannelMonitorDefaultIntervalSeconds,
 		ChannelMonitorAnnouncement:           settings.ChannelMonitorAnnouncement,
+		ImageWorkbenchEnabled:                settings.ImageWorkbenchEnabled,
+		ImageWorkbenchMaxConcurrent:          settings.ImageWorkbenchMaxConcurrent,
+		ImageWorkbenchAdminExempt:            settings.ImageWorkbenchAdminExempt,
+		ImageWorkbenchCustomRetentionEnabled: settings.ImageWorkbenchCustomRetentionEnabled,
+		ImageWorkbenchRetentionMinutes:       settings.ImageWorkbenchRetentionMinutes,
+		ImageWorkbenchTutorialURL:            settings.ImageWorkbenchTutorialURL,
 		AvailableChannelsEnabled:             settings.AvailableChannelsEnabled,
 		LeaderboardEnabled:                   settings.LeaderboardEnabled,
 		ModelPlazaEnabled:                    settings.ModelPlazaEnabled,

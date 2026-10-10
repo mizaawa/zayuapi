@@ -6858,6 +6858,22 @@
             </div>
 
             <div class="flex items-center justify-between gap-4 border-t border-gray-100 pt-5 dark:border-dark-700">
+              <label
+                for="disable-redeem-code-creation-limit"
+                class="min-w-0 flex-1 text-sm font-medium text-gray-700 dark:text-gray-300"
+              >
+                {{ localText('禁用兑换码创建上限', 'Disable redeem code creation limit') }}
+              </label>
+              <Toggle
+                id="disable-redeem-code-creation-limit"
+                v-model="form.disable_redeem_code_creation_limit"
+                :aria-label="localText('禁用兑换码创建上限', 'Disable redeem code creation limit')"
+                class="shrink-0"
+                data-testid="disable-redeem-code-creation-limit-toggle"
+              />
+            </div>
+
+            <div class="flex items-center justify-between gap-4 border-t border-gray-100 pt-5 dark:border-dark-700">
               <div class="min-w-0 flex-1">
                 <label class="text-sm font-medium text-gray-700 dark:text-gray-300">
                   {{ localText('强制自定义菜单新页面打开', 'Always open custom menus in a new tab') }}
@@ -6992,6 +7008,52 @@
               <p class="mt-1 text-xs text-gray-400">
                 {{ t('admin.settings.features.channelMonitor.announcementHint') }}
               </p>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="border-b border-gray-100 px-6 py-4 dark:border-dark-700">
+            <h2 class="text-lg font-semibold text-gray-900 dark:text-white">
+              {{ t('admin.settings.features.imageWorkbench.title') }}
+            </h2>
+          </div>
+          <div class="space-y-5 p-6" data-testid="image-workbench-settings">
+            <div class="flex items-center justify-between gap-4">
+              <label for="image-workbench-enabled" class="text-sm font-medium text-gray-700 dark:text-gray-300">
+                {{ t('admin.settings.features.imageWorkbench.enabled') }}
+              </label>
+              <Toggle id="image-workbench-enabled" v-model="form.image_workbench_enabled" data-testid="image-workbench-toggle" />
+            </div>
+            <div>
+              <label class="input-label" for="image-workbench-max-concurrent">
+                {{ t('admin.settings.features.imageWorkbench.maxConcurrent') }}
+              </label>
+              <input id="image-workbench-max-concurrent" v-model.number="form.image_workbench_max_concurrent" type="number" min="1" max="100" step="1" class="input" />
+            </div>
+            <div class="flex items-center justify-between gap-4">
+              <label for="image-workbench-admin-exempt" class="text-sm font-medium text-gray-700 dark:text-gray-300">
+                {{ t('admin.settings.features.imageWorkbench.adminExempt') }}
+              </label>
+              <Toggle id="image-workbench-admin-exempt" v-model="form.image_workbench_admin_exempt" />
+            </div>
+            <div class="flex items-center justify-between gap-4">
+              <label for="image-workbench-custom-retention" class="text-sm font-medium text-gray-700 dark:text-gray-300">
+                {{ t('admin.settings.features.imageWorkbench.customRetention') }}
+              </label>
+              <Toggle id="image-workbench-custom-retention" v-model="form.image_workbench_custom_retention_enabled" />
+            </div>
+            <div>
+              <label class="input-label" for="image-workbench-retention">
+                {{ t('admin.settings.features.imageWorkbench.retentionMinutes') }}
+              </label>
+              <input id="image-workbench-retention" v-model.number="form.image_workbench_retention_minutes" :disabled="!form.image_workbench_custom_retention_enabled" type="number" min="1" max="1440" step="1" class="input" />
+            </div>
+            <div>
+              <label class="input-label" for="image-workbench-tutorial-url">
+                {{ t('admin.settings.features.imageWorkbench.tutorialURL') }}
+              </label>
+              <input id="image-workbench-tutorial-url" v-model="form.image_workbench_tutorial_url" type="url" maxlength="2048" placeholder="https://" class="input" />
             </div>
           </div>
         </div>
@@ -9669,6 +9731,12 @@ const form = reactive<SettingsForm>({
   channel_monitor_hide_usage_logs: false,
   channel_monitor_default_interval_seconds: 60,
   channel_monitor_announcement: "",
+  image_workbench_enabled: true,
+  image_workbench_max_concurrent: 5,
+  image_workbench_admin_exempt: false,
+  image_workbench_custom_retention_enabled: false,
+  image_workbench_retention_minutes: 15,
+  image_workbench_tutorial_url: "",
   // Available Channels feature switch
   available_channels_enabled: false,
   leaderboard_enabled: false,
@@ -9678,6 +9746,7 @@ const form = reactive<SettingsForm>({
   model_plaza_description: '',
   response_model_audit_bypass_enabled: false,
   disable_temp_unschedulable: false,
+  disable_redeem_code_creation_limit: false,
   // Affiliate (邀请返利) feature switch
   affiliate_enabled: false,
   // Allow user view error requests
@@ -11325,6 +11394,12 @@ async function saveSettings() {
       channel_monitor_default_interval_seconds:
         Number(form.channel_monitor_default_interval_seconds) || 60,
       channel_monitor_announcement: form.channel_monitor_announcement.trim(),
+      image_workbench_enabled: form.image_workbench_enabled,
+      image_workbench_max_concurrent: Number(form.image_workbench_max_concurrent),
+      image_workbench_admin_exempt: form.image_workbench_admin_exempt,
+      image_workbench_custom_retention_enabled: form.image_workbench_custom_retention_enabled,
+      image_workbench_retention_minutes: Number(form.image_workbench_retention_minutes),
+      image_workbench_tutorial_url: form.image_workbench_tutorial_url.trim(),
       // Available Channels feature switch
       available_channels_enabled: form.available_channels_enabled,
       leaderboard_enabled: form.leaderboard_enabled,
@@ -11337,6 +11412,7 @@ async function saveSettings() {
         : form.update_github_token.trim() || undefined,
       response_model_audit_bypass_enabled: form.response_model_audit_bypass_enabled,
       disable_temp_unschedulable: form.disable_temp_unschedulable,
+      disable_redeem_code_creation_limit: form.disable_redeem_code_creation_limit,
       // Affiliate (邀请返利) feature switch
       affiliate_enabled: form.affiliate_enabled,
       allow_user_view_error_requests: form.allow_user_view_error_requests,

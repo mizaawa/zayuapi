@@ -111,6 +111,12 @@ func (h *SettingHandler) GetPublicSettings(c *gin.Context) {
 		ChannelMonitorEnabled:                settings.ChannelMonitorEnabled,
 		ChannelMonitorDefaultIntervalSeconds: settings.ChannelMonitorDefaultIntervalSeconds,
 		ChannelMonitorAnnouncement:           settings.ChannelMonitorAnnouncement,
+		ImageWorkbenchEnabled:                settings.ImageWorkbenchEnabled,
+		ImageWorkbenchMaxConcurrent:          settings.ImageWorkbenchMaxConcurrent,
+		ImageWorkbenchAdminExempt:            settings.ImageWorkbenchAdminExempt,
+		ImageWorkbenchCustomRetentionEnabled: settings.ImageWorkbenchCustomRetentionEnabled,
+		ImageWorkbenchRetentionMinutes:       settings.ImageWorkbenchRetentionMinutes,
+		ImageWorkbenchTutorialURL:            settings.ImageWorkbenchTutorialURL,
 
 		AvailableChannelsEnabled: settings.AvailableChannelsEnabled,
 		LeaderboardEnabled:       settings.LeaderboardEnabled,

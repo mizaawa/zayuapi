@@ -576,6 +576,9 @@ func diffSettings(before *service.SystemSettings, after *service.SystemSettings,
 	if !equalNotifyEmailEntries(before.AccountQuotaNotifyEmails, after.AccountQuotaNotifyEmails) {
 		changed = append(changed, "account_quota_notify_emails")
 	}
+	if before.DisableRedeemCodeCreationLimit != after.DisableRedeemCodeCreationLimit {
+		changed = append(changed, "disable_redeem_code_creation_limit")
+	}
 	if before.ChannelMonitorEnabled != after.ChannelMonitorEnabled {
 		changed = append(changed, "channel_monitor_enabled")
 	}
@@ -593,6 +596,24 @@ func diffSettings(before *service.SystemSettings, after *service.SystemSettings,
 	}
 	if before.LeaderboardEnabled != after.LeaderboardEnabled {
 		changed = append(changed, "leaderboard_enabled")
+	}
+	if before.ImageWorkbenchEnabled != after.ImageWorkbenchEnabled {
+		changed = append(changed, "image_workbench_enabled")
+	}
+	if before.ImageWorkbenchMaxConcurrent != after.ImageWorkbenchMaxConcurrent {
+		changed = append(changed, "image_workbench_max_concurrent")
+	}
+	if before.ImageWorkbenchAdminExempt != after.ImageWorkbenchAdminExempt {
+		changed = append(changed, "image_workbench_admin_exempt")
+	}
+	if before.ImageWorkbenchCustomRetentionEnabled != after.ImageWorkbenchCustomRetentionEnabled {
+		changed = append(changed, "image_workbench_custom_retention_enabled")
+	}
+	if before.ImageWorkbenchRetentionMinutes != after.ImageWorkbenchRetentionMinutes {
+		changed = append(changed, "image_workbench_retention_minutes")
+	}
+	if before.ImageWorkbenchTutorialURL != after.ImageWorkbenchTutorialURL {
+		changed = append(changed, "image_workbench_tutorial_url")
 	}
 	if before.ModelPlazaEnabled != after.ModelPlazaEnabled {
 		changed = append(changed, "model_plaza_enabled")

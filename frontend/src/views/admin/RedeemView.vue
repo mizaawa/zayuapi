@@ -48,7 +48,7 @@
               <Icon name="edit" size="md" class="mr-2" />
               {{ t('admin.redeem.batchUpdate') }}
             </button>
-            <button @click="showGenerateDialog = true" class="btn btn-primary">
+            <button data-test="generate-open" @click="showGenerateDialog = true" class="btn btn-primary">
               {{ t('admin.redeem.generateCodes') }}
             </button>
           </div>
@@ -282,7 +282,7 @@
           <h2 class="mb-4 text-lg font-semibold text-gray-900 dark:text-white">
             {{ t('admin.redeem.generateCodesTitle') }}
           </h2>
-          <form @submit.prevent="handleGenerateCodes" class="space-y-4">
+          <form data-test="generate-form" @submit.prevent="handleGenerateCodes" class="space-y-4">
             <div>
               <label class="input-label">{{ t('admin.redeem.codeType') }}</label>
               <Select v-model="generateForm.type" :options="typeOptions" />
@@ -389,9 +389,10 @@
               <label class="input-label">{{ t('admin.redeem.count') }}</label>
               <input
                 v-model.number="generateForm.count"
+                data-test="generate-count"
                 type="number"
                 min="1"
-                max="100"
+                :max="adminSettingsStore.disableRedeemCodeCreationLimit ? undefined : 100"
                 required
                 class="input"
               />
@@ -611,6 +612,7 @@
 import { ref, reactive, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAppStore } from '@/stores/app'
+import { useAdminSettingsStore } from '@/stores/adminSettings'
 import { useClipboard } from '@/composables/useClipboard'
 import { useTableSelection } from '@/composables/useTableSelection'
 import { getPersistedPageSize } from '@/composables/usePersistedPageSize'
@@ -637,6 +639,7 @@ import Icon from '@/components/icons/Icon.vue'
 
 const { t } = useI18n()
 const appStore = useAppStore()
+const adminSettingsStore = useAdminSettingsStore()
 const { copyToClipboard: clipboardCopy } = useClipboard()
 
 interface GroupOption {
@@ -1178,6 +1181,7 @@ const loadSubscriptionGroups = async () => {
 }
 
 onMounted(() => {
+  adminSettingsStore.fetch(true)
   loadCodes()
   loadSubscriptionGroups()
 })

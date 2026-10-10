@@ -413,6 +413,8 @@ func (s *SettingService) buildSystemSettingsUpdates(ctx context.Context, setting
 		updates[SettingKeyOpsMetricsIntervalSeconds] = strconv.Itoa(settings.OpsMetricsIntervalSeconds)
 	}
 
+	updates[SettingKeyDisableRedeemCodeCreationLimit] = strconv.FormatBool(settings.DisableRedeemCodeCreationLimit)
+
 	// Channel monitor feature switch
 	updates[SettingKeyChannelMonitorEnabled] = strconv.FormatBool(settings.ChannelMonitorEnabled)
 	updates[SettingKeyChannelMonitorHideUsageLogs] = strconv.FormatBool(settings.ChannelMonitorHideUsageLogs)
@@ -420,6 +422,16 @@ func (s *SettingService) buildSystemSettingsUpdates(ctx context.Context, setting
 		updates[SettingKeyChannelMonitorDefaultIntervalSeconds] = strconv.Itoa(v)
 	}
 	updates[SettingKeyChannelMonitorAnnouncement] = strings.TrimSpace(settings.ChannelMonitorAnnouncement)
+
+	if err := ValidateImageWorkbenchSettings(settings); err != nil {
+		return nil, err
+	}
+	updates[SettingKeyImageWorkbenchEnabled] = strconv.FormatBool(settings.ImageWorkbenchEnabled)
+	updates[SettingKeyImageWorkbenchMaxConcurrent] = strconv.Itoa(imageWorkbenchNumberOrDefault(settings.ImageWorkbenchMaxConcurrent, ImageWorkbenchMaxConcurrent))
+	updates[SettingKeyImageWorkbenchAdminExempt] = strconv.FormatBool(settings.ImageWorkbenchAdminExempt)
+	updates[SettingKeyImageWorkbenchCustomRetentionEnabled] = strconv.FormatBool(settings.ImageWorkbenchCustomRetentionEnabled)
+	updates[SettingKeyImageWorkbenchRetentionMinutes] = strconv.Itoa(imageWorkbenchNumberOrDefault(settings.ImageWorkbenchRetentionMinutes, 15))
+	updates[SettingKeyImageWorkbenchTutorialURL] = strings.TrimSpace(settings.ImageWorkbenchTutorialURL)
 
 	// Available channels feature switch
 	updates[SettingKeyAvailableChannelsEnabled] = strconv.FormatBool(settings.AvailableChannelsEnabled)

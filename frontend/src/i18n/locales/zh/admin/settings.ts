@@ -41,6 +41,15 @@ export default {
           enabled: '启用可用渠道',
           enabledHint: '关闭后用户端侧边栏入口隐藏，接口返回空数组。',
         },
+        imageWorkbench: {
+          title: '生图工作台',
+          enabled: '开启生图工作台',
+          maxConcurrent: '用户最大并发数',
+          adminExempt: '禁用管理员并发限制',
+          customRetention: '设置云端图片缓存时间',
+          retentionMinutes: '缓存时间（分钟）',
+          tutorialURL: '使用教程链接',
+        },
         leaderboard: {
           title: '排行榜',
           description: '向已登录用户展示经过隐私脱敏的使用量排行榜，默认关闭。',

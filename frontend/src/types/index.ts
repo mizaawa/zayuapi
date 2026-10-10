@@ -268,6 +268,12 @@ export interface PublicSettings {
   channel_monitor_enabled: boolean
   channel_monitor_default_interval_seconds: number
   channel_monitor_announcement: string
+  image_workbench_enabled: boolean
+  image_workbench_max_concurrent: number
+  image_workbench_admin_exempt: boolean
+  image_workbench_custom_retention_enabled: boolean
+  image_workbench_retention_minutes: number
+  image_workbench_tutorial_url: string
   available_channels_enabled: boolean
   leaderboard_enabled: boolean
   model_plaza_enabled: boolean

@@ -32,38 +32,41 @@ var (
 // ImageTaskRecord is the private Redis representation of an asynchronous image
 // request. Ownership fields are intentionally omitted from the public view.
 type ImageTaskRecord struct {
-	ID          string          `json:"id"`
-	UserID      int64           `json:"user_id"`
-	APIKeyID    int64           `json:"api_key_id"`
-	UserEmail   string          `json:"user_email,omitempty"`
-	Status      string          `json:"status"`
-	HTTPStatus  int             `json:"http_status,omitempty"`
-	Result      json.RawMessage `json:"result,omitempty"`
-	Error       json.RawMessage `json:"error,omitempty"`
-	CreatedAt   int64           `json:"created_at"`
-	CompletedAt *int64          `json:"completed_at,omitempty"`
-	ExpiresAt   int64           `json:"expires_at"`
+	ID          string                  `json:"id"`
+	UserID      int64                   `json:"user_id"`
+	APIKeyID    int64                   `json:"api_key_id"`
+	UserEmail   string                  `json:"user_email,omitempty"`
+	Status      string                  `json:"status"`
+	HTTPStatus  int                     `json:"http_status,omitempty"`
+	Result      json.RawMessage         `json:"result,omitempty"`
+	Error       json.RawMessage         `json:"error,omitempty"`
+	CreatedAt   int64                   `json:"created_at"`
+	CompletedAt *int64                  `json:"completed_at,omitempty"`
+	ExpiresAt   int64                   `json:"expires_at"`
+	Workbench   *ImageWorkbenchMetadata `json:"workbench,omitempty"`
 }
 
 // ImageTask is the API-safe task representation returned to callers.
 type ImageTask struct {
-	ID          string          `json:"id"`
-	TaskID      string          `json:"task_id"`
-	Object      string          `json:"object"`
-	Status      string          `json:"status"`
-	HTTPStatus  int             `json:"http_status,omitempty"`
-	ImageURL    string          `json:"image_url,omitempty"`
-	Result      json.RawMessage `json:"result,omitempty"`
-	Error       json.RawMessage `json:"error,omitempty"`
-	CreatedAt   int64           `json:"created_at"`
-	CompletedAt *int64          `json:"completed_at,omitempty"`
-	ExpiresAt   int64           `json:"expires_at"`
+	ID          string                  `json:"id"`
+	TaskID      string                  `json:"task_id"`
+	Object      string                  `json:"object"`
+	Status      string                  `json:"status"`
+	HTTPStatus  int                     `json:"http_status,omitempty"`
+	ImageURL    string                  `json:"image_url,omitempty"`
+	Result      json.RawMessage         `json:"result,omitempty"`
+	Error       json.RawMessage         `json:"error,omitempty"`
+	CreatedAt   int64                   `json:"created_at"`
+	CompletedAt *int64                  `json:"completed_at,omitempty"`
+	ExpiresAt   int64                   `json:"expires_at"`
+	Workbench   *ImageWorkbenchMetadata `json:"workbench,omitempty"`
 }
 
 type ImageTaskOwner struct {
 	UserID    int64
 	APIKeyID  int64
 	UserEmail string
+	IsAdmin   bool
 }
 
 type ImageTaskStore interface {
@@ -78,12 +81,13 @@ type ImageTaskStore interface {
 type ImageStorageResolver func() (uploader *ImageResultUploader, enabled bool)
 
 type ImageTaskService struct {
-	store            ImageTaskStore
-	uploader         *ImageResultUploader
-	enabled          bool
-	resolve          ImageStorageResolver
-	ttl              time.Duration
-	executionTimeout time.Duration
+	store             ImageTaskStore
+	uploader          *ImageResultUploader
+	enabled           bool
+	resolve           ImageStorageResolver
+	ttl               time.Duration
+	executionTimeout  time.Duration
+	workbenchSettings func(context.Context) ImageWorkbenchRuntime
 }
 
 func NewImageTaskService(store ImageTaskStore) *ImageTaskService {
@@ -189,6 +193,9 @@ func (s *ImageTaskService) Get(ctx context.Context, owner ImageTaskOwner, id str
 		// Do not reveal whether a random task ID exists for another caller.
 		return nil, ErrImageTaskNotFound
 	}
+	if task.Workbench != nil && !s.WorkbenchRuntime(ctx).Enabled {
+		return nil, ErrImageWorkbenchDisabled
+	}
 	return imageTaskToPublic(task), nil
 }
 
@@ -209,6 +216,9 @@ func (s *ImageTaskService) Complete(ctx context.Context, id string, statusCode i
 		}
 		if NormalizeImageOwnerEmail(task.UserEmail) == "" {
 			return s.Fail(ctx, id, http.StatusForbidden, imageTaskErrorJSON("permission_error", "image task owner email is missing"))
+		}
+		if task.Workbench != nil {
+			uploader = uploader.forWorkbench()
 		}
 		rewritten, err := uploader.RewriteForEmail(ctx, id, task.UserEmail, result)
 		if err != nil {
@@ -246,8 +256,12 @@ func (s *ImageTaskService) finish(ctx context.Context, id, status string, status
 	task.Result = result
 	task.Error = taskErr
 	task.CompletedAt = &completedAt
-	task.ExpiresAt = now.Add(s.ttl).Unix()
-	if err := s.store.Save(ctx, task, s.ttl); err != nil {
+	ttl := s.ttl
+	if task.Workbench != nil {
+		ttl = s.WorkbenchRuntime(ctx).Retention()
+	}
+	task.ExpiresAt = now.Add(ttl).Unix()
+	if err := s.store.Save(ctx, task, ttl); err != nil {
 		return ErrImageTaskUnavailable.WithCause(err)
 	}
 	return nil
@@ -269,6 +283,7 @@ func imageTaskToPublic(task *ImageTaskRecord) *ImageTask {
 		CreatedAt:   task.CreatedAt,
 		CompletedAt: task.CompletedAt,
 		ExpiresAt:   task.ExpiresAt,
+		Workbench:   task.Workbench,
 	}
 }
 
