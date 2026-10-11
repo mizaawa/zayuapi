@@ -19,11 +19,14 @@ export default {
     unavailable: '视频工作台暂不可用', uploadType: '不支持此参考文件格式', uploadLimit: '此类参考文件最多 {max} 个',
     uploadSize: '参考文件总大小超出单次上传容量', uploadRead: '参考文件读取失败，请重新选择',
     invalidDuration: '请输入 1 至 86400 的整数秒数', invalidRatio: '宽和高须为 1 至 10000 的整数',
+    modelDuration: '此模型支持 {min} 至 {max} 的整数秒数', fixedModelDuration: '此模型支持的时长（秒）：{durations}',
+    invalidModelRatio: '此模型支持的宽高比：{ratios}', referenceImageRequired: '此模型需要至少一张参考图',
     created: '视频任务已创建', submitError: '创建未确认，请先检查任务列表，避免重复提交',
     downloadError: '下载失败，请重试', deleteError: '删除失败，请重试',
     errors: {
       generation_failed: '云端视频生成失败，请检查使用记录。',
       request_rejected: '视频请求未成功创建，请检查模型和生成参数。',
+      model_unavailable: '当前渠道未提供此模型，请更换模型或联系管理员检查渠道。',
       storage_failed: '视频文件下载或本地保存失败，请联系管理员。',
       authorization_failed: '密钥或分组权限已变更，请重新选择密钥。',
       interrupted: '任务已中断，请重新提交。', timeout: '视频任务超时，请联系管理员检查云端任务。'

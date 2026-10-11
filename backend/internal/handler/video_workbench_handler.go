@@ -56,15 +56,7 @@ func (h *VideoWorkbenchHandler) SetAuthRefresh(refresh func(*gin.Context) error)
 	h.refreshAuth = refresh
 }
 
-type videoWorkbenchPayload struct {
-	Model           string   `json:"model"`
-	Prompt          string   `json:"prompt"`
-	Ratio           string   `json:"ratio"`
-	Duration        int      `json:"duration"`
-	ReferenceImages []string `json:"referenceImages,omitempty"`
-	ReferenceVideos []string `json:"referenceVideos,omitempty"`
-	ReferenceAudios []string `json:"referenceAudios,omitempty"`
-}
+type videoWorkbenchPayload = service.VideoWorkbenchPayload
 
 func parseVideoWorkbenchPayload(body []byte, policy service.VideoWorkbenchRuntime) (*videoWorkbenchPayload, error) {
 	var p videoWorkbenchPayload
@@ -92,6 +84,9 @@ func parseVideoWorkbenchPayload(body []byte, policy service.VideoWorkbenchRuntim
 		if err != nil || n < 1 || n > 10000 {
 			return nil, errors.New("invalid aspect ratio")
 		}
+	}
+	if err := p.ValidateModel(); err != nil {
+		return nil, err
 	}
 	for _, media := range []struct {
 		values []string
@@ -251,7 +246,7 @@ func (h *VideoWorkbenchHandler) run(task *service.VideoWorkbenchRecord, c *gin.C
 	}()
 	created := h.call(c, body, "create", "")
 	if created.Code < 200 || created.Code >= 300 {
-		h.fail(task, "request_rejected")
+		h.fail(task, videoWorkbenchCreationError(created.Body.Bytes()))
 		return
 	}
 	upstreamID := videoWorkbenchResponseID(created.Body.Bytes())
@@ -376,11 +371,21 @@ func videoWorkbenchResponseState(body []byte) string {
 		switch strings.ToLower(gjson.GetBytes(body, path).String()) {
 		case "completed", "succeeded", "success", "done":
 			return "completed"
-		case "failed", "error", "cancelled", "canceled", "expired":
+		case "failed", "failure", "fail", "error", "cancelled", "canceled", "expired":
 			return "failed"
 		}
 	}
 	return "processing"
+}
+
+func videoWorkbenchCreationError(body []byte) string {
+	for _, path := range []string{"error.code", "error.type"} {
+		switch strings.ToLower(gjson.GetBytes(body, path).String()) {
+		case "model_not_found", "model_not_available", "model_not_exist", "unknown_model":
+			return "model_unavailable"
+		}
+	}
+	return "request_rejected"
 }
 
 type videoWorkbenchStreamWriter struct {

@@ -17,6 +17,23 @@ type userDashboardRepoStub struct {
 	load func(context.Context, int64, bool, bool) (*usagestats.UserDashboardStats, error)
 }
 
+func TestUserDashboardCacheInvalidatesAfterRestore(t *testing.T) {
+	var total atomic.Int64
+	total.Store(99)
+	svc := NewUsageService(&userDashboardRepoStub{load: func(context.Context, int64, bool, bool) (*usagestats.UserDashboardStats, error) {
+		return &usagestats.UserDashboardStats{TotalRequests: total.Load()}, nil
+	}}, nil, nil, nil)
+	ctx := context.Background()
+	stats, err := svc.loadUserDashboardStats(ctx, 1, true, false)
+	require.NoError(t, err)
+	require.EqualValues(t, 99, stats.TotalRequests)
+	total.Store(5)
+	svc.InvalidateDashboardCache()
+	stats, err = svc.loadUserDashboardStats(ctx, 1, true, false)
+	require.NoError(t, err)
+	require.EqualValues(t, 5, stats.TotalRequests)
+}
+
 func (r *userDashboardRepoStub) GetUserDashboardStatsWithOptions(ctx context.Context, id int64, totals, hidden bool) (*usagestats.UserDashboardStats, error) {
 	return r.load(ctx, id, totals, hidden)
 }

@@ -10,6 +10,7 @@ const {
   updateSchedule,
   deleteBackup,
   listBackups,
+  getBackup,
   getDownloadURL,
 } = vi.hoisted(() => ({
   getS3Config: vi.fn(),
@@ -18,6 +19,7 @@ const {
   updateSchedule: vi.fn(),
   deleteBackup: vi.fn(),
   listBackups: vi.fn(),
+  getBackup: vi.fn(),
   getDownloadURL: vi.fn(),
 }))
 
@@ -34,7 +36,7 @@ vi.mock('@/api', () => ({
       updateSchedule,
       createBackup: vi.fn(),
       listBackups,
-      getBackup: vi.fn(),
+      getBackup,
       deleteBackup,
       getDownloadURL,
       restoreBackup: vi.fn(),
@@ -99,6 +101,7 @@ describe('admin BackupView', () => {
     deleteBackup.mockReset().mockResolvedValue(undefined)
     listBackups.mockResolvedValue({ items: [] })
     getDownloadURL.mockReset()
+    getBackup.mockReset()
     vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
   })
 
@@ -106,6 +109,37 @@ describe('admin BackupView', () => {
     wrappers.splice(0).forEach(wrapper => wrapper.unmount())
     vi.restoreAllMocks()
     document.body.innerHTML = ''
+  })
+
+  it('preserves unlimited backup retention when loading and saving the schedule', async () => {
+    getSchedule.mockResolvedValue({ enabled: false, cron_expr: '0 2 * * *', retain_days: 0, retain_count: 0 })
+    const wrapper = mountBackupView()
+    await flushPromises()
+    const panel = wrapper.findAll('.card').find(card => card.text().includes('admin.backup.schedule.title'))!
+    const save = panel.findAll('button').find(button => button.text() === 'common.save')!
+    await save.trigger('click')
+    await flushPromises()
+    expect(updateSchedule).toHaveBeenCalledWith({ enabled: false, cron_expr: '0 2 * * *', retain_days: 0, retain_count: 0 })
+  })
+
+  it('reloads settings after a restore completes', async () => {
+    vi.useFakeTimers()
+    listBackups.mockResolvedValue({ items: [{ ...baseRecord('restoring'), restore_status: 'running' }] })
+    getBackup.mockResolvedValue({ ...baseRecord('restoring'), restore_status: 'completed' })
+    const wrapper = mountBackupView()
+    try {
+      await flushPromises()
+      const loadedSettings = getSchedule.mock.calls.length
+      await vi.advanceTimersByTimeAsync(2000)
+      await flushPromises()
+      expect(getBackup).toHaveBeenCalledWith('restoring')
+      expect(getSchedule).toHaveBeenCalledTimes(loadedSettings + 1)
+      expect(vi.getTimerCount()).toBe(0)
+    } finally {
+      wrapper.unmount()
+      vi.clearAllTimers()
+      vi.useRealTimers()
+    }
   })
 
   it.each(['backup', 'restore'])('does not resume %s polling after navigation during initial loading', async (operation) => {

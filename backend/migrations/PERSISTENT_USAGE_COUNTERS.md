@@ -23,6 +23,32 @@ preserves credited recharge and usage totals. Deleting or clearing usage logs
 does not delete the counters. Legacy dashboard aggregation rebuilds and
 retention jobs operate on their own tables and cannot reset these counters.
 
+## Data management
+
+S3 and WebDAV full database backups include the counters, billing deduplication
+flags, financial totals, and outstanding refund receipts. PostgreSQL restores
+table data before installing the dumped triggers, so restoring a current backup
+preserves its totals without counting the imported logs again.
+
+In-app restore first validates the decompressed backup in a temporary disk file
+and then runs psql with `ON_ERROR_STOP`, `--file=-`, and `--single-transaction`.
+The temporary file is removed afterward; memory usage does not grow with the
+dump or psql output. Restores require temporary disk space for the unpacked SQL.
+Any SQL error rolls back the restore, including counter compatibility changes.
+
+For backups preceding migration 213, restoration removes target-database counter
+leftovers and applies migration 213 in the same transaction. Usage and recharge
+totals begin at zero without a historical backfill; balances come from the
+restored users. The usage_logs row-type function is removed before restoration
+to allow older dumps to replace that table. Current backups restore their own
+function and totals. Unrelated older schema migrations still follow the normal
+application upgrade process.
+
+On success, the running process invalidates dashboard caches and reloads the
+backup schedule and storage configuration. Backup and restore jobs are mutually
+exclusive within the process. Storage measurement automatically includes the
+new tables; manual, scheduled, and filtered log cleanup leave them intact.
+
 User dashboard statistics and the usage page's top cards read these counters.
 The usage cards show lifetime values; date and other filters still apply to
 log pagination and detailed charts. The usage page omits the old headline

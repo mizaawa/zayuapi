@@ -614,8 +614,14 @@ func ProvideBackupService(
 	encryptor SecretEncryptor,
 	storeFactory BackupObjectStoreFactory,
 	dumper DBDumper,
+	dashboard *DashboardService,
+	usage *UsageService,
 ) *BackupService {
 	svc := NewBackupService(settingRepo, cfg, encryptor, storeFactory, dumper)
+	svc.afterRestore = func(ctx context.Context) error {
+		usage.InvalidateDashboardCache()
+		return dashboard.InvalidateStatsCache(ctx)
+	}
 	svc.Start()
 	return svc
 }

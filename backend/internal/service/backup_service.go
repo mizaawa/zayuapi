@@ -150,6 +150,7 @@ type BackupService struct {
 	encryptionKeyConfigured bool
 	storeFactory            BackupObjectStoreFactory
 	dumper                  DBDumper
+	afterRestore            func(context.Context) error
 
 	opMu      sync.Mutex // 保护 backingUp/restoring 标志
 	backingUp bool
@@ -537,7 +538,7 @@ func (s *BackupService) runScheduledBackup() {
 	// 读取定时备份配置中的过期天数
 	schedule, _ := s.GetSchedule(ctx)
 	expireDays := 14 // 默认14天过期
-	if schedule != nil && schedule.RetainDays > 0 {
+	if schedule != nil {
 		expireDays = schedule.RetainDays
 	}
 
@@ -575,6 +576,10 @@ func (s *BackupService) CreateBackup(ctx context.Context, triggeredBy string, ex
 	if s.backingUp {
 		s.opMu.Unlock()
 		return nil, ErrBackupInProgress
+	}
+	if s.restoring {
+		s.opMu.Unlock()
+		return nil, ErrRestoreInProgress
 	}
 	s.backingUp = true
 	s.opMu.Unlock()
@@ -690,6 +695,10 @@ func (s *BackupService) StartBackup(ctx context.Context, triggeredBy string, exp
 	if s.backingUp {
 		s.opMu.Unlock()
 		return nil, ErrBackupInProgress
+	}
+	if s.restoring {
+		s.opMu.Unlock()
+		return nil, ErrRestoreInProgress
 	}
 	s.backingUp = true
 	s.opMu.Unlock()
@@ -853,6 +862,10 @@ func (s *BackupService) RestoreBackup(ctx context.Context, backupID string) erro
 		s.opMu.Unlock()
 		return ErrRestoreInProgress
 	}
+	if s.backingUp {
+		s.opMu.Unlock()
+		return ErrBackupInProgress
+	}
 	s.restoring = true
 	s.opMu.Unlock()
 	defer func() {
@@ -881,7 +894,7 @@ func (s *BackupService) RestoreBackup(ctx context.Context, backupID string) erro
 	}
 	defer func() { _ = body.Close() }()
 
-	// 流式解压 gzip -> psql（不将全部数据加载到内存）
+	// Stream decompression; the dumper validates the stream before restoring.
 	gzReader, err := gzip.NewReader(body)
 	if err != nil {
 		return fmt.Errorf("gzip reader: %w", err)
@@ -893,7 +906,7 @@ func (s *BackupService) RestoreBackup(ctx context.Context, backupID string) erro
 		return fmt.Errorf("pg restore: %w", err)
 	}
 
-	return nil
+	return s.finishRestore(ctx)
 }
 
 // StartRestore 异步恢复备份，立即返回
@@ -906,6 +919,10 @@ func (s *BackupService) StartRestore(ctx context.Context, backupID string) (*Bac
 	if s.restoring {
 		s.opMu.Unlock()
 		return nil, ErrRestoreInProgress
+	}
+	if s.backingUp {
+		s.opMu.Unlock()
+		return nil, ErrBackupInProgress
 	}
 	s.restoring = true
 	s.opMu.Unlock()
@@ -934,6 +951,8 @@ func (s *BackupService) StartRestore(ctx context.Context, backupID string) (*Bac
 	}
 
 	record.RestoreStatus = "running"
+	record.RestoreError = ""
+	record.RestoredAt = ""
 	_ = s.saveRecord(ctx, record)
 
 	launched = true
@@ -990,12 +1009,40 @@ func (s *BackupService) executeRestore(record *BackupRecord, objectStore BackupO
 		_ = s.saveRecord(context.Background(), record)
 		return
 	}
+	if err := s.finishRestore(ctx); err != nil {
+		record.RestoreStatus = "failed"
+		record.RestoreError = err.Error()
+		_ = s.saveRecord(context.Background(), record)
+		return
+	}
 
 	record.RestoreStatus = "completed"
+	record.RestoreError = ""
 	record.RestoredAt = time.Now().Format(time.RFC3339)
 	if err := s.saveRecord(context.Background(), record); err != nil {
 		logger.LegacyPrintf("service.backup", "[Backup] 保存恢复记录失败: %v", err)
 	}
+}
+
+func (s *BackupService) finishRestore(ctx context.Context) error {
+	s.clearStoreCache()
+	if s.afterRestore != nil {
+		if err := s.afterRestore(ctx); err != nil {
+			return fmt.Errorf("database restored, but statistics cache refresh failed: %w", err)
+		}
+	}
+	schedule, err := s.GetSchedule(ctx)
+	if err != nil {
+		return fmt.Errorf("database restored, but loading backup schedule failed: %w", err)
+	}
+	if s.cronSched != nil && schedule.Enabled {
+		if err := s.applyCronSchedule(schedule); err != nil {
+			return fmt.Errorf("database restored, but applying backup schedule failed: %w", err)
+		}
+	} else {
+		s.removeCronSchedule()
+	}
+	return nil
 }
 
 // ─── 备份记录管理 ───

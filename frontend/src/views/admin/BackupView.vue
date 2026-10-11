@@ -790,6 +790,8 @@ function startRestorePolling(backupId: string) {
         restoringId.value = ''
         if (record.restore_status === 'completed') {
           appStore.showSuccess(t('admin.backup.actions.restoreSuccess'))
+          databaseStorageStats.value = null
+          await Promise.all([loadS3Config(), loadWebDAVConfig(), loadImageStorageConfig(), loadSchedule(), loadUsageCleanupSettings()])
         } else {
           appStore.showError(record.restore_error || t('admin.backup.operations.restoreFailed'))
         }
@@ -1077,8 +1079,8 @@ async function loadSchedule() {
     scheduleForm.value = {
       enabled: cfg.enabled,
       cron_expr: cfg.cron_expr || '0 2 * * *',
-      retain_days: cfg.retain_days || 14,
-      retain_count: cfg.retain_count || 10,
+      retain_days: cfg.retain_days ?? 14,
+      retain_count: cfg.retain_count ?? 10,
     }
   } catch (error) {
     appStore.showError((error as { message?: string })?.message || t('errors.networkError'))
@@ -1125,8 +1127,8 @@ async function createBackup() {
       creatingBackup.value = false
       return
     }
-    if (error?.response?.status === 409) {
-      appStore.showWarning(t('admin.backup.operations.alreadyInProgress'))
+    if (error?.status === 409 || error?.response?.status === 409) {
+      appStore.showWarning(t('admin.backup.operations.operationInProgress'))
     } else {
       appStore.showError(error?.message || t('errors.networkError'))
     }
@@ -1193,7 +1195,7 @@ async function restoreBackup(id: string) {
     if (reportStepUpBlocked(error)) return
     // apiClient 拦截器把 HTTP 错误归一化为顶层 { status } 平面对象（无 response 字段）
     if (error?.status === 409 || error?.response?.status === 409) {
-      appStore.showWarning(t('admin.backup.operations.restoreRunning'))
+      appStore.showWarning(t('admin.backup.operations.operationInProgress'))
     } else {
       appStore.showError(error?.message || t('errors.networkError'))
     }

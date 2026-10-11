@@ -124,6 +124,9 @@ describe('admin BackupView Usage_logs management', () => {
       tables: [
         { table_name: 'public.usage_logs', table_bytes: 1024 ** 3, index_bytes: 1024 ** 2, total_bytes: 1024 ** 3 + 1024 ** 2 },
         { table_name: 'public.users', table_bytes: 1024 ** 2, index_bytes: 1024 ** 2, total_bytes: 2 * 1024 ** 2 },
+        { table_name: 'public.usage_counters', table_bytes: 4096, index_bytes: 4096, total_bytes: 8192 },
+        { table_name: 'public.usage_counter_refunds', table_bytes: 4096, index_bytes: 4096, total_bytes: 8192 },
+        { table_name: 'public.dashboard_user_financials', table_bytes: 4096, index_bytes: 4096, total_bytes: 8192 },
       ],
       table_bytes: 1024 ** 3,
       index_bytes: 1024 ** 2,
@@ -152,6 +155,9 @@ describe('admin BackupView Usage_logs management', () => {
     expect(getDatabaseStorageStats).toHaveBeenCalledTimes(1)
     expect(panel.text()).toContain('public.usage_logs')
     expect(panel.text()).toContain('public.users')
+    expect(panel.text()).toContain('public.usage_counters')
+    expect(panel.text()).toContain('public.usage_counter_refunds')
+    expect(panel.text()).toContain('public.dashboard_user_financials')
     expect(panel.text()).toContain('admin.backup.databaseStorage.databaseSize')
     expect(panel.text()).toContain('admin.backup.databaseStorage.indexSizeTotal')
     expect(panel.text()).toContain('admin.backup.databaseStorage.businessTotal')

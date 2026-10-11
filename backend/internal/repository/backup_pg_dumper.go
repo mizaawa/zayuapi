@@ -1,13 +1,18 @@
 package repository
 
 import (
+	"bytes"
 	"context"
+	"crypto/sha256"
 	"fmt"
 	"io"
+	"os"
 	"os/exec"
+	"strings"
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
 	"github.com/Wei-Shaw/sub2api/internal/service"
+	"github.com/Wei-Shaw/sub2api/migrations"
 )
 
 // PgDumper implements service.DBDumper using pg_dump/psql
@@ -54,14 +59,40 @@ func (d *PgDumper) Dump(ctx context.Context) (io.ReadCloser, error) {
 	return &cmdReadCloser{ReadCloser: stdout, cmd: cmd}, nil
 }
 
-// Restore executes psql to restore from a streaming reader
+// Restore validates the input stream on disk before starting the restore transaction.
 func (d *PgDumper) Restore(ctx context.Context, data io.Reader) error {
+	file, err := prepareRestoreFile(data)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		_ = file.Close()
+		_ = os.Remove(file.Name())
+	}()
+
+	cmd := d.restoreCommand(ctx)
+	cmd.Stdin = file
+	cmd.Stdout = io.Discard
+	output := &pgRestoreOutput{}
+	cmd.Stderr = output
+
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("%w: %s", err, output.String())
+	}
+	return nil
+}
+
+func (d *PgDumper) restoreCommand(ctx context.Context) *exec.Cmd {
 	args := []string{
 		"-h", d.cfg.Host,
 		"-p", fmt.Sprintf("%d", d.cfg.Port),
 		"-U", d.cfg.User,
 		"-d", d.cfg.DBName,
+		"--no-psqlrc",
+		"--set=ON_ERROR_STOP=1",
+		"--quiet",
 		"--single-transaction",
+		"--file=-",
 	}
 
 	cmd := exec.CommandContext(ctx, "psql", args...)
@@ -72,13 +103,109 @@ func (d *PgDumper) Restore(ctx context.Context, data io.Reader) error {
 		cmd.Env = append(cmd.Environ(), "PGSSLMODE="+d.cfg.SSLMode)
 	}
 
-	cmd.Stdin = data
+	return cmd
+}
 
-	output, err := cmd.CombinedOutput()
+const persistentCountersMigration = "213_persistent_usage_counters.sql"
+
+// Older dumps do not know about the function's dependency on the usage_logs row type.
+// The dump recreates it, or the compatibility migration below does so before commit.
+const restoreCountersPrelude = `
+DO $restore_counters$
+BEGIN
+    IF to_regclass('public.usage_logs') IS NOT NULL THEN
+        LOCK TABLE public.usage_logs IN ACCESS EXCLUSIVE MODE;
+        DROP FUNCTION IF EXISTS public.accumulate_usage_counters(public.usage_logs, bigint);
+    END IF;
+END;
+$restore_counters$;
+`
+
+func restoreCountersPostlude() (string, error) {
+	migration, err := migrations.FS.ReadFile(persistentCountersMigration)
 	if err != nil {
-		return fmt.Errorf("%v: %s", err, string(output))
+		return "", fmt.Errorf("read counter migration: %w", err)
 	}
-	return nil
+	content := strings.TrimSpace(string(migration))
+	checksum := fmt.Sprintf("%x", sha256.Sum256([]byte(content)))
+	return fmt.Sprintf(`
+SET LOCAL search_path TO public;
+SET LOCAL standard_conforming_strings = on;
+DO $restore_counters$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM schema_migrations WHERE filename = '%s') THEN
+        -- A pre-counter backup has no historical totals. Discard leftovers from
+        -- the target database and begin counting new activity after restoration.
+        DROP TABLE IF EXISTS usage_counters, usage_counter_refunds, dashboard_user_financials;
+        EXECUTE '%s';
+        INSERT INTO schema_migrations (filename, checksum) VALUES ('%s', '%s');
+    END IF;
+    IF to_regclass('usage_counters') IS NULL
+        OR to_regclass('usage_counter_refunds') IS NULL
+        OR to_regclass('dashboard_user_financials') IS NULL
+        OR to_regprocedure('accumulate_usage_counters(usage_logs,bigint)') IS NULL
+        OR (SELECT COUNT(*) FROM pg_trigger WHERE tgenabled IN ('O', 'A') AND (
+            (tgrelid = 'usage_logs'::regclass AND tgname IN ('usage_counters_mark', 'usage_counters_write'))
+            OR (tgrelid = 'users'::regclass AND tgname = 'dashboard_balance_write')
+            OR (tgrelid = 'redeem_codes'::regclass AND tgname IN ('dashboard_recharge_mark', 'dashboard_recharge_write'))
+        )) <> 5 THEN
+        RAISE EXCEPTION 'Backup is missing persistent statistics tables, functions or triggers';
+    END IF;
+END;
+$restore_counters$;
+`, persistentCountersMigration, strings.ReplaceAll(content, "'", "''"), persistentCountersMigration, checksum), nil
+}
+
+func prepareRestoreFile(data io.Reader) (*os.File, error) {
+	postlude, err := restoreCountersPostlude()
+	if err != nil {
+		return nil, err
+	}
+	file, err := os.CreateTemp("", "sub2api-restore-*.sql")
+	if err != nil {
+		return nil, fmt.Errorf("create restore file: %w", err)
+	}
+	ready := false
+	defer func() {
+		if !ready {
+			_ = file.Close()
+			_ = os.Remove(file.Name())
+		}
+	}()
+	if _, err := io.WriteString(file, restoreCountersPrelude); err != nil {
+		return nil, fmt.Errorf("write restore prelude: %w", err)
+	}
+	// Reading to EOF verifies gzip checksums and download errors before psql can
+	// commit a truncated stream. Only the copy buffer, not the dump, lives in memory.
+	size, err := io.Copy(file, data)
+	if err != nil {
+		return nil, fmt.Errorf("read backup: %w", err)
+	}
+	if size == 0 {
+		return nil, fmt.Errorf("backup is empty")
+	}
+	if _, err := io.WriteString(file, postlude); err != nil {
+		return nil, fmt.Errorf("write restore postlude: %w", err)
+	}
+	if _, err := file.Seek(0, io.SeekStart); err != nil {
+		return nil, fmt.Errorf("rewind restore file: %w", err)
+	}
+	ready = true
+	return file, nil
+}
+
+// Bound diagnostics even for a large restore with many PostgreSQL notices.
+type pgRestoreOutput struct{ buffer bytes.Buffer }
+
+func (b *pgRestoreOutput) Len() int       { return b.buffer.Len() }
+func (b *pgRestoreOutput) String() string { return b.buffer.String() }
+
+func (b *pgRestoreOutput) Write(p []byte) (int, error) {
+	const limit = 64 * 1024
+	if remaining := limit - b.Len(); remaining > 0 {
+		_, _ = b.buffer.Write(p[:min(len(p), remaining)])
+	}
+	return len(p), nil
 }
 
 // cmdReadCloser wraps a command stdout pipe and waits for the process on Close

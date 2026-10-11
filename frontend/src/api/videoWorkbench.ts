@@ -43,6 +43,24 @@ export interface VideoPayload {
   referenceVideos?: string[]
   referenceAudios?: string[]
 }
+export function miniMaxVideoModelLimits(model: string) {
+  const id = model.trim().toLowerCase()
+  if (id === 'minimax-h3' || id.startsWith('minimax-h3-')) {
+    return {
+      durations: [5, 10, 12, 15], defaultDuration: 5, minDuration: 4, maxDuration: 15,
+      fixedDurations: false, images: 9, videos: 3, audios: 3, requiresImage: false,
+      ratios: ['21:9', '16:9', '4:3', '1:1', '3:4', '9:16']
+    }
+  }
+  if (['minimax-hailuo-2.3', 'minimax-hailuo-2.3-fast', 'minimax-hailuo-02'].includes(id)) {
+    return {
+      durations: [6, 10], defaultDuration: 6, minDuration: 6, maxDuration: 10,
+      fixedDurations: true, images: 2, videos: 0, audios: 0,
+      requiresImage: id === 'minimax-hailuo-2.3-fast', ratios: null
+    }
+  }
+  return null
+}
 export async function listVideoTasks(signal?: AbortSignal) {
   const { data } = await apiClient.get<{ settings: VideoWorkbenchSettings; tasks: VideoTask[] }>('/video-workbench/tasks', { signal })
   return data

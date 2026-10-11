@@ -21,9 +21,12 @@ export default {
     invalidDuration: 'Enter a whole number from 1 to 86400 seconds', invalidRatio: 'Width and height must be integers from 1 to 10000',
     created: 'Video task created', submitError: 'Creation is unconfirmed; check the task list before submitting again',
     downloadError: 'Download failed; try again', deleteError: 'Deletion failed; try again',
+    modelDuration: 'This model supports whole seconds between {min} and {max}', fixedModelDuration: 'Supported durations in seconds: {durations}',
+    invalidModelRatio: 'Supported aspect ratios: {ratios}', referenceImageRequired: 'This model requires at least one reference image',
     errors: {
       generation_failed: 'Cloud video generation failed. Check usage records.',
       request_rejected: 'Video creation failed. Check the model and generation parameters.',
+      model_unavailable: 'This channel does not provide the model. Choose another model or contact the administrator.',
       storage_failed: 'Video download or local storage failed. Contact the administrator.',
       authorization_failed: 'Key or group access changed. Select an available key.',
       interrupted: 'The task was interrupted. Submit a new task.', timeout: 'The video task timed out. Contact the administrator to check the cloud task.'

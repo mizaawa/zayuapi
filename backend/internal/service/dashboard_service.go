@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -36,12 +37,14 @@ type dashboardStatsCacheEntry struct {
 
 // DashboardService 提供管理员仪表盘统计服务。
 type DashboardService struct {
-	usageRepo      UsageLogRepository
-	cache          DashboardStatsCache
-	cacheFreshTTL  time.Duration
-	cacheTTL       time.Duration
-	refreshTimeout time.Duration
-	refreshing     int32
+	usageRepo       UsageLogRepository
+	cache           DashboardStatsCache
+	cacheFreshTTL   time.Duration
+	cacheTTL        time.Duration
+	refreshTimeout  time.Duration
+	refreshing      int32
+	cacheMu         sync.Mutex
+	cacheGeneration atomic.Uint64
 }
 
 func NewDashboardService(usageRepo UsageLogRepository, _ DashboardAggregationRepository, cache DashboardStatsCache, cfg *config.Config) *DashboardService {
@@ -211,6 +214,7 @@ func (s *DashboardService) getCachedDashboardStats(ctx context.Context) (*usages
 }
 
 func (s *DashboardService) refreshDashboardStats(ctx context.Context) (*usagestats.DashboardStats, error) {
+	generation := s.cacheGeneration.Load()
 	stats, err := s.fetchDashboardStats(ctx)
 	if err != nil {
 		return nil, err
@@ -218,7 +222,7 @@ func (s *DashboardService) refreshDashboardStats(ctx context.Context) (*usagesta
 	s.markDashboardStatsUpdated(stats)
 	cacheCtx, cancel := s.cacheOperationContext()
 	defer cancel()
-	s.saveDashboardStatsCache(cacheCtx, stats)
+	s.saveDashboardStatsCacheAtGeneration(cacheCtx, stats, generation)
 	return stats, nil
 }
 
@@ -232,6 +236,7 @@ func (s *DashboardService) refreshDashboardStatsAsync() {
 
 	go func() {
 		defer atomic.StoreInt32(&s.refreshing, 0)
+		generation := s.cacheGeneration.Load()
 
 		ctx, cancel := context.WithTimeout(context.Background(), s.refreshTimeout)
 		defer cancel()
@@ -244,7 +249,7 @@ func (s *DashboardService) refreshDashboardStatsAsync() {
 		s.markDashboardStatsUpdated(stats)
 		cacheCtx, cancel := s.cacheOperationContext()
 		defer cancel()
-		s.saveDashboardStatsCache(cacheCtx, stats)
+		s.saveDashboardStatsCacheAtGeneration(cacheCtx, stats, generation)
 	}()
 }
 
@@ -253,6 +258,15 @@ func (s *DashboardService) fetchDashboardStats(ctx context.Context) (*usagestats
 }
 
 func (s *DashboardService) saveDashboardStatsCache(ctx context.Context, stats *usagestats.DashboardStats) {
+	s.saveDashboardStatsCacheAtGeneration(ctx, stats, s.cacheGeneration.Load())
+}
+
+func (s *DashboardService) saveDashboardStatsCacheAtGeneration(ctx context.Context, stats *usagestats.DashboardStats, generation uint64) {
+	s.cacheMu.Lock()
+	defer s.cacheMu.Unlock()
+	if generation != s.cacheGeneration.Load() {
+		return
+	}
 	if s.cache == nil || stats == nil {
 		return
 	}
@@ -270,6 +284,17 @@ func (s *DashboardService) saveDashboardStatsCache(ctx context.Context, stats *u
 	if err := s.cache.SetDashboardStats(ctx, string(data), s.cacheTTL); err != nil {
 		logger.LegacyPrintf("service.dashboard", "[Dashboard] 仪表盘缓存写入失败: %v", err)
 	}
+}
+
+// InvalidateStatsCache also prevents in-flight pre-restore queries from caching old totals.
+func (s *DashboardService) InvalidateStatsCache(ctx context.Context) error {
+	s.cacheMu.Lock()
+	defer s.cacheMu.Unlock()
+	s.cacheGeneration.Add(1)
+	if s.cache == nil {
+		return nil
+	}
+	return s.cache.DeleteDashboardStats(ctx)
 }
 
 func (s *DashboardService) evictDashboardStatsCache(reason error) {

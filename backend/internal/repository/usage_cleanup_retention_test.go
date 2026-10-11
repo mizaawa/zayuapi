@@ -16,16 +16,23 @@ func TestUsageCleanupRepositoryDatabaseStorageStatsIncludesEveryUserTable(t *tes
 	mock.ExpectQuery(`WITH RECURSIVE.*current_database\(\).*pg_database_size\(current_database\(\)\).*FROM pg_class c.*c\.relkind IN \('r', 'm', 'p'\).*NOT c\.relispartition.*relation_tree\(root_oid, relid\) AS.*JOIN pg_inherits.*child\.relispartition.*pg_table_size\(physical_table\.oid\).*pg_indexes_size\(physical_table\.oid\).*pg_total_relation_size\(physical_table\.oid\).*physical_table\.relkind IN \('r', 'm'\).*LEFT JOIN table_sizes`).
 		WillReturnRows(sqlmock.NewRows([]string{"database_name", "database_bytes", "table_name", "table_bytes", "index_bytes", "total_bytes"}).
 			AddRow("app", int64(300), "public.usage_logs", int64(100), int64(40), int64(140)).
-			AddRow("app", int64(300), "public.users", int64(20), int64(10), int64(30)))
+			AddRow("app", int64(300), "public.users", int64(20), int64(10), int64(30)).
+			AddRow("app", int64(300), "public.usage_counters", int64(10), int64(5), int64(15)).
+			AddRow("app", int64(300), "public.usage_counter_refunds", int64(10), int64(5), int64(15)).
+			AddRow("app", int64(300), "public.dashboard_user_financials", int64(10), int64(5), int64(15)))
 
 	before := time.Now().UTC()
 	stats, err := repo.GetDatabaseStorageStats(context.Background())
 	require.NoError(t, err)
 	require.Equal(t, "app", stats.DatabaseName)
 	require.Equal(t, int64(300), stats.DatabaseBytes)
-	require.Equal(t, int64(120), stats.TableBytes)
-	require.Equal(t, int64(50), stats.IndexBytes)
-	require.Equal(t, int64(170), stats.TotalBytes)
+	require.Equal(t, int64(150), stats.TableBytes)
+	require.Equal(t, int64(65), stats.IndexBytes)
+	require.Equal(t, int64(215), stats.TotalBytes)
+	require.Len(t, stats.Tables, 5)
+	require.Equal(t, "public.usage_counters", stats.Tables[2].TableName)
+	require.Equal(t, "public.usage_counter_refunds", stats.Tables[3].TableName)
+	require.Equal(t, "public.dashboard_user_financials", stats.Tables[4].TableName)
 	require.Equal(t, []string{"public.usage_logs", "public.users"}, []string{stats.Tables[0].TableName, stats.Tables[1].TableName})
 	require.False(t, stats.MeasuredAt.Before(before))
 	require.False(t, stats.MeasuredAt.After(time.Now().UTC()))

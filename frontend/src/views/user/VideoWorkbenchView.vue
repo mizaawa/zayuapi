@@ -50,6 +50,7 @@
               <input :ref="element => setFileInput(kind.id, element)" type="file" multiple :accept="kind.accept" class="sr-only" tabindex="-1" :aria-label="t(`videoWorkbench.${kind.addLabel}`)" @change="onFileChange(kind.id, $event)" />
             </div>
             <p v-if="references[kind.id].length > referenceLimit(kind.id)" class="validation-error">{{ t('videoWorkbench.uploadLimit', { max: referenceLimit(kind.id) }) }}</p>
+            <p v-if="kind.id === 'images' && modelLimits?.requiresImage && !references.images.length" class="validation-error">{{ t('videoWorkbench.referenceImageRequired') }}</p>
           </div>
           <fieldset class="parameter-field">
             <legend>{{ t('videoWorkbench.aspectRatio') }}</legend>
@@ -62,18 +63,19 @@
               <span>:</span><label for="video-height">{{ t('videoWorkbench.height') }}</label><input id="video-height" v-model.number="form.height" type="number" min="1" max="10000" step="1" :disabled="form.ratio !== 'custom'" />
             </div>
             <p v-if="!validRatio" class="validation-error">{{ t('videoWorkbench.invalidRatio') }}</p>
+            <p v-else-if="!validModelRatio" class="validation-error">{{ t('videoWorkbench.invalidModelRatio', { ratios: modelLimits?.ratios?.join(', ') }) }}</p>
           </fieldset>
           <fieldset class="parameter-field">
             <legend>{{ t('videoWorkbench.duration') }}</legend>
-            <div class="segmented five duration-options">
+            <div class="segmented duration-options" :style="{ gridTemplateColumns: `repeat(${durations.length}, minmax(0, 1fr))` }">
               <button v-for="duration in durations" :key="duration" type="button" :class="{ selected: form.duration === duration }" :aria-pressed="form.duration === duration" @click="form.duration = duration">{{ duration === 'custom' ? t('videoWorkbench.custom') : `${duration}s` }}</button>
             </div>
             <div v-if="form.duration === 'custom'" class="custom-duration">
               <label class="sr-only" for="video-custom-duration">{{ t('videoWorkbench.customDuration') }}</label>
-              <input id="video-custom-duration" v-model.number="form.customDuration" type="number" min="1" max="86400" step="1" :placeholder="t('videoWorkbench.customDurationPlaceholder')" />
+              <input id="video-custom-duration" v-model.number="form.customDuration" type="number" :min="modelLimits?.minDuration ?? 1" :max="modelLimits?.maxDuration ?? 86400" step="1" :placeholder="t('videoWorkbench.customDurationPlaceholder')" />
               <span>s</span>
             </div>
-            <p v-if="form.duration === 'custom' && form.customDuration !== '' && !validDuration" class="validation-error">{{ t('videoWorkbench.invalidDuration') }}</p>
+            <p v-if="form.duration === 'custom' && form.customDuration !== '' && !validDuration" class="validation-error">{{ modelLimits ? t(modelLimits.fixedDurations ? 'videoWorkbench.fixedModelDuration' : 'videoWorkbench.modelDuration', { min: modelLimits.minDuration, max: modelLimits.maxDuration, durations: modelLimits.durations.join(', ') }) : t('videoWorkbench.invalidDuration') }}</p>
           </fieldset>
           <button class="create-task" type="submit" :disabled="!canSubmit"><Icon :name="submitting ? 'refresh' : 'sparkles'" size="sm" :class="{ 'animate-spin': submitting }" />{{ t(submitting ? 'videoWorkbench.submitting' : 'videoWorkbench.create') }}<Icon name="arrowRight" size="sm" /></button>
         </div>
@@ -115,7 +117,7 @@ import Pagination from '@/components/common/Pagination.vue'
 import VideoWorkbenchTaskRow from '@/components/user/VideoWorkbenchTaskRow.vue'
 import { keysAPI } from '@/api/keys'
 import { saveBlob } from '@/api/batchImage'
-import { listVideoTasks, listVideoModels, submitVideoTask, downloadVideoTask, deleteVideoTask, safeWorkbenchLink, type VideoTask, type VideoWorkbenchSettings, type VideoPayload } from '@/api/videoWorkbench'
+import { listVideoTasks, listVideoModels, submitVideoTask, downloadVideoTask, deleteVideoTask, safeWorkbenchLink, miniMaxVideoModelLimits, type VideoTask, type VideoWorkbenchSettings, type VideoPayload } from '@/api/videoWorkbench'
 import { useAuthStore } from '@/stores/auth'
 import { useAppStore } from '@/stores/app'
 import type { ApiKey } from '@/types'
@@ -128,7 +130,6 @@ const tab = ref<'workbench' | 'tasks'>('workbench')
 const tabs = [{ id: 'workbench', icon: 'sparkles' }, { id: 'tasks', icon: 'clipboard' }] as const
 const statuses = ['all', 'queued', 'processing', 'completed', 'failed'] as const
 const ratios = ['1:1', '4:3', '3:4', '16:9', '9:16']
-const durations = [5, 10, 30, 60, 'custom'] as const
 const mediaKinds = [
   { id: 'images', addLabel: 'addImages', accept: 'image/png,image/jpeg,image/webp' },
   { id: 'videos', addLabel: 'addVideos', accept: 'video/mp4,video/webm,video/quicktime' },
@@ -136,6 +137,8 @@ const mediaKinds = [
 ] as const
 const initialForm = { prompt: '', model: '', ratio: '16:9', width: 16, height: 9, duration: 5 as number | 'custom', customDuration: '' as number | '' }
 const form = reactive({ ...initialForm })
+const modelLimits = computed(() => miniMaxVideoModelLimits(form.model))
+const durations = computed(() => [...(modelLimits.value?.durations ?? [5, 10, 30, 60]), 'custom'] as (number | 'custom')[])
 const references = reactive<Record<MediaKind, Reference[]>>({ images: [], videos: [], audios: [] })
 const fileInputs: Partial<Record<MediaKind, HTMLInputElement>> = {}
 const keys = ref<ApiKey[]>([]), models = ref<{ id: string }[]>([])
@@ -171,10 +174,18 @@ watch(filter, () => { taskPage.value = 1 })
 watch(taskPageCount, (pages) => { taskPage.value = Math.min(taskPage.value, pages) })
 watch(taskPage, () => { if (taskList.value) taskList.value.scrollTop = 0 }, { flush: 'post' })
 const seconds = computed(() => form.duration === 'custom' ? Number(form.customDuration) : form.duration)
-const validDuration = computed(() => Number.isSafeInteger(seconds.value) && seconds.value >= 1 && seconds.value <= 86400)
+const validDuration = computed(() => Number.isSafeInteger(seconds.value) && seconds.value >= (modelLimits.value?.minDuration ?? 1) && seconds.value <= (modelLimits.value?.maxDuration ?? 86400) && (!modelLimits.value?.fixedDurations || modelLimits.value.durations.includes(seconds.value)))
 const validRatio = computed(() => form.ratio !== 'custom' || [form.width, form.height].every(n => Number.isSafeInteger(n) && n >= 1 && n <= 10000))
-const canSubmit = computed(() => loaded.value && settings.enabled && !tasksError.value && !!selectedKey.value && models.value.some(model => model.id === form.model) && !!form.prompt.trim() && validDuration.value && validRatio.value && !loadingModels.value && !submitting.value && mediaKinds.every(kind => references[kind.id].length <= referenceLimit(kind.id)))
-function referenceLimit(kind: MediaKind) { return settings[`max_reference_${kind}`] }
+const validModelRatio = computed(() => !modelLimits.value?.ratios || modelLimits.value.ratios.includes(form.ratio === 'custom' ? `${form.width}:${form.height}` : form.ratio))
+const canSubmit = computed(() => loaded.value && settings.enabled && !tasksError.value && !!selectedKey.value && models.value.some(model => model.id === form.model) && !!form.prompt.trim() && validDuration.value && validRatio.value && validModelRatio.value && (!modelLimits.value?.requiresImage || references.images.length > 0) && !loadingModels.value && !submitting.value && mediaKinds.every(kind => references[kind.id].length <= referenceLimit(kind.id)))
+watch(() => form.model, () => {
+  if (modelLimits.value && !validDuration.value) form.duration = modelLimits.value.defaultDuration
+  else if (form.duration !== 'custom' && !durations.value.includes(form.duration)) {
+    form.customDuration = form.duration
+    form.duration = 'custom'
+  }
+})
+function referenceLimit(kind: MediaKind) { return Math.min(settings[`max_reference_${kind}`], modelLimits.value?.[kind] ?? Infinity) }
 function statusCount(status: string) { return tasks.value.filter(task => task.expires_at > now.value && (status === 'all' || status === task.status)).length }
 function ratioStyle(ratio: string) { const [w = 1, h = 1] = ratio.split(':').map(Number); return { width: `${18 * w / Math.max(w, h)}px`, height: `${18 * h / Math.max(w, h)}px` } }
 function setFileInput(kind: MediaKind, element: Element | ComponentPublicInstance | null) { if (element instanceof HTMLInputElement) fileInputs[kind] = element }
@@ -265,7 +276,7 @@ async function submit() {
     if (!tasks.value.some(task => task.id === result.id)) tasks.value.unshift(result)
     if (Object.entries(draft).every(([field, value]) => form[field as keyof typeof form] === value) &&
       mediaKinds.every(({ id }) => references[id].length === snapshot[id].length && references[id].every((reference, index) => reference.id === snapshot[id][index]?.id))) {
-      Object.assign(form, initialForm, { model: draft.model })
+      Object.assign(form, initialForm, { model: draft.model, duration: modelLimits.value?.defaultDuration ?? initialForm.duration })
       for (const { id } of mediaKinds) {
         references[id].forEach(reference => { if (reference.url) URL.revokeObjectURL(reference.url) })
         references[id] = []

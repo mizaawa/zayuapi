@@ -38,7 +38,7 @@ const date = computed(() => new Date(props.task.created_at * 1000).toLocaleStrin
 const elapsed = computed(() => props.task.started_at ? t('videoWorkbench.seconds', { count: Math.max(0, (props.task.completed_at || props.now) - props.task.started_at) }) : '-')
 const remaining = computed(() => ['completed', 'failed'].includes(props.task.status) ? t('videoWorkbench.remainingMinutes', { count: Math.max(0, Math.ceil((props.task.expires_at - props.now) / 60)) }) : '-')
 const errorMessage = computed(() => {
-  const codes = ['generation_failed', 'request_rejected', 'storage_failed', 'authorization_failed', 'interrupted', 'timeout']
+  const codes = ['generation_failed', 'request_rejected', 'model_unavailable', 'storage_failed', 'authorization_failed', 'interrupted', 'timeout']
   return t(`videoWorkbench.errors.${codes.includes(props.task.error_code || '') ? props.task.error_code : 'generation_failed'}`)
 })
 </script>

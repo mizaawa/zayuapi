@@ -27,6 +27,23 @@ type usageRepoStub struct {
 	onCall     chan struct{}
 }
 
+func TestDashboardCacheInvalidationRejectsPreRestoreResults(t *testing.T) {
+	cache := &dashboardCacheStub{}
+	svc := NewDashboardService(&usageRepoStub{}, nil, cache, nil)
+	ctx := context.Background()
+	before := svc.cacheGeneration.Load()
+	svc.saveDashboardStatsCacheAtGeneration(ctx, &usagestats.DashboardStats{TotalRequests: 99}, before)
+	require.NoError(t, svc.InvalidateStatsCache(ctx))
+	svc.saveDashboardStatsCacheAtGeneration(ctx, &usagestats.DashboardStats{TotalRequests: 99}, before)
+	require.EqualValues(t, 1, cache.setCalls)
+	require.EqualValues(t, 1, cache.delCalls)
+	svc.saveDashboardStatsCache(ctx, &usagestats.DashboardStats{TotalRequests: 5})
+	require.EqualValues(t, 2, cache.setCalls)
+	var entry dashboardStatsCacheEntry
+	require.NoError(t, json.Unmarshal([]byte(cache.lastSet), &entry))
+	require.EqualValues(t, 5, entry.Stats.TotalRequests)
+}
+
 func (s *usageRepoStub) GetDashboardStats(ctx context.Context) (*usagestats.DashboardStats, error) {
 	atomic.AddInt32(&s.calls, 1)
 	if s.onCall != nil {

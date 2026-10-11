@@ -753,3 +753,68 @@ func TestStartRestore_Async(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "completed", final.RestoreStatus)
 }
+
+func TestBackupService_BackupAndRestoreAreMutuallyExclusive(t *testing.T) {
+	svc := newTestBackupService(newMockSettingRepo(), &mockDumper{}, newMockObjectStore())
+	ctx := context.Background()
+	svc.restoring = true
+	_, err := svc.CreateBackup(ctx, "manual", 0)
+	require.ErrorIs(t, err, ErrRestoreInProgress)
+	_, err = svc.StartBackup(ctx, "manual", 0)
+	require.ErrorIs(t, err, ErrRestoreInProgress)
+	svc.restoring, svc.backingUp = false, true
+	require.ErrorIs(t, svc.RestoreBackup(ctx, "backup"), ErrBackupInProgress)
+	_, err = svc.StartRestore(ctx, "backup")
+	require.ErrorIs(t, err, ErrBackupInProgress)
+}
+
+func TestBackupService_RestoreRefreshesStatisticsOnlyOnSuccess(t *testing.T) {
+	for _, async := range []bool{false, true} {
+		for _, fails := range []bool{false, true} {
+			t.Run(fmt.Sprintf("async=%t/fails=%t", async, fails), func(t *testing.T) {
+				repo := newMockSettingRepo()
+				seedS3Config(t, repo)
+				dumper := &mockDumper{dumpData: []byte("snapshot")}
+				svc := newTestBackupService(repo, dumper, newMockObjectStore())
+				record, err := svc.CreateBackup(context.Background(), "manual", 0)
+				require.NoError(t, err)
+				record.RestoreError = "previous failure"
+				require.NoError(t, svc.saveRecord(context.Background(), record))
+				refreshed := false
+				svc.afterRestore = func(context.Context) error { refreshed = true; return nil }
+				if fails {
+					dumper.restErr = fmt.Errorf("SQL restore failed")
+				}
+				if async {
+					_, err = svc.StartRestore(context.Background(), record.ID)
+					require.NoError(t, err)
+					svc.wg.Wait()
+					final, err := svc.GetBackupRecord(context.Background(), record.ID)
+					require.NoError(t, err)
+					if fails {
+						require.Equal(t, "failed", final.RestoreStatus)
+					} else {
+						require.Equal(t, "completed", final.RestoreStatus)
+						require.Empty(t, final.RestoreError)
+					}
+				} else {
+					err = svc.RestoreBackup(context.Background(), record.ID)
+					require.Equal(t, fails, err != nil)
+				}
+				require.Equal(t, !fails, refreshed)
+			})
+		}
+	}
+}
+
+func TestBackupService_ScheduledBackupPreservesUnlimitedRetention(t *testing.T) {
+	repo := newMockSettingRepo()
+	seedS3Config(t, repo)
+	require.NoError(t, repo.Set(context.Background(), settingKeyBackupSchedule, `{"enabled":true,"retain_days":0,"retain_count":0}`))
+	svc := newTestBackupService(repo, &mockDumper{dumpData: []byte("snapshot")}, newMockObjectStore())
+	svc.runScheduledBackup()
+	records, err := svc.ListBackups(context.Background())
+	require.NoError(t, err)
+	require.Len(t, records, 1)
+	require.Empty(t, records[0].ExpiresAt)
+}

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
@@ -27,11 +28,21 @@ type userDashboardCacheEntry struct {
 }
 
 type userDashboardCache struct {
-	mu      sync.Mutex
-	entries map[string]userDashboardCacheEntry
-	flight  singleflight.Group
-	today   chan struct{}
-	totals  chan struct{}
+	mu         sync.Mutex
+	entries    map[string]userDashboardCacheEntry
+	flight     singleflight.Group
+	today      chan struct{}
+	totals     chan struct{}
+	generation atomic.Uint64
+}
+
+func (s *UsageService) InvalidateDashboardCache() {
+	if cache := s.userDashboardCache; cache != nil {
+		cache.mu.Lock()
+		defer cache.mu.Unlock()
+		cache.generation.Add(1)
+		clear(cache.entries)
+	}
 }
 
 func newUserDashboardCache() *userDashboardCache {
@@ -135,7 +146,7 @@ func (s *UsageService) loadUserDashboardStats(ctx context.Context, userID int64,
 	}
 	// The day and visibility are part of the key to prevent midnight/setting changes
 	// from returning statistics with a different scope.
-	key := fmt.Sprintf("%d:%t:%t:%d", userID, includeTotals, hideMonitor, timezone.Today().Unix())
+	key := fmt.Sprintf("%d:%t:%t:%d:%d", userID, includeTotals, hideMonitor, timezone.Today().Unix(), cache.generation.Load())
 	if stats := cache.get(key); stats != nil {
 		return stats, nil
 	}

@@ -794,6 +794,14 @@ func (s *OpenAIGatewayService) ForwardGrokMedia(
 			forwardedRequestInfo = normalizeCustomVideoRequestInfo(forwardedRequestInfo)
 		}
 	}
+	if account.Platform == PlatformCustom && endpoint == GrokMediaEndpointVideosGenerations {
+		// Adapt only internal workbench requests after extracting the original
+		// reference and duration metadata used for billing and audit.
+		body, err = normalizeMiniMaxVideoWorkbenchBody(ctx, body)
+		if err != nil {
+			return nil, err
+		}
+	}
 
 	var bodyReader io.Reader
 	if endpoint.RequiresRequestBody() {

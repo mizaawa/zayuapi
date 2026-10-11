@@ -61,6 +61,61 @@ func TestVideoWorkbenchInterruptedStreamIsNeverSuccessful(t *testing.T) {
 	}
 }
 
+func TestVideoWorkbenchMiniMaxRequestValidation(t *testing.T) {
+	policy := service.VideoWorkbenchRuntime{MaxReferenceImages: 6, MaxReferenceVideos: 6, MaxReferenceAudios: 6}
+	for _, body := range []string{
+		`{"model":"MiniMax-Hailuo-2.3","prompt":"waves","duration":5,"ratio":"16:9"}`,
+		`{"model":"MiniMax-Hailuo-2.3-Fast","prompt":"waves","duration":6,"ratio":"16:9"}`,
+		`{"model":"MiniMax-H3","prompt":"waves","duration":30,"ratio":"16:9"}`,
+		`{"model":"MiniMax-H3","prompt":"waves","duration":5,"ratio":"2:1"}`,
+	} {
+		_, err := parseVideoWorkbenchPayload([]byte(body), policy)
+		require.Error(t, err)
+	}
+	for _, body := range []string{
+		`{"model":"MiniMax-H3","prompt":"waves","duration":5,"ratio":"9:16"}`,
+		`{"model":"MiniMax-Hailuo-2.3","prompt":"waves","duration":6,"ratio":"16:9"}`,
+		`{"model":"other-video","prompt":"waves","duration":60,"ratio":"2:1"}`,
+	} {
+		_, err := parseVideoWorkbenchPayload([]byte(body), policy)
+		require.NoError(t, err)
+	}
+}
+
+func TestVideoWorkbenchModelUnavailableDoesNotExposeUpstreamError(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	store := &videoHandlerStore{tasks: make(map[string]service.VideoWorkbenchRecord)}
+	storage := &videoHandlerStorage{files: make(map[string][]byte)}
+	svc := service.NewVideoWorkbenchServiceWithSettings(store, storage, func(context.Context) service.VideoWorkbenchRuntime {
+		return service.VideoWorkbenchRuntime{Enabled: true, MaxConcurrent: 3, RetentionMinutes: 15}
+	})
+	h := NewVideoWorkbenchHandler(svc, nil)
+	h.SetAuthRefresh(func(*gin.Context) error { return nil })
+	h.execute = func(c *gin.Context, operation string) {
+		require.Equal(t, "create", operation)
+		c.JSON(503, gin.H{"error": gin.H{"code": "model_not_found", "message": "private upstream https://internal.example sk-secret"}})
+	}
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/video-workbench/tasks", nil)
+	task, err := svc.Create(context.Background(), 7, service.VideoWorkbenchMetadata{APIKeyID: 9, Model: "MiniMax-H3", Duration: 5})
+	require.NoError(t, err)
+	ctx, cancel := context.WithCancel(context.Background())
+	c.Request = c.Request.WithContext(ctx)
+	h.run(task, c, []byte(`{"model":"MiniMax-H3"}`), cancel)
+	listed, err := svc.List(context.Background(), 7)
+	require.NoError(t, err)
+	require.Len(t, listed, 1)
+	require.Equal(t, "failed", listed[0].Status)
+	require.Equal(t, "model_unavailable", listed[0].ErrorCode)
+	data, err := json.Marshal(listed)
+	require.NoError(t, err)
+	require.NotContains(t, string(data), "internal.example")
+	require.NotContains(t, string(data), "sk-secret")
+	for _, state := range []string{"FAILURE", "Fail", "failed"} {
+		require.Equal(t, "failed", videoWorkbenchResponseState([]byte(`{"status":"`+state+`"}`)))
+	}
+}
+
 func TestVideoWorkbenchGenerationOwnershipAndDownloadHTTP(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	policy := service.VideoWorkbenchRuntime{Enabled: true, MaxConcurrent: 3, MaxReferenceImages: 6, MaxReferenceVideos: 6, MaxReferenceAudios: 6, RetentionMinutes: 30}

@@ -34,45 +34,60 @@ func TestPersistentUsageCounterMigration(t *testing.T) {
 }
 
 func TestPersistentUsageCountersSurviveCleanup(t *testing.T) {
-	ctx := context.Background()
-	tx := testEntTx(t)
-	client := tx.Client()
-	repo := newUsageLogRepositoryWithSQL(client, tx)
-	user := mustCreateUser(t, client, &service.User{})
-	key := mustCreateApiKey(t, client, &service.APIKey{UserID: user.ID, Key: "counter-cleanup"})
-	account := mustCreateAccount(t, client, &service.Account{Name: "counter-cleanup", Platform: "openai"})
-	log := &service.UsageLog{
-		UserID: user.ID, APIKeyID: key.ID, AccountID: account.ID,
-		RequestID: "counter-cleanup", Model: "gpt-test", InputTokens: 10, OutputTokens: 20,
-		CacheCreationTokens: 3, CacheReadTokens: 4, TotalCost: 5, ActualCost: 2.5,
-		CreatedAt: time.Now(),
+	for _, mode := range []string{"all", "retention", "filtered"} {
+		t.Run(mode, func(t *testing.T) {
+			ctx := context.Background()
+			tx := testEntTx(t)
+			client := tx.Client()
+			repo := newUsageLogRepositoryWithSQL(client, tx)
+			user := mustCreateUser(t, client, &service.User{})
+			key := mustCreateApiKey(t, client, &service.APIKey{UserID: user.ID, Key: "counter-cleanup"})
+			account := mustCreateAccount(t, client, &service.Account{Name: "counter-cleanup", Platform: "openai"})
+			log := &service.UsageLog{
+				UserID: user.ID, APIKeyID: key.ID, AccountID: account.ID,
+				RequestID: "counter-cleanup", Model: "gpt-test", InputTokens: 10, OutputTokens: 20,
+				CacheCreationTokens: 3, CacheReadTokens: 4, TotalCost: 5, ActualCost: 2.5,
+				CreatedAt: time.Now(),
+			}
+			inserted, err := repo.Create(ctx, log)
+			require.NoError(t, err)
+			require.True(t, inserted)
+			inserted, err = repo.Create(ctx, log)
+			require.NoError(t, err)
+			require.False(t, inserted)
+			before, err := repo.GetDashboardStats(ctx)
+			require.NoError(t, err)
+			cleanup := newUsageCleanupRepositoryWithSQL(nil, tx)
+			var deleted int64
+			switch mode {
+			case "all":
+				deleted, err = cleanup.DeleteUsageLogsThroughIDBatch(ctx, log.ID, 10000)
+			case "retention":
+				deleted, err = cleanup.DeleteUsageLogsBeforeBatch(ctx, log.CreatedAt.Add(time.Second), 10000)
+			case "filtered":
+				deleted, err = cleanup.DeleteUsageLogsBatch(ctx, service.UsageCleanupFilters{
+					StartTime: log.CreatedAt.Add(-time.Second), EndTime: log.CreatedAt.Add(time.Second), UserID: &user.ID,
+				}, 10000)
+			}
+			require.NoError(t, err)
+			require.Greater(t, deleted, int64(0))
+			userStats, err := repo.GetUserDashboardStats(ctx, user.ID)
+			require.NoError(t, err)
+			require.EqualValues(t, 1, userStats.TotalRequests)
+			require.EqualValues(t, 37, userStats.TotalTokens)
+			require.EqualValues(t, 1, userStats.TodayRequests)
+			require.Equal(t, 2.5, userStats.TotalActualCost)
+			require.Len(t, userStats.ByPlatform, 1)
+			require.Equal(t, 2.5, userStats.ByPlatform[0].TotalActualCost)
+			after, err := repo.GetDashboardStats(ctx)
+			require.NoError(t, err)
+			require.Equal(t, before.TotalRequests, after.TotalRequests)
+			require.Equal(t, before.TotalTokens, after.TotalTokens)
+			require.Equal(t, before.TotalActualCost, after.TotalActualCost)
+			require.Equal(t, before.TodayActualCost, after.TodayActualCost)
+			require.Equal(t, before.TotalAccountCost, after.TotalAccountCost)
+		})
 	}
-	inserted, err := repo.Create(ctx, log)
-	require.NoError(t, err)
-	require.True(t, inserted)
-	inserted, err = repo.Create(ctx, log)
-	require.NoError(t, err)
-	require.False(t, inserted)
-	before, err := repo.GetDashboardStats(ctx)
-	require.NoError(t, err)
-	cleanup := newUsageCleanupRepositoryWithSQL(nil, tx)
-	_, err = cleanup.DeleteUsageLogsThroughIDBatch(ctx, log.ID, 10000)
-	require.NoError(t, err)
-	userStats, err := repo.GetUserDashboardStats(ctx, user.ID)
-	require.NoError(t, err)
-	require.EqualValues(t, 1, userStats.TotalRequests)
-	require.EqualValues(t, 37, userStats.TotalTokens)
-	require.EqualValues(t, 1, userStats.TodayRequests)
-	require.Equal(t, 2.5, userStats.TotalActualCost)
-	require.Len(t, userStats.ByPlatform, 1)
-	require.Equal(t, 2.5, userStats.ByPlatform[0].TotalActualCost)
-	after, err := repo.GetDashboardStats(ctx)
-	require.NoError(t, err)
-	require.Equal(t, before.TotalRequests, after.TotalRequests)
-	require.Equal(t, before.TotalTokens, after.TotalTokens)
-	require.Equal(t, before.TotalActualCost, after.TotalActualCost)
-	require.Equal(t, before.TodayActualCost, after.TodayActualCost)
-	require.Equal(t, before.TotalAccountCost, after.TotalAccountCost)
 }
 
 func TestPersistentUsageCountersRefundAfterCleanup(t *testing.T) {
