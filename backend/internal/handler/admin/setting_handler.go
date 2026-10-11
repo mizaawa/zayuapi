@@ -382,6 +382,7 @@ func (h *SettingHandler) GetSettings(c *gin.Context) {
 		ChannelMonitorAnnouncement:           settings.ChannelMonitorAnnouncement,
 		ImageWorkbenchEnabled:                settings.ImageWorkbenchEnabled,
 		ImageWorkbenchMaxConcurrent:          settings.ImageWorkbenchMaxConcurrent,
+		ImageWorkbenchMaxImageSizeMB:         settings.ImageWorkbenchMaxImageSizeMB,
 		ImageWorkbenchAdminExempt:            settings.ImageWorkbenchAdminExempt,
 		ImageWorkbenchCustomRetentionEnabled: settings.ImageWorkbenchCustomRetentionEnabled,
 		ImageWorkbenchRetentionMinutes:       settings.ImageWorkbenchRetentionMinutes,

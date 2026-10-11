@@ -1,6 +1,9 @@
 package handler
 
 import (
+	"context"
+	"encoding/base64"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -70,10 +73,10 @@ func TestImageWorkbenchSubmissionRequiresGroupDeclaration(t *testing.T) {
 }
 
 func TestImageWorkbenchMetadataValidation(t *testing.T) {
-	_, err := parseImageWorkbenchMetadata("application/json", []byte(`{"model":"gpt-image-2","prompt":"`+strings.Repeat("\u753b", 32000)+`"}`))
+	_, err := parseImageWorkbenchMetadata("application/json", []byte(`{"model":"gpt-image-2","prompt":"`+strings.Repeat("\u753b", 32000)+`"}`), 50)
 	require.NoError(t, err)
 	for _, count := range []string{"1", "3", "5", "10", "20"} {
-		metadata, err := parseImageWorkbenchMetadata("application/json", []byte(`{"model":"gpt-image-2","prompt":"test","n":`+count+`}`))
+		metadata, err := parseImageWorkbenchMetadata("application/json", []byte(`{"model":"gpt-image-2","prompt":"test","n":`+count+`}`), 50)
 		require.NoError(t, err)
 		require.Equal(t, "auto", metadata.Quality)
 	}
@@ -84,9 +87,79 @@ func TestImageWorkbenchMetadataValidation(t *testing.T) {
 		`{"model":"gpt-image-2","prompt":"test","images":[{},{},{}]}`,
 		`{"model":"gpt-image-2","prompt":"` + strings.Repeat("a", 32001) + `"}`,
 	} {
-		_, err := parseImageWorkbenchMetadata("application/json", []byte(payload))
+		_, err := parseImageWorkbenchMetadata("application/json", []byte(payload), 50)
 		require.Error(t, err)
 	}
-	_, err = parseImageWorkbenchMetadata("multipart/form-data; boundary=test", []byte(`{}`))
+	_, err = parseImageWorkbenchMetadata("multipart/form-data; boundary=test", []byte(`{}`), 50)
 	require.Error(t, err)
+}
+
+func TestImageWorkbenchReferenceSizeBoundary(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		size  int
+		limit int
+		valid bool
+	}{
+		{name: "exact limit", size: 1024 * 1024, limit: 1, valid: true},
+		{name: "one byte above", size: 1024*1024 + 1, limit: 1},
+		{name: "unlimited", size: 2 * 1024 * 1024, limit: 0, valid: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			imageURL := "data:image/png;base64," + base64.StdEncoding.EncodeToString(make([]byte, tc.size))
+			payload, err := json.Marshal(map[string]any{
+				"model": "gpt-image-2", "prompt": "test",
+				"images": []map[string]string{{"image_url": imageURL}, {"image_url": imageURL}},
+			})
+			require.NoError(t, err)
+			_, err = parseImageWorkbenchMetadata("application/json", payload, tc.limit)
+			if tc.valid {
+				require.NoError(t, err)
+			} else {
+				require.ErrorContains(t, err, "1 MB")
+			}
+		})
+	}
+	for _, imageURL := range []string{"", "https://example.test/ref.png", "data:image/png;base64,invalid!", "data:image/png;base64,", "data:text/plain;base64,aGk="} {
+		payload, err := json.Marshal(map[string]any{
+			"model": "gpt-image-2", "prompt": "test", "images": []map[string]string{{"image_url": imageURL}},
+		})
+		require.NoError(t, err)
+		_, err = parseImageWorkbenchMetadata("application/json", payload, 0)
+		require.Error(t, err, imageURL)
+	}
+}
+
+func TestImageWorkbenchRejectsOversizeBeforeCreatingTask(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	store := &localWorkbenchHandlerStore{asyncImageMemoryStore{tasks: make(map[string]*service.ImageTaskRecord)}}
+	svc := service.NewImageTaskServiceWithUploader(store, nil, time.Hour, time.Minute)
+	svc.SetWorkbenchSettingsResolver(func(context.Context) service.ImageWorkbenchRuntime {
+		return service.ImageWorkbenchRuntime{Enabled: true, MaxConcurrent: 5, MaxImageSizeMB: 1, RetentionMinutes: 15}
+	})
+	h := NewAsyncImageHandler(svc, nil)
+	h.execute = func(_ string, _ *gin.Context) { t.Error("oversized upload reached execution") }
+	router := gin.New()
+	router.Use(func(c *gin.Context) {
+		c.Set(string(middleware2.ContextKeyAPIKey), &service.APIKey{
+			ID: 1, UserID: 2, User: &service.User{ID: 2, Email: "owner@example.com"},
+			Group: &service.Group{ID: 3, Platform: service.PlatformOpenAI, AllowImageGeneration: true, ImageWorkbenchEnabled: true},
+		})
+		c.Next()
+	})
+	router.POST("/v1/images/edits/async", h.Submit)
+	imageURL := "data:image/png;base64," + base64.StdEncoding.EncodeToString(make([]byte, 1024*1024+1))
+	payload, err := json.Marshal(map[string]any{
+		"model": "gpt-image-2", "prompt": "test", "images": []map[string]string{{"image_url": imageURL}},
+	})
+	require.NoError(t, err)
+	req := httptest.NewRequest(http.MethodPost, "/v1/images/edits/async", strings.NewReader(string(payload)))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set(imageOwnerEmailHeader, "owner@example.com")
+	req.Header.Set(imageWorkbenchHeader, "true")
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	require.Equal(t, http.StatusBadRequest, rec.Code, rec.Body.String())
+	require.Contains(t, rec.Body.String(), "1 MB")
+	require.Empty(t, store.tasks)
 }

@@ -197,6 +197,7 @@ func (s *SettingService) InitializeDefaultSettings(ctx context.Context) error {
 
 		SettingKeyImageWorkbenchEnabled:                "true",
 		SettingKeyImageWorkbenchMaxConcurrent:          "5",
+		SettingKeyImageWorkbenchMaxImageSizeMB:         "50",
 		SettingKeyImageWorkbenchAdminExempt:            "false",
 		SettingKeyImageWorkbenchCustomRetentionEnabled: "false",
 		SettingKeyImageWorkbenchRetentionMinutes:       "15",
@@ -815,6 +816,7 @@ func (s *SettingService) parseSettings(settings map[string]string) *SystemSettin
 	workbench := parseImageWorkbenchRuntime(settings)
 	result.ImageWorkbenchEnabled = workbench.Enabled
 	result.ImageWorkbenchMaxConcurrent = workbench.MaxConcurrent
+	result.ImageWorkbenchMaxImageSizeMB = workbench.MaxImageSizeMB
 	result.ImageWorkbenchAdminExempt = workbench.AdminExempt
 	result.ImageWorkbenchCustomRetentionEnabled = workbench.CustomRetentionEnabled
 	result.ImageWorkbenchRetentionMinutes = parseImageWorkbenchNumber(settings[SettingKeyImageWorkbenchRetentionMinutes], 15, 1440)

@@ -603,6 +603,9 @@ func diffSettings(before *service.SystemSettings, after *service.SystemSettings,
 	if before.ImageWorkbenchMaxConcurrent != after.ImageWorkbenchMaxConcurrent {
 		changed = append(changed, "image_workbench_max_concurrent")
 	}
+	if before.ImageWorkbenchMaxImageSizeMB != after.ImageWorkbenchMaxImageSizeMB {
+		changed = append(changed, "image_workbench_max_image_size_mb")
+	}
 	if before.ImageWorkbenchAdminExempt != after.ImageWorkbenchAdminExempt {
 		changed = append(changed, "image_workbench_admin_exempt")
 	}

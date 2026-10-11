@@ -411,6 +411,7 @@ const (
 
 	SettingKeyImageWorkbenchEnabled                = "image_workbench_enabled"
 	SettingKeyImageWorkbenchMaxConcurrent          = "image_workbench_max_concurrent"
+	SettingKeyImageWorkbenchMaxImageSizeMB         = "image_workbench_max_image_size_mb"
 	SettingKeyImageWorkbenchAdminExempt            = "image_workbench_admin_exempt"
 	SettingKeyImageWorkbenchCustomRetentionEnabled = "image_workbench_custom_retention_enabled"
 	SettingKeyImageWorkbenchRetentionMinutes       = "image_workbench_retention_minutes"

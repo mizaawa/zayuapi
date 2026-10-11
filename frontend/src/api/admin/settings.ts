@@ -682,6 +682,7 @@ export interface SystemSettings {
 
   image_workbench_enabled: boolean;
   image_workbench_max_concurrent: number;
+  image_workbench_max_image_size_mb: number;
   image_workbench_admin_exempt: boolean;
   image_workbench_custom_retention_enabled: boolean;
   image_workbench_retention_minutes: number;
@@ -994,6 +995,7 @@ export interface UpdateSettingsRequest {
 
   image_workbench_enabled?: boolean;
   image_workbench_max_concurrent?: number;
+  image_workbench_max_image_size_mb?: number;
   image_workbench_admin_exempt?: boolean;
   image_workbench_custom_retention_enabled?: boolean;
   image_workbench_retention_minutes?: number;

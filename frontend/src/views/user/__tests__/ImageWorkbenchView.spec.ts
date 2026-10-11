@@ -27,7 +27,8 @@ vi.mock('vue-i18n', async () => ({
   ...await vi.importActual<typeof import('vue-i18n')>('vue-i18n'),
   useI18n: () => ({
     locale: ref('en'),
-    t: (key: string, params?: Record<string, unknown>) => params?.count === undefined ? key : `${key}:${params.count}`,
+    t: (key: string, params?: Record<string, unknown>) => params?.count !== undefined ? `${key}:${params.count}`
+      : params?.max !== undefined ? `${key}:${params.max}` : key,
   }),
 }))
 
@@ -46,7 +47,7 @@ function task(id: string, status: ImageTask['status'] = 'processing'): ImageTask
 }
 
 function tasksResponse(tasks: ImageTask[] = []): WorkbenchTasksResponse {
-  return { enabled: true, max_concurrent: 5, retention_seconds: 900, tasks }
+  return { enabled: true, max_concurrent: 5, max_image_size_mb: 50, retention_seconds: 900, tasks }
 }
 
 function deferred<T>() {
@@ -110,9 +111,70 @@ afterEach(() => {
   wrappers.splice(0).forEach(wrapper => wrapper.unmount())
   vi.clearAllTimers()
   vi.useRealTimers()
+  vi.unstubAllGlobals()
 })
 
 describe('ImageWorkbenchView', () => {
+  function stubImageReading() {
+    vi.stubGlobal('FileReader', class {
+      result = 'data:image/png;base64,aW1hZ2U='
+      onload?: () => void
+      readAsDataURL() { this.onload?.() }
+    })
+    vi.stubGlobal('Image', class {
+      naturalWidth = 1
+      onload?: () => void
+      set src(_value: string) { this.onload?.() }
+    })
+    vi.stubGlobal('URL', class extends URL {
+      static createObjectURL = vi.fn(() => 'blob:reference')
+      static revokeObjectURL = vi.fn()
+    })
+  }
+
+  async function addReference(wrapper: VueWrapper, size: number) {
+    const file = new File(['image'], 'reference.png', { type: 'image/png' })
+    Object.defineProperty(file, 'size', { value: size })
+    const input = wrapper.get('input[type="file"]')
+    Object.defineProperty(input.element, 'files', { value: [file], configurable: true })
+    await input.trigger('change')
+    await flushPromises()
+  }
+
+  it('accepts the 50 MB boundary and rejects an image one byte above it', async () => {
+    stubImageReading()
+    const wrapper = mountWorkbench()
+    await flushPromises()
+    await addReference(wrapper, 50 * 1024 * 1024)
+    expect(wrapper.findAll('button[aria-label="imageWorkbench.removeReference"]')).toHaveLength(1)
+    expect(showError).not.toHaveBeenCalled()
+    await addReference(wrapper, 50 * 1024 * 1024 + 1)
+    expect(wrapper.findAll('button[aria-label="imageWorkbench.removeReference"]')).toHaveLength(1)
+    expect(showError).toHaveBeenCalledWith('imageWorkbench.referenceSize:50')
+  })
+
+  it('accepts large references when unlimited and rechecks them when the setting changes', async () => {
+    stubImageReading()
+    listTasks.mockResolvedValue({ ...tasksResponse(), max_image_size_mb: 0 })
+    const wrapper = mountWorkbench()
+    await flushPromises()
+    await addReference(wrapper, 51 * 1024 * 1024)
+    expect(wrapper.findAll('button[aria-label="imageWorkbench.removeReference"]')).toHaveLength(1)
+    expect(showError).not.toHaveBeenCalled()
+    await wrapper.get('#guide-tab').trigger('click')
+    expect(wrapper.text()).toContain('imageWorkbench.guideFormatsUnlimited')
+
+    listTasks.mockResolvedValue({ ...tasksResponse(), max_image_size_mb: 20 })
+    await vi.advanceTimersByTimeAsync(5000)
+    await flushPromises()
+    expect(wrapper.text()).toContain('imageWorkbench.guideFormats:20')
+    await wrapper.get('#workbench-tab').trigger('click')
+    await wrapper.get('#image-prompt').setValue('A lighthouse')
+    await wrapper.get('form').trigger('submit')
+    expect(submitTask).not.toHaveBeenCalled()
+    expect(showError).toHaveBeenCalledWith('imageWorkbench.referenceSize:20')
+  })
+
   it('lists only eligible keys from explicitly declared groups across pages', async () => {
     listKeys.mockResolvedValueOnce({
       items: [

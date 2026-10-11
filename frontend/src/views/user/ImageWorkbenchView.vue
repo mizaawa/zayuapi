@@ -342,7 +342,7 @@
           </li>
         </ol>
         <div class="guide-limits">
-          <span>{{ t('imageWorkbench.guideFormats') }}</span
+          <span>{{ t(maxImageSizeMB === 0 ? 'imageWorkbench.guideFormatsUnlimited' : 'imageWorkbench.guideFormats', { max: maxImageSizeMB }) }}</span
           ><span>{{ t('imageWorkbench.guideLimits', { max: maxConcurrentLabel, minutes: retentionMinutes }) }}</span>
         </div>
       </div>
@@ -468,6 +468,7 @@ const tasksError = ref(false)
 const enabled = ref(false)
 const capabilitiesLoaded = ref(false)
 const maxConcurrent = ref(5)
+const maxImageSizeMB = ref(50)
 const retentionMinutes = ref(15)
 const tutorialURL = ref('')
 const submitting = ref(false)
@@ -622,6 +623,8 @@ async function refreshTasks() {
     tasks.value = [...response.tasks].sort((a, b) => b.created_at - a.created_at)
     enabled.value = response.enabled
     maxConcurrent.value = Number.isFinite(response.max_concurrent) ? response.max_concurrent : 5
+    maxImageSizeMB.value = Number.isSafeInteger(response.max_image_size_mb) && response.max_image_size_mb >= 0
+      ? response.max_image_size_mb : 50
     retentionMinutes.value = Math.max(1, Math.round((response.retention_seconds || 900) / 60))
     tutorialURL.value = typeof response.tutorial_url === 'string' ? response.tutorial_url : ''
     capabilitiesLoaded.value = true
@@ -657,8 +660,8 @@ async function addReferences(files: File[]) {
         appStore.showError(t('imageWorkbench.referenceType'))
         continue
       }
-      if (file.size > 10 * 1024 * 1024) {
-        appStore.showError(t('imageWorkbench.referenceSize'))
+      if (maxImageSizeMB.value > 0 && file.size > maxImageSizeMB.value * 1024 * 1024) {
+        appStore.showError(t('imageWorkbench.referenceSize', { max: maxImageSizeMB.value }))
         continue
       }
       try {
@@ -715,6 +718,10 @@ function removeReference(index: number) {
 
 async function submit() {
   if (!canSubmit.value || !selectedKey.value || !outputSize.value) return
+  if (maxImageSizeMB.value > 0 && references.value.some(reference => reference.file.size > maxImageSizeMB.value * 1024 * 1024)) {
+    appStore.showError(t('imageWorkbench.referenceSize', { max: maxImageSizeMB.value }))
+    return
+  }
   submitting.value = true
   const key = selectedKey.value
   try {

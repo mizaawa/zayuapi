@@ -66,7 +66,7 @@ export default {
       'Image generation is unavailable. Ask an administrator to check storage directory permissions and free disk space.',
     referencesLimit: 'You can add up to 2 reference images',
     referenceType: 'Only PNG, JPEG and WebP images are supported',
-    referenceSize: 'Each reference image must be 10 MB or smaller',
+    referenceSize: 'Each reference image must be {max} MB or smaller',
     referenceRead: 'Could not read this image. Select it again.',
     invalidRatio: 'Use integers from 1 to 8192 and a ratio between 1:64 and 64:1',
     promptRequired: 'Enter a prompt first',
@@ -91,7 +91,8 @@ export default {
     guideStep4: 'Review and download',
     guideDetail4:
       'Tasks continue in the cloud and return when you reopen this page. Open previews to view original images, or copy the original prompt. Download results within {minutes} minutes before automatic deletion.',
-    guideFormats: 'PNG / JPEG / WebP · Up to 10 MB each',
+    guideFormats: 'PNG / JPEG / WebP · Up to {max} MB each',
+    guideFormatsUnlimited: 'PNG / JPEG / WebP · No per-image size limit',
     guideLimits: 'Up to {max} concurrent tasks · Results retained for {minutes} minutes'
   }
 }

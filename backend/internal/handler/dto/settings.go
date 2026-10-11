@@ -313,6 +313,7 @@ type SystemSettings struct {
 
 	ImageWorkbenchEnabled                bool   `json:"image_workbench_enabled"`
 	ImageWorkbenchMaxConcurrent          int    `json:"image_workbench_max_concurrent"`
+	ImageWorkbenchMaxImageSizeMB         int    `json:"image_workbench_max_image_size_mb"`
 	ImageWorkbenchAdminExempt            bool   `json:"image_workbench_admin_exempt"`
 	ImageWorkbenchCustomRetentionEnabled bool   `json:"image_workbench_custom_retention_enabled"`
 	ImageWorkbenchRetentionMinutes       int    `json:"image_workbench_retention_minutes"`
@@ -425,6 +426,7 @@ type PublicSettings struct {
 
 	ImageWorkbenchEnabled                bool   `json:"image_workbench_enabled"`
 	ImageWorkbenchMaxConcurrent          int    `json:"image_workbench_max_concurrent"`
+	ImageWorkbenchMaxImageSizeMB         int    `json:"image_workbench_max_image_size_mb"`
 	ImageWorkbenchAdminExempt            bool   `json:"image_workbench_admin_exempt"`
 	ImageWorkbenchCustomRetentionEnabled bool   `json:"image_workbench_custom_retention_enabled"`
 	ImageWorkbenchRetentionMinutes       int    `json:"image_workbench_retention_minutes"`

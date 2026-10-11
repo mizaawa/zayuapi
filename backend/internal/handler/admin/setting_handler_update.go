@@ -343,6 +343,7 @@ type UpdateSettingsRequest struct {
 
 	ImageWorkbenchEnabled                *bool   `json:"image_workbench_enabled"`
 	ImageWorkbenchMaxConcurrent          *int    `json:"image_workbench_max_concurrent" binding:"omitempty,min=1,max=100"`
+	ImageWorkbenchMaxImageSizeMB         *int    `json:"image_workbench_max_image_size_mb" binding:"omitempty,min=0"`
 	ImageWorkbenchAdminExempt            *bool   `json:"image_workbench_admin_exempt"`
 	ImageWorkbenchCustomRetentionEnabled *bool   `json:"image_workbench_custom_retention_enabled"`
 	ImageWorkbenchRetentionMinutes       *int    `json:"image_workbench_retention_minutes" binding:"omitempty,min=1,max=1440"`
@@ -509,6 +510,10 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		return
 	}
 	channelMonitorAnnouncement := previousSettings.ChannelMonitorAnnouncement
+	if req.ImageWorkbenchMaxImageSizeMB != nil && *req.ImageWorkbenchMaxImageSizeMB < 0 {
+		response.BadRequest(c, "Image workbench image size limit must be a non-negative integer in MB")
+		return
+	}
 	if req.ImageWorkbenchMaxConcurrent != nil && (*req.ImageWorkbenchMaxConcurrent < 1 || *req.ImageWorkbenchMaxConcurrent > 100) {
 		response.BadRequest(c, "Image workbench concurrency must be between 1 and 100")
 		return
@@ -1940,6 +1945,12 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 			}
 			return previousSettings.ImageWorkbenchMaxConcurrent
 		}(),
+		ImageWorkbenchMaxImageSizeMB: func() int {
+			if req.ImageWorkbenchMaxImageSizeMB != nil {
+				return *req.ImageWorkbenchMaxImageSizeMB
+			}
+			return previousSettings.ImageWorkbenchMaxImageSizeMB
+		}(),
 		ImageWorkbenchAdminExempt: func() bool {
 			if req.ImageWorkbenchAdminExempt != nil {
 				return *req.ImageWorkbenchAdminExempt
@@ -2424,6 +2435,7 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		ChannelMonitorAnnouncement:           updatedSettings.ChannelMonitorAnnouncement,
 		ImageWorkbenchEnabled:                updatedSettings.ImageWorkbenchEnabled,
 		ImageWorkbenchMaxConcurrent:          updatedSettings.ImageWorkbenchMaxConcurrent,
+		ImageWorkbenchMaxImageSizeMB:         updatedSettings.ImageWorkbenchMaxImageSizeMB,
 		ImageWorkbenchAdminExempt:            updatedSettings.ImageWorkbenchAdminExempt,
 		ImageWorkbenchCustomRetentionEnabled: updatedSettings.ImageWorkbenchCustomRetentionEnabled,
 		ImageWorkbenchRetentionMinutes:       updatedSettings.ImageWorkbenchRetentionMinutes,

@@ -98,6 +98,7 @@ func TestWorkbenchLocalStorageHTTPWithoutS3(t *testing.T) {
 	list := request(http.MethodGet, "/api/v1/image-workbench/tasks", "", false, true)
 	require.Equal(t, http.StatusOK, list.Code, list.Body.String())
 	require.Contains(t, list.Body.String(), `"enabled":true`)
+	require.Contains(t, list.Body.String(), `"max_image_size_mb":50`)
 	require.Equal(t, http.StatusNotFound, request(http.MethodPost, "/v1/images/generations/async", `{"model":"gpt-image-2","prompt":"test"}`, false, true).Code)
 	submitted := request(http.MethodPost, "/v1/images/generations/async", `{"model":"gpt-image-2","prompt":"test"}`, true, true)
 	require.Equal(t, http.StatusAccepted, submitted.Code, submitted.Body.String())

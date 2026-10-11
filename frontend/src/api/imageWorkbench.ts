@@ -33,6 +33,7 @@ export interface ImageTask {
 export interface WorkbenchTasksResponse {
   enabled: boolean
   max_concurrent: number
+  max_image_size_mb: number
   user_max_concurrent?: number
   admin_exempt?: boolean
   retention_seconds: number

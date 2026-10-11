@@ -234,6 +234,7 @@ func (s *SettingService) GetPublicSettings(ctx context.Context) (*PublicSettings
 		SettingKeyChannelMonitorAnnouncement,
 		SettingKeyImageWorkbenchEnabled,
 		SettingKeyImageWorkbenchMaxConcurrent,
+		SettingKeyImageWorkbenchMaxImageSizeMB,
 		SettingKeyImageWorkbenchAdminExempt,
 		SettingKeyImageWorkbenchCustomRetentionEnabled,
 		SettingKeyImageWorkbenchRetentionMinutes,
@@ -367,6 +368,7 @@ func (s *SettingService) GetPublicSettings(ctx context.Context) (*PublicSettings
 		ChannelMonitorAnnouncement:           strings.TrimSpace(settings[SettingKeyChannelMonitorAnnouncement]),
 		ImageWorkbenchEnabled:                workbench.Enabled,
 		ImageWorkbenchMaxConcurrent:          workbench.MaxConcurrent,
+		ImageWorkbenchMaxImageSizeMB:         workbench.MaxImageSizeMB,
 		ImageWorkbenchAdminExempt:            workbench.AdminExempt,
 		ImageWorkbenchCustomRetentionEnabled: workbench.CustomRetentionEnabled,
 		ImageWorkbenchRetentionMinutes:       workbench.RetentionMinutes,
@@ -595,6 +597,7 @@ type PublicSettingsInjectionPayload struct {
 	ChannelMonitorAnnouncement           string `json:"channel_monitor_announcement"`
 	ImageWorkbenchEnabled                bool   `json:"image_workbench_enabled"`
 	ImageWorkbenchMaxConcurrent          int    `json:"image_workbench_max_concurrent"`
+	ImageWorkbenchMaxImageSizeMB         int    `json:"image_workbench_max_image_size_mb"`
 	ImageWorkbenchAdminExempt            bool   `json:"image_workbench_admin_exempt"`
 	ImageWorkbenchCustomRetentionEnabled bool   `json:"image_workbench_custom_retention_enabled"`
 	ImageWorkbenchRetentionMinutes       int    `json:"image_workbench_retention_minutes"`
@@ -682,6 +685,7 @@ func (s *SettingService) GetPublicSettingsForInjection(ctx context.Context) (any
 		ChannelMonitorAnnouncement:           settings.ChannelMonitorAnnouncement,
 		ImageWorkbenchEnabled:                settings.ImageWorkbenchEnabled,
 		ImageWorkbenchMaxConcurrent:          settings.ImageWorkbenchMaxConcurrent,
+		ImageWorkbenchMaxImageSizeMB:         settings.ImageWorkbenchMaxImageSizeMB,
 		ImageWorkbenchAdminExempt:            settings.ImageWorkbenchAdminExempt,
 		ImageWorkbenchCustomRetentionEnabled: settings.ImageWorkbenchCustomRetentionEnabled,
 		ImageWorkbenchRetentionMinutes:       settings.ImageWorkbenchRetentionMinutes,

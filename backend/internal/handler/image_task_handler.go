@@ -3,8 +3,10 @@ package handler
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -125,17 +127,18 @@ func (h *AsyncImageHandler) Submit(c *gin.Context) {
 		imageTaskJSONError(c, http.StatusBadRequest, "invalid_request_error", "streaming image requests cannot be submitted as asynchronous tasks")
 		return
 	}
-	if err := h.validateRequest(c, platform, body); err != nil {
-		imageTaskJSONError(c, http.StatusBadRequest, "invalid_request_error", err.Error())
-		return
-	}
 	var metadata *service.ImageWorkbenchMetadata
 	if isImageWorkbenchRequest(c) {
-		metadata, err = parseImageWorkbenchMetadata(c.GetHeader("Content-Type"), body)
+		policy := h.tasks.WorkbenchRuntime(c.Request.Context())
+		metadata, err = parseImageWorkbenchMetadata(c.GetHeader("Content-Type"), body, policy.MaxImageSizeMB)
 		if err != nil {
 			imageTaskJSONError(c, http.StatusBadRequest, "invalid_request_error", err.Error())
 			return
 		}
+	}
+	if err := h.validateRequest(c, platform, body); err != nil {
+		imageTaskJSONError(c, http.StatusBadRequest, "invalid_request_error", err.Error())
+		return
 	}
 	if !h.checkSecurityAuditBeforeSubmit(c, apiKey, platform, body) {
 		return
@@ -196,6 +199,7 @@ func (h *AsyncImageHandler) ListWorkbench(c *gin.Context) {
 	response.Success(c, gin.H{
 		"enabled":             h.tasks.WorkbenchEnabled(c.Request.Context()),
 		"max_concurrent":      policy.Limit(role == service.RoleAdmin),
+		"max_image_size_mb":   policy.MaxImageSizeMB,
 		"user_max_concurrent": policy.MaxConcurrent,
 		"admin_exempt":        policy.AdminExempt,
 		"retention_seconds":   int(policy.Retention().Seconds()),
@@ -255,17 +259,19 @@ func (h *AsyncImageHandler) DownloadWorkbenchImage(c *gin.Context) {
 	c.Data(http.StatusOK, contentType, data)
 }
 
-func parseImageWorkbenchMetadata(contentType string, body []byte) (*service.ImageWorkbenchMetadata, error) {
+func parseImageWorkbenchMetadata(contentType string, body []byte, maxImageSizeMB int) (*service.ImageWorkbenchMetadata, error) {
 	if isMultipartImagesContentType(contentType) {
 		return nil, errors.New("workbench requests must use JSON with images[].image_url")
 	}
 	var payload struct {
-		Prompt  string            `json:"prompt"`
-		Model   string            `json:"model"`
-		Quality string            `json:"quality"`
-		Size    string            `json:"size"`
-		N       int               `json:"n"`
-		Images  []json.RawMessage `json:"images"`
+		Prompt  string `json:"prompt"`
+		Model   string `json:"model"`
+		Quality string `json:"quality"`
+		Size    string `json:"size"`
+		N       int    `json:"n"`
+		Images  []struct {
+			ImageURL string `json:"image_url"`
+		} `json:"images"`
 	}
 	if err := json.Unmarshal(body, &payload); err != nil {
 		return nil, errors.New("invalid image workbench request")
@@ -293,6 +299,25 @@ func parseImageWorkbenchMetadata(contentType string, body []byte) (*service.Imag
 	}
 	if len(payload.Images) > 2 {
 		return nil, errors.New("at most 2 reference images are allowed")
+	}
+	for _, image := range payload.Images {
+		header, encoded, ok := strings.Cut(strings.TrimSpace(image.ImageURL), ",")
+		if !ok {
+			return nil, errors.New("reference images must be base64 PNG, JPEG, or WebP data URLs")
+		}
+		switch strings.ToLower(header) {
+		case "data:image/png;base64", "data:image/jpeg;base64", "data:image/webp;base64":
+		default:
+			return nil, errors.New("reference images must be base64 PNG, JPEG, or WebP data URLs")
+		}
+		// Count decoded bytes without allocating a second copy of large uploads.
+		size, err := io.Copy(io.Discard, base64.NewDecoder(base64.StdEncoding, strings.NewReader(encoded)))
+		if err != nil || size == 0 {
+			return nil, errors.New("invalid reference image data")
+		}
+		if maxImageSizeMB > 0 && (size+1024*1024-1)/(1024*1024) > int64(maxImageSizeMB) {
+			return nil, fmt.Errorf("each reference image must be %d MB or smaller", maxImageSizeMB)
+		}
 	}
 	return &service.ImageWorkbenchMetadata{
 		Prompt: payload.Prompt, Model: payload.Model, Quality: payload.Quality,

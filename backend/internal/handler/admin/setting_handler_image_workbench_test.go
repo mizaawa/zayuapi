@@ -15,6 +15,7 @@ func TestUpdateSettingsImageWorkbenchPersistsAndPreservesOmitted(t *testing.T) {
 	values := map[string]any{
 		"image_workbench_enabled":                  false,
 		"image_workbench_max_concurrent":           8,
+		"image_workbench_max_image_size_mb":        80,
 		"image_workbench_admin_exempt":             true,
 		"image_workbench_custom_retention_enabled": true,
 		"image_workbench_retention_minutes":        30,
@@ -25,6 +26,7 @@ func TestUpdateSettingsImageWorkbenchPersistsAndPreservesOmitted(t *testing.T) {
 	want := map[string]string{
 		service.SettingKeyImageWorkbenchEnabled:                "false",
 		service.SettingKeyImageWorkbenchMaxConcurrent:          "8",
+		service.SettingKeyImageWorkbenchMaxImageSizeMB:         "80",
 		service.SettingKeyImageWorkbenchAdminExempt:            "true",
 		service.SettingKeyImageWorkbenchCustomRetentionEnabled: "true",
 		service.SettingKeyImageWorkbenchRetentionMinutes:       "30",
@@ -39,16 +41,20 @@ func TestUpdateSettingsImageWorkbenchPersistsAndPreservesOmitted(t *testing.T) {
 		require.Equal(t, value, repo.values[key], "omitting a field preserves it")
 	}
 	require.Contains(t, rec.Body.String(), `"image_workbench_max_concurrent":8`)
+	require.Contains(t, rec.Body.String(), `"image_workbench_max_image_size_mb":80`)
 	require.Contains(t, rec.Body.String(), `"image_workbench_retention_minutes":30`)
 
 	rec = doUpdateSettings(t, h, map[string]any{
 		"image_workbench_enabled":                  true,
+		"image_workbench_max_image_size_mb":        0,
 		"image_workbench_admin_exempt":             false,
 		"image_workbench_custom_retention_enabled": false,
 		"image_workbench_tutorial_url":             "",
 	}, nil)
 	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
 	require.Equal(t, "true", repo.values[service.SettingKeyImageWorkbenchEnabled])
+	require.Equal(t, "0", repo.values[service.SettingKeyImageWorkbenchMaxImageSizeMB])
+	require.Contains(t, rec.Body.String(), `"image_workbench_max_image_size_mb":0`)
 	require.Equal(t, "false", repo.values[service.SettingKeyImageWorkbenchAdminExempt])
 	require.Equal(t, "false", repo.values[service.SettingKeyImageWorkbenchCustomRetentionEnabled])
 	require.Empty(t, repo.values[service.SettingKeyImageWorkbenchTutorialURL])
@@ -61,8 +67,11 @@ func TestUpdateSettingsImageWorkbenchDefaultsAndValidation(t *testing.T) {
 	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
 	require.Equal(t, "5", repo.values[service.SettingKeyImageWorkbenchMaxConcurrent])
 	require.Equal(t, "15", repo.values[service.SettingKeyImageWorkbenchRetentionMinutes])
+	require.Equal(t, "50", repo.values[service.SettingKeyImageWorkbenchMaxImageSizeMB])
 	for _, values := range []map[string]any{
 		{"image_workbench_max_concurrent": 0},
+		{"image_workbench_max_image_size_mb": -1},
+		{"image_workbench_max_image_size_mb": 1.5},
 		{"image_workbench_max_concurrent": 101},
 		{"image_workbench_retention_minutes": 0},
 		{"image_workbench_retention_minutes": 1441},
@@ -72,5 +81,6 @@ func TestUpdateSettingsImageWorkbenchDefaultsAndValidation(t *testing.T) {
 		require.Equal(t, http.StatusBadRequest, rec.Code, rec.Body.String())
 		require.Equal(t, "5", repo.values[service.SettingKeyImageWorkbenchMaxConcurrent])
 		require.Equal(t, "15", repo.values[service.SettingKeyImageWorkbenchRetentionMinutes])
+		require.Equal(t, "50", repo.values[service.SettingKeyImageWorkbenchMaxImageSizeMB])
 	}
 }

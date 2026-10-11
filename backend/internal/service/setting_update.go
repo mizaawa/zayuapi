@@ -428,6 +428,7 @@ func (s *SettingService) buildSystemSettingsUpdates(ctx context.Context, setting
 	}
 	updates[SettingKeyImageWorkbenchEnabled] = strconv.FormatBool(settings.ImageWorkbenchEnabled)
 	updates[SettingKeyImageWorkbenchMaxConcurrent] = strconv.Itoa(imageWorkbenchNumberOrDefault(settings.ImageWorkbenchMaxConcurrent, ImageWorkbenchMaxConcurrent))
+	updates[SettingKeyImageWorkbenchMaxImageSizeMB] = strconv.Itoa(settings.ImageWorkbenchMaxImageSizeMB)
 	updates[SettingKeyImageWorkbenchAdminExempt] = strconv.FormatBool(settings.ImageWorkbenchAdminExempt)
 	updates[SettingKeyImageWorkbenchCustomRetentionEnabled] = strconv.FormatBool(settings.ImageWorkbenchCustomRetentionEnabled)
 	updates[SettingKeyImageWorkbenchRetentionMinutes] = strconv.Itoa(imageWorkbenchNumberOrDefault(settings.ImageWorkbenchRetentionMinutes, 15))

@@ -65,7 +65,7 @@ export default {
     unavailable: '生图服务暂不可用，请联系管理员检查图片存储目录的写入权限和可用空间。',
     referencesLimit: '最多添加 2 张参考图',
     referenceType: '参考图仅支持 PNG、JPEG 和 WebP',
-    referenceSize: '每张参考图不能超过 10 MB',
+    referenceSize: '每张参考图不能超过 {max} MB',
     referenceRead: '无法读取此图片，请重新选择',
     invalidRatio: '宽和高须为 1 到 8192 的整数，比例范围为 1:64 至 64:1',
     promptRequired: '请先填写提示词',
@@ -90,7 +90,8 @@ export default {
     guideStep4: '查看与下载图片',
     guideDetail4:
       '任务会在云端继续执行，重新打开页面可继续查看。点击预览图打开原图，复制按钮可复制原提示词。完成后的图片保留 {minutes} 分钟，过期后自动删除。',
-    guideFormats: 'PNG / JPEG / WebP · 单张上限 10 MB',
+    guideFormats: 'PNG / JPEG / WebP · 单张上限 {max} MB',
+    guideFormatsUnlimited: 'PNG / JPEG / WebP · 单张大小不限',
     guideLimits: '最多 {max} 个并发任务 · 完成后保留 {minutes} 分钟'
   }
 }

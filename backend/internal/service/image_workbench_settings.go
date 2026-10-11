@@ -13,6 +13,7 @@ import (
 type ImageWorkbenchRuntime struct {
 	Enabled                bool
 	MaxConcurrent          int
+	MaxImageSizeMB         int
 	AdminExempt            bool
 	CustomRetentionEnabled bool
 	RetentionMinutes       int
@@ -32,6 +33,7 @@ func (r ImageWorkbenchRuntime) Retention() time.Duration {
 
 var imageWorkbenchSettingKeys = []string{
 	SettingKeyImageWorkbenchEnabled, SettingKeyImageWorkbenchMaxConcurrent,
+	SettingKeyImageWorkbenchMaxImageSizeMB,
 	SettingKeyImageWorkbenchAdminExempt, SettingKeyImageWorkbenchCustomRetentionEnabled,
 	SettingKeyImageWorkbenchRetentionMinutes, SettingKeyImageWorkbenchTutorialURL,
 }
@@ -52,9 +54,14 @@ func imageWorkbenchNumberOrDefault(n, fallback int) int {
 }
 
 func parseImageWorkbenchRuntime(vals map[string]string) ImageWorkbenchRuntime {
+	maxImageSizeMB, err := strconv.Atoi(strings.TrimSpace(vals[SettingKeyImageWorkbenchMaxImageSizeMB]))
+	if err != nil || maxImageSizeMB < 0 {
+		maxImageSizeMB = 50
+	}
 	r := ImageWorkbenchRuntime{
 		Enabled:                !isFalseSettingValue(vals[SettingKeyImageWorkbenchEnabled]),
 		MaxConcurrent:          parseImageWorkbenchNumber(vals[SettingKeyImageWorkbenchMaxConcurrent], ImageWorkbenchMaxConcurrent, 100),
+		MaxImageSizeMB:         maxImageSizeMB,
 		AdminExempt:            vals[SettingKeyImageWorkbenchAdminExempt] == "true",
 		CustomRetentionEnabled: vals[SettingKeyImageWorkbenchCustomRetentionEnabled] == "true",
 		RetentionMinutes:       15,
@@ -87,6 +94,9 @@ func validImageWorkbenchTutorialURL(raw string) bool {
 }
 
 func ValidateImageWorkbenchSettings(settings *SystemSettings) error {
+	if settings.ImageWorkbenchMaxImageSizeMB < 0 {
+		return infraerrors.BadRequest("INVALID_IMAGE_WORKBENCH_IMAGE_SIZE", "image workbench image size limit must be a non-negative integer in MB")
+	}
 	if n := settings.ImageWorkbenchMaxConcurrent; n < 0 || n > 100 {
 		return infraerrors.BadRequest("INVALID_IMAGE_WORKBENCH_CONCURRENCY", "image workbench concurrency must be between 1 and 100")
 	}

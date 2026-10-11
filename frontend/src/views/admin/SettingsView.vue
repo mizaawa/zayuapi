@@ -7040,6 +7040,15 @@
               </label>
               <input id="image-workbench-max-concurrent" v-model.number="form.image_workbench_max_concurrent" type="number" min="1" max="100" step="1" class="input" />
             </div>
+            <div>
+              <label class="input-label" for="image-workbench-max-image-size">
+                {{ t('admin.settings.features.imageWorkbench.maxImageSizeMB') }}
+              </label>
+              <input id="image-workbench-max-image-size" v-model.number="form.image_workbench_max_image_size_mb" type="number" min="0" step="1" class="input" aria-describedby="image-workbench-max-image-size-hint" />
+              <p id="image-workbench-max-image-size-hint" class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                {{ t('admin.settings.features.imageWorkbench.maxImageSizeHint') }}
+              </p>
+            </div>
             <div class="flex items-center justify-between gap-4">
               <label for="image-workbench-admin-exempt" class="text-sm font-medium text-gray-700 dark:text-gray-300">
                 {{ t('admin.settings.features.imageWorkbench.adminExempt') }}
@@ -9742,6 +9751,7 @@ const form = reactive<SettingsForm>({
   channel_monitor_announcement: "",
   image_workbench_enabled: true,
   image_workbench_max_concurrent: 5,
+  image_workbench_max_image_size_mb: 50,
   image_workbench_admin_exempt: false,
   image_workbench_custom_retention_enabled: false,
   image_workbench_retention_minutes: 15,
@@ -10959,6 +10969,10 @@ function findDuplicateDefaultSubscription(
 async function saveSettings() {
   saving.value = true;
   try {
+    if (!Number.isSafeInteger(form.image_workbench_max_image_size_mb) || form.image_workbench_max_image_size_mb < 0) {
+      appStore.showError(t('admin.settings.features.imageWorkbench.maxImageSizeInvalid'));
+      return;
+    }
     const normalizedTableDefaultPageSize = Math.floor(
       Number(form.table_default_page_size),
     );
@@ -11405,6 +11419,7 @@ async function saveSettings() {
       channel_monitor_announcement: form.channel_monitor_announcement.trim(),
       image_workbench_enabled: form.image_workbench_enabled,
       image_workbench_max_concurrent: Number(form.image_workbench_max_concurrent),
+      image_workbench_max_image_size_mb: form.image_workbench_max_image_size_mb,
       image_workbench_admin_exempt: form.image_workbench_admin_exempt,
       image_workbench_custom_retention_enabled: form.image_workbench_custom_retention_enabled,
       image_workbench_retention_minutes: Number(form.image_workbench_retention_minutes),

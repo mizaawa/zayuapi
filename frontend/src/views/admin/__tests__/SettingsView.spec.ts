@@ -717,6 +717,34 @@ describe("admin SettingsView payment visible method controls", () => {
     );
   });
 
+  it("shows the image size hint and saves an unlimited per-image size", async () => {
+    const wrapper = mountView();
+    await flushPromises();
+    await openFeaturesTab(wrapper);
+    const input = wrapper.get<HTMLInputElement>("#image-workbench-max-image-size");
+    expect(input.element.value).toBe("50");
+    expect(input.attributes("min")).toBe("0");
+    expect(wrapper.get("#image-workbench-max-image-size-hint").text()).toContain("maxImageSizeHint");
+    await input.setValue("0");
+    await wrapper.find("form").trigger("submit.prevent");
+    await flushPromises();
+    expect(updateSettings).toHaveBeenCalledWith(expect.objectContaining({ image_workbench_max_image_size_mb: 0 }));
+    expect(input.element.value).toBe("0");
+    wrapper.unmount();
+  });
+
+  it.each(["-1", "1.5", ""])("rejects an invalid per-image size: %s", async (value) => {
+    const wrapper = mountView();
+    await flushPromises();
+    await openFeaturesTab(wrapper);
+    await wrapper.get("#image-workbench-max-image-size").setValue(value);
+    await wrapper.find("form").trigger("submit.prevent");
+    await flushPromises();
+    expect(updateSettings).not.toHaveBeenCalled();
+    expect(showError).toHaveBeenCalledWith("admin.settings.features.imageWorkbench.maxImageSizeInvalid");
+    wrapper.unmount();
+  });
+
   it("saves a GitHub token from extended features and clears the password input after saving", async () => {
     updateSettings.mockResolvedValue({
       ...baseSettingsResponse,
