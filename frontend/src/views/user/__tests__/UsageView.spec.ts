@@ -6,6 +6,7 @@ import UsageView from '../UsageView.vue'
 const {
   query,
   getStats,
+  getDashboardStats,
   getDashboardModels,
   getDashboardSnapshotV2,
   list,
@@ -20,6 +21,7 @@ const {
 } = vi.hoisted(() => ({
   query: vi.fn(),
   getStats: vi.fn(),
+  getDashboardStats: vi.fn(),
   getDashboardModels: vi.fn(),
   getDashboardSnapshotV2: vi.fn(),
   list: vi.fn(),
@@ -76,6 +78,7 @@ vi.mock('@/api', () => ({
   usageAPI: {
     query,
     getStats,
+    getDashboardStats,
     getDashboardModels,
     getDashboardSnapshotV2,
   },
@@ -185,6 +188,7 @@ describe('user UsageView', () => {
   beforeEach(() => {
     query.mockReset()
     getStats.mockReset()
+    getDashboardStats.mockReset()
     getDashboardModels.mockReset()
     getDashboardSnapshotV2.mockReset()
     list.mockReset()
@@ -199,6 +203,11 @@ describe('user UsageView', () => {
     localStorage.clear()
 
     query.mockResolvedValue({ items: [usageLog], total: 1, pages: 1 })
+    getDashboardStats.mockResolvedValue({
+      total_requests: 100, total_tokens: 400, total_input_tokens: 100,
+      total_output_tokens: 200, total_cache_creation_tokens: 40, total_cache_read_tokens: 60,
+      total_cost: 15, total_actual_cost: 12, average_duration_ms: 30,
+    })
     getStats.mockResolvedValue({
       total_requests: 1,
       total_input_tokens: 10,
@@ -228,6 +237,25 @@ describe('user UsageView', () => {
     })
     list.mockResolvedValue({ items: [{ id: 1, name: 'demo-key' }] })
     getAvailable.mockResolvedValue([{ id: 1, name: 'default' }])
+  })
+
+  it('keeps cumulative cards separate from filtered logs and pagination after cleanup', async () => {
+    const wrapper = mountUsageView()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    expect(vm.lifetimeStats.total_requests).toBe(100)
+    expect(vm.lifetimeStats.total_cache_tokens).toBe(100)
+    expect(vm.currentStatsTotal).toBe(1)
+    expect(getStats).toHaveBeenCalledWith(expect.objectContaining({ include_summary: false }), undefined, expect.any(Object))
+    query.mockResolvedValue({ items: [], total: 0, total_is_exact: true })
+    getStats.mockResolvedValue({ total_requests: 0, endpoints: [] })
+    vm.applyFilters()
+    await flushPromises()
+    expect(vm.lifetimeStats.total_actual_cost).toBe(12)
+    expect(vm.lifetimeStats.total_requests).toBe(100)
+    expect(vm.paginationTotal).toBe(0)
+    expect(getDashboardStats).toHaveBeenCalledTimes(1)
+    wrapper.unmount()
   })
 
   it('shows cache hit rate between tokens and cost and persists its column setting', async () => {

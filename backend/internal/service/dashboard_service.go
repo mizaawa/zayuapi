@@ -29,10 +29,6 @@ type DashboardStatsCache interface {
 	DeleteDashboardStats(ctx context.Context) error
 }
 
-type dashboardStatsRangeFetcher interface {
-	GetDashboardStatsWithRange(ctx context.Context, start, end time.Time) (*usagestats.DashboardStats, error)
-}
-
 type dashboardStatsCacheEntry struct {
 	Stats     *usagestats.DashboardStats `json:"stats"`
 	UpdatedAt int64                      `json:"updated_at"`
@@ -41,26 +37,17 @@ type dashboardStatsCacheEntry struct {
 // DashboardService 提供管理员仪表盘统计服务。
 type DashboardService struct {
 	usageRepo      UsageLogRepository
-	aggRepo        DashboardAggregationRepository
 	cache          DashboardStatsCache
 	cacheFreshTTL  time.Duration
 	cacheTTL       time.Duration
 	refreshTimeout time.Duration
 	refreshing     int32
-	aggEnabled     bool
-	aggInterval    time.Duration
-	aggLookback    time.Duration
-	aggUsageDays   int
 }
 
-func NewDashboardService(usageRepo UsageLogRepository, aggRepo DashboardAggregationRepository, cache DashboardStatsCache, cfg *config.Config) *DashboardService {
+func NewDashboardService(usageRepo UsageLogRepository, _ DashboardAggregationRepository, cache DashboardStatsCache, cfg *config.Config) *DashboardService {
 	freshTTL := defaultDashboardStatsFreshTTL
 	cacheTTL := defaultDashboardStatsCacheTTL
 	refreshTimeout := defaultDashboardStatsRefreshTimeout
-	aggEnabled := true
-	aggInterval := time.Minute
-	aggLookback := 2 * time.Minute
-	aggUsageDays := 90
 	if cfg != nil {
 		if !cfg.Dashboard.Enabled {
 			cache = nil
@@ -74,31 +61,13 @@ func NewDashboardService(usageRepo UsageLogRepository, aggRepo DashboardAggregat
 		if cfg.Dashboard.StatsRefreshTimeoutSeconds > 0 {
 			refreshTimeout = time.Duration(cfg.Dashboard.StatsRefreshTimeoutSeconds) * time.Second
 		}
-		aggEnabled = cfg.DashboardAgg.Enabled
-		if cfg.DashboardAgg.IntervalSeconds > 0 {
-			aggInterval = time.Duration(cfg.DashboardAgg.IntervalSeconds) * time.Second
-		}
-		if cfg.DashboardAgg.LookbackSeconds > 0 {
-			aggLookback = time.Duration(cfg.DashboardAgg.LookbackSeconds) * time.Second
-		}
-		if cfg.DashboardAgg.Retention.UsageLogsDays > 0 {
-			aggUsageDays = cfg.DashboardAgg.Retention.UsageLogsDays
-		}
-	}
-	if aggRepo == nil {
-		aggEnabled = false
 	}
 	return &DashboardService{
 		usageRepo:      usageRepo,
-		aggRepo:        aggRepo,
 		cache:          cache,
 		cacheFreshTTL:  freshTTL,
 		cacheTTL:       cacheTTL,
 		refreshTimeout: refreshTimeout,
-		aggEnabled:     aggEnabled,
-		aggInterval:    aggInterval,
-		aggLookback:    aggLookback,
-		aggUsageDays:   aggUsageDays,
 	}
 }
 
@@ -106,7 +75,7 @@ func (s *DashboardService) GetDashboardStats(ctx context.Context) (*usagestats.D
 	if s.cache != nil {
 		cached, fresh, err := s.getCachedDashboardStats(ctx)
 		if err == nil && cached != nil {
-			s.refreshAggregationStaleness(cached)
+			s.refreshDashboardStatsStaleness(cached)
 			if !fresh {
 				s.refreshDashboardStatsAsync()
 			}
@@ -246,7 +215,7 @@ func (s *DashboardService) refreshDashboardStats(ctx context.Context) (*usagesta
 	if err != nil {
 		return nil, err
 	}
-	s.applyAggregationStatus(ctx, stats)
+	s.markDashboardStatsUpdated(stats)
 	cacheCtx, cancel := s.cacheOperationContext()
 	defer cancel()
 	s.saveDashboardStatsCache(cacheCtx, stats)
@@ -272,7 +241,7 @@ func (s *DashboardService) refreshDashboardStatsAsync() {
 			logger.LegacyPrintf("service.dashboard", "[Dashboard] 仪表盘缓存异步刷新失败: %v", err)
 			return
 		}
-		s.applyAggregationStatus(ctx, stats)
+		s.markDashboardStatsUpdated(stats)
 		cacheCtx, cancel := s.cacheOperationContext()
 		defer cancel()
 		s.saveDashboardStatsCache(cacheCtx, stats)
@@ -280,13 +249,6 @@ func (s *DashboardService) refreshDashboardStatsAsync() {
 }
 
 func (s *DashboardService) fetchDashboardStats(ctx context.Context) (*usagestats.DashboardStats, error) {
-	if !s.aggEnabled {
-		if fetcher, ok := s.usageRepo.(dashboardStatsRangeFetcher); ok {
-			now := time.Now().UTC()
-			start := truncateToDayUTC(now.AddDate(0, 0, -s.aggUsageDays))
-			return fetcher.GetDashboardStatsWithRange(ctx, start, now)
-		}
-	}
 	return s.usageRepo.GetDashboardStats(ctx)
 }
 
@@ -329,48 +291,20 @@ func (s *DashboardService) cacheOperationContext() (context.Context, context.Can
 	return context.WithTimeout(context.Background(), s.refreshTimeout)
 }
 
-func (s *DashboardService) applyAggregationStatus(ctx context.Context, stats *usagestats.DashboardStats) {
+func (s *DashboardService) markDashboardStatsUpdated(stats *usagestats.DashboardStats) {
 	if stats == nil {
 		return
 	}
-	updatedAt := s.fetchAggregationUpdatedAt(ctx)
-	stats.StatsUpdatedAt = updatedAt.UTC().Format(time.RFC3339)
-	stats.StatsStale = s.isAggregationStale(updatedAt, time.Now().UTC())
+	// Counters commit with the request; the legacy aggregation watermark only
+	// describes charts and must not make these headline statistics look stale.
+	stats.StatsUpdatedAt = time.Now().UTC().Format(time.RFC3339)
+	stats.StatsStale = false
 }
 
-func (s *DashboardService) refreshAggregationStaleness(stats *usagestats.DashboardStats) {
-	if stats == nil {
-		return
+func (s *DashboardService) refreshDashboardStatsStaleness(stats *usagestats.DashboardStats) {
+	if stats != nil {
+		stats.StatsStale = time.Since(parseStatsUpdatedAt(stats.StatsUpdatedAt)) > s.cacheFreshTTL
 	}
-	updatedAt := parseStatsUpdatedAt(stats.StatsUpdatedAt)
-	stats.StatsStale = s.isAggregationStale(updatedAt, time.Now().UTC())
-}
-
-func (s *DashboardService) fetchAggregationUpdatedAt(ctx context.Context) time.Time {
-	if s.aggRepo == nil {
-		return time.Unix(0, 0).UTC()
-	}
-	updatedAt, err := s.aggRepo.GetAggregationWatermark(ctx)
-	if err != nil {
-		logger.LegacyPrintf("service.dashboard", "[Dashboard] 读取聚合水位失败: %v", err)
-		return time.Unix(0, 0).UTC()
-	}
-	if updatedAt.IsZero() {
-		return time.Unix(0, 0).UTC()
-	}
-	return updatedAt.UTC()
-}
-
-func (s *DashboardService) isAggregationStale(updatedAt, now time.Time) bool {
-	if !s.aggEnabled {
-		return true
-	}
-	epoch := time.Unix(0, 0).UTC()
-	if !updatedAt.After(epoch) {
-		return true
-	}
-	threshold := s.aggInterval + s.aggLookback
-	return now.Sub(updatedAt) > threshold
 }
 
 func parseStatsUpdatedAt(raw string) time.Time {

@@ -178,7 +178,7 @@ export async function query(
  * @returns Usage statistics
  */
 export async function getStats(
-  paramsOrPeriod: (UsageQueryParams & { period?: string; timezone?: string }) | string = 'today',
+  paramsOrPeriod: (UsageQueryParams & { period?: string; timezone?: string; include_summary?: boolean }) | string = 'today',
   apiKeyId?: number,
   options?: UsageRequestOptions
 ): Promise<UsageStatsResponse> {

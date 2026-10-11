@@ -334,7 +334,7 @@ func TestDashboardService_CacheParseError_RepoFailure(t *testing.T) {
 	require.Equal(t, int32(1), atomic.LoadInt32(&cache.delCalls))
 }
 
-func TestDashboardService_StatsUpdatedAtEpochWhenMissing(t *testing.T) {
+func TestDashboardService_PersistentStatsDoNotNeedAggregationWatermark(t *testing.T) {
 	stats := &usagestats.DashboardStats{}
 	repo := &usageRepoStub{stats: stats}
 	aggRepo := &dashboardAggregationRepoStub{watermark: time.Unix(0, 0).UTC()}
@@ -343,8 +343,8 @@ func TestDashboardService_StatsUpdatedAtEpochWhenMissing(t *testing.T) {
 
 	got, err := svc.GetDashboardStats(context.Background())
 	require.NoError(t, err)
-	require.Equal(t, "1970-01-01T00:00:00Z", got.StatsUpdatedAt)
-	require.True(t, got.StatsStale)
+	require.WithinDuration(t, time.Now(), parseStatsUpdatedAt(got.StatsUpdatedAt), time.Second)
+	require.False(t, got.StatsStale)
 }
 
 func TestDashboardService_StatsStaleFalseWhenFresh(t *testing.T) {
@@ -364,15 +364,14 @@ func TestDashboardService_StatsStaleFalseWhenFresh(t *testing.T) {
 
 	got, err := svc.GetDashboardStats(context.Background())
 	require.NoError(t, err)
-	require.Equal(t, aggNow.Format(time.RFC3339), got.StatsUpdatedAt)
+	require.WithinDuration(t, time.Now(), parseStatsUpdatedAt(got.StatsUpdatedAt), time.Second)
 	require.False(t, got.StatsStale)
 }
 
-func TestDashboardService_AggDisabled_UsesUsageLogsFallback(t *testing.T) {
+func TestDashboardService_AggDisabled_UsesPersistentCounters(t *testing.T) {
 	expected := &usagestats.DashboardStats{TotalUsers: 42}
 	repo := &usageRepoStub{
-		rangeStats: expected,
-		err:        errors.New("should not call aggregated stats"),
+		stats: expected,
 	}
 	cfg := &config.Config{
 		Dashboard: config.DashboardCacheConfig{Enabled: false},
@@ -388,8 +387,6 @@ func TestDashboardService_AggDisabled_UsesUsageLogsFallback(t *testing.T) {
 	got, err := svc.GetDashboardStats(context.Background())
 	require.NoError(t, err)
 	require.Equal(t, int64(42), got.TotalUsers)
-	require.Equal(t, int32(0), atomic.LoadInt32(&repo.calls))
-	require.Equal(t, int32(1), atomic.LoadInt32(&repo.rangeCalls))
-	require.False(t, repo.rangeEnd.IsZero())
-	require.Equal(t, truncateToDayUTC(repo.rangeEnd.AddDate(0, 0, -7)), repo.rangeStart)
+	require.Equal(t, int32(1), atomic.LoadInt32(&repo.calls))
+	require.Equal(t, int32(0), atomic.LoadInt32(&repo.rangeCalls))
 }

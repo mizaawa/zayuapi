@@ -80,13 +80,14 @@
       </form>
 
       <div v-show="tab === 'tasks'" id="video-tasks-panel" class="tasks-panel" role="tabpanel" aria-labelledby="video-tasks-tab">
-        <p class="retention"><Icon name="clock" size="sm" />{{ t('videoWorkbench.retention', { minutes: settings.retention_minutes }) }}</p>
+        <div class="task-notice"><Icon name="cloud" size="md" /><p>{{ t('videoWorkbench.retention', { minutes: settings.retention_minutes }) }}</p></div>
         <div class="task-toolbar">
           <div class="status-filter" :aria-label="t('videoWorkbench.tasks')"><button v-for="status in statuses" :key="status" type="button" :class="{ active: filter === status }" :aria-pressed="filter === status" @click="filter = status">{{ t(`videoWorkbench.${status}`) }}<span>{{ statusCount(status) }}</span></button></div>
-          <button type="button" class="icon-button" :title="t('videoWorkbench.refresh')" :aria-label="t('videoWorkbench.refresh')" :disabled="loadingTasks" @click="refreshTasks"><Icon name="refresh" size="sm" :class="{ 'animate-spin': loadingTasks }" /></button>
+          <button type="button" class="icon-button" :title="t('videoWorkbench.refresh')" :aria-label="t('videoWorkbench.refresh')" :disabled="loadingTasks || manualRefreshing" @click="refreshManually"><Icon name="refresh" size="sm" :class="{ 'animate-spin': loadingTasks || manualRefreshing }" /></button>
         </div>
         <div v-if="!visibleTasks.length" class="empty-tasks"><Icon name="play" size="xl" /><h3>{{ t(tasks.length ? 'videoWorkbench.emptyFiltered' : 'videoWorkbench.emptyTasks') }}</h3></div>
-        <div v-else class="task-list"><VideoWorkbenchTaskRow v-for="task in visibleTasks" :key="task.id" :task="task" :now="now" :key-name="keys.find(key => key.id === task.workbench.api_key_id)?.name" :downloading="downloading.has(task.id)" @download="download(task)" @delete="deleteTarget = task" /></div>
+        <div v-else ref="taskList" class="task-list"><VideoWorkbenchTaskRow v-for="task in pagedTasks" :key="task.id" :task="task" :now="now" :key-name="keys.find(key => key.id === task.workbench.api_key_id)?.name" :downloading="downloading.has(task.id)" @download="download(task)" @delete="deleteTarget = task" /></div>
+        <Pagination v-if="visibleTasks.length" v-model:page="taskPage" :total="visibleTasks.length" :page-size="TASKS_PER_PAGE" :show-page-size-selector="false" class="task-pagination" />
       </div>
       <nav class="workbench-tabs" :aria-label="t('videoWorkbench.title')">
         <div class="view-tabs" role="tablist">
@@ -110,6 +111,7 @@ import AppLayout from '@/components/layout/AppLayout.vue'
 import Icon from '@/components/icons/Icon.vue'
 import Select from '@/components/common/Select.vue'
 import BaseDialog from '@/components/common/BaseDialog.vue'
+import Pagination from '@/components/common/Pagination.vue'
 import VideoWorkbenchTaskRow from '@/components/user/VideoWorkbenchTaskRow.vue'
 import { keysAPI } from '@/api/keys'
 import { saveBlob } from '@/api/batchImage'
@@ -132,23 +134,29 @@ const mediaKinds = [
   { id: 'videos', addLabel: 'addVideos', accept: 'video/mp4,video/webm,video/quicktime' },
   { id: 'audios', addLabel: 'addAudios', accept: 'audio/mpeg,audio/mp3,audio/wav,audio/x-wav,audio/ogg,audio/mp4,audio/aac,audio/x-m4a,audio/webm,audio/flac,audio/x-flac' }
 ] as const
-const form = reactive({ prompt: '', model: '', ratio: '16:9', width: 16, height: 9, duration: 5 as number | 'custom', customDuration: '' as number | '' })
+const initialForm = { prompt: '', model: '', ratio: '16:9', width: 16, height: 9, duration: 5 as number | 'custom', customDuration: '' as number | '' }
+const form = reactive({ ...initialForm })
 const references = reactive<Record<MediaKind, Reference[]>>({ images: [], videos: [], audios: [] })
 const fileInputs: Partial<Record<MediaKind, HTMLInputElement>> = {}
 const keys = ref<ApiKey[]>([]), models = ref<{ id: string }[]>([])
 const selectedKeyId = ref<number | null>(null)
 const loadingKeys = ref(true), loadingModels = ref(false), loadingTasks = ref(false)
+const manualRefreshing = ref(false)
 const keysError = ref(false), modelsError = ref(false), tasksError = ref(false), loaded = ref(false)
 const submitting = ref(false), deleting = ref(false)
 const tasks = ref<VideoTask[]>([]), acceptedTasks = new Map<string, VideoTask>()
 const deleteTarget = ref<VideoTask | null>(null)
 const downloading = reactive(new Set<string>())
 const filter = ref<(typeof statuses)[number]>('all')
+const TASKS_PER_PAGE = 20
+const taskPage = ref(1)
+const taskList = ref<HTMLElement | null>(null)
 const now = ref(Math.floor(Date.now() / 1000))
 const settings = reactive<VideoWorkbenchSettings>({ enabled: false, max_concurrent: 3, max_reference_images: 6, max_reference_videos: 6, max_reference_audios: 6, retention_minutes: 30, tutorial_url: '', documentation_url: '', announcement: '' })
 const tutorialURL = computed(() => safeWorkbenchLink(settings.tutorial_url))
 const documentationURL = computed(() => safeWorkbenchLink(settings.documentation_url))
 let disposed = false, pollTimer: ReturnType<typeof setTimeout> | undefined, clockTimer: ReturnType<typeof setInterval> | undefined
+let refreshAnimationTimer: ReturnType<typeof setTimeout> | undefined
 let modelAbort: AbortController | undefined
 const lifecycle = new AbortController()
 const selectedKey = computed(() => keys.value.find(key => key.id === selectedKeyId.value))
@@ -157,6 +165,11 @@ const modelOptions = computed(() => models.value.map(model => ({ value: model.id
 const activeCount = computed(() => statusCount('processing'))
 const unfinishedCount = computed(() => statusCount('processing') + statusCount('queued'))
 const visibleTasks = computed(() => tasks.value.filter(task => task.expires_at > now.value && (filter.value === 'all' || task.status === filter.value)))
+const taskPageCount = computed(() => Math.max(1, Math.ceil(visibleTasks.value.length / TASKS_PER_PAGE)))
+const pagedTasks = computed(() => visibleTasks.value.slice((taskPage.value - 1) * TASKS_PER_PAGE, taskPage.value * TASKS_PER_PAGE))
+watch(filter, () => { taskPage.value = 1 })
+watch(taskPageCount, (pages) => { taskPage.value = Math.min(taskPage.value, pages) })
+watch(taskPage, () => { if (taskList.value) taskList.value.scrollTop = 0 }, { flush: 'post' })
 const seconds = computed(() => form.duration === 'custom' ? Number(form.customDuration) : form.duration)
 const validDuration = computed(() => Number.isSafeInteger(seconds.value) && seconds.value >= 1 && seconds.value <= 86400)
 const validRatio = computed(() => form.ratio !== 'custom' || [form.width, form.height].every(n => Number.isSafeInteger(n) && n >= 1 && n <= 10000))
@@ -208,6 +221,12 @@ async function refreshTasks() {
   } catch { if (!disposed) tasksError.value = true }
   finally { if (!disposed) { loadingTasks.value = false; pollTimer = setTimeout(refreshTasks, unfinishedCount.value ? 3000 : 5000) } }
 }
+function refreshManually() {
+  if (loadingTasks.value || manualRefreshing.value) return
+  manualRefreshing.value = true
+  refreshAnimationTimer = setTimeout(() => { manualRefreshing.value = false }, 1000)
+  void refreshTasks()
+}
 function addFiles(kind: MediaKind, files: File[]) {
   if (submitting.value) return
   const accept = mediaKinds.find(item => item.id === kind)!.accept.split(',')
@@ -233,6 +252,7 @@ async function submit() {
   if (!canSubmit.value || !selectedKey.value) return
   submitting.value = true
   const key = selectedKey.value.key, email = authStore.user?.email || ''
+  const draft = { ...form }
   const payload: VideoPayload = { model: form.model, prompt: form.prompt.trim(), ratio: form.ratio === 'custom' ? `${form.width}:${form.height}` : form.ratio, duration: seconds.value }
   const snapshot = { images: [...references.images], videos: [...references.videos], audios: [...references.audios] }
   try {
@@ -243,7 +263,15 @@ async function submit() {
     if (disposed) return
     acceptedTasks.set(result.id, result)
     if (!tasks.value.some(task => task.id === result.id)) tasks.value.unshift(result)
-    tab.value = 'tasks'; filter.value = 'all'; appStore.showSuccess(t('videoWorkbench.created')); void refreshTasks()
+    if (Object.entries(draft).every(([field, value]) => form[field as keyof typeof form] === value) &&
+      mediaKinds.every(({ id }) => references[id].length === snapshot[id].length && references[id].every((reference, index) => reference.id === snapshot[id][index]?.id))) {
+      Object.assign(form, initialForm, { model: draft.model })
+      for (const { id } of mediaKinds) {
+        references[id].forEach(reference => { if (reference.url) URL.revokeObjectURL(reference.url) })
+        references[id] = []
+      }
+    }
+    appStore.showSuccess(t('videoWorkbench.created')); void refreshTasks()
   } catch { if (!disposed) { appStore.showError(t('videoWorkbench.submitError')); void refreshTasks() } }
   finally { if (!disposed) submitting.value = false }
 }
@@ -268,11 +296,11 @@ async function onTabKeydown(event: KeyboardEvent) {
   await nextTick(); document.getElementById(`video-${tab.value}-tab`)?.focus()
 }
 onMounted(() => { void loadKeys(); void refreshTasks(); clockTimer = setInterval(() => { now.value = Math.floor(Date.now() / 1000) }, 1000) })
-onUnmounted(() => { disposed = true; lifecycle.abort(); modelAbort?.abort(); clearTimeout(pollTimer); clearInterval(clockTimer); references.images.forEach(ref => URL.revokeObjectURL(ref.url)) })
+onUnmounted(() => { disposed = true; lifecycle.abort(); modelAbort?.abort(); clearTimeout(pollTimer); clearInterval(clockTimer); clearTimeout(refreshAnimationTimer); references.images.forEach(ref => URL.revokeObjectURL(ref.url)) })
 </script>
 
 <style scoped>
-.video-workbench { display: flex; flex-direction: column; max-width: 1320px; height: calc(100dvh - 132px); min-height: 280px; margin: 0 auto; padding-bottom: calc(80px + env(safe-area-inset-bottom)); color: var(--md-sys-color-on-surface); letter-spacing: 0; }
+.video-workbench { display: flex; flex-direction: column; max-width: 1320px; min-height: calc(100vh - 164px); margin: 0 auto; padding-bottom: calc(88px + env(safe-area-inset-bottom)); color: var(--md-sys-color-on-surface); letter-spacing: 0; }
 .workbench-heading,.heading-title,.activity { display: flex; align-items: center; }
 .workbench-heading { flex-shrink: 0; justify-content: space-between; gap: 16px; padding: 4px 0 26px; }
 .heading-title { gap: 12px; } .heading-title svg { color: var(--md-sys-color-primary); }
@@ -280,11 +308,11 @@ h2 { font-size: 21px; font-weight: 600; } .activity { gap: 8px; font-size: 12px;
 .activity > span { width: 6px; height: 6px; border-radius: 50%; background: var(--md-sys-color-outline); } .activity .busy { background: var(--md-sys-color-secondary); }
 .announcement,.workbench-message { display: flex; gap: 10px; align-items: flex-start; padding: 12px 0; margin-bottom: 18px; font-size: 13px; line-height: 1.7; border-bottom: 1px solid var(--md-sys-color-outline-variant); }
 .announcement { flex-shrink: 0; max-height: 120px; overflow-y: auto; } .announcement span { white-space: pre-wrap; overflow-wrap: anywhere; } .announcement svg { flex-shrink: 0; margin-top: 3px; } .error { color: var(--md-sys-color-error, #b3261e); } .workbench-message button { margin-left: auto; text-decoration: underline; }
-.workbench-form { display: grid; flex: 1; min-height: 0; overflow-y: auto; scrollbar-gutter: stable; padding: 4px 4px 8px; grid-template-columns: minmax(0,1.13fr) minmax(0,1fr); gap: 42px; }
+.workbench-form { display: grid; padding: 0 0 30px; grid-template-columns: minmax(0,1.13fr) minmax(0,1fr); gap: 42px; }
 .creative-column,.parameters-column { min-width: 0; display: flex; flex-direction: column; } .parameters-column { gap: 16px; }
 .field-title { display: flex; justify-content: space-between; gap: 12px; align-items: center; margin-bottom: 12px; font-size: 13px; font-weight: 600; }
 .field-title > span:last-child { font-size: 11px; font-weight: 400; color: var(--md-sys-color-on-surface-variant); }
-.prompt-input { display: block; resize: vertical; min-height: 390px; flex: 1; width: 100%; padding: 22px; border: 1px solid var(--md-sys-color-outline); background: var(--md-sys-color-surface); border-radius: 24px; font-size: 14px; line-height: 1.8; }
+.prompt-input { display: block; resize: none; aspect-ratio: 6 / 5; min-height: 0; flex: none; overflow-y: auto; width: 100%; padding: 22px; border: 1px solid var(--md-sys-color-outline); background: var(--md-sys-color-surface); border-radius: 24px; font-size: 14px; line-height: 1.9; }
 .prompt-input:focus { outline: 2px solid var(--md-sys-color-primary); outline-offset: 2px; } .prompt-input::placeholder { color: var(--md-sys-color-on-surface-variant); }
 .key-model-fields { display: grid; grid-template-columns: minmax(0,.9fr) minmax(0,1.1fr); gap: 16px; margin-top: 25px; }
 .parameter-field { min-width: 0; border: 0; padding: 0; } .parameter-field > label,.parameter-field > legend { display: block; margin-bottom: 12px; font-size: 13px; font-weight: 600; }
@@ -310,18 +338,22 @@ h2 { font-size: 21px; font-weight: 600; } .activity { gap: 8px; font-size: 12px;
 .create-task > svg:first-child { margin-left: auto; } .create-task > svg:last-child { margin-left: auto; } .create-task:disabled { opacity: .5; cursor: not-allowed; }
 .validation-error { margin-top: 8px; font-size: 12px; color: var(--md-sys-color-error, #b3261e); }
 .inline-state { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 14px; font-size: 12px; color: var(--md-sys-color-on-surface-variant); } .inline-state a,.inline-state button { display: inline-flex; align-items: center; gap: 4px; text-decoration: underline; }
-.workbench-tabs { position: fixed; bottom: calc(20px + env(safe-area-inset-bottom)); left: 16px; right: 16px; display: flex; justify-content: center; width: max-content; max-width: calc(100% - 32px); margin: 0 auto; gap: 5px; padding: 6px; z-index: 20; border-radius: 24px; background: var(--md-sys-color-surface); border: 1px solid var(--md-sys-color-outline-variant); box-shadow: 0 8px 28px rgb(0 0 0 / .12); }
+.workbench-tabs { position: fixed; bottom: calc(20px + env(safe-area-inset-bottom)); left: 16px; right: 16px; display: flex; justify-content: center; width: max-content; max-width: calc(100% - 32px); margin: 0 auto; gap: 6px; padding: 6px; z-index: 20; border-radius: 24px; background: var(--md-sys-color-surface); border: 1px solid color-mix(in srgb, var(--md-sys-color-outline) 45%, transparent); box-shadow: 0 8px 28px rgb(63 52 32 / .14); }
 .view-tabs { display: flex; gap: 5px; min-width: 0; } .workbench-tabs button,.workbench-tabs a { position: relative; display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 43px; padding: 0 18px; min-width: 0; border-radius: 18px; font-size: 13px; color: var(--md-sys-color-on-surface-variant); white-space: nowrap; }
 .workbench-tabs button.active { background: var(--md-sys-color-surface-container-high); color: var(--md-sys-color-on-surface); font-weight: 600; } .tab-count { min-width: 16px; padding: 1px 4px; border-radius: 20px; font-size: 10px; background: var(--md-sys-color-primary); color: var(--md-sys-color-on-primary); }
-.retention { display: flex; gap: 8px; align-items: center; font-size: 12px; color: var(--md-sys-color-on-surface-variant); }
+.task-notice { display: flex; gap: 12px; align-items: flex-start; padding: 14px 16px; background: var(--md-sys-color-surface-container); border-radius: 1rem; font-size: 12px; line-height: 1.8; color: var(--md-sys-color-on-surface-variant); }
+.task-notice svg { flex-shrink: 0; margin-top: 2px; }
 .task-toolbar { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 22px 0 12px; border-bottom: 1px solid var(--md-sys-color-outline); }
 .status-filter { display: flex; flex-wrap: wrap; gap: 12px; } .status-filter button { display: flex; align-items: center; gap: 7px; min-height: 30px; font-size: 12px; color: var(--md-sys-color-on-surface-variant); }
 .status-filter button.active { color: var(--md-sys-color-on-surface); font-weight: 600; } .status-filter button > span { font-size: 10px; padding: 1px 6px; border-radius: 20px; background: var(--md-sys-color-surface-container); font-variant-numeric: tabular-nums; }
 .icon-button { display: grid; place-items: center; flex-shrink: 0; width: 32px; height: 32px; border-radius: 8px; } .icon-button:hover { background: var(--md-sys-color-surface-container); }
 .empty-tasks { min-height: 350px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px; color: var(--md-sys-color-on-surface-variant); } .empty-tasks h3 { font-size: 14px; font-weight: 400; }
-#video-tasks-panel { display: flex; flex-direction: column; flex: 1; min-height: 0; } .task-list { min-height: 0; overflow-y: auto; scrollbar-gutter: stable; }
+.tasks-panel { padding-bottom: 40px; }
+.task-list { max-height: max(240px, calc(100dvh - 480px)); overflow-y: auto; scrollbar-gutter: stable; padding-right: 8px; }
+.task-pagination { margin-top: 16px; border-radius: 1rem; }
+@media (min-width: 1600px) { .workbench-form { gap: 56px; } }
 @media (min-width: 1024px) { .workbench-tabs { left: calc(var(--sidebar-width) + 16px); max-width: calc(100% - var(--sidebar-width) - 32px); } }
 @media (max-width: 1100px) { .workbench-form { gap: 24px; } .key-model-fields { grid-template-columns: minmax(0,1fr); } }
-@media (max-width: 767px) { .workbench-form { grid-template-columns: minmax(0,1fr); gap: 28px; } .prompt-input { min-height: 245px; padding: 16px; } .key-model-fields { grid-template-columns: minmax(0,.9fr) minmax(0,1.1fr); gap: 12px; } h2 { font-size: 18px; } .heading-title { gap: 8px; } .activity { font-size: 11px; gap: 5px; } .workbench-heading { gap: 10px; } .workbench-tabs { gap: 3px; padding: 5px; } .view-tabs { gap: 3px; } .workbench-tabs button,.workbench-tabs a { flex-direction: column; gap: 4px; min-height: 49px; padding: 5px 11px; font-size: 11px; } .tab-count { position: absolute; top: 2px; right: 2px; } .status-filter { gap: 9px; } .status-filter button { font-size: 11px; gap: 4px; } }
+@media (max-width: 767px) { .video-workbench { min-height: calc(100vh - 135px); } .workbench-form { grid-template-columns: minmax(0,1fr); gap: 26px; } .prompt-input { padding: 16px; } .key-model-fields { grid-template-columns: minmax(0,.9fr) minmax(0,1.1fr); gap: 12px; } h2 { font-size: 18px; } .heading-title { gap: 8px; } .activity { font-size: 11px; gap: 5px; } .workbench-heading { gap: 10px; } .workbench-tabs { gap: 3px; padding: 5px; } .view-tabs { gap: 3px; } .workbench-tabs button,.workbench-tabs a { flex-direction: column; gap: 4px; min-height: 42px; padding: 5px 9px; font-size: 11px; } .tab-count { position: absolute; top: 2px; right: 2px; } .status-filter { gap: 9px; } .status-filter button { font-size: 11px; gap: 4px; } }
 @media (max-width: 359px) { .workbench-tabs button,.workbench-tabs a { padding: 5px 8px; } .custom-ratio { gap: 6px; } .heading-title { gap: 5px; } h2 { font-size: 17px; } }
 </style>

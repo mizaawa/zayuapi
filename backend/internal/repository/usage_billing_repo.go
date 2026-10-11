@@ -131,6 +131,9 @@ func (r *usageBillingRepository) Reverse(ctx context.Context, cmd *service.Usage
 	`, original.RequestID, original.APIKeyID); err != nil {
 		return nil, err
 	}
+	if _, err := tx.ExecContext(ctx, `SELECT reverse_missing_usage_counters($1, $2)`, original.RequestID, original.APIKeyID); err != nil {
+		return nil, err
+	}
 
 	if err := tx.Commit(); err != nil {
 		return nil, err

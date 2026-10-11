@@ -296,6 +296,8 @@ type UsageLogFilters struct {
 	ExactTotal bool
 	// SkipUpstreamStats omits admin-only endpoint breakdowns from user statistics queries.
 	SkipUpstreamStats bool `json:"-"`
+	// SkipSummaryStats serves endpoint charts without rescanning logs for headline totals.
+	SkipSummaryStats bool `json:"-"`
 	// HideChannelMonitorLogs is an internal display filter, never a billing filter.
 	HideChannelMonitorLogs bool `json:"-"`
 }

@@ -5,7 +5,7 @@
         <span>{{ t(section.message) }}</span>
         <button type="button" class="btn btn-secondary" @click="section.retry">{{ t('common.refresh') }}</button>
       </div>
-      <UsageStatsCards :stats="usageStats" :show-account-cost="false" :strike-standard-cost="true" />
+      <UsageStatsCards :stats="lifetimeStats" :show-account-cost="false" :strike-standard-cost="true" cumulative />
 
       <div class="space-y-4">
         <div class="card p-4">
@@ -275,6 +275,7 @@ type DistributionMetric = 'tokens' | 'actual_cost'
 type EndpointSource = 'inbound' | 'upstream' | 'path'
 
 const usageStats = ref<UsageStatsResponse | null>(null)
+const lifetimeStats = ref<UsageStatsResponse | null>(null)
 const usageLogs = ref<UsageLog[]>([])
 const trendData = ref<TrendDataPoint[]>([])
 const requestedModelStats = ref<ModelStat[]>([])
@@ -289,7 +290,7 @@ const groupStatsLoading = ref(false)
 const trendLoading = ref(false)
 const modelStatsLoading = ref(false)
 const endpointStatsLoading = ref(false)
-const sectionErrors = reactive({ stats: false, models: false, groups: false, trend: false, filters: false })
+const sectionErrors = reactive({ totals: false, stats: false, models: false, groups: false, trend: false, filters: false })
 const statsErrorMessage = ref('usage.statsLoadFailed')
 const statsFiltersKey = ref<string | null>(null)
 const exporting = ref(false)
@@ -345,7 +346,7 @@ const applyErrorFilters = () => {
   void loadErrors()
 }
 
-type RequestKey = 'logs' | 'stats' | 'models' | 'groups' | 'trend' | 'errors'
+type RequestKey = 'logs' | 'stats' | 'totals' | 'models' | 'groups' | 'trend' | 'errors'
 const requests = new Map<RequestKey, AbortController>()
 const queueAggregateRequest = createUsageRequestQueue()
 let disposed = false
@@ -507,6 +508,24 @@ const loadLogs = async () => {
   }
 }
 
+const loadLifetimeStats = async () => {
+  const controller = startRequest('totals')
+  sectionErrors.totals = false
+  try {
+    const stats = await fetchUsageWithRetry(
+      () => usageAPI.getDashboardStats({ include_totals: true }, { signal: controller.signal }),
+      controller.signal,
+    )
+    if (!isCurrentRequest('totals', controller)) return
+    lifetimeStats.value = {
+      ...stats,
+      total_cache_tokens: stats.total_cache_creation_tokens + stats.total_cache_read_tokens,
+    }
+  } catch {
+    if (isCurrentRequest('totals', controller)) sectionErrors.totals = true
+  }
+}
+
 const loadStats = async () => {
   const controller = startRequest('stats')
   const params = { ...normalizedFilters.value }
@@ -517,11 +536,10 @@ const loadStats = async () => {
   try {
     const stats = await fetchUsageWithRetry(
       async () => {
-        const result = await queueAggregateRequest(() => usageAPI.getStats(params, undefined, { signal: controller.signal }), controller.signal)
-        // Preserve valid totals while incomplete endpoint details recover.
+        const result = await queueAggregateRequest(() => usageAPI.getStats({ ...params, include_summary: false }, undefined, { signal: controller.signal }), controller.signal)
         if (isCurrentRequest('stats', controller)) {
           usageStats.value = result
-          statsFiltersKey.value = key
+          statsFiltersKey.value = result.endpoints_unavailable ? null : key
         }
         return result
       },
@@ -530,7 +548,7 @@ const loadStats = async () => {
     )
     if (!isCurrentRequest('stats', controller)) return
     usageStats.value = stats
-    statsFiltersKey.value = key
+    statsFiltersKey.value = stats.endpoints_unavailable ? null : key
     sectionErrors.stats = stats.endpoints_unavailable === true
     if (stats.endpoints_unavailable) {
       statsErrorMessage.value = 'usage.endpointStatsLoadFailed'
@@ -652,6 +670,7 @@ const applyFilters = () => {
 }
 
 const refreshData = () => {
+  void loadLifetimeStats()
   void loadLogs()
   void loadStats()
   void loadModelStats()
@@ -968,6 +987,7 @@ const loadFilterOptions = async () => {
 }
 
 const failedSections = computed(() => [
+  { key: 'totals', message: 'dashboard.totalsLoadFailed', retry: loadLifetimeStats },
   { key: 'stats', message: statsErrorMessage.value, retry: loadStats },
   { key: 'models', message: 'usage.modelsLoadFailed', retry: loadModelStats },
   { key: 'groups', message: 'usage.groupsLoadFailed', retry: loadGroupStats },

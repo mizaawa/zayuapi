@@ -748,6 +748,9 @@ func (r *usageLogRepository) GetStatsWithFilters(ctx context.Context, filters Us
 
 	// 汇总查询:失败即致命。
 	runSummary := func(c context.Context) error {
+		if filters.SkipSummaryStats {
+			return nil
+		}
 		return scanSingleRow(
 			c, r.sql, query, args,
 			&stats.TotalRequests,
@@ -824,6 +827,13 @@ func (r *usageLogRepository) GetStatsWithFilters(ctx context.Context, filters Us
 	stats.Endpoints = endpoints
 	stats.UpstreamEndpoints = upstreamEndpoints
 	stats.EndpointPaths = endpointPaths
+	if filters.SkipSummaryStats && !stats.EndpointsUnavailable {
+		// Endpoint groups partition the filtered logs, including unknown endpoints.
+		// Reuse their count for pagination without another full summary scan.
+		for _, endpoint := range endpoints {
+			stats.TotalRequests += endpoint.Requests
+		}
+	}
 
 	return stats, nil
 }

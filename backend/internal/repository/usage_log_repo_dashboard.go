@@ -2,7 +2,6 @@ package repository
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"time"
 
@@ -86,7 +85,7 @@ func (r *usageLogRepository) GetDashboardStats(ctx context.Context) (*DashboardS
 	if err := r.fillDashboardEntityStats(ctx, stats, todayStart, now); err != nil {
 		return nil, err
 	}
-	if err := r.fillDashboardUsageStatsAggregated(ctx, stats, todayStart, now); err != nil {
+	if err := r.fillDashboardUsageStatsPersistent(ctx, stats, todayStart, now); err != nil {
 		return nil, err
 	}
 	stats.TotalConsumption = stats.TotalActualCost
@@ -101,46 +100,20 @@ func (r *usageLogRepository) GetDashboardStats(ctx context.Context) (*DashboardS
 	return stats, nil
 }
 
+// GetDashboardStatsWithRange retains compatibility with the aggregation-disabled
+// caller. Headline counters always cover the lifetime since the migration.
 func (r *usageLogRepository) GetDashboardStatsWithRange(ctx context.Context, start, end time.Time) (*DashboardStats, error) {
-	startUTC := start.UTC()
-	endUTC := end.UTC()
-	if !endUTC.After(startUTC) {
-		return nil, errors.New("统计时间范围无效")
+	if !end.After(start) {
+		return nil, errors.New("invalid statistics time range")
 	}
-
-	stats := &DashboardStats{}
-	now := timezone.Now()
-	todayStart := timezone.Today()
-
-	if err := r.fillDashboardEntityStats(ctx, stats, todayStart, now); err != nil {
-		return nil, err
-	}
-	if err := r.fillDashboardUsageStatsFromUsageLogs(ctx, stats, startUTC, endUTC, todayStart, now); err != nil {
-		return nil, err
-	}
-	// The fallback window limits token statistics, but not cumulative spending.
-	if err := scanSingleRow(ctx, r.sql,
-		`SELECT COALESCE(SUM(actual_cost), 0) FROM usage_logs`, nil,
-		&stats.TotalConsumption); err != nil {
-		return nil, err
-	}
-
-	rpm, tpm, err := r.getPerformanceStats(ctx, 0)
-	if err != nil {
-		return nil, err
-	}
-	stats.Rpm = rpm
-	stats.Tpm = tpm
-
-	return stats, nil
+	return r.GetDashboardStats(ctx)
 }
 
 func (r *usageLogRepository) fillDashboardEntityStats(ctx context.Context, stats *DashboardStats, todayUTC, now time.Time) error {
 	userStatsQuery := `
 		SELECT
 			COUNT(*) as total_users,
-			COUNT(CASE WHEN created_at >= $1 THEN 1 END) as today_new_users,
-			COALESCE(SUM(balance), 0) as total_balance
+			COUNT(CASE WHEN created_at >= $1 THEN 1 END) as today_new_users
 		FROM users
 		WHERE deleted_at IS NULL
 	`
@@ -151,22 +124,15 @@ func (r *usageLogRepository) fillDashboardEntityStats(ctx context.Context, stats
 		[]any{todayUTC},
 		&stats.TotalUsers,
 		&stats.TodayNewUsers,
-		&stats.TotalBalance,
 	); err != nil {
 		return err
 	}
 
-	// Successful online payments redeem a balance code. Count the credited records
-	// once, including positive admin adjustments and historically deleted users.
-	rechargeStatsQuery := `
-		SELECT COALESCE(SUM(value), 0)
-		FROM redeem_codes
-		WHERE status = $1 AND used_by IS NOT NULL
-			AND type IN ($2, $3) AND value > 0
-	`
-	if err := scanSingleRow(ctx, r.sql, rechargeStatsQuery,
-		[]any{service.StatusUsed, service.RedeemTypeBalance, service.AdjustmentTypeAdminBalance},
-		&stats.TotalRecharged); err != nil {
+	if err := scanSingleRow(ctx, r.sql,
+		`SELECT COALESCE(SUM(amount) FILTER (WHERE metric = 'balance'), 0),
+		COALESCE(SUM(amount) FILTER (WHERE metric = 'recharged'), 0)
+		FROM dashboard_user_financials`, nil,
+		&stats.TotalBalance, &stats.TotalRecharged); err != nil {
 		return err
 	}
 
@@ -215,182 +181,44 @@ func (r *usageLogRepository) fillDashboardEntityStats(ctx context.Context, stats
 	return nil
 }
 
-func (r *usageLogRepository) fillDashboardUsageStatsAggregated(ctx context.Context, stats *DashboardStats, todayUTC, now time.Time) error {
-	totalStatsQuery := `
-		SELECT
-			COALESCE(SUM(total_requests), 0) as total_requests,
-			COALESCE(SUM(input_tokens), 0) as total_input_tokens,
-			COALESCE(SUM(output_tokens), 0) as total_output_tokens,
-			COALESCE(SUM(cache_creation_tokens), 0) as total_cache_creation_tokens,
-			COALESCE(SUM(cache_read_tokens), 0) as total_cache_read_tokens,
-			COALESCE(SUM(total_cost), 0) as total_cost,
-			COALESCE(SUM(actual_cost), 0) as total_actual_cost,
-			COALESCE(SUM(account_cost), 0) as total_account_cost,
-			COALESCE(SUM(total_duration_ms), 0) as total_duration_ms
-		FROM usage_dashboard_daily
-	`
-	var totalDurationMs int64
-	if err := scanSingleRow(
-		ctx,
-		r.sql,
-		totalStatsQuery,
-		nil,
-		&stats.TotalRequests,
-		&stats.TotalInputTokens,
-		&stats.TotalOutputTokens,
-		&stats.TotalCacheCreationTokens,
-		&stats.TotalCacheReadTokens,
-		&stats.TotalCost,
-		&stats.TotalActualCost,
-		&stats.TotalAccountCost,
-		&totalDurationMs,
-	); err != nil {
+func (r *usageLogRepository) fillDashboardUsageStatsPersistent(ctx context.Context, stats *DashboardStats, today, now time.Time) error {
+	query := `SELECT
+		COALESCE(SUM(requests) FILTER (WHERE bucket_date = DATE '0001-01-01'), 0),
+		COALESCE(SUM(input_tokens) FILTER (WHERE bucket_date = DATE '0001-01-01'), 0),
+		COALESCE(SUM(output_tokens) FILTER (WHERE bucket_date = DATE '0001-01-01'), 0),
+		COALESCE(SUM(cache_creation_tokens) FILTER (WHERE bucket_date = DATE '0001-01-01'), 0),
+		COALESCE(SUM(cache_read_tokens) FILTER (WHERE bucket_date = DATE '0001-01-01'), 0),
+		COALESCE(SUM(total_cost) FILTER (WHERE bucket_date = DATE '0001-01-01'), 0),
+		COALESCE(SUM(actual_cost) FILTER (WHERE bucket_date = DATE '0001-01-01'), 0),
+		COALESCE(SUM(account_cost) FILTER (WHERE bucket_date = DATE '0001-01-01'), 0),
+		COALESCE(SUM(total_duration_ms) FILTER (WHERE bucket_date = DATE '0001-01-01'), 0),
+		COALESCE(SUM(requests) FILTER (WHERE bucket_date = $1::date), 0),
+		COALESCE(SUM(input_tokens) FILTER (WHERE bucket_date = $1::date), 0),
+		COALESCE(SUM(output_tokens) FILTER (WHERE bucket_date = $1::date), 0),
+		COALESCE(SUM(cache_creation_tokens) FILTER (WHERE bucket_date = $1::date), 0),
+		COALESCE(SUM(cache_read_tokens) FILTER (WHERE bucket_date = $1::date), 0),
+		COALESCE(SUM(total_cost) FILTER (WHERE bucket_date = $1::date), 0),
+		COALESCE(SUM(actual_cost) FILTER (WHERE bucket_date = $1::date), 0),
+		COALESCE(SUM(account_cost) FILTER (WHERE bucket_date = $1::date), 0),
+		COUNT(DISTINCT user_id) FILTER (WHERE bucket_date = $1::date AND requests > 0),
+		COUNT(DISTINCT user_id) FILTER (WHERE bucket_date = $1::date AND last_used_at >= $2)
+		FROM usage_counters WHERE bucket_date IN (DATE '0001-01-01', $1::date)`
+	var duration int64
+	if err := scanSingleRow(ctx, r.sql, query, []any{today.Format("2006-01-02"), now.Truncate(time.Hour)},
+		&stats.TotalRequests, &stats.TotalInputTokens, &stats.TotalOutputTokens,
+		&stats.TotalCacheCreationTokens, &stats.TotalCacheReadTokens,
+		&stats.TotalCost, &stats.TotalActualCost, &stats.TotalAccountCost, &duration,
+		&stats.TodayRequests, &stats.TodayInputTokens, &stats.TodayOutputTokens,
+		&stats.TodayCacheCreationTokens, &stats.TodayCacheReadTokens,
+		&stats.TodayCost, &stats.TodayActualCost, &stats.TodayAccountCost,
+		&stats.ActiveUsers, &stats.HourlyActiveUsers); err != nil {
 		return err
 	}
 	stats.TotalTokens = stats.TotalInputTokens + stats.TotalOutputTokens + stats.TotalCacheCreationTokens + stats.TotalCacheReadTokens
-	if stats.TotalRequests > 0 {
-		stats.AverageDurationMs = float64(totalDurationMs) / float64(stats.TotalRequests)
-	}
-
-	todayStatsQuery := `
-		SELECT
-			total_requests as today_requests,
-			input_tokens as today_input_tokens,
-			output_tokens as today_output_tokens,
-			cache_creation_tokens as today_cache_creation_tokens,
-			cache_read_tokens as today_cache_read_tokens,
-			total_cost as today_cost,
-			actual_cost as today_actual_cost,
-			account_cost as today_account_cost,
-			active_users as active_users
-		FROM usage_dashboard_daily
-		WHERE bucket_date = $1::date
-	`
-	if err := scanSingleRow(
-		ctx,
-		r.sql,
-		todayStatsQuery,
-		[]any{todayUTC},
-		&stats.TodayRequests,
-		&stats.TodayInputTokens,
-		&stats.TodayOutputTokens,
-		&stats.TodayCacheCreationTokens,
-		&stats.TodayCacheReadTokens,
-		&stats.TodayCost,
-		&stats.TodayActualCost,
-		&stats.TodayAccountCost,
-		&stats.ActiveUsers,
-	); err != nil {
-		if err != sql.ErrNoRows {
-			return err
-		}
-	}
 	stats.TodayTokens = stats.TodayInputTokens + stats.TodayOutputTokens + stats.TodayCacheCreationTokens + stats.TodayCacheReadTokens
-
-	hourlyActiveQuery := `
-		SELECT active_users
-		FROM usage_dashboard_hourly
-		WHERE bucket_start = $1
-	`
-	hourStart := now.In(timezone.Location()).Truncate(time.Hour)
-	if err := scanSingleRow(ctx, r.sql, hourlyActiveQuery, []any{hourStart}, &stats.HourlyActiveUsers); err != nil {
-		if err != sql.ErrNoRows {
-			return err
-		}
-	}
-
-	return nil
-}
-
-func (r *usageLogRepository) fillDashboardUsageStatsFromUsageLogs(ctx context.Context, stats *DashboardStats, startUTC, endUTC, todayUTC, now time.Time) error {
-	todayEnd := todayUTC.Add(24 * time.Hour)
-	combinedStatsQuery := `
-		WITH scoped AS (
-			SELECT
-				created_at,
-				input_tokens,
-				output_tokens,
-				cache_creation_tokens,
-				cache_read_tokens,
-				total_cost,
-				actual_cost,
-				COALESCE(account_stats_cost, total_cost) * COALESCE(account_rate_multiplier, 1) AS account_cost,
-				COALESCE(duration_ms, 0) AS duration_ms
-			FROM usage_logs
-			WHERE created_at >= LEAST($1::timestamptz, $3::timestamptz)
-				AND created_at < GREATEST($2::timestamptz, $4::timestamptz)
-		)
-		SELECT
-			COUNT(*) FILTER (WHERE created_at >= $1::timestamptz AND created_at < $2::timestamptz) AS total_requests,
-			COALESCE(SUM(input_tokens) FILTER (WHERE created_at >= $1::timestamptz AND created_at < $2::timestamptz), 0) AS total_input_tokens,
-			COALESCE(SUM(output_tokens) FILTER (WHERE created_at >= $1::timestamptz AND created_at < $2::timestamptz), 0) AS total_output_tokens,
-			COALESCE(SUM(cache_creation_tokens) FILTER (WHERE created_at >= $1::timestamptz AND created_at < $2::timestamptz), 0) AS total_cache_creation_tokens,
-			COALESCE(SUM(cache_read_tokens) FILTER (WHERE created_at >= $1::timestamptz AND created_at < $2::timestamptz), 0) AS total_cache_read_tokens,
-			COALESCE(SUM(total_cost) FILTER (WHERE created_at >= $1::timestamptz AND created_at < $2::timestamptz), 0) AS total_cost,
-			COALESCE(SUM(actual_cost) FILTER (WHERE created_at >= $1::timestamptz AND created_at < $2::timestamptz), 0) AS total_actual_cost,
-			COALESCE(SUM(account_cost) FILTER (WHERE created_at >= $1::timestamptz AND created_at < $2::timestamptz), 0) AS total_account_cost,
-			COALESCE(SUM(duration_ms) FILTER (WHERE created_at >= $1::timestamptz AND created_at < $2::timestamptz), 0) AS total_duration_ms,
-			COUNT(*) FILTER (WHERE created_at >= $3::timestamptz AND created_at < $4::timestamptz) AS today_requests,
-			COALESCE(SUM(input_tokens) FILTER (WHERE created_at >= $3::timestamptz AND created_at < $4::timestamptz), 0) AS today_input_tokens,
-			COALESCE(SUM(output_tokens) FILTER (WHERE created_at >= $3::timestamptz AND created_at < $4::timestamptz), 0) AS today_output_tokens,
-			COALESCE(SUM(cache_creation_tokens) FILTER (WHERE created_at >= $3::timestamptz AND created_at < $4::timestamptz), 0) AS today_cache_creation_tokens,
-			COALESCE(SUM(cache_read_tokens) FILTER (WHERE created_at >= $3::timestamptz AND created_at < $4::timestamptz), 0) AS today_cache_read_tokens,
-			COALESCE(SUM(total_cost) FILTER (WHERE created_at >= $3::timestamptz AND created_at < $4::timestamptz), 0) AS today_cost,
-			COALESCE(SUM(actual_cost) FILTER (WHERE created_at >= $3::timestamptz AND created_at < $4::timestamptz), 0) AS today_actual_cost,
-			COALESCE(SUM(account_cost) FILTER (WHERE created_at >= $3::timestamptz AND created_at < $4::timestamptz), 0) AS today_account_cost
-		FROM scoped
-	`
-	var totalDurationMs int64
-	if err := scanSingleRow(
-		ctx,
-		r.sql,
-		combinedStatsQuery,
-		[]any{startUTC, endUTC, todayUTC, todayEnd},
-		&stats.TotalRequests,
-		&stats.TotalInputTokens,
-		&stats.TotalOutputTokens,
-		&stats.TotalCacheCreationTokens,
-		&stats.TotalCacheReadTokens,
-		&stats.TotalCost,
-		&stats.TotalActualCost,
-		&stats.TotalAccountCost,
-		&totalDurationMs,
-		&stats.TodayRequests,
-		&stats.TodayInputTokens,
-		&stats.TodayOutputTokens,
-		&stats.TodayCacheCreationTokens,
-		&stats.TodayCacheReadTokens,
-		&stats.TodayCost,
-		&stats.TodayActualCost,
-		&stats.TodayAccountCost,
-	); err != nil {
-		return err
-	}
-	stats.TotalTokens = stats.TotalInputTokens + stats.TotalOutputTokens + stats.TotalCacheCreationTokens + stats.TotalCacheReadTokens
 	if stats.TotalRequests > 0 {
-		stats.AverageDurationMs = float64(totalDurationMs) / float64(stats.TotalRequests)
+		stats.AverageDurationMs = float64(duration) / float64(stats.TotalRequests)
 	}
-
-	stats.TodayTokens = stats.TodayInputTokens + stats.TodayOutputTokens + stats.TodayCacheCreationTokens + stats.TodayCacheReadTokens
-
-	hourStart := now.UTC().Truncate(time.Hour)
-	hourEnd := hourStart.Add(time.Hour)
-	activeUsersQuery := `
-		WITH scoped AS (
-			SELECT user_id, created_at
-			FROM usage_logs
-			WHERE created_at >= LEAST($1::timestamptz, $3::timestamptz)
-				AND created_at < GREATEST($2::timestamptz, $4::timestamptz)
-		)
-		SELECT
-			COUNT(DISTINCT CASE WHEN created_at >= $1::timestamptz AND created_at < $2::timestamptz THEN user_id END) AS active_users,
-			COUNT(DISTINCT CASE WHEN created_at >= $3::timestamptz AND created_at < $4::timestamptz THEN user_id END) AS hourly_active_users
-		FROM scoped
-	`
-	if err := scanSingleRow(ctx, r.sql, activeUsersQuery, []any{todayUTC, todayEnd, hourStart, hourEnd}, &stats.ActiveUsers, &stats.HourlyActiveUsers); err != nil {
-		return err
-	}
-
 	return nil
 }
 

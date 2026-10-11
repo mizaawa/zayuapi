@@ -284,12 +284,12 @@
           <button
             type="button"
             class="toolbar-refresh"
-            :disabled="loadingTasks"
+            :disabled="loadingTasks || manualRefreshing"
             :title="t('imageWorkbench.refresh')"
             :aria-label="t('imageWorkbench.refresh')"
-            @click="refreshTasks"
+            @click="refreshManually"
           >
-            <Icon name="refresh" :class="{ 'animate-spin': loadingTasks }" size="sm" />
+            <Icon name="refresh" :class="{ 'animate-spin': loadingTasks || manualRefreshing }" size="sm" />
           </button>
         </div>
         <div v-if="loadingTasks && !capabilitiesLoaded" class="empty-tasks">
@@ -311,8 +311,8 @@
             <Icon name="plus" size="sm" />{{ t('imageWorkbench.create') }}
           </button>
         </div>
-        <div v-else class="task-list">
-          <template v-for="task in visibleTasks" :key="task.id"
+        <div v-else ref="taskList" class="task-list">
+          <template v-for="task in pagedTasks" :key="task.id"
             ><ImageWorkbenchTaskRow
               v-for="index in Math.max(1, task.result?.data?.length || 0)"
               :key="`${task.id}-${index}`"
@@ -325,6 +325,14 @@
               @delete="deleteTarget = task"
           /></template>
         </div>
+        <Pagination
+          v-if="visibleTasks.length"
+          v-model:page="taskPage"
+          :total="visibleTasks.length"
+          :page-size="TASKS_PER_PAGE"
+          :show-page-size-selector="false"
+          class="task-pagination"
+        />
       </div>
 
       <nav class="workbench-tabs" role="tablist" :aria-label="t('imageWorkbench.title')">
@@ -379,6 +387,7 @@ import AppLayout from '@/components/layout/AppLayout.vue'
 import Icon from '@/components/icons/Icon.vue'
 import Select from '@/components/common/Select.vue'
 import BaseDialog from '@/components/common/BaseDialog.vue'
+import Pagination from '@/components/common/Pagination.vue'
 import ImageWorkbenchTaskRow from '@/components/user/ImageWorkbenchTaskRow.vue'
 import { keysAPI } from '@/api/keys'
 import { safeWorkbenchLink } from '@/api/videoWorkbench'
@@ -424,7 +433,7 @@ const ratios = ['1:1', '4:3', '3:4', '16:9', '9:16']
 const resolutions = ['1K', '2K', '4K', '8K'] as const
 const quantities = [1, 3, 5, 10, 20]
 const statuses = ['all', 'queued', 'processing', 'completed', 'failed'] as const
-const form = reactive({
+const initialForm = {
   prompt: '',
   model: '',
   quality: 'auto' as Quality,
@@ -433,7 +442,8 @@ const form = reactive({
   customHeight: 1,
   resolution: '1K' as ImageResolution,
   quantity: 1
-})
+}
+const form = reactive({ ...initialForm })
 const references = ref<ReferenceImage[]>([])
 const fileInput = ref<HTMLInputElement | null>(null)
 const readingReferences = ref(false)
@@ -448,6 +458,7 @@ const modelsError = ref(false)
 const tasks = ref<ImageTask[]>([])
 const acceptedTasks = new Map<string, ImageTask>()
 const loadingTasks = ref(false)
+const manualRefreshing = ref(false)
 const tasksError = ref(false)
 const enabled = ref(false)
 const capabilitiesLoaded = ref(false)
@@ -459,6 +470,9 @@ const tutorialURL = ref('')
 const documentationURL = ref('')
 const submitting = ref(false)
 const taskFilter = ref<(typeof statuses)[number]>('all')
+const TASKS_PER_PAGE = 20
+const taskPage = ref(1)
+const taskList = ref<HTMLElement | null>(null)
 const now = ref(Math.floor(Date.now() / 1000))
 const downloading = reactive(new Set<string>())
 const deleteTarget = ref<ImageTask | null>(null)
@@ -468,6 +482,7 @@ let modelAbort: AbortController | undefined
 const lifecycleAbort = new AbortController()
 let pollTimer: ReturnType<typeof setTimeout> | undefined
 let clockTimer: ReturnType<typeof setInterval> | undefined
+let refreshAnimationTimer: ReturnType<typeof setTimeout> | undefined
 const selectedKey = computed(() => keys.value.find((key) => key.id === selectedKeyId.value))
 const keyOptions = computed(() => keys.value.map((key) => ({ value: key.id, label: key.name })))
 const modelOptions = computed(() =>
@@ -488,6 +503,11 @@ const visibleTasks = computed(() =>
       (taskFilter.value === 'all' || task.status === taskFilter.value)
   )
 )
+const taskPageCount = computed(() => Math.max(1, Math.ceil(visibleTasks.value.length / TASKS_PER_PAGE)))
+const pagedTasks = computed(() => visibleTasks.value.slice((taskPage.value - 1) * TASKS_PER_PAGE, taskPage.value * TASKS_PER_PAGE))
+watch(taskFilter, () => { taskPage.value = 1 })
+watch(taskPageCount, (pages) => { taskPage.value = Math.min(taskPage.value, pages) })
+watch(taskPage, () => { if (taskList.value) taskList.value.scrollTop = 0 }, { flush: 'post' })
 const outputSize = computed(() => {
   try {
     return calculateImageSize(
@@ -636,6 +656,13 @@ async function refreshTasks() {
   }
 }
 
+function refreshManually() {
+  if (loadingTasks.value || manualRefreshing.value) return
+  manualRefreshing.value = true
+  refreshAnimationTimer = setTimeout(() => { manualRefreshing.value = false }, 1000)
+  void refreshTasks()
+}
+
 function selectTab(next: Tab): void {
   tab.value = next
 }
@@ -727,6 +754,8 @@ async function submit() {
   const apiKey = selectedKey.value.key
   const email = authStore.user?.email || ''
   const quantity = form.quantity
+  const draft = { ...form }
+  const submittedReferences = [...references.value]
   const payload: SubmitImageTaskPayload = {
     model: form.model,
     prompt: form.prompt.trim(),
@@ -745,13 +774,21 @@ async function submit() {
       if (!disposed) {
         acceptedTasks.set(result.id, result)
         if (!tasks.value.some(task => task.id === result.id)) tasks.value.unshift(result)
-        tab.value = 'tasks'
-        taskFilter.value = 'all'
       }
       return result
     }))
     if (disposed) return
     const created = results.filter(result => result.status === 'fulfilled').length
+    // Leave any newer draft alone while clearing the content that was submitted.
+    if (created > 0 && !readingReferences.value &&
+      Object.entries(draft).every(([key, value]) => form[key as keyof typeof form] === value) &&
+      references.value.length === submittedReferences.length &&
+      references.value.every((reference, index) => reference.id === submittedReferences[index]?.id)) {
+      Object.assign(form, initialForm, { model: draft.model })
+      references.value.forEach(reference => URL.revokeObjectURL(reference.url))
+      references.value = []
+      dragging.value = false
+    }
     if (created === quantity) {
       appStore.showSuccess(t(quantity === 1 ? 'imageWorkbench.created' : 'imageWorkbench.createdMany', { count: created }))
     } else {
@@ -818,6 +855,7 @@ onUnmounted(() => {
   modelAbort?.abort()
   clearTimeout(pollTimer)
   clearInterval(clockTimer)
+  clearTimeout(refreshAnimationTimer)
   references.value.forEach((reference) => URL.revokeObjectURL(reference.url))
 })
 </script>
@@ -902,9 +940,11 @@ h2 {
 .prompt-input {
   display: block;
   width: 100%;
-  min-height: 310px;
-  flex: 1;
-  resize: vertical;
+  aspect-ratio: 6 / 5;
+  min-height: 0;
+  flex: none;
+  resize: none;
+  overflow-y: auto;
   padding: 22px;
   background: var(--md-sys-color-surface);
   border: 1px solid var(--md-sys-color-outline);
@@ -1187,6 +1227,7 @@ fieldset {
 }
 .workbench-tabs button,
 .workbench-tabs a {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1215,10 +1256,14 @@ fieldset {
   padding-bottom: 40px;
 }
 .task-list {
-  max-height: max(280px, calc(100dvh - 360px));
+  max-height: max(240px, calc(100dvh - 480px));
   overflow-y: auto;
   scrollbar-gutter: stable;
   padding-right: 8px;
+}
+.task-pagination {
+  margin-top: 16px;
+  border-radius: 1rem;
 }
 .task-notice {
   display: flex;
@@ -1305,9 +1350,6 @@ fieldset {
   .workbench-form {
     gap: 56px;
   }
-  .prompt-input {
-    min-height: 390px;
-  }
 }
 @media (min-width: 1024px) {
   .workbench-tabs {
@@ -1356,7 +1398,6 @@ fieldset {
     gap: 5px;
   }
   .prompt-input {
-    min-height: 245px;
     padding: 16px;
   }
   .key-model-fields {
@@ -1381,6 +1422,11 @@ fieldset {
   }
   .reference-strip {
     min-height: 100px;
+  }
+  .tab-count {
+    position: absolute;
+    top: 2px;
+    right: 2px;
   }
   .reference-add,
   .reference-image {

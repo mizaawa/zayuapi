@@ -13,7 +13,7 @@ export default {
     createdAt: '生成日期', elapsed: '耗时', remaining: '剩余时间', remainingMinutes: '{count} 分钟',
     download: '下载', copyPrompt: '复制提示词', delete: '删除任务', refresh: '刷新任务', retry: '重试',
     deleteTitle: '删除此任务？', deleteMessage: '任务记录和本地视频文件将被删除。',
-    retention: '生成结果保留 {minutes} 分钟', emptyTasks: '暂无视频任务', emptyFiltered: '没有符合条件的任务',
+    retention: '视频生成在云端进行，无需前端等待，生成结果默认云端缓存{minutes}分钟，请及时下载', emptyTasks: '暂无视频任务', emptyFiltered: '没有符合条件的任务',
     noKeys: '暂无已声明视频分组的可用密钥', manageKeys: '管理 API 密钥', noModels: '此密钥没有可用模型',
     keysError: '密钥加载失败', modelsError: '模型加载失败', tasksError: '任务列表加载失败',
     unavailable: '视频工作台暂不可用', uploadType: '不支持此参考文件格式', uploadLimit: '此类参考文件最多 {max} 个',

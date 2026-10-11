@@ -96,7 +96,7 @@ func (s *UsageService) getUserDashboardStatsCached(ctx context.Context, userID i
 	if !includeTotals {
 		return s.loadUserDashboardStats(ctx, userID, false, filters.HideChannelMonitorLogs)
 	}
-	// Refresh the small current-day query independently of the historical cache.
+	// Refresh current-day counters independently of the lifetime snapshot.
 	today, err := s.loadUserDashboardStats(ctx, userID, false, filters.HideChannelMonitorLogs)
 	if err != nil {
 		return nil, err
@@ -145,7 +145,7 @@ func (s *UsageService) loadUserDashboardStats(ctx context.Context, userID int64,
 		}
 		slots, timeout, ttl := cache.today, 5*time.Second, 15*time.Second
 		if includeTotals {
-			slots, timeout, ttl = cache.totals, 12*time.Second, 5*time.Minute
+			slots, timeout, ttl = cache.totals, 5*time.Second, 15*time.Second
 		}
 		select {
 		case slots <- struct{}{}:

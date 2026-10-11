@@ -471,6 +471,11 @@ func (h *UsageHandler) Stats(c *gin.Context) {
 	// User responses only display inbound endpoints; avoid scanning the same
 	// history twice more for upstream breakdowns that are discarded below.
 	parsed.Filters.SkipUpstreamStats = true
+	includeSummary, ok := parseBoolQueryWithDefault(c, "include_summary", true)
+	if !ok {
+		return
+	}
+	parsed.Filters.SkipSummaryStats = !includeSummary
 	stats, err := h.usageService.GetStatsWithFilters(c.Request.Context(), parsed.Filters)
 	if err != nil {
 		response.ErrorFrom(c, err)

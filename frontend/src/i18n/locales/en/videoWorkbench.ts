@@ -13,7 +13,7 @@ export default {
     createdAt: 'Created', elapsed: 'Elapsed', remaining: 'Remaining', remainingMinutes: '{count} min',
     download: 'Download', copyPrompt: 'Copy prompt', delete: 'Delete task', refresh: 'Refresh tasks', retry: 'Retry',
     deleteTitle: 'Delete this task?', deleteMessage: 'The task and its local video file will be deleted.',
-    retention: 'Generated videos retained for {minutes} minutes', emptyTasks: 'No video tasks yet', emptyFiltered: 'No matching tasks',
+    retention: 'Videos are generated in the cloud; you do not need to keep this page open. Results are cached in the cloud for {minutes} minutes by default. Please download them in time.', emptyTasks: 'No video tasks yet', emptyFiltered: 'No matching tasks',
     noKeys: 'No active keys in declared video groups', manageKeys: 'Manage API keys', noModels: 'No available models for this key',
     keysError: 'Unable to load API keys', modelsError: 'Unable to load models', tasksError: 'Unable to load tasks',
     unavailable: 'Video workbench is unavailable', uploadType: 'Unsupported reference format', uploadLimit: 'Maximum {max} files of this type',
