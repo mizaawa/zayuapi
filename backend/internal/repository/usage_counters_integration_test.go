@@ -40,7 +40,7 @@ func TestPersistentUsageCountersSurviveCleanup(t *testing.T) {
 	repo := newUsageLogRepositoryWithSQL(client, tx)
 	user := mustCreateUser(t, client, &service.User{})
 	key := mustCreateApiKey(t, client, &service.APIKey{UserID: user.ID, Key: "counter-cleanup"})
-	account := mustCreateAccount(t, client, &service.Account{Platform: "openai"})
+	account := mustCreateAccount(t, client, &service.Account{Name: "counter-cleanup", Platform: "openai"})
 	log := &service.UsageLog{
 		UserID: user.ID, APIKeyID: key.ID, AccountID: account.ID,
 		RequestID: "counter-cleanup", Model: "gpt-test", InputTokens: 10, OutputTokens: 20,
@@ -83,7 +83,7 @@ func TestPersistentUsageCountersRefundAfterCleanup(t *testing.T) {
 	requestID := fmt.Sprintf("video:counter-refund:%d", time.Now().UnixNano())
 	user := mustCreateUser(t, client, &service.User{Balance: 10})
 	key := mustCreateApiKey(t, client, &service.APIKey{UserID: user.ID, Key: requestID})
-	account := mustCreateAccount(t, client, &service.Account{Platform: "openai"})
+	account := mustCreateAccount(t, client, &service.Account{Name: "counter-refund", Platform: "openai"})
 	cmd := &service.UsageBillingCommand{
 		RequestID: requestID, UserID: user.ID, APIKeyID: key.ID, AccountID: account.ID,
 		BalanceCost: 2.5,
