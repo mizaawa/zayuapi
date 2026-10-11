@@ -7038,7 +7038,8 @@
               <label class="input-label" for="image-workbench-max-concurrent">
                 {{ t('admin.settings.features.imageWorkbench.maxConcurrent') }}
               </label>
-              <input id="image-workbench-max-concurrent" v-model.number="form.image_workbench_max_concurrent" type="number" min="1" max="100" step="1" class="input" />
+              <input id="image-workbench-max-concurrent" v-model.number="form.image_workbench_max_concurrent" type="number" min="1" max="100" step="1" class="input" aria-describedby="image-workbench-max-concurrent-hint" />
+              <p id="image-workbench-max-concurrent-hint" class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ t('admin.settings.features.imageWorkbench.maxConcurrentHint') }}</p>
             </div>
             <div>
               <label class="input-label" for="image-workbench-max-image-size">
@@ -7047,6 +7048,15 @@
               <input id="image-workbench-max-image-size" v-model.number="form.image_workbench_max_image_size_mb" type="number" min="0" step="1" class="input" aria-describedby="image-workbench-max-image-size-hint" />
               <p id="image-workbench-max-image-size-hint" class="mt-1 text-xs text-gray-500 dark:text-gray-400">
                 {{ t('admin.settings.features.imageWorkbench.maxImageSizeHint') }}
+              </p>
+            </div>
+            <div>
+              <label class="input-label" for="image-workbench-max-reference-images">
+                {{ t('admin.settings.features.imageWorkbench.maxReferenceImages') }}
+              </label>
+              <input id="image-workbench-max-reference-images" v-model.number="form.image_workbench_max_reference_images" type="number" min="1" step="1" class="input" aria-describedby="image-workbench-max-reference-images-hint" />
+              <p id="image-workbench-max-reference-images-hint" class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                {{ t('admin.settings.features.imageWorkbench.maxReferenceImagesHint') }}
               </p>
             </div>
             <div class="flex items-center justify-between gap-4">
@@ -7072,6 +7082,58 @@
                 {{ t('admin.settings.features.imageWorkbench.tutorialURL') }}
               </label>
               <input id="image-workbench-tutorial-url" v-model="form.image_workbench_tutorial_url" type="url" maxlength="2048" placeholder="https://" class="input" />
+            </div>
+            <div>
+              <label class="input-label" for="image-workbench-documentation-url">{{ t('admin.settings.features.imageWorkbench.documentationURL') }}</label>
+              <input id="image-workbench-documentation-url" v-model="form.image_workbench_documentation_url" type="url" maxlength="2048" placeholder="https://" class="input" />
+            </div>
+          </div>
+        </div>
+
+        <div class="card" data-testid="video-workbench-settings">
+          <div class="border-b border-gray-100 px-6 py-4 dark:border-dark-700">
+            <h2 class="text-lg font-semibold text-gray-900 dark:text-white">{{ t('admin.settings.features.videoWorkbench.title') }}</h2>
+          </div>
+          <div class="space-y-5 p-6">
+            <div class="flex items-center justify-between gap-4">
+              <label for="video-workbench-enabled" class="text-sm font-medium text-gray-700 dark:text-gray-300">{{ t('admin.settings.features.videoWorkbench.enabled') }}</label>
+              <Toggle id="video-workbench-enabled" v-model="form.video_workbench_enabled" />
+            </div>
+            <div>
+              <label for="video-workbench-max-concurrent" class="input-label">{{ t('admin.settings.features.videoWorkbench.maxConcurrent') }}</label>
+              <input id="video-workbench-max-concurrent" v-model.number="form.video_workbench_max_concurrent" type="number" min="1" max="100" step="1" class="input" />
+            </div>
+            <div class="grid gap-5 md:grid-cols-3">
+              <div>
+                <label for="video-workbench-max-reference-images" class="input-label">{{ t('admin.settings.features.videoWorkbench.maxReferenceImages') }}</label>
+                <input id="video-workbench-max-reference-images" v-model.number="form.video_workbench_max_reference_images" type="number" min="1" max="100" step="1" class="input" />
+              </div>
+              <div>
+                <label for="video-workbench-max-reference-videos" class="input-label">{{ t('admin.settings.features.videoWorkbench.maxReferenceVideos') }}</label>
+                <input id="video-workbench-max-reference-videos" v-model.number="form.video_workbench_max_reference_videos" type="number" min="1" max="100" step="1" class="input" />
+              </div>
+              <div>
+                <label for="video-workbench-max-reference-audios" class="input-label">{{ t('admin.settings.features.videoWorkbench.maxReferenceAudios') }}</label>
+                <input id="video-workbench-max-reference-audios" v-model.number="form.video_workbench_max_reference_audios" type="number" min="1" max="100" step="1" class="input" />
+              </div>
+            </div>
+            <div>
+              <label for="video-workbench-retention" class="input-label">{{ t('admin.settings.features.videoWorkbench.retentionMinutes') }}</label>
+              <input id="video-workbench-retention" v-model.number="form.video_workbench_retention_minutes" type="number" min="1" max="10080" step="1" class="input" />
+            </div>
+            <div class="grid gap-5 md:grid-cols-2">
+              <div>
+                <label for="video-workbench-tutorial-url" class="input-label">{{ t('admin.settings.features.videoWorkbench.tutorialURL') }}</label>
+                <input id="video-workbench-tutorial-url" v-model="form.video_workbench_tutorial_url" type="url" maxlength="2048" placeholder="https://" class="input" />
+              </div>
+              <div>
+                <label for="video-workbench-documentation-url" class="input-label">{{ t('admin.settings.features.videoWorkbench.documentationURL') }}</label>
+                <input id="video-workbench-documentation-url" v-model="form.video_workbench_documentation_url" type="url" maxlength="2048" placeholder="https://" class="input" />
+              </div>
+            </div>
+            <div>
+              <label for="video-workbench-announcement" class="input-label">{{ t('admin.settings.features.videoWorkbench.announcement') }}</label>
+              <textarea id="video-workbench-announcement" v-model="form.video_workbench_announcement" rows="4" maxlength="4000" class="input resize-y"></textarea>
             </div>
           </div>
         </div>
@@ -9752,10 +9814,21 @@ const form = reactive<SettingsForm>({
   image_workbench_enabled: true,
   image_workbench_max_concurrent: 5,
   image_workbench_max_image_size_mb: 50,
+  image_workbench_max_reference_images: 6,
   image_workbench_admin_exempt: false,
   image_workbench_custom_retention_enabled: false,
   image_workbench_retention_minutes: 15,
   image_workbench_tutorial_url: "",
+  image_workbench_documentation_url: "",
+  video_workbench_enabled: false,
+  video_workbench_max_concurrent: 3,
+  video_workbench_max_reference_images: 6,
+  video_workbench_max_reference_videos: 6,
+  video_workbench_max_reference_audios: 6,
+  video_workbench_retention_minutes: 30,
+  video_workbench_tutorial_url: "",
+  video_workbench_documentation_url: "",
+  video_workbench_announcement: "",
   // Available Channels feature switch
   available_channels_enabled: false,
   leaderboard_enabled: false,
@@ -10969,8 +11042,17 @@ function findDuplicateDefaultSubscription(
 async function saveSettings() {
   saving.value = true;
   try {
+    const videoLimits = [form.video_workbench_max_concurrent, form.video_workbench_max_reference_images, form.video_workbench_max_reference_videos, form.video_workbench_max_reference_audios];
+    if (videoLimits.some(value => !Number.isSafeInteger(value) || value < 1 || value > 100) || !Number.isSafeInteger(form.video_workbench_retention_minutes) || form.video_workbench_retention_minutes < 1 || form.video_workbench_retention_minutes > 10080) {
+      appStore.showError(t('admin.settings.features.videoWorkbench.invalidLimits'));
+      return;
+    }
     if (!Number.isSafeInteger(form.image_workbench_max_image_size_mb) || form.image_workbench_max_image_size_mb < 0) {
       appStore.showError(t('admin.settings.features.imageWorkbench.maxImageSizeInvalid'));
+      return;
+    }
+    if (!Number.isSafeInteger(form.image_workbench_max_reference_images) || form.image_workbench_max_reference_images < 1) {
+      appStore.showError(t('admin.settings.features.imageWorkbench.maxReferenceImagesInvalid'));
       return;
     }
     const normalizedTableDefaultPageSize = Math.floor(
@@ -11420,10 +11502,21 @@ async function saveSettings() {
       image_workbench_enabled: form.image_workbench_enabled,
       image_workbench_max_concurrent: Number(form.image_workbench_max_concurrent),
       image_workbench_max_image_size_mb: form.image_workbench_max_image_size_mb,
+      image_workbench_max_reference_images: form.image_workbench_max_reference_images,
       image_workbench_admin_exempt: form.image_workbench_admin_exempt,
       image_workbench_custom_retention_enabled: form.image_workbench_custom_retention_enabled,
       image_workbench_retention_minutes: Number(form.image_workbench_retention_minutes),
       image_workbench_tutorial_url: form.image_workbench_tutorial_url.trim(),
+      image_workbench_documentation_url: form.image_workbench_documentation_url.trim(),
+      video_workbench_enabled: form.video_workbench_enabled,
+      video_workbench_max_concurrent: Number(form.video_workbench_max_concurrent),
+      video_workbench_max_reference_images: Number(form.video_workbench_max_reference_images),
+      video_workbench_max_reference_videos: Number(form.video_workbench_max_reference_videos),
+      video_workbench_max_reference_audios: Number(form.video_workbench_max_reference_audios),
+      video_workbench_retention_minutes: Number(form.video_workbench_retention_minutes),
+      video_workbench_tutorial_url: form.video_workbench_tutorial_url.trim(),
+      video_workbench_documentation_url: form.video_workbench_documentation_url.trim(),
+      video_workbench_announcement: form.video_workbench_announcement.trim(),
       // Available Channels feature switch
       available_channels_enabled: form.available_channels_enabled,
       leaderboard_enabled: form.leaderboard_enabled,

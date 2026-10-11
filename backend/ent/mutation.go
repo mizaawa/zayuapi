@@ -22898,6 +22898,7 @@ type GroupMutation struct {
 	default_validity_days                   *int
 	adddefault_validity_days                *int
 	allow_image_generation                  *bool
+	video_workbench_enabled                 *bool
 	image_workbench_enabled                 *bool
 	allow_batch_image_generation            *bool
 	image_rate_independent                  *bool
@@ -23999,6 +24000,42 @@ func (m *GroupMutation) OldAllowImageGeneration(ctx context.Context) (v bool, er
 // ResetAllowImageGeneration resets all changes to the "allow_image_generation" field.
 func (m *GroupMutation) ResetAllowImageGeneration() {
 	m.allow_image_generation = nil
+}
+
+// SetVideoWorkbenchEnabled sets the "video_workbench_enabled" field.
+func (m *GroupMutation) SetVideoWorkbenchEnabled(b bool) {
+	m.video_workbench_enabled = &b
+}
+
+// VideoWorkbenchEnabled returns the value of the "video_workbench_enabled" field in the mutation.
+func (m *GroupMutation) VideoWorkbenchEnabled() (r bool, exists bool) {
+	v := m.video_workbench_enabled
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldVideoWorkbenchEnabled returns the old "video_workbench_enabled" field's value of the Group entity.
+// If the Group object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GroupMutation) OldVideoWorkbenchEnabled(ctx context.Context) (v bool, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldVideoWorkbenchEnabled is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldVideoWorkbenchEnabled requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldVideoWorkbenchEnabled: %w", err)
+	}
+	return oldValue.VideoWorkbenchEnabled, nil
+}
+
+// ResetVideoWorkbenchEnabled resets all changes to the "video_workbench_enabled" field.
+func (m *GroupMutation) ResetVideoWorkbenchEnabled() {
+	m.video_workbench_enabled = nil
 }
 
 // SetImageWorkbenchEnabled sets the "image_workbench_enabled" field.
@@ -26283,7 +26320,7 @@ func (m *GroupMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *GroupMutation) Fields() []string {
-	fields := make([]string, 0, 57)
+	fields := make([]string, 0, 58)
 	if m.created_at != nil {
 		fields = append(fields, group.FieldCreatedAt)
 	}
@@ -26343,6 +26380,9 @@ func (m *GroupMutation) Fields() []string {
 	}
 	if m.allow_image_generation != nil {
 		fields = append(fields, group.FieldAllowImageGeneration)
+	}
+	if m.video_workbench_enabled != nil {
+		fields = append(fields, group.FieldVideoWorkbenchEnabled)
 	}
 	if m.image_workbench_enabled != nil {
 		fields = append(fields, group.FieldImageWorkbenchEnabled)
@@ -26503,6 +26543,8 @@ func (m *GroupMutation) Field(name string) (ent.Value, bool) {
 		return m.DefaultValidityDays()
 	case group.FieldAllowImageGeneration:
 		return m.AllowImageGeneration()
+	case group.FieldVideoWorkbenchEnabled:
+		return m.VideoWorkbenchEnabled()
 	case group.FieldImageWorkbenchEnabled:
 		return m.ImageWorkbenchEnabled()
 	case group.FieldAllowBatchImageGeneration:
@@ -26626,6 +26668,8 @@ func (m *GroupMutation) OldField(ctx context.Context, name string) (ent.Value, e
 		return m.OldDefaultValidityDays(ctx)
 	case group.FieldAllowImageGeneration:
 		return m.OldAllowImageGeneration(ctx)
+	case group.FieldVideoWorkbenchEnabled:
+		return m.OldVideoWorkbenchEnabled(ctx)
 	case group.FieldImageWorkbenchEnabled:
 		return m.OldImageWorkbenchEnabled(ctx)
 	case group.FieldAllowBatchImageGeneration:
@@ -26848,6 +26892,13 @@ func (m *GroupMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetAllowImageGeneration(v)
+		return nil
+	case group.FieldVideoWorkbenchEnabled:
+		v, ok := value.(bool)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetVideoWorkbenchEnabled(v)
 		return nil
 	case group.FieldImageWorkbenchEnabled:
 		v, ok := value.(bool)
@@ -27600,6 +27651,9 @@ func (m *GroupMutation) ResetField(name string) error {
 		return nil
 	case group.FieldAllowImageGeneration:
 		m.ResetAllowImageGeneration()
+		return nil
+	case group.FieldVideoWorkbenchEnabled:
+		m.ResetVideoWorkbenchEnabled()
 		return nil
 	case group.FieldImageWorkbenchEnabled:
 		m.ResetImageWorkbenchEnabled()

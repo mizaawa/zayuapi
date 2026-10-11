@@ -21,12 +21,15 @@ func TestImageWorkbenchRuntimeDefaultsAndLiveSettings(t *testing.T) {
 	require.Equal(t, 5, defaults.Limit(false))
 	require.Equal(t, 5, defaults.Limit(true))
 	require.Equal(t, 50, defaults.MaxImageSizeMB)
+	require.Equal(t, 6, defaults.ReferenceImageLimit())
+	require.Equal(t, 6, (ImageWorkbenchRuntime{}).ReferenceImageLimit())
 	require.Equal(t, 15*time.Minute, defaults.Retention())
 
 	repo.values = map[string]string{
 		SettingKeyImageWorkbenchEnabled:                "false",
 		SettingKeyImageWorkbenchMaxConcurrent:          "8",
 		SettingKeyImageWorkbenchMaxImageSizeMB:         "80",
+		SettingKeyImageWorkbenchMaxReferenceImages:     "8",
 		SettingKeyImageWorkbenchAdminExempt:            "true",
 		SettingKeyImageWorkbenchCustomRetentionEnabled: "true",
 		SettingKeyImageWorkbenchRetentionMinutes:       "30",
@@ -36,12 +39,15 @@ func TestImageWorkbenchRuntimeDefaultsAndLiveSettings(t *testing.T) {
 	require.False(t, updated.Enabled)
 	require.Equal(t, 8, updated.Limit(false))
 	require.Equal(t, 80, updated.MaxImageSizeMB)
+	require.Equal(t, 8, updated.ReferenceImageLimit())
 	require.Zero(t, updated.Limit(true))
 	require.Equal(t, 30*time.Minute, updated.Retention())
 	require.Equal(t, "https://docs.example.com/images", updated.TutorialURL)
 
 	repo.values[SettingKeyImageWorkbenchCustomRetentionEnabled] = "false"
 	repo.values[SettingKeyImageWorkbenchMaxImageSizeMB] = "0"
+	repo.values[SettingKeyImageWorkbenchMaxReferenceImages] = "1"
+	require.Equal(t, 1, svc.GetImageWorkbenchRuntime(ctx).ReferenceImageLimit())
 	require.Zero(t, svc.GetImageWorkbenchRuntime(ctx).MaxImageSizeMB)
 	require.Equal(t, 15*time.Minute, svc.GetImageWorkbenchRuntime(ctx).Retention())
 	repo.err = errors.New("settings unavailable")
@@ -53,6 +59,7 @@ func TestImageWorkbenchPublicSettingsAndInjection(t *testing.T) {
 		SettingKeyImageWorkbenchEnabled:                "false",
 		SettingKeyImageWorkbenchMaxConcurrent:          "9",
 		SettingKeyImageWorkbenchMaxImageSizeMB:         "80",
+		SettingKeyImageWorkbenchMaxReferenceImages:     "8",
 		SettingKeyImageWorkbenchAdminExempt:            "true",
 		SettingKeyImageWorkbenchCustomRetentionEnabled: "true",
 		SettingKeyImageWorkbenchRetentionMinutes:       "25",
@@ -64,6 +71,7 @@ func TestImageWorkbenchPublicSettingsAndInjection(t *testing.T) {
 	require.False(t, settings.ImageWorkbenchEnabled)
 	require.Equal(t, 9, settings.ImageWorkbenchMaxConcurrent)
 	require.Equal(t, 80, settings.ImageWorkbenchMaxImageSizeMB)
+	require.Equal(t, 8, settings.ImageWorkbenchMaxReferenceImages)
 	require.True(t, settings.ImageWorkbenchAdminExempt)
 	require.True(t, settings.ImageWorkbenchCustomRetentionEnabled)
 	require.Equal(t, 25, settings.ImageWorkbenchRetentionMinutes)
@@ -75,6 +83,7 @@ func TestImageWorkbenchPublicSettingsAndInjection(t *testing.T) {
 	require.Equal(t, settings.ImageWorkbenchEnabled, payload.ImageWorkbenchEnabled)
 	require.Equal(t, settings.ImageWorkbenchMaxConcurrent, payload.ImageWorkbenchMaxConcurrent)
 	require.Equal(t, settings.ImageWorkbenchMaxImageSizeMB, payload.ImageWorkbenchMaxImageSizeMB)
+	require.Equal(t, settings.ImageWorkbenchMaxReferenceImages, payload.ImageWorkbenchMaxReferenceImages)
 	require.Equal(t, settings.ImageWorkbenchAdminExempt, payload.ImageWorkbenchAdminExempt)
 	require.Equal(t, settings.ImageWorkbenchCustomRetentionEnabled, payload.ImageWorkbenchCustomRetentionEnabled)
 	require.Equal(t, settings.ImageWorkbenchRetentionMinutes, payload.ImageWorkbenchRetentionMinutes)
@@ -85,6 +94,7 @@ func TestImageWorkbenchSettingsRejectInvalidValues(t *testing.T) {
 	for _, settings := range []*SystemSettings{
 		{ImageWorkbenchMaxConcurrent: -1},
 		{ImageWorkbenchMaxImageSizeMB: -1},
+		{ImageWorkbenchMaxReferenceImages: -1},
 		{ImageWorkbenchMaxConcurrent: 101},
 		{ImageWorkbenchRetentionMinutes: -1},
 		{ImageWorkbenchRetentionMinutes: 1441},
@@ -105,5 +115,12 @@ func TestImageWorkbenchImageSizeInvalidSettingsFallBack(t *testing.T) {
 	for _, raw := range []string{"", "invalid", "-1", "1.5"} {
 		runtime := parseImageWorkbenchRuntime(map[string]string{SettingKeyImageWorkbenchMaxImageSizeMB: raw})
 		require.Equal(t, 50, runtime.MaxImageSizeMB, raw)
+	}
+}
+
+func TestImageWorkbenchReferenceLimitInvalidSettingsFallBack(t *testing.T) {
+	for _, raw := range []string{"", "invalid", "-1", "0", "1.5", "99999999999999999999999"} {
+		runtime := parseImageWorkbenchRuntime(map[string]string{SettingKeyImageWorkbenchMaxReferenceImages: raw})
+		require.Equal(t, 6, runtime.ReferenceImageLimit(), raw)
 	}
 }

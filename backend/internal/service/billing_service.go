@@ -1649,11 +1649,18 @@ func (s *BillingService) CalculateImageCost(model string, imageSize string, imag
 // groupConfig: 分组配置的每秒价格（可能为 nil，表示使用默认值）
 // rateMultiplier: 费率倍数
 func (s *BillingService) CalculateVideoCost(model string, resolution string, videoCount int, durationSeconds int, groupConfig *VideoPriceConfig, rateMultiplier float64) *CostBreakdown {
+	return s.calculateVideoCost(model, resolution, videoCount, NormalizeVideoBillingDurationSecondsForModelOrDefault(model, durationSeconds), groupConfig, rateMultiplier)
+}
+
+func (s *BillingService) CalculateCustomVideoCost(model string, resolution string, videoCount int, durationSeconds int, groupConfig *VideoPriceConfig, rateMultiplier float64) *CostBreakdown {
+	return s.calculateVideoCost(model, resolution, videoCount, NormalizeCustomVideoDurationSeconds(durationSeconds), groupConfig, rateMultiplier)
+}
+
+func (s *BillingService) calculateVideoCost(model string, resolution string, videoCount int, durationSeconds int, groupConfig *VideoPriceConfig, rateMultiplier float64) *CostBreakdown {
 	if videoCount <= 0 || videoCount > maxBillableRequestCount {
 		return &CostBreakdown{}
 	}
 	resolution = NormalizeVideoBillingResolutionForModelOrDefault(model, resolution, "")
-	durationSeconds = NormalizeVideoBillingDurationSecondsForModelOrDefault(model, durationSeconds)
 
 	perSecondPrice := s.getVideoUnitPrice(model, resolution, groupConfig)
 	totalCost := perSecondPrice * float64(durationSeconds) * float64(videoCount)

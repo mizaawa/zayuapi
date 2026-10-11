@@ -40,6 +40,28 @@ func (*localWorkbenchHandlerStore) DeleteWorkbench(context.Context, *service.Ima
 	return nil
 }
 
+func (s *localWorkbenchHandlerStore) TryStartWorkbench(_ context.Context, owner service.ImageTaskOwner, id string, now time.Time, ttl time.Duration, _ int) (bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	task := s.tasks[id]
+	if task == nil || task.UserID != owner.UserID || task.APIKeyID != owner.APIKeyID || task.Status != service.ImageTaskStatusQueued {
+		return false, service.ErrImageTaskNotFound
+	}
+	started := now.Unix()
+	task.Status = service.ImageTaskStatusProcessing
+	task.StartedAt = &started
+	task.ExpiresAt = now.Add(ttl).Unix()
+	return true, nil
+}
+
+func (*localWorkbenchHandlerStore) ExpiredWorkbenchQueue(context.Context, time.Time) ([]*service.ImageTaskRecord, error) {
+	return nil, nil
+}
+
+func (*localWorkbenchHandlerStore) FailExpiredWorkbenchQueue(context.Context, *service.ImageTaskRecord, time.Time, time.Duration) error {
+	return nil
+}
+
 type localWorkbenchHandlerStorage struct{ data []byte }
 
 func (localWorkbenchHandlerStorage) Ready(context.Context) error { return nil }
@@ -99,6 +121,7 @@ func TestWorkbenchLocalStorageHTTPWithoutS3(t *testing.T) {
 	require.Equal(t, http.StatusOK, list.Code, list.Body.String())
 	require.Contains(t, list.Body.String(), `"enabled":true`)
 	require.Contains(t, list.Body.String(), `"max_image_size_mb":50`)
+	require.Contains(t, list.Body.String(), `"max_reference_images":6`)
 	require.Equal(t, http.StatusNotFound, request(http.MethodPost, "/v1/images/generations/async", `{"model":"gpt-image-2","prompt":"test"}`, false, true).Code)
 	submitted := request(http.MethodPost, "/v1/images/generations/async", `{"model":"gpt-image-2","prompt":"test"}`, true, true)
 	require.Equal(t, http.StatusAccepted, submitted.Code, submitted.Body.String())

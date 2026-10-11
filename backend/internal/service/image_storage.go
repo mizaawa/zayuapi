@@ -9,7 +9,9 @@ import (
 	"fmt"
 	"io"
 	"mime"
+	"net"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -22,7 +24,13 @@ const LocalImageURLPrefix = "local-image:"
 type ImageWorkbenchLocalStorage interface {
 	ImageStorage
 	ImageStorageCleaner
+	ImageStorageReader
 	Ready(context.Context) error
+}
+
+// ImageStorageReader reads managed objects through the configured storage
+// binding, without following a URL supplied by an upstream image provider.
+type ImageStorageReader interface {
 	Read(ctx context.Context, key string, maxBytes int64) ([]byte, string, error)
 }
 
@@ -52,6 +60,7 @@ type ImageResultUploader struct {
 	httpClient       *http.Client
 	prefix           string
 	maxDownloadBytes int64
+	workbench        bool
 }
 
 // NewImageResultUploader 构造一个 uploader；storage 为 nil 时 Rewrite 直接透传。
@@ -78,7 +87,28 @@ func NewImageResultUploader(storage ImageStorage, prefix string, maxDownloadByte
 }
 
 func defaultImageDownloadHTTPClient() *http.Client {
-	return &http.Client{Timeout: 60 * time.Second}
+	client := newSSRFSafeHTTPClient(60 * time.Second)
+	client.CheckRedirect = func(req *http.Request, via []*http.Request) error {
+		if len(via) >= 5 {
+			return errors.New("too many image redirects")
+		}
+		return validateImageDownloadURL(req.URL)
+	}
+	return client
+}
+
+func validateImageDownloadURL(target *url.URL) error {
+	if target == nil || (target.Scheme != "http" && target.Scheme != "https") || target.User != nil || target.Opaque != "" {
+		return errors.New("invalid image download URL")
+	}
+	host := strings.TrimSuffix(strings.ToLower(target.Hostname()), ".")
+	if isBlockedHostname(host) || strings.Contains(host, "%") {
+		return errors.New("image download host is blocked")
+	}
+	if ip := net.ParseIP(host); ip != nil && isPrivateIP(ip) {
+		return errors.New("image download address is blocked")
+	}
+	return nil
 }
 
 // Rewrite 将 result（上游生图响应 JSON）里的每张图片转存到对象存储，
@@ -101,6 +131,9 @@ func (u *ImageResultUploader) RewriteForEmail(ctx context.Context, taskID, email
 	}
 	rawData, ok := top["data"]
 	if !ok {
+		if u.workbench {
+			return nil, errors.New("missing generated image data")
+		}
 		// 没有 data 数组（结构不符合预期），保持原样返回，交由上层决定。
 		return result, nil
 	}
@@ -109,15 +142,25 @@ func (u *ImageResultUploader) RewriteForEmail(ctx context.Context, taskID, email
 		return nil, fmt.Errorf("parse image response data: %w", err)
 	}
 	if len(items) == 0 {
+		if u.workbench {
+			return nil, errors.New("empty generated image data")
+		}
 		return result, nil
 	}
+	if u.workbench && len(items) > 20 {
+		return nil, errors.New("too many generated images")
+	}
 	for i, item := range items {
-		data, contentType, err := u.fetchImageBytes(ctx, item)
+		data, _, err := u.fetchImageBytes(ctx, item)
 		if err != nil {
 			return nil, fmt.Errorf("image %d: %w", i, err)
 		}
 		if int64(len(data)) > u.maxDownloadBytes {
 			return nil, fmt.Errorf("image %d exceeds %d bytes", i, u.maxDownloadBytes)
+		}
+		contentType := detectedImageContentType(data)
+		if contentType == "" {
+			return nil, fmt.Errorf("image %d is not a supported raster image", i)
 		}
 		key := u.buildKey(taskID, email, i, contentType)
 		url, err := u.storage.Save(ctx, key, contentType, data)
@@ -128,17 +171,22 @@ func (u *ImageResultUploader) RewriteForEmail(ctx context.Context, taskID, email
 		if err != nil {
 			return nil, fmt.Errorf("image %d: encode url: %w", i, err)
 		}
-		item["url"] = urlRaw
-		if strings.HasSuffix(u.prefix, "/workbench/") {
+		if u.workbench {
+			// Provider metadata can contain credentials and internal URLs.
+			item = make(map[string]json.RawMessage)
 			item["size_bytes"] = json.RawMessage(strconv.Itoa(len(data)))
 			item["content_type"], _ = json.Marshal(contentType)
 		}
+		item["url"] = urlRaw
 		delete(item, "b64_json")
 		items[i] = item
 	}
 	newData, err := json.Marshal(items)
 	if err != nil {
 		return nil, fmt.Errorf("encode image response data: %w", err)
+	}
+	if u.workbench {
+		top = make(map[string]json.RawMessage)
 	}
 	top["data"] = newData
 	out, err := json.Marshal(top)
@@ -171,6 +219,7 @@ func (u *ImageResultUploader) DeleteAll(ctx context.Context) (int64, error) {
 func (u *ImageResultUploader) forWorkbench() *ImageResultUploader {
 	copy := *u
 	copy.prefix += "workbench/"
+	copy.workbench = true
 	return &copy
 }
 
@@ -193,11 +242,12 @@ func (u *ImageResultUploader) fetchImageBytes(ctx context.Context, item map[stri
 		var b64 string
 		if err := json.Unmarshal(raw, &b64); err == nil {
 			if b64 = strings.TrimSpace(b64); b64 != "" {
-				data, err := base64.StdEncoding.DecodeString(b64)
+				decoder := base64.NewDecoder(base64.StdEncoding, strings.NewReader(b64))
+				data, err := io.ReadAll(io.LimitReader(decoder, u.maxDownloadBytes+1))
 				if err != nil {
 					return nil, "", fmt.Errorf("decode b64_json: %w", err)
 				}
-				return data, detectImageContentType(data), nil
+				return data, detectedImageContentType(data), nil
 			}
 		}
 	}
@@ -262,21 +312,21 @@ func (u *ImageResultUploader) decodeImageDataURL(rawURL string) ([]byte, string,
 		return nil, "", fmt.Errorf("decoded image data URL exceeds %d bytes", limit)
 	}
 
-	contentType := detectedImageContentType(data)
-	if contentType == "" {
-		contentType = declaredType
-	}
-	return data, contentType, nil
+	return data, detectedImageContentType(data), nil
 }
 
 func (u *ImageResultUploader) download(ctx context.Context, rawURL string) ([]byte, string, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
 	if err != nil {
-		return nil, "", fmt.Errorf("build download request: %w", err)
+		return nil, "", errors.New("invalid image download URL")
+	}
+	if err := validateImageDownloadURL(req.URL); err != nil {
+		return nil, "", err
 	}
 	resp, err := u.httpClient.Do(req)
 	if err != nil {
-		return nil, "", fmt.Errorf("download image: %w", err)
+		// net/http errors include signed URLs; never persist or log them.
+		return nil, "", errors.New("image download request failed")
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
@@ -293,9 +343,9 @@ func (u *ImageResultUploader) download(ctx context.Context, rawURL string) ([]by
 	if int64(len(data)) > limit {
 		return nil, "", fmt.Errorf("downloaded image exceeds %d bytes", limit)
 	}
-	contentType := strings.TrimSpace(strings.Split(resp.Header.Get("Content-Type"), ";")[0])
-	if !strings.HasPrefix(contentType, "image/") {
-		contentType = detectImageContentType(data)
+	contentType := detectedImageContentType(data)
+	if contentType == "" {
+		return nil, "", errors.New("downloaded content is not a supported raster image")
 	}
 	return data, contentType, nil
 }
@@ -315,19 +365,21 @@ func NormalizeImageOwnerEmail(email string) string {
 	return strings.ToLower(strings.TrimSpace(email))
 }
 
-func detectImageContentType(data []byte) string {
-	if ct := detectedImageContentType(data); ct != "" {
-		return ct
-	}
-	return "image/png"
-}
-
 func detectedImageContentType(data []byte) string {
 	ct := strings.TrimSpace(strings.Split(http.DetectContentType(data), ";")[0])
-	if strings.HasPrefix(ct, "image/") {
+	if supportedImageContentType(ct) {
 		return ct
 	}
 	return ""
+}
+
+func supportedImageContentType(ct string) bool {
+	switch ct {
+	case "image/png", "image/jpeg", "image/webp", "image/gif":
+		return true
+	default:
+		return false
+	}
 }
 
 func extensionForContentType(ct string) string {

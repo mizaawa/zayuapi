@@ -51,11 +51,20 @@ func (*leaderboardSettingRepoStub) GetMultiple(context.Context, []string) (map[s
 	return map[string]string{service.SettingKeyLeaderboardEnabled: "true"}, nil
 }
 
-func TestGetLeaderboardReturnsOptionalAvatarAndMaskedIdentity(t *testing.T) {
+func TestGetLeaderboardReturnsOptionalAvatarAndDisplayName(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	usageRepo := &leaderboardUsageRepoStub{ranking: []usagestats.UserSpendingRankingItem{
 		{UserID: 1, Email: "alice@example.com", Username: "Alice", AvatarURL: " https://cdn.example.com/alice.png "},
 		{UserID: 2, Email: "bob@example.com", Username: "Bob"},
+		{UserID: 3, Email: "carol@example.com"},
+		{UserID: 4, Email: "  charlotte@example.com  ", Username: " \t "},
+		{UserID: 5, Email: "a@example.com"},
+		{UserID: 6, Email: "unicode@example.com", Username: "\u7528\u6237\u5168\u540d"},
+		{UserID: 7, Email: "fallback@example.com", Username: "  Display Name  "},
+		{UserID: 8, Email: "fallback@example.com", Username: "chosen@name.example"},
+		{UserID: 9, Email: " \t ", Username: " \t "},
+		{UserID: 10, Email: "\u7528\u6237@example.com"},
+		{UserID: 11, Email: "fallback@example.com", Username: "A"},
 	}}
 	usageSvc := service.NewUsageService(usageRepo, &leaderboardUserRepoStub{}, nil, nil)
 	settings := service.NewSettingService(&leaderboardSettingRepoStub{}, &config.Config{})
@@ -74,12 +83,15 @@ func TestGetLeaderboardReturnsOptionalAvatarAndMaskedIdentity(t *testing.T) {
 		} `json:"data"`
 	}
 	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &response))
-	require.Len(t, response.Data.Entries, 2)
+	wantNames := []string{
+		"Alice", "Bob", "c***@example.com", "ch***@example.com", "a***@example.com",
+		"\u7528\u6237\u5168\u540d", "Display Name", "chosen@name.example", "***", "\u7528***@example.com", "A",
+	}
+	require.Len(t, response.Data.Entries, len(wantNames))
 	require.Equal(t, "https://cdn.example.com/alice.png", response.Data.Entries[0]["avatar_url"])
-	require.Equal(t, "A***e", response.Data.Entries[0]["display_name"])
-	require.Equal(t, "B***b", response.Data.Entries[1]["display_name"])
 	require.NotContains(t, response.Data.Entries[1], "avatar_url")
-	for _, entry := range response.Data.Entries {
+	for i, entry := range response.Data.Entries {
+		require.Equal(t, wantNames[i], entry["display_name"], "entry %d", i)
 		require.NotContains(t, entry, "user_id")
 		require.NotContains(t, entry, "email")
 		require.NotContains(t, entry, "username")

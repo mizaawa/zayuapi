@@ -22,8 +22,8 @@ const (
 	ImageWorkbenchStorageLocal  = "local"
 )
 
-var ErrImageWorkbenchLimit = infraerrors.New(http.StatusTooManyRequests, "IMAGE_WORKBENCH_LIMIT", "image workbench concurrency limit reached")
 var ErrImageWorkbenchDisabled = infraerrors.New(http.StatusNotFound, "IMAGE_WORKBENCH_DISABLED", "image workbench is disabled")
+var ErrImageTaskProcessing = infraerrors.New(http.StatusConflict, "IMAGE_TASK_PROCESSING", "running image tasks cannot be deleted")
 
 func (s *ImageTaskService) SetWorkbenchSettingsResolver(resolve func(context.Context) ImageWorkbenchRuntime) {
 	s.workbenchSettings = resolve
@@ -82,21 +82,47 @@ func (s *ImageTaskService) WorkbenchEnabled(ctx context.Context) bool {
 	return true
 }
 
-func localWorkbenchPublicResult(taskID string, result json.RawMessage) json.RawMessage {
-	var body map[string]json.RawMessage
-	if json.Unmarshal(result, &body) != nil {
+type imageWorkbenchResult struct {
+	Data []struct {
+		URL         string `json:"url"`
+		SizeBytes   int64  `json:"size_bytes,omitempty"`
+		ContentType string `json:"content_type,omitempty"`
+	} `json:"data"`
+}
+
+func workbenchPublicResult(taskID string, result json.RawMessage) json.RawMessage {
+	var body imageWorkbenchResult
+	if json.Unmarshal(result, &body) != nil || len(body.Data) == 0 || len(body.Data) > 20 {
 		return nil
 	}
-	var items []map[string]json.RawMessage
-	if json.Unmarshal(body["data"], &items) != nil {
-		return result
+	for index := range body.Data {
+		item := &body.Data[index]
+		item.URL = fmt.Sprintf("/api/v1/image-workbench/tasks/%s/images/%d", taskID, index)
+		if !supportedImageContentType(item.ContentType) {
+			item.ContentType = ""
+		}
+		if item.SizeBytes < 0 {
+			item.SizeBytes = 0
+		}
 	}
-	for index, item := range items {
-		item["url"], _ = json.Marshal(fmt.Sprintf("/api/v1/image-workbench/tasks/%s/images/%d", taskID, index))
-	}
-	body["data"], _ = json.Marshal(items)
 	result, _ = json.Marshal(body)
 	return result
+}
+
+// Use local messages only, including for records created before this policy.
+func workbenchPublicError(status int) json.RawMessage {
+	switch status {
+	case http.StatusBadRequest, http.StatusUnprocessableEntity:
+		return imageTaskErrorJSON("invalid_request_error", "image generation request was rejected; check the prompt and image settings")
+	case http.StatusTooManyRequests:
+		return imageTaskErrorJSON("rate_limit_error", "image generation is busy; try again later")
+	case http.StatusRequestTimeout, http.StatusGatewayTimeout:
+		return imageTaskErrorJSON("timeout_error", "image generation timed out; try again later")
+	case http.StatusUnauthorized, http.StatusForbidden:
+		return imageTaskErrorJSON("permission_error", "image generation is unavailable for this request; contact the administrator")
+	default:
+		return imageTaskErrorJSON("api_error", "image generation failed; try again later or contact the administrator")
+	}
 }
 
 func (s *ImageTaskService) cleanupWorkbenchImages(ctx context.Context, task ImageWorkbenchCleanup) (bool, error) {
@@ -133,11 +159,18 @@ func (s *ImageTaskService) DeleteWorkbench(ctx context.Context, userID int64, id
 	if err != nil {
 		return err
 	}
-	if task.UserID != userID || task.Workbench == nil {
+	if task.UserID != userID || task.Workbench == nil || task.ExpiresAt <= time.Now().Unix() {
 		return ErrImageTaskNotFound
 	}
 	if task.Status == ImageTaskStatusProcessing {
-		return infraerrors.New(http.StatusConflict, "IMAGE_TASK_PROCESSING", "running image tasks cannot be deleted")
+		return ErrImageTaskProcessing
+	}
+	if task.Status == ImageTaskStatusQueued {
+		// The store checks status atomically against a concurrent execution claim.
+		if err := store.DeleteWorkbench(ctx, task); err != nil {
+			return err
+		}
+		return store.RemoveWorkbenchCleanup(ctx, ImageWorkbenchCleanup{ID: task.ID, UserEmail: task.UserEmail, Storage: task.WorkbenchStorage})
 	}
 	// Keep the durable cleanup entry if storage is temporarily unavailable.
 	cleanup := ImageWorkbenchCleanup{ID: task.ID, UserEmail: task.UserEmail, Storage: task.WorkbenchStorage}
@@ -167,31 +200,31 @@ func (s *ImageTaskService) DownloadWorkbenchImage(ctx context.Context, userID in
 	if task.UserID != userID || task.Workbench == nil || task.ExpiresAt <= time.Now().Unix() || task.Status != ImageTaskStatusCompleted {
 		return nil, "", ErrImageTaskNotFound
 	}
-	var result struct {
-		Data []struct {
-			URL string `json:"url"`
-		} `json:"data"`
-	}
+	var result imageWorkbenchResult
 	if json.Unmarshal(task.Result, &result) != nil || index < 0 || index >= len(result.Data) || result.Data[index].URL == "" {
 		return nil, "", ErrImageTaskNotFound
 	}
-	if task.WorkbenchStorage == ImageWorkbenchStorageLocal {
-		if s.workbenchLocal == nil || !strings.HasPrefix(result.Data[index].URL, LocalImageURLPrefix) {
-			return nil, "", ErrImageTaskUnavailable
-		}
-		data, contentType, err := s.workbenchLocal.Read(ctx, strings.TrimPrefix(result.Data[index].URL, LocalImageURLPrefix), defaultImageMaxDownloadBytes)
-		if err != nil {
-			return nil, "", ErrImageTaskUnavailable.WithCause(err)
-		}
-		return data, contentType, nil
-	}
 	uploader, _ := s.current()
+	if task.WorkbenchStorage == ImageWorkbenchStorageLocal {
+		uploader, _ = s.localWorkbenchUploader()
+	}
 	if uploader == nil {
 		return nil, "", ErrImageTaskUnavailable
 	}
-	data, contentType, err := uploader.download(ctx, result.Data[index].URL)
+	reader, ok := uploader.storage.(ImageStorageReader)
+	if !ok || !supportedImageContentType(result.Data[index].ContentType) {
+		return nil, "", ErrImageTaskUnavailable
+	}
+	// Derive the key from authenticated task ownership. Neither upstream URLs
+	// nor client-supplied paths participate in reading a managed object.
+	key := uploader.forWorkbench().buildKey(task.ID, task.UserEmail, index, result.Data[index].ContentType)
+	data, _, err := reader.Read(ctx, key, uploader.maxDownloadBytes)
 	if err != nil {
 		return nil, "", ErrImageTaskUnavailable.WithCause(err)
+	}
+	contentType := detectedImageContentType(data)
+	if contentType == "" || int64(len(data)) > uploader.maxDownloadBytes {
+		return nil, "", ErrImageTaskUnavailable
 	}
 	return data, contentType, nil
 }
@@ -210,22 +243,24 @@ func (s *ImageTaskService) CreateWorkbench(ctx context.Context, owner ImageTaskO
 	}
 	now := time.Now().UTC()
 	metadata.APIKeyID = owner.APIKeyID
-	ttl := s.ExecutionTimeout() + policy.Retention()
+	ttl := ImageWorkbenchQueueTimeout + policy.Retention()
 	task := &ImageTaskRecord{
-		ID:        "imgtask_" + strings.ReplaceAll(uuid.NewString(), "-", ""),
-		UserID:    owner.UserID,
-		APIKeyID:  owner.APIKeyID,
-		UserEmail: NormalizeImageOwnerEmail(owner.UserEmail),
-		Status:    ImageTaskStatusProcessing,
-		CreatedAt: now.Unix(),
-		ExpiresAt: now.Add(ttl).Unix(),
-		Workbench: &metadata,
+		ID:              "imgtask_" + strings.ReplaceAll(uuid.NewString(), "-", ""),
+		UserID:          owner.UserID,
+		APIKeyID:        owner.APIKeyID,
+		UserEmail:       NormalizeImageOwnerEmail(owner.UserEmail),
+		Status:          ImageTaskStatusQueued,
+		CreatedAt:       now.Unix(),
+		ExpiresAt:       now.Add(ttl).Unix(),
+		Workbench:       &metadata,
+		QueueDeadline:   now.Add(ImageWorkbenchQueueTimeout).Unix(),
+		QueueLeaseUntil: now.Add(ImageWorkbenchQueueLease).Unix(),
 	}
 	if !s.Enabled() {
 		task.WorkbenchStorage = ImageWorkbenchStorageLocal
 	}
-	if err := store.CreateWorkbench(ctx, task, ttl, policy.Limit(owner.IsAdmin)); err != nil {
-		if errors.Is(err, ErrImageWorkbenchLimit) {
+	if err := store.CreateWorkbench(ctx, task, ttl, ImageWorkbenchQueueLimit); err != nil {
+		if errors.Is(err, ErrImageWorkbenchQueueFull) {
 			return nil, err
 		}
 		return nil, ErrImageTaskUnavailable.WithCause(err)
@@ -267,6 +302,9 @@ func (s *ImageTaskService) RunWorkbenchCleanup(ctx context.Context) error {
 	store, ok := s.store.(ImageWorkbenchStore)
 	if !ok {
 		return nil
+	}
+	if err := s.expireWorkbenchQueue(ctx); err != nil {
+		return err
 	}
 	expired, err := store.ExpiredWorkbench(ctx, time.Now().UTC())
 	if err != nil {

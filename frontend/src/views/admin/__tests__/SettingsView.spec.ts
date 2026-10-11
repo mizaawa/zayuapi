@@ -733,6 +733,33 @@ describe("admin SettingsView payment visible method controls", () => {
     wrapper.unmount();
   });
 
+  it("shows the default reference limit and hint and saves a configured count", async () => {
+    const wrapper = mountView();
+    await flushPromises();
+    await openFeaturesTab(wrapper);
+    const input = wrapper.get<HTMLInputElement>("#image-workbench-max-reference-images");
+    expect(input.element.value).toBe("6");
+    expect(input.attributes("min")).toBe("1");
+    expect(wrapper.get("#image-workbench-max-reference-images-hint").text()).toContain("maxReferenceImagesHint");
+    await input.setValue("8");
+    await wrapper.find("form").trigger("submit.prevent");
+    await flushPromises();
+    expect(updateSettings).toHaveBeenCalledWith(expect.objectContaining({ image_workbench_max_reference_images: 8 }));
+    wrapper.unmount();
+  });
+
+  it.each(["0", "-1", "1.5", ""])("rejects an invalid reference count: %s", async (value) => {
+    const wrapper = mountView();
+    await flushPromises();
+    await openFeaturesTab(wrapper);
+    await wrapper.get("#image-workbench-max-reference-images").setValue(value);
+    await wrapper.find("form").trigger("submit.prevent");
+    await flushPromises();
+    expect(updateSettings).not.toHaveBeenCalled();
+    expect(showError).toHaveBeenCalledWith("admin.settings.features.imageWorkbench.maxReferenceImagesInvalid");
+    wrapper.unmount();
+  });
+
   it.each(["-1", "1.5", ""])("rejects an invalid per-image size: %s", async (value) => {
     const wrapper = mountView();
     await flushPromises();

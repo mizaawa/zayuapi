@@ -302,6 +302,20 @@ func (_c *GroupCreate) SetNillableAllowImageGeneration(v *bool) *GroupCreate {
 	return _c
 }
 
+// SetVideoWorkbenchEnabled sets the "video_workbench_enabled" field.
+func (_c *GroupCreate) SetVideoWorkbenchEnabled(v bool) *GroupCreate {
+	_c.mutation.SetVideoWorkbenchEnabled(v)
+	return _c
+}
+
+// SetNillableVideoWorkbenchEnabled sets the "video_workbench_enabled" field if the given value is not nil.
+func (_c *GroupCreate) SetNillableVideoWorkbenchEnabled(v *bool) *GroupCreate {
+	if v != nil {
+		_c.SetVideoWorkbenchEnabled(*v)
+	}
+	return _c
+}
+
 // SetImageWorkbenchEnabled sets the "image_workbench_enabled" field.
 func (_c *GroupCreate) SetImageWorkbenchEnabled(v bool) *GroupCreate {
 	_c.mutation.SetImageWorkbenchEnabled(v)
@@ -988,6 +1002,10 @@ func (_c *GroupCreate) defaults() error {
 		v := group.DefaultAllowImageGeneration
 		_c.mutation.SetAllowImageGeneration(v)
 	}
+	if _, ok := _c.mutation.VideoWorkbenchEnabled(); !ok {
+		v := group.DefaultVideoWorkbenchEnabled
+		_c.mutation.SetVideoWorkbenchEnabled(v)
+	}
 	if _, ok := _c.mutation.ImageWorkbenchEnabled(); !ok {
 		v := group.DefaultImageWorkbenchEnabled
 		_c.mutation.SetImageWorkbenchEnabled(v)
@@ -1173,6 +1191,9 @@ func (_c *GroupCreate) check() error {
 	}
 	if _, ok := _c.mutation.AllowImageGeneration(); !ok {
 		return &ValidationError{Name: "allow_image_generation", err: errors.New(`ent: missing required field "Group.allow_image_generation"`)}
+	}
+	if _, ok := _c.mutation.VideoWorkbenchEnabled(); !ok {
+		return &ValidationError{Name: "video_workbench_enabled", err: errors.New(`ent: missing required field "Group.video_workbench_enabled"`)}
 	}
 	if _, ok := _c.mutation.ImageWorkbenchEnabled(); !ok {
 		return &ValidationError{Name: "image_workbench_enabled", err: errors.New(`ent: missing required field "Group.image_workbench_enabled"`)}
@@ -1368,6 +1389,10 @@ func (_c *GroupCreate) createSpec() (*Group, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.AllowImageGeneration(); ok {
 		_spec.SetField(group.FieldAllowImageGeneration, field.TypeBool, value)
 		_node.AllowImageGeneration = value
+	}
+	if value, ok := _c.mutation.VideoWorkbenchEnabled(); ok {
+		_spec.SetField(group.FieldVideoWorkbenchEnabled, field.TypeBool, value)
+		_node.VideoWorkbenchEnabled = value
 	}
 	if value, ok := _c.mutation.ImageWorkbenchEnabled(); ok {
 		_spec.SetField(group.FieldImageWorkbenchEnabled, field.TypeBool, value)
@@ -1968,6 +1993,18 @@ func (u *GroupUpsert) SetAllowImageGeneration(v bool) *GroupUpsert {
 // UpdateAllowImageGeneration sets the "allow_image_generation" field to the value that was provided on create.
 func (u *GroupUpsert) UpdateAllowImageGeneration() *GroupUpsert {
 	u.SetExcluded(group.FieldAllowImageGeneration)
+	return u
+}
+
+// SetVideoWorkbenchEnabled sets the "video_workbench_enabled" field.
+func (u *GroupUpsert) SetVideoWorkbenchEnabled(v bool) *GroupUpsert {
+	u.Set(group.FieldVideoWorkbenchEnabled, v)
+	return u
+}
+
+// UpdateVideoWorkbenchEnabled sets the "video_workbench_enabled" field to the value that was provided on create.
+func (u *GroupUpsert) UpdateVideoWorkbenchEnabled() *GroupUpsert {
+	u.SetExcluded(group.FieldVideoWorkbenchEnabled)
 	return u
 }
 
@@ -2957,6 +2994,20 @@ func (u *GroupUpsertOne) SetAllowImageGeneration(v bool) *GroupUpsertOne {
 func (u *GroupUpsertOne) UpdateAllowImageGeneration() *GroupUpsertOne {
 	return u.Update(func(s *GroupUpsert) {
 		s.UpdateAllowImageGeneration()
+	})
+}
+
+// SetVideoWorkbenchEnabled sets the "video_workbench_enabled" field.
+func (u *GroupUpsertOne) SetVideoWorkbenchEnabled(v bool) *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.SetVideoWorkbenchEnabled(v)
+	})
+}
+
+// UpdateVideoWorkbenchEnabled sets the "video_workbench_enabled" field to the value that was provided on create.
+func (u *GroupUpsertOne) UpdateVideoWorkbenchEnabled() *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.UpdateVideoWorkbenchEnabled()
 	})
 }
 
@@ -4214,6 +4265,20 @@ func (u *GroupUpsertBulk) SetAllowImageGeneration(v bool) *GroupUpsertBulk {
 func (u *GroupUpsertBulk) UpdateAllowImageGeneration() *GroupUpsertBulk {
 	return u.Update(func(s *GroupUpsert) {
 		s.UpdateAllowImageGeneration()
+	})
+}
+
+// SetVideoWorkbenchEnabled sets the "video_workbench_enabled" field.
+func (u *GroupUpsertBulk) SetVideoWorkbenchEnabled(v bool) *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.SetVideoWorkbenchEnabled(v)
+	})
+}
+
+// UpdateVideoWorkbenchEnabled sets the "video_workbench_enabled" field to the value that was provided on create.
+func (u *GroupUpsertBulk) UpdateVideoWorkbenchEnabled() *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.UpdateVideoWorkbenchEnabled()
 	})
 }
 

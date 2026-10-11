@@ -56,6 +56,8 @@ const (
 	FieldDefaultValidityDays = "default_validity_days"
 	// FieldAllowImageGeneration holds the string denoting the allow_image_generation field in the database.
 	FieldAllowImageGeneration = "allow_image_generation"
+	// FieldVideoWorkbenchEnabled holds the string denoting the video_workbench_enabled field in the database.
+	FieldVideoWorkbenchEnabled = "video_workbench_enabled"
 	// FieldImageWorkbenchEnabled holds the string denoting the image_workbench_enabled field in the database.
 	FieldImageWorkbenchEnabled = "image_workbench_enabled"
 	// FieldAllowBatchImageGeneration holds the string denoting the allow_batch_image_generation field in the database.
@@ -234,6 +236,7 @@ var Columns = []string{
 	FieldMonthlyLimitUsd,
 	FieldDefaultValidityDays,
 	FieldAllowImageGeneration,
+	FieldVideoWorkbenchEnabled,
 	FieldImageWorkbenchEnabled,
 	FieldAllowBatchImageGeneration,
 	FieldImageRateIndependent,
@@ -342,6 +345,8 @@ var (
 	DefaultDefaultValidityDays int
 	// DefaultAllowImageGeneration holds the default value on creation for the "allow_image_generation" field.
 	DefaultAllowImageGeneration bool
+	// DefaultVideoWorkbenchEnabled holds the default value on creation for the "video_workbench_enabled" field.
+	DefaultVideoWorkbenchEnabled bool
 	// DefaultImageWorkbenchEnabled holds the default value on creation for the "image_workbench_enabled" field.
 	DefaultImageWorkbenchEnabled bool
 	// DefaultAllowBatchImageGeneration holds the default value on creation for the "allow_batch_image_generation" field.
@@ -506,6 +511,11 @@ func ByDefaultValidityDays(opts ...sql.OrderTermOption) OrderOption {
 // ByAllowImageGeneration orders the results by the allow_image_generation field.
 func ByAllowImageGeneration(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldAllowImageGeneration, opts...).ToFunc()
+}
+
+// ByVideoWorkbenchEnabled orders the results by the video_workbench_enabled field.
+func ByVideoWorkbenchEnabled(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldVideoWorkbenchEnabled, opts...).ToFunc()
 }
 
 // ByImageWorkbenchEnabled orders the results by the image_workbench_enabled field.

@@ -64,7 +64,10 @@ function injectPublicSettings(backendUrl: string): Plugin {
           if (response.ok) {
             const data = await response.json()
             if (data.code === 0 && data.data) {
-              const script = `<script>window.__APP_CONFIG__=${JSON.stringify(data.data)};</script>`
+              // JSON embedded in HTML must not allow announcement text to close
+              // the script element. Match the backend JSON encoder's escaping.
+              const settingsJSON = JSON.stringify(data.data).replace(/</g, '\\u003c')
+              const script = `<script>window.__APP_CONFIG__=${settingsJSON};</script>`
               return injectBranding(html, data.data).replace('</head>', `${script}\n</head>`)
             }
           }

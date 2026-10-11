@@ -198,10 +198,21 @@ func (s *SettingService) InitializeDefaultSettings(ctx context.Context) error {
 		SettingKeyImageWorkbenchEnabled:                "true",
 		SettingKeyImageWorkbenchMaxConcurrent:          "5",
 		SettingKeyImageWorkbenchMaxImageSizeMB:         "50",
+		SettingKeyImageWorkbenchMaxReferenceImages:     strconv.Itoa(ImageWorkbenchDefaultMaxReferenceImages),
 		SettingKeyImageWorkbenchAdminExempt:            "false",
 		SettingKeyImageWorkbenchCustomRetentionEnabled: "false",
 		SettingKeyImageWorkbenchRetentionMinutes:       "15",
 		SettingKeyImageWorkbenchTutorialURL:            "",
+		SettingKeyImageWorkbenchDocumentationURL:       "",
+		SettingKeyVideoWorkbenchEnabled:                "false",
+		SettingKeyVideoWorkbenchMaxConcurrent:          "3",
+		SettingKeyVideoWorkbenchMaxReferenceImages:     "6",
+		SettingKeyVideoWorkbenchMaxReferenceVideos:     "6",
+		SettingKeyVideoWorkbenchMaxReferenceAudios:     "6",
+		SettingKeyVideoWorkbenchRetentionMinutes:       "30",
+		SettingKeyVideoWorkbenchTutorialURL:            "",
+		SettingKeyVideoWorkbenchDocumentationURL:       "",
+		SettingKeyVideoWorkbenchAnnouncement:           "",
 
 		// Available channels feature (default disabled; opt-in)
 		SettingKeyAvailableChannelsEnabled: "false",
@@ -817,10 +828,22 @@ func (s *SettingService) parseSettings(settings map[string]string) *SystemSettin
 	result.ImageWorkbenchEnabled = workbench.Enabled
 	result.ImageWorkbenchMaxConcurrent = workbench.MaxConcurrent
 	result.ImageWorkbenchMaxImageSizeMB = workbench.MaxImageSizeMB
+	result.ImageWorkbenchMaxReferenceImages = workbench.ReferenceImageLimit()
 	result.ImageWorkbenchAdminExempt = workbench.AdminExempt
 	result.ImageWorkbenchCustomRetentionEnabled = workbench.CustomRetentionEnabled
 	result.ImageWorkbenchRetentionMinutes = parseImageWorkbenchNumber(settings[SettingKeyImageWorkbenchRetentionMinutes], 15, 1440)
 	result.ImageWorkbenchTutorialURL = workbench.TutorialURL
+	result.ImageWorkbenchDocumentationURL = workbench.DocumentationURL
+	videoWorkbench := parseVideoWorkbenchRuntime(settings)
+	result.VideoWorkbenchEnabled = videoWorkbench.Enabled
+	result.VideoWorkbenchMaxConcurrent = videoWorkbench.MaxConcurrent
+	result.VideoWorkbenchMaxReferenceImages = videoWorkbench.MaxReferenceImages
+	result.VideoWorkbenchMaxReferenceVideos = videoWorkbench.MaxReferenceVideos
+	result.VideoWorkbenchMaxReferenceAudios = videoWorkbench.MaxReferenceAudios
+	result.VideoWorkbenchRetentionMinutes = videoWorkbench.RetentionMinutes
+	result.VideoWorkbenchTutorialURL = videoWorkbench.TutorialURL
+	result.VideoWorkbenchDocumentationURL = videoWorkbench.DocumentationURL
+	result.VideoWorkbenchAnnouncement = videoWorkbench.Announcement
 
 	// Available channels feature (default: disabled; strict true)
 	result.AvailableChannelsEnabled = settings[SettingKeyAvailableChannelsEnabled] == "true"

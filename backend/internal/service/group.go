@@ -46,6 +46,7 @@ type Group struct {
 	// 图片生成计费配置（antigravity 和 gemini 平台使用）
 	AllowImageGeneration         bool
 	ImageWorkbenchEnabled        bool
+	VideoWorkbenchEnabled        bool
 	AllowBatchImageGeneration    bool
 	ImageRateIndependent         bool
 	ImageRateMultiplier          float64

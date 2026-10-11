@@ -26,9 +26,10 @@ import (
 )
 
 type AsyncImageHandler struct {
-	tasks   *service.ImageTaskService
-	openAI  *OpenAIGatewayHandler
-	execute func(platform string, c *gin.Context)
+	tasks                *service.ImageTaskService
+	openAI               *OpenAIGatewayHandler
+	execute              func(platform string, c *gin.Context)
+	refreshWorkbenchAuth func(*gin.Context) error
 }
 
 const imageOwnerEmailHeader = "X-Sub2API-User-Email"
@@ -42,6 +43,10 @@ func NewAsyncImageHandler(tasks *service.ImageTaskService, openAI *OpenAIGateway
 	h := &AsyncImageHandler{tasks: tasks, openAI: openAI}
 	h.execute = h.executeWithGateway
 	return h
+}
+
+func (h *AsyncImageHandler) SetWorkbenchAuthRefresh(refresh func(*gin.Context) error) {
+	h.refreshWorkbenchAuth = refresh
 }
 
 // enabled reports whether the async image task feature is available. Object
@@ -93,7 +98,7 @@ func (h *AsyncImageHandler) Submit(c *gin.Context) {
 	if resolvedPlatform, resolved := service.ResolvedTargetPlatformFromContext(c.Request.Context()); resolved {
 		platform = resolvedPlatform
 	}
-	if platform != service.PlatformOpenAI && platform != service.PlatformGrok {
+	if platform != service.PlatformOpenAI && platform != service.PlatformGrok && platform != service.PlatformCustom {
 		imageTaskJSONError(c, http.StatusNotFound, "not_found_error", "Images API is not supported for this platform")
 		return
 	}
@@ -130,7 +135,7 @@ func (h *AsyncImageHandler) Submit(c *gin.Context) {
 	var metadata *service.ImageWorkbenchMetadata
 	if isImageWorkbenchRequest(c) {
 		policy := h.tasks.WorkbenchRuntime(c.Request.Context())
-		metadata, err = parseImageWorkbenchMetadata(c.GetHeader("Content-Type"), body, policy.MaxImageSizeMB)
+		metadata, err = parseImageWorkbenchMetadata(c.GetHeader("Content-Type"), body, policy.MaxImageSizeMB, policy.ReferenceImageLimit())
 		if err != nil {
 			imageTaskJSONError(c, http.StatusBadRequest, "invalid_request_error", err.Error())
 			return
@@ -144,7 +149,17 @@ func (h *AsyncImageHandler) Submit(c *gin.Context) {
 		return
 	}
 
-	taskCtx, recorder, cancel := newAsyncImageContext(c, body, h.tasks.ExecutionTimeout())
+	releasePayload := func() {}
+	timeout := h.tasks.ExecutionTimeout()
+	if metadata != nil {
+		releasePayload, err = h.tasks.ReserveWorkbenchPayload(len(body))
+		if err != nil {
+			imageTaskError(c, err)
+			return
+		}
+		timeout = service.ImageWorkbenchQueueTimeout
+	}
+	taskCtx, recorder, cancel := newAsyncImageContext(c, body, timeout)
 	owner := service.ImageTaskOwner{UserID: apiKey.UserID, APIKeyID: apiKey.ID, UserEmail: ownerEmail, IsAdmin: apiKey.User != nil && apiKey.User.IsAdmin()}
 	var task *service.ImageTask
 	if metadata != nil {
@@ -154,6 +169,7 @@ func (h *AsyncImageHandler) Submit(c *gin.Context) {
 	}
 	if err != nil {
 		cancel()
+		releasePayload()
 		imageTaskError(c, err)
 		return
 	}
@@ -173,7 +189,56 @@ func (h *AsyncImageHandler) Submit(c *gin.Context) {
 		"workbench":  task.Workbench,
 	})
 
-	go h.run(task.ID, platform, taskCtx, recorder, cancel)
+	go func() {
+		defer releasePayload()
+		if metadata != nil {
+			authorize := func(ctx context.Context) (service.ImageTaskOwner, error) {
+				taskCtx.Request = taskCtx.Request.WithContext(ctx)
+				if h.refreshWorkbenchAuth != nil {
+					if err := h.refreshWorkbenchAuth(taskCtx); err != nil {
+						return owner, err
+					}
+				} else if h.openAI != nil {
+					return owner, service.ErrImageTaskUnavailable
+				}
+				fresh, ok := middleware2.GetAPIKeyFromContext(taskCtx)
+				if !ok || fresh == nil || fresh.User == nil || fresh.ID != owner.APIKeyID || fresh.UserID != owner.UserID || service.NormalizeImageOwnerEmail(fresh.User.Email) != owner.UserEmail {
+					return owner, service.ErrImageTaskForbidden
+				}
+				current := owner
+				current.IsAdmin = fresh.User.IsAdmin()
+				return current, nil
+			}
+			claimed, err := h.tasks.AwaitWorkbenchSlot(taskCtx.Request.Context(), task.ID, authorize)
+			if err != nil {
+				cancel()
+				if !errors.Is(err, service.ErrImageTaskNotFound) {
+					status := infraerrors.Code(err)
+					if status < 400 {
+						status = http.StatusGatewayTimeout
+					}
+					h.failTask(task.ID, status, imageTaskErrorPayload("api_error", "queued image task could not start"))
+				}
+				return
+			}
+			checkCtx, checkCancel := context.WithTimeout(context.WithoutCancel(taskCtx.Request.Context()), 5*time.Second)
+			current, err := authorize(checkCtx)
+			checkCancel()
+			if err != nil || (claimed.IsAdmin && !current.IsAdmin) {
+				cancel()
+				h.failTask(task.ID, http.StatusForbidden, imageTaskErrorPayload("permission_error", "queued task authorization was revoked"))
+				return
+			}
+			// Queue waiting does not consume the generation timeout. The server
+			// task ID also supplies a unique, trusted billing identity per image.
+			executionCtx, executionCancel := context.WithTimeout(context.WithoutCancel(taskCtx.Request.Context()), h.tasks.ExecutionTimeout())
+			cancel()
+			cancel = executionCancel
+			taskCtx.Request = taskCtx.Request.WithContext(executionCtx)
+			taskCtx.Set(imageWorkbenchTaskIDContextKey, task.ID)
+		}
+		h.run(task.ID, platform, taskCtx, recorder, cancel)
+	}()
 }
 
 // ListWorkbench uses the panel session so task recovery works across keys and
@@ -197,14 +262,16 @@ func (h *AsyncImageHandler) ListWorkbench(c *gin.Context) {
 	policy := h.tasks.WorkbenchRuntime(c.Request.Context())
 	role, _ := middleware2.GetUserRoleFromContext(c)
 	response.Success(c, gin.H{
-		"enabled":             h.tasks.WorkbenchEnabled(c.Request.Context()),
-		"max_concurrent":      policy.Limit(role == service.RoleAdmin),
-		"max_image_size_mb":   policy.MaxImageSizeMB,
-		"user_max_concurrent": policy.MaxConcurrent,
-		"admin_exempt":        policy.AdminExempt,
-		"retention_seconds":   int(policy.Retention().Seconds()),
-		"tutorial_url":        policy.TutorialURL,
-		"tasks":               tasks,
+		"enabled":              h.tasks.WorkbenchEnabled(c.Request.Context()),
+		"max_concurrent":       policy.Limit(role == service.RoleAdmin),
+		"max_image_size_mb":    policy.MaxImageSizeMB,
+		"max_reference_images": policy.ReferenceImageLimit(),
+		"user_max_concurrent":  policy.MaxConcurrent,
+		"admin_exempt":         policy.AdminExempt,
+		"retention_seconds":    int(policy.Retention().Seconds()),
+		"tutorial_url":         policy.TutorialURL,
+		"documentation_url":    policy.DocumentationURL,
+		"tasks":                tasks,
 	})
 }
 
@@ -259,22 +326,32 @@ func (h *AsyncImageHandler) DownloadWorkbenchImage(c *gin.Context) {
 	c.Data(http.StatusOK, contentType, data)
 }
 
-func parseImageWorkbenchMetadata(contentType string, body []byte, maxImageSizeMB int) (*service.ImageWorkbenchMetadata, error) {
+func parseImageWorkbenchMetadata(contentType string, body []byte, maxImageSizeMB, maxReferenceImages int) (*service.ImageWorkbenchMetadata, error) {
 	if isMultipartImagesContentType(contentType) {
 		return nil, errors.New("workbench requests must use JSON with images[].image_url")
 	}
+	if !hasUniqueJSONMembers(body) || !validImageWorkbenchFields(body) {
+		return nil, errors.New("workbench requests require valid JSON with unique fields")
+	}
 	var payload struct {
-		Prompt  string `json:"prompt"`
-		Model   string `json:"model"`
-		Quality string `json:"quality"`
-		Size    string `json:"size"`
-		N       int    `json:"n"`
-		Images  []struct {
+		Prompt         string `json:"prompt"`
+		Model          string `json:"model"`
+		Quality        string `json:"quality"`
+		Size           string `json:"size"`
+		N              int    `json:"n"`
+		Stream         bool   `json:"stream"`
+		ResponseFormat string `json:"response_format"`
+		Images         []struct {
 			ImageURL string `json:"image_url"`
 		} `json:"images"`
 	}
-	if err := json.Unmarshal(body, &payload); err != nil {
+	decoder := json.NewDecoder(bytes.NewReader(body))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&payload); err != nil {
 		return nil, errors.New("invalid image workbench request")
+	}
+	if payload.Stream {
+		return nil, errors.New("streaming image requests cannot be submitted as asynchronous tasks")
 	}
 	payload.Prompt = strings.TrimSpace(payload.Prompt)
 	payload.Model = strings.TrimSpace(payload.Model)
@@ -284,10 +361,8 @@ func parseImageWorkbenchMetadata(contentType string, body []byte, maxImageSizeMB
 	if payload.N == 0 {
 		payload.N = 1
 	}
-	switch payload.N {
-	case 1, 3, 5, 10, 20:
-	default:
-		return nil, errors.New("image count must be 1, 3, 5, 10, or 20")
+	if payload.N != 1 {
+		return nil, errors.New("each image workbench task must generate exactly one image")
 	}
 	if payload.Quality == "" {
 		payload.Quality = "auto"
@@ -297,8 +372,8 @@ func parseImageWorkbenchMetadata(contentType string, body []byte, maxImageSizeMB
 	default:
 		return nil, errors.New("invalid image quality")
 	}
-	if len(payload.Images) > 2 {
-		return nil, errors.New("at most 2 reference images are allowed")
+	if len(payload.Images) > maxReferenceImages {
+		return nil, fmt.Errorf("at most %d reference images are allowed", maxReferenceImages)
 	}
 	for _, image := range payload.Images {
 		header, encoded, ok := strings.Cut(strings.TrimSpace(image.ImageURL), ",")
@@ -386,7 +461,7 @@ func (h *AsyncImageHandler) Get(c *gin.Context) {
 		return
 	}
 	c.Header("Cache-Control", "no-store")
-	if task.Status == service.ImageTaskStatusProcessing {
+	if task.Status == service.ImageTaskStatusProcessing || task.Status == service.ImageTaskStatusQueued {
 		c.Header("Retry-After", "3")
 	}
 	c.JSON(http.StatusOK, task)

@@ -429,10 +429,24 @@ func (s *SettingService) buildSystemSettingsUpdates(ctx context.Context, setting
 	updates[SettingKeyImageWorkbenchEnabled] = strconv.FormatBool(settings.ImageWorkbenchEnabled)
 	updates[SettingKeyImageWorkbenchMaxConcurrent] = strconv.Itoa(imageWorkbenchNumberOrDefault(settings.ImageWorkbenchMaxConcurrent, ImageWorkbenchMaxConcurrent))
 	updates[SettingKeyImageWorkbenchMaxImageSizeMB] = strconv.Itoa(settings.ImageWorkbenchMaxImageSizeMB)
+	updates[SettingKeyImageWorkbenchMaxReferenceImages] = strconv.Itoa(imageWorkbenchNumberOrDefault(settings.ImageWorkbenchMaxReferenceImages, ImageWorkbenchDefaultMaxReferenceImages))
 	updates[SettingKeyImageWorkbenchAdminExempt] = strconv.FormatBool(settings.ImageWorkbenchAdminExempt)
 	updates[SettingKeyImageWorkbenchCustomRetentionEnabled] = strconv.FormatBool(settings.ImageWorkbenchCustomRetentionEnabled)
 	updates[SettingKeyImageWorkbenchRetentionMinutes] = strconv.Itoa(imageWorkbenchNumberOrDefault(settings.ImageWorkbenchRetentionMinutes, 15))
 	updates[SettingKeyImageWorkbenchTutorialURL] = strings.TrimSpace(settings.ImageWorkbenchTutorialURL)
+	updates[SettingKeyImageWorkbenchDocumentationURL] = strings.TrimSpace(settings.ImageWorkbenchDocumentationURL)
+	if err := ValidateVideoWorkbenchSettings(settings); err != nil {
+		return nil, err
+	}
+	updates[SettingKeyVideoWorkbenchEnabled] = strconv.FormatBool(settings.VideoWorkbenchEnabled)
+	updates[SettingKeyVideoWorkbenchMaxConcurrent] = strconv.Itoa(imageWorkbenchNumberOrDefault(settings.VideoWorkbenchMaxConcurrent, 3))
+	updates[SettingKeyVideoWorkbenchMaxReferenceImages] = strconv.Itoa(imageWorkbenchNumberOrDefault(settings.VideoWorkbenchMaxReferenceImages, 6))
+	updates[SettingKeyVideoWorkbenchMaxReferenceVideos] = strconv.Itoa(imageWorkbenchNumberOrDefault(settings.VideoWorkbenchMaxReferenceVideos, 6))
+	updates[SettingKeyVideoWorkbenchMaxReferenceAudios] = strconv.Itoa(imageWorkbenchNumberOrDefault(settings.VideoWorkbenchMaxReferenceAudios, 6))
+	updates[SettingKeyVideoWorkbenchRetentionMinutes] = strconv.Itoa(imageWorkbenchNumberOrDefault(settings.VideoWorkbenchRetentionMinutes, 30))
+	updates[SettingKeyVideoWorkbenchTutorialURL] = strings.TrimSpace(settings.VideoWorkbenchTutorialURL)
+	updates[SettingKeyVideoWorkbenchDocumentationURL] = strings.TrimSpace(settings.VideoWorkbenchDocumentationURL)
+	updates[SettingKeyVideoWorkbenchAnnouncement] = strings.TrimSpace(settings.VideoWorkbenchAnnouncement)
 
 	// Available channels feature switch
 	updates[SettingKeyAvailableChannelsEnabled] = strconv.FormatBool(settings.AvailableChannelsEnabled)

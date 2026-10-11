@@ -15,6 +15,7 @@ import (
 )
 
 const (
+	ImageTaskStatusQueued     = "queued"
 	ImageTaskStatusProcessing = "processing"
 	ImageTaskStatusCompleted  = "completed"
 	ImageTaskStatusFailed     = "failed"
@@ -41,10 +42,13 @@ type ImageTaskRecord struct {
 	Result           json.RawMessage         `json:"result,omitempty"`
 	Error            json.RawMessage         `json:"error,omitempty"`
 	CreatedAt        int64                   `json:"created_at"`
+	StartedAt        *int64                  `json:"started_at,omitempty"`
 	CompletedAt      *int64                  `json:"completed_at,omitempty"`
 	ExpiresAt        int64                   `json:"expires_at"`
 	Workbench        *ImageWorkbenchMetadata `json:"workbench,omitempty"`
 	WorkbenchStorage string                  `json:"workbench_storage,omitempty"`
+	QueueDeadline    int64                   `json:"queue_deadline,omitempty"`
+	QueueLeaseUntil  int64                   `json:"queue_lease_until,omitempty"`
 }
 
 // ImageTask is the API-safe task representation returned to callers.
@@ -58,6 +62,7 @@ type ImageTask struct {
 	Result      json.RawMessage         `json:"result,omitempty"`
 	Error       json.RawMessage         `json:"error,omitempty"`
 	CreatedAt   int64                   `json:"created_at"`
+	StartedAt   *int64                  `json:"started_at,omitempty"`
 	CompletedAt *int64                  `json:"completed_at,omitempty"`
 	ExpiresAt   int64                   `json:"expires_at"`
 	Workbench   *ImageWorkbenchMetadata `json:"workbench,omitempty"`
@@ -90,6 +95,7 @@ type ImageTaskService struct {
 	executionTimeout  time.Duration
 	workbenchSettings func(context.Context) ImageWorkbenchRuntime
 	workbenchLocal    ImageWorkbenchLocalStorage
+	workbenchPayloads imageWorkbenchPayloadBudget
 }
 
 func NewImageTaskService(store ImageTaskStore) *ImageTaskService {
@@ -191,7 +197,7 @@ func (s *ImageTaskService) Get(ctx context.Context, owner ImageTaskOwner, id str
 	}
 	ownerEmail := NormalizeImageOwnerEmail(owner.UserEmail)
 	if task.UserID != owner.UserID || task.APIKeyID != owner.APIKeyID ||
-		(ownerEmail != "" && NormalizeImageOwnerEmail(task.UserEmail) != ownerEmail) {
+		(ownerEmail != "" && NormalizeImageOwnerEmail(task.UserEmail) != ownerEmail) || task.ExpiresAt <= time.Now().Unix() {
 		// Do not reveal whether a random task ID exists for another caller.
 		return nil, ErrImageTaskNotFound
 	}
@@ -266,6 +272,11 @@ func (s *ImageTaskService) finish(ctx context.Context, id, status string, status
 	task.CompletedAt = &completedAt
 	ttl := s.ttl
 	if task.Workbench != nil {
+		task.QueueDeadline = 0
+		task.QueueLeaseUntil = 0
+		if status == ImageTaskStatusFailed {
+			task.Error = workbenchPublicError(statusCode)
+		}
 		ttl = s.WorkbenchRuntime(ctx).Retention()
 	}
 	task.ExpiresAt = now.Add(ttl).Unix()
@@ -280,8 +291,12 @@ func imageTaskToPublic(task *ImageTaskRecord) *ImageTask {
 		return nil
 	}
 	result := task.Result
-	if task.WorkbenchStorage == ImageWorkbenchStorageLocal {
-		result = localWorkbenchPublicResult(task.ID, result)
+	taskError := task.Error
+	if task.Workbench != nil {
+		result = workbenchPublicResult(task.ID, result)
+		if task.Status == ImageTaskStatusFailed || len(taskError) > 0 {
+			taskError = workbenchPublicError(task.HTTPStatus)
+		}
 	}
 	return &ImageTask{
 		ID:          task.ID,
@@ -291,8 +306,9 @@ func imageTaskToPublic(task *ImageTaskRecord) *ImageTask {
 		HTTPStatus:  task.HTTPStatus,
 		ImageURL:    firstImageTaskURL(result),
 		Result:      result,
-		Error:       task.Error,
+		Error:       taskError,
 		CreatedAt:   task.CreatedAt,
+		StartedAt:   task.StartedAt,
 		CompletedAt: task.CompletedAt,
 		ExpiresAt:   task.ExpiresAt,
 		Workbench:   task.Workbench,

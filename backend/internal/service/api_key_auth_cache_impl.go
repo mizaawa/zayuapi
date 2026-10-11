@@ -14,7 +14,7 @@ import (
 	"github.com/dgraph-io/ristretto"
 )
 
-const apiKeyAuthSnapshotVersion = 24 // v24: include the group image-workbench declaration
+const apiKeyAuthSnapshotVersion = 25 // v25: include the group video-workbench declaration
 
 type apiKeyAuthCacheConfig struct {
 	l1Size        int
@@ -401,6 +401,7 @@ func (s *APIKeyService) snapshotFromAPIKey(ctx context.Context, apiKey *APIKey) 
 			MonthlyLimitUSD:                 apiKey.Group.MonthlyLimitUSD,
 			AllowImageGeneration:            apiKey.Group.AllowImageGeneration,
 			ImageWorkbenchEnabled:           apiKey.Group.ImageWorkbenchEnabled,
+			VideoWorkbenchEnabled:           apiKey.Group.VideoWorkbenchEnabled,
 			AllowBatchImageGeneration:       apiKey.Group.AllowBatchImageGeneration,
 			ImageRateIndependent:            apiKey.Group.ImageRateIndependent,
 			ImageRateMultiplier:             apiKey.Group.ImageRateMultiplier,
@@ -504,6 +505,7 @@ func (s *APIKeyService) snapshotToAPIKey(key string, snapshot *APIKeyAuthSnapsho
 			MonthlyLimitUSD:                 snapshot.Group.MonthlyLimitUSD,
 			AllowImageGeneration:            snapshot.Group.AllowImageGeneration,
 			ImageWorkbenchEnabled:           snapshot.Group.ImageWorkbenchEnabled,
+			VideoWorkbenchEnabled:           snapshot.Group.VideoWorkbenchEnabled,
 			AllowBatchImageGeneration:       snapshot.Group.AllowBatchImageGeneration,
 			ImageRateIndependent:            snapshot.Group.ImageRateIndependent,
 			ImageRateMultiplier:             snapshot.Group.ImageRateMultiplier,

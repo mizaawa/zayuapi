@@ -153,7 +153,9 @@ func TestAsyncImageHandlerSubmitUsesResolvedCompositeTarget(t *testing.T) {
 			Group:   &service.Group{ID: groupID, Platform: service.PlatformComposite, AllowImageGeneration: true},
 		}
 		c.Set(string(middleware2.ContextKeyAPIKey), apiKey)
-		c.Request = c.Request.WithContext(service.WithResolvedTargetPlatform(c.Request.Context(), service.PlatformOpenAI))
+		decision, err := service.NewCompositeRouteResolver(nil).Resolve(c.Request.Context(), groupID, "image-alias", service.CompositeRouteEndpointImages)
+		require.NoError(t, err)
+		c.Request = c.Request.WithContext(service.WithCompositeRouteDecision(c.Request.Context(), decision))
 		c.Next()
 	})
 	router.POST("/v1/images/generations/async", h.Submit)
@@ -167,7 +169,7 @@ func TestAsyncImageHandlerSubmitUsesResolvedCompositeTarget(t *testing.T) {
 
 	select {
 	case platform := <-platformSeen:
-		require.Equal(t, service.PlatformOpenAI, platform)
+		require.Equal(t, service.PlatformCustom, platform)
 	case <-time.After(time.Second):
 		t.Fatal("async image task did not execute")
 	}

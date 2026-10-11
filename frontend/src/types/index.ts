@@ -271,10 +271,21 @@ export interface PublicSettings {
   image_workbench_enabled: boolean
   image_workbench_max_concurrent: number
   image_workbench_max_image_size_mb: number
+  image_workbench_max_reference_images: number
   image_workbench_admin_exempt: boolean
   image_workbench_custom_retention_enabled: boolean
   image_workbench_retention_minutes: number
   image_workbench_tutorial_url: string
+  image_workbench_documentation_url: string
+  video_workbench_enabled: boolean
+  video_workbench_max_concurrent: number
+  video_workbench_max_reference_images: number
+  video_workbench_max_reference_videos: number
+  video_workbench_max_reference_audios: number
+  video_workbench_retention_minutes: number
+  video_workbench_tutorial_url: string
+  video_workbench_documentation_url: string
+  video_workbench_announcement: string
   available_channels_enabled: boolean
   leaderboard_enabled: boolean
   model_plaza_enabled: boolean
@@ -572,6 +583,7 @@ export interface Group {
   // 图片生成计费配置
   allow_image_generation: boolean
   image_workbench_enabled?: boolean
+  video_workbench_enabled?: boolean
   allow_batch_image_generation: boolean
   image_rate_independent: boolean
   image_rate_multiplier: number
@@ -806,6 +818,7 @@ export interface CreateGroupRequest {
   model_pricing?: import('@/api/admin/channels').ChannelModelPricing[]
   allow_image_generation?: boolean
   image_workbench_enabled?: boolean
+  video_workbench_enabled?: boolean
   allow_batch_image_generation?: boolean
   image_rate_independent?: boolean
   image_rate_multiplier?: number
@@ -864,6 +877,7 @@ export interface UpdateGroupRequest {
   model_pricing?: import('@/api/admin/channels').ChannelModelPricing[]
   allow_image_generation?: boolean
   image_workbench_enabled?: boolean
+  video_workbench_enabled?: boolean
   allow_batch_image_generation?: boolean
   image_rate_independent?: boolean
   image_rate_multiplier?: number

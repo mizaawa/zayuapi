@@ -1083,6 +1083,10 @@ export default {
         bufferRangeError: '安全缓冲应在 0 到 99.99 之间',
         sumTooHigh: '最低毛利率与安全缓冲之和必须小于 100%，否则将排除全部账号'
       },
+      videoWorkbench: {
+        title: '声明分组视频功能',
+        hint: '开启后，此 Custom 分组的有效密钥可用于视频工作台。'
+      },
       imageWorkbench: {
         title: '声明分组生图功能',
         hint: '开启后，该分组中符合生图条件的密钥才会出现在生图工作台；关闭时隐藏并禁止从工作台提交。'

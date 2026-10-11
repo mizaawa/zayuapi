@@ -811,6 +811,24 @@ func (s *APIKeyService) GetByKey(ctx context.Context, key string) (*APIKey, erro
 	return apiKey, nil
 }
 
+// GetByKeyFresh bypasses authentication snapshots for accepted work that may
+// have waited in a queue while key, user, or group permissions were revoked.
+func (s *APIKeyService) GetByKeyFresh(ctx context.Context, key string) (*APIKey, error) {
+	if len(key) == 0 || len(key) > MaxAPIKeyCredentialBytes {
+		return nil, ErrAPIKeyNotFound
+	}
+	apiKey, err := s.lookupAPIKeyForAuth(ctx, key)
+	if err != nil {
+		return nil, err
+	}
+	if apiKey == nil {
+		return nil, ErrAPIKeyNotFound
+	}
+	apiKey.Key = key
+	s.compileAPIKeyIPRules(apiKey)
+	return apiKey, nil
+}
+
 // Update 更新API Key
 func (s *APIKeyService) Update(ctx context.Context, id int64, userID int64, req UpdateAPIKeyRequest) (*APIKey, error) {
 	if err := validateAPIKeyLimits(req.Quota, req.RateLimit5h, req.RateLimit1d, req.RateLimit7d); err != nil {

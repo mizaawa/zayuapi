@@ -10,14 +10,18 @@ import (
 	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
 )
 
+const ImageWorkbenchDefaultMaxReferenceImages = 6
+
 type ImageWorkbenchRuntime struct {
 	Enabled                bool
 	MaxConcurrent          int
 	MaxImageSizeMB         int
+	MaxReferenceImages     int
 	AdminExempt            bool
 	CustomRetentionEnabled bool
 	RetentionMinutes       int
 	TutorialURL            string
+	DocumentationURL       string
 }
 
 func (r ImageWorkbenchRuntime) Limit(isAdmin bool) int {
@@ -31,16 +35,25 @@ func (r ImageWorkbenchRuntime) Retention() time.Duration {
 	return time.Duration(r.RetentionMinutes) * time.Minute
 }
 
+func (r ImageWorkbenchRuntime) ReferenceImageLimit() int {
+	if r.MaxReferenceImages < 1 {
+		return ImageWorkbenchDefaultMaxReferenceImages
+	}
+	return r.MaxReferenceImages
+}
+
 var imageWorkbenchSettingKeys = []string{
 	SettingKeyImageWorkbenchEnabled, SettingKeyImageWorkbenchMaxConcurrent,
 	SettingKeyImageWorkbenchMaxImageSizeMB,
+	SettingKeyImageWorkbenchMaxReferenceImages,
 	SettingKeyImageWorkbenchAdminExempt, SettingKeyImageWorkbenchCustomRetentionEnabled,
 	SettingKeyImageWorkbenchRetentionMinutes, SettingKeyImageWorkbenchTutorialURL,
+	SettingKeyImageWorkbenchDocumentationURL,
 }
 
 func parseImageWorkbenchNumber(raw string, fallback, max int) int {
 	n, err := strconv.Atoi(strings.TrimSpace(raw))
-	if err != nil || n < 1 || n > max {
+	if err != nil || n < 1 || (max > 0 && n > max) {
 		return fallback
 	}
 	return n
@@ -62,6 +75,7 @@ func parseImageWorkbenchRuntime(vals map[string]string) ImageWorkbenchRuntime {
 		Enabled:                !isFalseSettingValue(vals[SettingKeyImageWorkbenchEnabled]),
 		MaxConcurrent:          parseImageWorkbenchNumber(vals[SettingKeyImageWorkbenchMaxConcurrent], ImageWorkbenchMaxConcurrent, 100),
 		MaxImageSizeMB:         maxImageSizeMB,
+		MaxReferenceImages:     parseImageWorkbenchNumber(vals[SettingKeyImageWorkbenchMaxReferenceImages], ImageWorkbenchDefaultMaxReferenceImages, 0),
 		AdminExempt:            vals[SettingKeyImageWorkbenchAdminExempt] == "true",
 		CustomRetentionEnabled: vals[SettingKeyImageWorkbenchCustomRetentionEnabled] == "true",
 		RetentionMinutes:       15,
@@ -71,6 +85,9 @@ func parseImageWorkbenchRuntime(vals map[string]string) ImageWorkbenchRuntime {
 	}
 	if raw := strings.TrimSpace(vals[SettingKeyImageWorkbenchTutorialURL]); validImageWorkbenchTutorialURL(raw) {
 		r.TutorialURL = raw
+	}
+	if raw := strings.TrimSpace(vals[SettingKeyImageWorkbenchDocumentationURL]); validImageWorkbenchTutorialURL(raw) {
+		r.DocumentationURL = raw
 	}
 	return r
 }
@@ -94,6 +111,9 @@ func validImageWorkbenchTutorialURL(raw string) bool {
 }
 
 func ValidateImageWorkbenchSettings(settings *SystemSettings) error {
+	if settings.ImageWorkbenchMaxReferenceImages < 0 {
+		return infraerrors.BadRequest("INVALID_IMAGE_WORKBENCH_REFERENCE_LIMIT", "image workbench reference image limit must be a positive integer")
+	}
 	if settings.ImageWorkbenchMaxImageSizeMB < 0 {
 		return infraerrors.BadRequest("INVALID_IMAGE_WORKBENCH_IMAGE_SIZE", "image workbench image size limit must be a non-negative integer in MB")
 	}
@@ -105,6 +125,9 @@ func ValidateImageWorkbenchSettings(settings *SystemSettings) error {
 	}
 	if !validImageWorkbenchTutorialURL(strings.TrimSpace(settings.ImageWorkbenchTutorialURL)) {
 		return infraerrors.BadRequest("INVALID_IMAGE_WORKBENCH_TUTORIAL_URL", "image workbench tutorial must be an HTTP or HTTPS URL")
+	}
+	if !validImageWorkbenchTutorialURL(strings.TrimSpace(settings.ImageWorkbenchDocumentationURL)) {
+		return infraerrors.BadRequest("INVALID_IMAGE_WORKBENCH_DOCUMENTATION_URL", "image workbench documentation must be an HTTP or HTTPS URL")
 	}
 	return nil
 }

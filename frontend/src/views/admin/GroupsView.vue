@@ -882,6 +882,35 @@
           </button>
         </div>
 
+        <div v-if="['custom', 'composite'].includes(createForm.platform)" class="flex items-center justify-between gap-3 border-t pt-4">
+          <div class="min-w-0">
+            <label for="create-video-workbench-enabled" class="text-sm font-medium text-gray-700 dark:text-gray-300">
+              {{ t("admin.groups.videoWorkbench.title") }}
+            </label>
+            <p id="create-video-workbench-hint" class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              {{ t("admin.groups.videoWorkbench.hint") }}
+            </p>
+          </div>
+          <button
+            id="create-video-workbench-enabled"
+            type="button"
+            role="switch"
+            :aria-checked="createForm.video_workbench_enabled"
+            :aria-label="t('admin.groups.videoWorkbench.title')"
+            aria-describedby="create-video-workbench-hint"
+            @click="createForm.video_workbench_enabled = !createForm.video_workbench_enabled"
+            :class="[
+              'relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors',
+              createForm.video_workbench_enabled ? 'bg-primary-500' : 'bg-gray-300 dark:bg-dark-600',
+            ]"
+          >
+            <span :class="[
+              'inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform',
+              createForm.video_workbench_enabled ? 'translate-x-6' : 'translate-x-1',
+            ]" />
+          </button>
+        </div>
+
         <!-- 图片生成计费配置 -->
         <div
           v-if="supportsImagePricingPlatform(createForm.platform)"
@@ -2523,6 +2552,35 @@
             <span :class="[
               'inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform',
               editForm.image_workbench_enabled ? 'translate-x-6' : 'translate-x-1',
+            ]" />
+          </button>
+        </div>
+
+        <div v-if="['custom', 'composite'].includes(editForm.platform)" class="flex items-center justify-between gap-3 border-t pt-4">
+          <div class="min-w-0">
+            <label for="edit-video-workbench-enabled" class="text-sm font-medium text-gray-700 dark:text-gray-300">
+              {{ t("admin.groups.videoWorkbench.title") }}
+            </label>
+            <p id="edit-video-workbench-hint" class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              {{ t("admin.groups.videoWorkbench.hint") }}
+            </p>
+          </div>
+          <button
+            id="edit-video-workbench-enabled"
+            type="button"
+            role="switch"
+            :aria-checked="editForm.video_workbench_enabled"
+            :aria-label="t('admin.groups.videoWorkbench.title')"
+            aria-describedby="edit-video-workbench-hint"
+            @click="editForm.video_workbench_enabled = !editForm.video_workbench_enabled"
+            :class="[
+              'relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors',
+              editForm.video_workbench_enabled ? 'bg-primary-500' : 'bg-gray-300 dark:bg-dark-600',
+            ]"
+          >
+            <span :class="[
+              'inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform',
+              editForm.video_workbench_enabled ? 'translate-x-6' : 'translate-x-1',
             ]" />
           </button>
         </div>
@@ -4844,6 +4902,7 @@ const createForm = reactive({
   // 图片生成计费配置
   allow_image_generation: false,
   image_workbench_enabled: false,
+  video_workbench_enabled: false,
   allow_batch_image_generation: false,
   image_rate_independent: false,
   image_rate_multiplier: 1,
@@ -5200,6 +5259,7 @@ const editForm = reactive({
   // 图片生成计费配置
   allow_image_generation: false,
   image_workbench_enabled: false,
+  video_workbench_enabled: false,
   allow_batch_image_generation: false,
   image_rate_independent: false,
   image_rate_multiplier: 1,
@@ -5651,6 +5711,7 @@ const closeCreateModal = () => {
   createForm.monthly_limit_usd = null;
   createForm.allow_image_generation = false;
   createForm.image_workbench_enabled = false;
+  createForm.video_workbench_enabled = false;
   createForm.allow_batch_image_generation = false;
   createForm.image_rate_independent = false;
   createForm.image_rate_multiplier = 1;
@@ -5858,6 +5919,7 @@ const handleEdit = async (group: AdminGroup) => {
   editForm.model_pricing = groupPricingFromAPI(group.model_pricing);
   editForm.allow_image_generation = group.allow_image_generation ?? false;
   editForm.image_workbench_enabled = group.image_workbench_enabled ?? false;
+  editForm.video_workbench_enabled = group.video_workbench_enabled ?? false;
   editForm.allow_batch_image_generation =
     group.allow_batch_image_generation ?? false;
   editForm.image_rate_independent = group.image_rate_independent ?? false;

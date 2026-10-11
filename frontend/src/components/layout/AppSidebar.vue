@@ -225,6 +225,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAdminSettingsStore, useAppStore, useAuthStore, useOnboardingStore } from '@/stores'
 import VersionBadge from '@/components/common/VersionBadge.vue'
+import Icon from '@/components/icons/Icon.vue'
 import { sanitizeSvg } from '@/utils/sanitize'
 import { sanitizeUrl } from '@/utils/url'
 import { buildEmbeddedUrl, detectTheme } from '@/utils/embedded-url'
@@ -721,6 +722,7 @@ const ChevronDownIcon = {
 // yet. Admin-only flags (not in public settings) stay inline below.
 const flagChannelMonitor = makeSidebarFlag(FeatureFlags.channelMonitor)
 const flagImageWorkbench = makeSidebarFlag(FeatureFlags.imageWorkbench)
+const flagVideoWorkbench = makeSidebarFlag(FeatureFlags.videoWorkbench)
 const flagPayment = makeSidebarFlag(FeatureFlags.payment)
 const flagAvailableChannels = makeSidebarFlag(FeatureFlags.availableChannels)
 const flagLeaderboard = makeSidebarFlag(FeatureFlags.leaderboard)
@@ -756,6 +758,7 @@ function buildSelfNavItems(withDashboard: boolean): NavItem[] {
   items.push(
     { path: '/keys', label: t('nav.apiKeys'), icon: KeyIcon },
     { path: '/image-workbench', label: t('imageWorkbench.navLabel'), icon: BatchImageIcon, featureFlag: flagImageWorkbench },
+    { path: '/video-workbench', label: t('videoWorkbench.navLabel'), icon: { render: () => h(Icon, { name: 'play' }) }, featureFlag: flagVideoWorkbench },
     { path: '/batch-image', label: t('nav.batchImage'), icon: BatchImageIcon, hideInSimpleMode: true, featureFlag: flagBatchImageAccess },
     { path: '/usage', label: t('nav.usage'), icon: ChartIcon, hideInSimpleMode: true },
     { path: '/available-channels', label: t('nav.availableChannels'), icon: ChannelIcon, hideInSimpleMode: true, featureFlag: flagAvailableChannels },

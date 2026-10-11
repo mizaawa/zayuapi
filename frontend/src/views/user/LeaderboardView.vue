@@ -85,7 +85,7 @@
                       />
                       <span v-else>{{ avatarInitial(entry.display_name) }}</span>
                     </div>
-                    <span class="min-w-0 truncate">{{ entry.display_name }}</span>
+                    <span class="min-w-0 whitespace-normal [overflow-wrap:anywhere]">{{ entry.display_name }}</span>
                   </div>
                 </td>
                 <td class="px-3 py-3 text-right tabular-nums sm:px-5">${{ entry.actual_cost.toFixed(2) }}</td>

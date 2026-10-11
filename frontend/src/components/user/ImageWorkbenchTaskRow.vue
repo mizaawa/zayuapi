@@ -26,7 +26,9 @@
         :name="
           task.status === 'processing'
             ? 'refresh'
-            : task.status === 'failed'
+            : task.status === 'queued'
+              ? 'clock'
+              : task.status === 'failed'
               ? 'exclamationTriangle'
               : 'grid'
         "
@@ -185,14 +187,15 @@ const date = computed(() =>
   })
 )
 const duration = computed(() => {
-  const seconds = Math.max(0, (props.task.completed_at || props.now) - props.task.created_at)
+  if (props.task.status === 'queued') return '-'
+  const seconds = Math.max(0, (props.task.completed_at || props.now) - (props.task.started_at || props.task.created_at))
   return seconds < 60
     ? t('imageWorkbench.seconds', { count: seconds })
     : t('imageWorkbench.minutes', { count: Math.floor(seconds / 60) })
 })
 const remainingSeconds = computed(() => Math.max(0, props.task.expires_at - props.now))
 const remaining = computed(() => {
-  if (props.task.status === 'processing') return '-'
+  if (props.task.status === 'processing' || props.task.status === 'queued') return '-'
   if (!remainingSeconds.value) return t('imageWorkbench.expired')
   return remainingSeconds.value < 60
     ? t('imageWorkbench.underMinute')

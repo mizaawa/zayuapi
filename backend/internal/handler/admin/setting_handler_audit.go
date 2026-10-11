@@ -606,6 +606,9 @@ func diffSettings(before *service.SystemSettings, after *service.SystemSettings,
 	if before.ImageWorkbenchMaxImageSizeMB != after.ImageWorkbenchMaxImageSizeMB {
 		changed = append(changed, "image_workbench_max_image_size_mb")
 	}
+	if before.ImageWorkbenchMaxReferenceImages != after.ImageWorkbenchMaxReferenceImages {
+		changed = append(changed, "image_workbench_max_reference_images")
+	}
 	if before.ImageWorkbenchAdminExempt != after.ImageWorkbenchAdminExempt {
 		changed = append(changed, "image_workbench_admin_exempt")
 	}
@@ -617,6 +620,36 @@ func diffSettings(before *service.SystemSettings, after *service.SystemSettings,
 	}
 	if before.ImageWorkbenchTutorialURL != after.ImageWorkbenchTutorialURL {
 		changed = append(changed, "image_workbench_tutorial_url")
+	}
+	if before.ImageWorkbenchDocumentationURL != after.ImageWorkbenchDocumentationURL {
+		changed = append(changed, "image_workbench_documentation_url")
+	}
+	if before.VideoWorkbenchEnabled != after.VideoWorkbenchEnabled {
+		changed = append(changed, "video_workbench_enabled")
+	}
+	if before.VideoWorkbenchMaxConcurrent != after.VideoWorkbenchMaxConcurrent {
+		changed = append(changed, "video_workbench_max_concurrent")
+	}
+	if before.VideoWorkbenchMaxReferenceImages != after.VideoWorkbenchMaxReferenceImages {
+		changed = append(changed, "video_workbench_max_reference_images")
+	}
+	if before.VideoWorkbenchMaxReferenceVideos != after.VideoWorkbenchMaxReferenceVideos {
+		changed = append(changed, "video_workbench_max_reference_videos")
+	}
+	if before.VideoWorkbenchMaxReferenceAudios != after.VideoWorkbenchMaxReferenceAudios {
+		changed = append(changed, "video_workbench_max_reference_audios")
+	}
+	if before.VideoWorkbenchRetentionMinutes != after.VideoWorkbenchRetentionMinutes {
+		changed = append(changed, "video_workbench_retention_minutes")
+	}
+	if before.VideoWorkbenchTutorialURL != after.VideoWorkbenchTutorialURL {
+		changed = append(changed, "video_workbench_tutorial_url")
+	}
+	if before.VideoWorkbenchDocumentationURL != after.VideoWorkbenchDocumentationURL {
+		changed = append(changed, "video_workbench_documentation_url")
+	}
+	if before.VideoWorkbenchAnnouncement != after.VideoWorkbenchAnnouncement {
+		changed = append(changed, "video_workbench_announcement")
 	}
 	if before.ModelPlazaEnabled != after.ModelPlazaEnabled {
 		changed = append(changed, "model_plaza_enabled")

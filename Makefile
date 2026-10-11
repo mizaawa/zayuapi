@@ -14,6 +14,8 @@ FRONTEND_CRITICAL_VITEST := \
 	src/views/user/__tests__/KeysView.spec.ts \
 	src/views/user/__tests__/UsageView.spec.ts \
 	src/views/user/__tests__/ImageWorkbenchView.spec.ts \
+	src/views/user/__tests__/VideoWorkbenchView.spec.ts \
+	src/views/user/__tests__/LeaderboardView.spec.ts \
 	src/components/user/__tests__/ImageWorkbenchTaskRow.spec.ts \
 	src/utils/__tests__/imageWorkbench.spec.ts \
 	src/utils/__tests__/usageRequest.spec.ts \

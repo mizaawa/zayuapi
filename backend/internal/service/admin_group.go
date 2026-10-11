@@ -482,6 +482,7 @@ func (s *adminServiceImpl) CreateGroup(ctx context.Context, input *CreateGroupIn
 		MonthlyLimitUSD:                 monthlyLimit,
 		AllowImageGeneration:            allowImageGeneration,
 		ImageWorkbenchEnabled:           input.ImageWorkbenchEnabled,
+		VideoWorkbenchEnabled:           input.VideoWorkbenchEnabled && platform == PlatformComposite,
 		AllowBatchImageGeneration:       allowBatchImageGeneration,
 		ImageRateIndependent:            input.ImageRateIndependent,
 		ImageRateMultiplier:             imageRateMultiplier,
@@ -703,6 +704,12 @@ func (s *adminServiceImpl) UpdateGroup(ctx context.Context, id int64, input *Upd
 	}
 	if input.ImageWorkbenchEnabled != nil {
 		group.ImageWorkbenchEnabled = *input.ImageWorkbenchEnabled
+	}
+	if input.VideoWorkbenchEnabled != nil {
+		group.VideoWorkbenchEnabled = *input.VideoWorkbenchEnabled
+	}
+	if NormalizeGroupPlatform(group.Platform) != PlatformComposite {
+		group.VideoWorkbenchEnabled = false
 	}
 	if input.AllowBatchImageGeneration != nil {
 		group.AllowBatchImageGeneration = *input.AllowBatchImageGeneration

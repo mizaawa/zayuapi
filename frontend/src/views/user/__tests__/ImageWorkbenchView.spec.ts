@@ -27,7 +27,9 @@ vi.mock('vue-i18n', async () => ({
   ...await vi.importActual<typeof import('vue-i18n')>('vue-i18n'),
   useI18n: () => ({
     locale: ref('en'),
-    t: (key: string, params?: Record<string, unknown>) => params?.count !== undefined ? `${key}:${params.count}`
+    t: (key: string, params?: Record<string, unknown>) => key === 'imageWorkbench.referenceCount' ? `${key}:${params?.count}/${params?.max}`
+      : key === 'imageWorkbench.submitPartial' ? `${key}:${params?.created}/${params?.failed}`
+      : params?.count !== undefined ? `${key}:${params.count}`
       : params?.max !== undefined ? `${key}:${params.max}` : key,
   }),
 }))
@@ -47,13 +49,14 @@ function task(id: string, status: ImageTask['status'] = 'processing'): ImageTask
 }
 
 function tasksResponse(tasks: ImageTask[] = []): WorkbenchTasksResponse {
-  return { enabled: true, max_concurrent: 5, max_image_size_mb: 50, retention_seconds: 900, tasks }
+  return { enabled: true, max_concurrent: 5, max_image_size_mb: 50, max_reference_images: 6, retention_seconds: 900, tasks }
 }
 
 function deferred<T>() {
   let resolve!: (value: T) => void
-  const promise = new Promise<T>(res => { resolve = res })
-  return { promise, resolve }
+  let reject!: (error: unknown) => void
+  const promise = new Promise<T>((res, rej) => { resolve = res; reject = rej })
+  return { promise, resolve, reject }
 }
 
 const selectStub = defineComponent({
@@ -141,6 +144,97 @@ describe('ImageWorkbenchView', () => {
     await flushPromises()
   }
 
+  it.each([undefined, 0, -1, 1.5])('defaults an absent or invalid reference limit to six: %s', async (limit) => {
+    stubImageReading()
+    listTasks.mockResolvedValue({ ...tasksResponse(), max_reference_images: limit })
+    submitTask.mockResolvedValue(task('six-references'))
+    const wrapper = mountWorkbench()
+    await flushPromises()
+    for (let index = 0; index < 7; index++) await addReference(wrapper, 5)
+    expect(wrapper.findAll('.reference-image')).toHaveLength(6)
+    expect(wrapper.get('.reference-counter').text()).toBe('imageWorkbench.referenceCount:6/6')
+    expect(wrapper.find('.reference-add').exists()).toBe(false)
+    expect(showError).toHaveBeenCalledWith('imageWorkbench.referencesLimit:6')
+    await wrapper.get('#image-prompt').setValue('Six reference images')
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+    expect(submitTask).toHaveBeenCalledTimes(1)
+    expect(submitTask.mock.calls[0][2].images).toHaveLength(6)
+  })
+
+  it.each(['upload', 'paste', 'drop'])('enforces the configured reference count for %s', async (method) => {
+    stubImageReading()
+    listTasks.mockResolvedValue({ ...tasksResponse(), max_reference_images: 2 })
+    const wrapper = mountWorkbench()
+    await flushPromises()
+    const files = Array.from({ length: 3 }, (_, index) => new File(['image'], `reference-${index}.png`, { type: 'image/png' }))
+    if (method === 'upload') {
+      const input = wrapper.get('input[type="file"]')
+      Object.defineProperty(input.element, 'files', { value: files, configurable: true })
+      await input.trigger('change')
+    } else if (method === 'drop') {
+      await wrapper.get('.reference-strip').trigger('drop', { dataTransfer: { files } })
+    } else {
+      await wrapper.get('.image-workbench').trigger('paste', {
+        clipboardData: { items: files.map(file => ({ kind: 'file', type: file.type, getAsFile: () => file })) },
+      })
+    }
+    await flushPromises()
+    expect(wrapper.findAll('.reference-image')).toHaveLength(2)
+    expect(showError).toHaveBeenCalledWith('imageWorkbench.referencesLimit:2')
+  })
+
+  it('updates reference controls live and blocks excess selected references on submit', async () => {
+    stubImageReading()
+    const wrapper = mountWorkbench()
+    await flushPromises()
+    for (let index = 0; index < 3; index++) await addReference(wrapper, 5)
+    await wrapper.get('#image-prompt').setValue('A lighthouse')
+    listTasks.mockResolvedValue({ ...tasksResponse(), max_reference_images: 2 })
+    await vi.advanceTimersByTimeAsync(5000)
+    await flushPromises()
+    expect(wrapper.findAll('.reference-image')).toHaveLength(3)
+    expect(wrapper.get('.reference-counter').text()).toBe('imageWorkbench.referenceCount:3/2')
+    expect(wrapper.get('.validation-error').text()).toBe('imageWorkbench.referencesLimit:2')
+    expect(wrapper.get<HTMLButtonElement>('.create-task').element.disabled).toBe(true)
+    await wrapper.get('form').trigger('submit')
+    expect(submitTask).not.toHaveBeenCalled()
+    expect(wrapper.find('#guide-tab').exists()).toBe(false)
+    await wrapper.get('#workbench-tab').trigger('click')
+    await wrapper.get('.reference-image button').trigger('click')
+    expect(wrapper.get<HTMLButtonElement>('.create-task').element.disabled).toBe(false)
+    expect(wrapper.find('.validation-error').exists()).toBe(false)
+
+    listTasks.mockResolvedValue({ ...tasksResponse(), max_reference_images: 8 })
+    await vi.advanceTimersByTimeAsync(5000)
+    await flushPromises()
+    for (let index = 0; index < 6; index++) await addReference(wrapper, 5)
+    expect(wrapper.findAll('.reference-image')).toHaveLength(8)
+    expect(wrapper.get('.reference-counter').text()).toBe('imageWorkbench.referenceCount:8/8')
+    expect(wrapper.find('.reference-add').exists()).toBe(false)
+  })
+
+  it('rechecks the reference limit after an in-progress image read completes', async () => {
+    stubImageReading()
+    const wrapper = mountWorkbench()
+    await flushPromises()
+    await addReference(wrapper, 5)
+    let finishRead: (() => void) | undefined
+    vi.stubGlobal('FileReader', class {
+      result = 'data:image/png;base64,aW1hZ2U='
+      onload?: () => void
+      readAsDataURL() { finishRead = () => this.onload?.() }
+    })
+    await addReference(wrapper, 5)
+    listTasks.mockResolvedValue({ ...tasksResponse(), max_reference_images: 1 })
+    await vi.advanceTimersByTimeAsync(5000)
+    await flushPromises()
+    finishRead?.()
+    await flushPromises()
+    expect(wrapper.findAll('.reference-image')).toHaveLength(1)
+    expect(showError).toHaveBeenCalledWith('imageWorkbench.referencesLimit:1')
+  })
+
   it('accepts the 50 MB boundary and rejects an image one byte above it', async () => {
     stubImageReading()
     const wrapper = mountWorkbench()
@@ -161,13 +255,11 @@ describe('ImageWorkbenchView', () => {
     await addReference(wrapper, 51 * 1024 * 1024)
     expect(wrapper.findAll('button[aria-label="imageWorkbench.removeReference"]')).toHaveLength(1)
     expect(showError).not.toHaveBeenCalled()
-    await wrapper.get('#guide-tab').trigger('click')
-    expect(wrapper.text()).toContain('imageWorkbench.guideFormatsUnlimited')
+    expect(wrapper.find('#guide-tab').exists()).toBe(false)
 
     listTasks.mockResolvedValue({ ...tasksResponse(), max_image_size_mb: 20 })
     await vi.advanceTimersByTimeAsync(5000)
     await flushPromises()
-    expect(wrapper.text()).toContain('imageWorkbench.guideFormats:20')
     await wrapper.get('#workbench-tab').trigger('click')
     await wrapper.get('#image-prompt').setValue('A lighthouse')
     await wrapper.get('form').trigger('submit')
@@ -237,13 +329,13 @@ describe('ImageWorkbenchView', () => {
     expect(showError).not.toHaveBeenCalled()
   })
 
-  it('submits the selected parameters once and switches to the task list when accepted', async () => {
-    const pending = deferred<ImageTask>()
-    const created = task('created-task')
-    submitTask.mockReturnValue(pending.promise)
-    listTasks.mockResolvedValueOnce(tasksResponse()).mockResolvedValue(tasksResponse([created]))
+  it('dispatches three independent requests concurrently from one snapshot and retains every accepted task', async () => {
+    stubImageReading()
+    const pending = Array.from({ length: 3 }, () => deferred<ImageTask>())
+    pending.forEach(request => submitTask.mockReturnValueOnce(request.promise))
     const wrapper = mountWorkbench()
     await flushPromises()
+    await addReference(wrapper, 5)
     await wrapper.get('#image-prompt').setValue('  A coastal lighthouse  ')
     await clickButton(wrapper, 'imageWorkbench.high')
     await clickButton(wrapper, '16:9')
@@ -252,33 +344,93 @@ describe('ImageWorkbenchView', () => {
     await wrapper.get('form').trigger('submit')
     await wrapper.get('form').trigger('submit')
 
-    expect(submitTask).toHaveBeenCalledTimes(1)
-    expect(submitTask).toHaveBeenCalledWith('sk-studio', 'owner@example.com', {
-      prompt: 'A coastal lighthouse', model: 'gpt-image-2', quality: 'high', size: '2048x1152', n: 3,
-    }, expect.any(AbortSignal))
+    expect(submitTask).toHaveBeenCalledTimes(3)
+    for (const request of submitTask.mock.calls) {
+      expect(request).toEqual(['sk-studio', 'owner@example.com', {
+        prompt: 'A coastal lighthouse', model: 'gpt-image-2', quality: 'high', size: '2048x1152', n: 1,
+        images: [{ image_url: 'data:image/png;base64,aW1hZ2U=' }],
+      }])
+    }
     expect(wrapper.get<HTMLButtonElement>('.create-task').element.disabled).toBe(true)
-
-    pending.resolve(created)
+    await wrapper.get('#image-prompt').setValue('Changed prompt')
+    await clickButton(wrapper, 'imageWorkbench.low')
+    await clickButton(wrapper, 'imageWorkbench.imageCount:1')
+    await wrapper.get('.reference-image button').trigger('click')
+    pending[1]!.resolve(task('created-2', 'queued'))
     await flushPromises()
     expect(wrapper.get('#tasks-tab').attributes('aria-selected')).toBe('true')
-    expect(wrapper.find('[data-task-id="created-task"]').exists()).toBe(true)
-    expect(showSuccess).toHaveBeenCalledWith('imageWorkbench.created')
+    expect(wrapper.find('[data-task-id="created-2"]').exists()).toBe(true)
+    await vi.advanceTimersByTimeAsync(5000)
+    expect(wrapper.find('[data-task-id="created-2"]').exists()).toBe(true)
+    pending[0]!.resolve(task('created-1', 'queued'))
+    pending[2]!.resolve(task('created-3', 'queued'))
+    await flushPromises()
+    expect(wrapper.findAll('[data-task-id]').map(row => row.attributes('data-task-id')).sort())
+      .toEqual(['created-1', 'created-2', 'created-3'])
+    expect(submitTask.mock.calls[2]![2].prompt).toBe('A coastal lighthouse')
+    expect(submitTask.mock.calls[2]![2].images).toHaveLength(1)
+    expect(showSuccess).toHaveBeenCalledWith('imageWorkbench.createdMany:3')
+    expect(showError).not.toHaveBeenCalled()
   })
 
-  it('prevents a sixth active task and re-enables submission after one completes', async () => {
+  it('accepts new queued tasks while all execution slots are occupied', async () => {
     const active = Array.from({ length: 5 }, (_, index) => task(`active-${index}`))
     listTasks.mockResolvedValue(tasksResponse(active))
     const wrapper = mountWorkbench()
     await flushPromises()
     await wrapper.get('#image-prompt').setValue('A coastal lighthouse')
-    expect(wrapper.get<HTMLButtonElement>('.create-task').element.disabled).toBe(true)
-    await wrapper.get('form').trigger('submit')
-    expect(submitTask).not.toHaveBeenCalled()
-
-    listTasks.mockResolvedValue(tasksResponse([...active.slice(1), task('completed', 'completed')]))
-    await vi.advanceTimersByTimeAsync(3000)
-    await flushPromises()
+    submitTask.mockResolvedValue(task('waiting', 'queued'))
     expect(wrapper.get<HTMLButtonElement>('.create-task').element.disabled).toBe(false)
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+    expect(submitTask).toHaveBeenCalledTimes(1)
+    expect(wrapper.find('[data-task-id="waiting"] .status-queued').text()).toBe('imageWorkbench.queued')
+    expect(wrapper.findAll('[data-task-id="waiting"] .task-details dd').map(item => item.text())).toContain('-')
+    expect(wrapper.find('[data-task-id="waiting"] button[aria-label="imageWorkbench.delete"]').exists()).toBe(true)
+    expect(wrapper.get<HTMLButtonElement>('.create-task').element.disabled).toBe(false)
+  })
+
+  it('keeps accepted tasks after partial failure and reconciles an ambiguous response without retrying POSTs', async () => {
+    const created = [task('accepted-1', 'queued'), task('response-lost', 'queued'), task('accepted-3', 'queued')]
+    submitTask.mockResolvedValueOnce(created[0]).mockRejectedValueOnce(new Error('Network failure')).mockResolvedValueOnce(created[2])
+    listTasks.mockResolvedValueOnce(tasksResponse()).mockResolvedValue(tasksResponse(created))
+    const wrapper = mountWorkbench()
+    await flushPromises()
+    await wrapper.get('#image-prompt').setValue('A lighthouse')
+    await clickButton(wrapper, 'imageWorkbench.imageCount:3')
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+    expect(wrapper.findAll('[data-task-id]')).toHaveLength(3)
+    expect(showError).toHaveBeenCalledWith('imageWorkbench.submitPartial:2/1')
+    expect(showSuccess).not.toHaveBeenCalled()
+    await vi.advanceTimersByTimeAsync(6000)
+    expect(submitTask).toHaveBeenCalledTimes(3)
+  })
+
+  it('does not abort dispatched submissions on navigation and recovers accepted tasks on return', async () => {
+    const pending = Array.from({ length: 3 }, () => deferred<ImageTask>())
+    pending.forEach(request => submitTask.mockReturnValueOnce(request.promise))
+    const wrapper = mountWorkbench()
+    await flushPromises()
+    await wrapper.get('#image-prompt').setValue('A lighthouse')
+    await clickButton(wrapper, 'imageWorkbench.imageCount:3')
+    await wrapper.get('form').trigger('submit')
+    wrapper.unmount()
+    const created = pending.map((request, index) => {
+      const item = task(`accepted-${index}`, 'queued')
+      request.resolve(item)
+      return item
+    })
+    await flushPromises()
+    expect(submitTask.mock.calls.every(request => request[3] === undefined)).toBe(true)
+    expect(showSuccess).not.toHaveBeenCalled()
+    expect(showError).not.toHaveBeenCalled()
+    listTasks.mockResolvedValue(tasksResponse(created))
+    const recovered = mountWorkbench()
+    await flushPromises()
+    await recovered.get('#tasks-tab').trigger('click')
+    expect(recovered.findAll('[data-task-id]')).toHaveLength(3)
+    expect(submitTask).toHaveBeenCalledTimes(3)
   })
 
   it('rejects decimal custom ratios before sending a generation request', async () => {

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"strings"
 	"time"
 
@@ -26,6 +27,7 @@ type S3ImageStorage struct {
 
 var _ service.ImageStorage = (*S3ImageStorage)(nil)
 var _ service.ImageStorageCleaner = (*S3ImageStorage)(nil)
+var _ service.ImageStorageReader = (*S3ImageStorage)(nil)
 
 // NewS3ImageStorage 依据配置构造 S3 图片存储（调用方应先确认 cfg.Active()）。
 func NewS3ImageStorage(ctx context.Context, cfg *config.ImageStorageConfig) (*S3ImageStorage, error) {
@@ -80,6 +82,32 @@ func (s *S3ImageStorage) Save(ctx context.Context, key, contentType string, data
 		return "", fmt.Errorf("presign url: %w", err)
 	}
 	return result.URL, nil
+}
+
+// Read uses the administrator-configured endpoint, including private MinIO,
+// without exposing bucket URLs or signing credentials to the browser.
+func (s *S3ImageStorage) Read(ctx context.Context, key string, maxBytes int64) ([]byte, string, error) {
+	if maxBytes <= 0 {
+		return nil, "", fmt.Errorf("invalid image read limit")
+	}
+	finish := servertiming.ObserveDependency(ctx, "s3")
+	defer finish()
+	object, err := s.client.GetObject(ctx, &s3.GetObjectInput{Bucket: &s.bucket, Key: &key})
+	if err != nil {
+		return nil, "", fmt.Errorf("S3 GetObject: %w", err)
+	}
+	defer func() { _ = object.Body.Close() }()
+	if aws.ToInt64(object.ContentLength) > maxBytes {
+		return nil, "", fmt.Errorf("stored image exceeds read limit")
+	}
+	data, err := io.ReadAll(io.LimitReader(object.Body, maxBytes+1))
+	if err != nil {
+		return nil, "", fmt.Errorf("read stored image: %w", err)
+	}
+	if int64(len(data)) > maxBytes {
+		return nil, "", fmt.Errorf("stored image exceeds read limit")
+	}
+	return data, aws.ToString(object.ContentType), nil
 }
 
 // DeletePrefix removes every object below prefix in bounded batches. The

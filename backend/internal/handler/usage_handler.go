@@ -38,11 +38,11 @@ type leaderboardResponse struct {
 	Participating bool                       `json:"participating"`
 }
 
-func maskLeaderboardIdentity(username, email string) string {
-	value := strings.TrimSpace(username)
-	if value == "" {
-		value = strings.TrimSpace(email)
+func leaderboardDisplayName(username, email string) string {
+	if name := strings.TrimSpace(username); name != "" {
+		return name
 	}
+	value := strings.TrimSpace(email)
 	if value == "" {
 		return "***"
 	}
@@ -537,7 +537,7 @@ func (h *UsageHandler) GetLeaderboard(c *gin.Context) {
 	entries := make([]leaderboardEntryResponse, 0, len(data.Ranking))
 	for i, item := range data.Ranking {
 		entries = append(entries, leaderboardEntryResponse{
-			Rank: int64(i + 1), DisplayName: maskLeaderboardIdentity(item.Username, item.Email),
+			Rank: int64(i + 1), DisplayName: leaderboardDisplayName(item.Username, item.Email),
 			AvatarURL:  strings.TrimSpace(item.AvatarURL),
 			ActualCost: item.ActualCost, Requests: item.Requests, Tokens: item.Tokens,
 		})

@@ -344,10 +344,21 @@ type UpdateSettingsRequest struct {
 	ImageWorkbenchEnabled                *bool   `json:"image_workbench_enabled"`
 	ImageWorkbenchMaxConcurrent          *int    `json:"image_workbench_max_concurrent" binding:"omitempty,min=1,max=100"`
 	ImageWorkbenchMaxImageSizeMB         *int    `json:"image_workbench_max_image_size_mb" binding:"omitempty,min=0"`
+	ImageWorkbenchMaxReferenceImages     *int    `json:"image_workbench_max_reference_images" binding:"omitempty,min=1"`
 	ImageWorkbenchAdminExempt            *bool   `json:"image_workbench_admin_exempt"`
 	ImageWorkbenchCustomRetentionEnabled *bool   `json:"image_workbench_custom_retention_enabled"`
 	ImageWorkbenchRetentionMinutes       *int    `json:"image_workbench_retention_minutes" binding:"omitempty,min=1,max=1440"`
 	ImageWorkbenchTutorialURL            *string `json:"image_workbench_tutorial_url"`
+	ImageWorkbenchDocumentationURL       *string `json:"image_workbench_documentation_url"`
+	VideoWorkbenchEnabled                *bool   `json:"video_workbench_enabled"`
+	VideoWorkbenchMaxConcurrent          *int    `json:"video_workbench_max_concurrent" binding:"omitempty,min=1,max=100"`
+	VideoWorkbenchMaxReferenceImages     *int    `json:"video_workbench_max_reference_images" binding:"omitempty,min=1,max=100"`
+	VideoWorkbenchMaxReferenceVideos     *int    `json:"video_workbench_max_reference_videos" binding:"omitempty,min=1,max=100"`
+	VideoWorkbenchMaxReferenceAudios     *int    `json:"video_workbench_max_reference_audios" binding:"omitempty,min=1,max=100"`
+	VideoWorkbenchRetentionMinutes       *int    `json:"video_workbench_retention_minutes" binding:"omitempty,min=1,max=10080"`
+	VideoWorkbenchTutorialURL            *string `json:"video_workbench_tutorial_url"`
+	VideoWorkbenchDocumentationURL       *string `json:"video_workbench_documentation_url"`
+	VideoWorkbenchAnnouncement           *string `json:"video_workbench_announcement"`
 
 	// Available Channels feature switch (user-facing)
 	AvailableChannelsEnabled *bool `json:"available_channels_enabled"`
@@ -510,6 +521,10 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		return
 	}
 	channelMonitorAnnouncement := previousSettings.ChannelMonitorAnnouncement
+	if req.ImageWorkbenchMaxReferenceImages != nil && *req.ImageWorkbenchMaxReferenceImages < 1 {
+		response.BadRequest(c, "Image workbench reference image limit must be a positive integer")
+		return
+	}
 	if req.ImageWorkbenchMaxImageSizeMB != nil && *req.ImageWorkbenchMaxImageSizeMB < 0 {
 		response.BadRequest(c, "Image workbench image size limit must be a non-negative integer in MB")
 		return
@@ -1951,6 +1966,12 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 			}
 			return previousSettings.ImageWorkbenchMaxImageSizeMB
 		}(),
+		ImageWorkbenchMaxReferenceImages: func() int {
+			if req.ImageWorkbenchMaxReferenceImages != nil {
+				return *req.ImageWorkbenchMaxReferenceImages
+			}
+			return previousSettings.ImageWorkbenchMaxReferenceImages
+		}(),
 		ImageWorkbenchAdminExempt: func() bool {
 			if req.ImageWorkbenchAdminExempt != nil {
 				return *req.ImageWorkbenchAdminExempt
@@ -1974,6 +1995,66 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 				return strings.TrimSpace(*req.ImageWorkbenchTutorialURL)
 			}
 			return previousSettings.ImageWorkbenchTutorialURL
+		}(),
+		ImageWorkbenchDocumentationURL: func() string {
+			if req.ImageWorkbenchDocumentationURL != nil {
+				return strings.TrimSpace(*req.ImageWorkbenchDocumentationURL)
+			}
+			return previousSettings.ImageWorkbenchDocumentationURL
+		}(),
+		VideoWorkbenchEnabled: func() bool {
+			if req.VideoWorkbenchEnabled != nil {
+				return *req.VideoWorkbenchEnabled
+			}
+			return previousSettings.VideoWorkbenchEnabled
+		}(),
+		VideoWorkbenchMaxConcurrent: func() int {
+			if req.VideoWorkbenchMaxConcurrent != nil {
+				return *req.VideoWorkbenchMaxConcurrent
+			}
+			return previousSettings.VideoWorkbenchMaxConcurrent
+		}(),
+		VideoWorkbenchMaxReferenceImages: func() int {
+			if req.VideoWorkbenchMaxReferenceImages != nil {
+				return *req.VideoWorkbenchMaxReferenceImages
+			}
+			return previousSettings.VideoWorkbenchMaxReferenceImages
+		}(),
+		VideoWorkbenchMaxReferenceVideos: func() int {
+			if req.VideoWorkbenchMaxReferenceVideos != nil {
+				return *req.VideoWorkbenchMaxReferenceVideos
+			}
+			return previousSettings.VideoWorkbenchMaxReferenceVideos
+		}(),
+		VideoWorkbenchMaxReferenceAudios: func() int {
+			if req.VideoWorkbenchMaxReferenceAudios != nil {
+				return *req.VideoWorkbenchMaxReferenceAudios
+			}
+			return previousSettings.VideoWorkbenchMaxReferenceAudios
+		}(),
+		VideoWorkbenchRetentionMinutes: func() int {
+			if req.VideoWorkbenchRetentionMinutes != nil {
+				return *req.VideoWorkbenchRetentionMinutes
+			}
+			return previousSettings.VideoWorkbenchRetentionMinutes
+		}(),
+		VideoWorkbenchTutorialURL: func() string {
+			if req.VideoWorkbenchTutorialURL != nil {
+				return *req.VideoWorkbenchTutorialURL
+			}
+			return previousSettings.VideoWorkbenchTutorialURL
+		}(),
+		VideoWorkbenchDocumentationURL: func() string {
+			if req.VideoWorkbenchDocumentationURL != nil {
+				return *req.VideoWorkbenchDocumentationURL
+			}
+			return previousSettings.VideoWorkbenchDocumentationURL
+		}(),
+		VideoWorkbenchAnnouncement: func() string {
+			if req.VideoWorkbenchAnnouncement != nil {
+				return *req.VideoWorkbenchAnnouncement
+			}
+			return previousSettings.VideoWorkbenchAnnouncement
 		}(),
 		AvailableChannelsEnabled: func() bool {
 			if req.AvailableChannelsEnabled != nil {
@@ -2436,10 +2517,21 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		ImageWorkbenchEnabled:                updatedSettings.ImageWorkbenchEnabled,
 		ImageWorkbenchMaxConcurrent:          updatedSettings.ImageWorkbenchMaxConcurrent,
 		ImageWorkbenchMaxImageSizeMB:         updatedSettings.ImageWorkbenchMaxImageSizeMB,
+		ImageWorkbenchMaxReferenceImages:     updatedSettings.ImageWorkbenchMaxReferenceImages,
 		ImageWorkbenchAdminExempt:            updatedSettings.ImageWorkbenchAdminExempt,
 		ImageWorkbenchCustomRetentionEnabled: updatedSettings.ImageWorkbenchCustomRetentionEnabled,
 		ImageWorkbenchRetentionMinutes:       updatedSettings.ImageWorkbenchRetentionMinutes,
 		ImageWorkbenchTutorialURL:            updatedSettings.ImageWorkbenchTutorialURL,
+		ImageWorkbenchDocumentationURL:       updatedSettings.ImageWorkbenchDocumentationURL,
+		VideoWorkbenchEnabled:                updatedSettings.VideoWorkbenchEnabled,
+		VideoWorkbenchMaxConcurrent:          updatedSettings.VideoWorkbenchMaxConcurrent,
+		VideoWorkbenchMaxReferenceImages:     updatedSettings.VideoWorkbenchMaxReferenceImages,
+		VideoWorkbenchMaxReferenceVideos:     updatedSettings.VideoWorkbenchMaxReferenceVideos,
+		VideoWorkbenchMaxReferenceAudios:     updatedSettings.VideoWorkbenchMaxReferenceAudios,
+		VideoWorkbenchRetentionMinutes:       updatedSettings.VideoWorkbenchRetentionMinutes,
+		VideoWorkbenchTutorialURL:            updatedSettings.VideoWorkbenchTutorialURL,
+		VideoWorkbenchDocumentationURL:       updatedSettings.VideoWorkbenchDocumentationURL,
+		VideoWorkbenchAnnouncement:           updatedSettings.VideoWorkbenchAnnouncement,
 
 		AvailableChannelsEnabled: updatedSettings.AvailableChannelsEnabled,
 		LeaderboardEnabled:       updatedSettings.LeaderboardEnabled,

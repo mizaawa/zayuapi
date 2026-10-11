@@ -94,6 +94,11 @@ function defineFlag<K extends keyof PublicSettings>(
  * public-settings-driven switch; see the "Adding a new flag" checklist above.
  */
 export const FeatureFlags = {
+	videoWorkbench: defineFlag({
+	  key: 'video_workbench_enabled',
+	  mode: 'opt-in',
+	  label: 'Video Workbench',
+	}),
   imageWorkbench: defineFlag({
     key: 'image_workbench_enabled',
     mode: 'opt-out',

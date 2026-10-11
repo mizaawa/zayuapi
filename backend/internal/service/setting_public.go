@@ -235,10 +235,21 @@ func (s *SettingService) GetPublicSettings(ctx context.Context) (*PublicSettings
 		SettingKeyImageWorkbenchEnabled,
 		SettingKeyImageWorkbenchMaxConcurrent,
 		SettingKeyImageWorkbenchMaxImageSizeMB,
+		SettingKeyImageWorkbenchMaxReferenceImages,
 		SettingKeyImageWorkbenchAdminExempt,
 		SettingKeyImageWorkbenchCustomRetentionEnabled,
 		SettingKeyImageWorkbenchRetentionMinutes,
 		SettingKeyImageWorkbenchTutorialURL,
+		SettingKeyImageWorkbenchDocumentationURL,
+		SettingKeyVideoWorkbenchEnabled,
+		SettingKeyVideoWorkbenchMaxConcurrent,
+		SettingKeyVideoWorkbenchMaxReferenceImages,
+		SettingKeyVideoWorkbenchMaxReferenceVideos,
+		SettingKeyVideoWorkbenchMaxReferenceAudios,
+		SettingKeyVideoWorkbenchRetentionMinutes,
+		SettingKeyVideoWorkbenchTutorialURL,
+		SettingKeyVideoWorkbenchDocumentationURL,
+		SettingKeyVideoWorkbenchAnnouncement,
 		SettingKeyAvailableChannelsEnabled,
 		SettingKeyLeaderboardEnabled,
 		SettingKeyModelPlazaEnabled,
@@ -304,6 +315,7 @@ func (s *SettingService) GetPublicSettings(ctx context.Context) (*PublicSettings
 	}
 
 	workbench := parseImageWorkbenchRuntime(settings)
+	videoWorkbench := parseVideoWorkbenchRuntime(settings)
 	return &PublicSettings{
 		RegistrationEnabled:              settings[SettingKeyRegistrationEnabled] == "true",
 		RegistrationAnnouncementEnabled:  settings[SettingKeyRegistrationAnnouncementEnabled] == "true",
@@ -369,10 +381,21 @@ func (s *SettingService) GetPublicSettings(ctx context.Context) (*PublicSettings
 		ImageWorkbenchEnabled:                workbench.Enabled,
 		ImageWorkbenchMaxConcurrent:          workbench.MaxConcurrent,
 		ImageWorkbenchMaxImageSizeMB:         workbench.MaxImageSizeMB,
+		ImageWorkbenchMaxReferenceImages:     workbench.ReferenceImageLimit(),
 		ImageWorkbenchAdminExempt:            workbench.AdminExempt,
 		ImageWorkbenchCustomRetentionEnabled: workbench.CustomRetentionEnabled,
 		ImageWorkbenchRetentionMinutes:       workbench.RetentionMinutes,
 		ImageWorkbenchTutorialURL:            workbench.TutorialURL,
+		ImageWorkbenchDocumentationURL:       workbench.DocumentationURL,
+		VideoWorkbenchEnabled:                videoWorkbench.Enabled,
+		VideoWorkbenchMaxConcurrent:          videoWorkbench.MaxConcurrent,
+		VideoWorkbenchMaxReferenceImages:     videoWorkbench.MaxReferenceImages,
+		VideoWorkbenchMaxReferenceVideos:     videoWorkbench.MaxReferenceVideos,
+		VideoWorkbenchMaxReferenceAudios:     videoWorkbench.MaxReferenceAudios,
+		VideoWorkbenchRetentionMinutes:       videoWorkbench.RetentionMinutes,
+		VideoWorkbenchTutorialURL:            videoWorkbench.TutorialURL,
+		VideoWorkbenchDocumentationURL:       videoWorkbench.DocumentationURL,
+		VideoWorkbenchAnnouncement:           videoWorkbench.Announcement,
 
 		AvailableChannelsEnabled: settings[SettingKeyAvailableChannelsEnabled] == "true",
 		LeaderboardEnabled:       settings[SettingKeyLeaderboardEnabled] == "true",
@@ -598,10 +621,21 @@ type PublicSettingsInjectionPayload struct {
 	ImageWorkbenchEnabled                bool   `json:"image_workbench_enabled"`
 	ImageWorkbenchMaxConcurrent          int    `json:"image_workbench_max_concurrent"`
 	ImageWorkbenchMaxImageSizeMB         int    `json:"image_workbench_max_image_size_mb"`
+	ImageWorkbenchMaxReferenceImages     int    `json:"image_workbench_max_reference_images"`
 	ImageWorkbenchAdminExempt            bool   `json:"image_workbench_admin_exempt"`
 	ImageWorkbenchCustomRetentionEnabled bool   `json:"image_workbench_custom_retention_enabled"`
 	ImageWorkbenchRetentionMinutes       int    `json:"image_workbench_retention_minutes"`
 	ImageWorkbenchTutorialURL            string `json:"image_workbench_tutorial_url"`
+	ImageWorkbenchDocumentationURL       string `json:"image_workbench_documentation_url"`
+	VideoWorkbenchEnabled                bool   `json:"video_workbench_enabled"`
+	VideoWorkbenchMaxConcurrent          int    `json:"video_workbench_max_concurrent"`
+	VideoWorkbenchMaxReferenceImages     int    `json:"video_workbench_max_reference_images"`
+	VideoWorkbenchMaxReferenceVideos     int    `json:"video_workbench_max_reference_videos"`
+	VideoWorkbenchMaxReferenceAudios     int    `json:"video_workbench_max_reference_audios"`
+	VideoWorkbenchRetentionMinutes       int    `json:"video_workbench_retention_minutes"`
+	VideoWorkbenchTutorialURL            string `json:"video_workbench_tutorial_url"`
+	VideoWorkbenchDocumentationURL       string `json:"video_workbench_documentation_url"`
+	VideoWorkbenchAnnouncement           string `json:"video_workbench_announcement"`
 	AvailableChannelsEnabled             bool   `json:"available_channels_enabled"`
 	LeaderboardEnabled                   bool   `json:"leaderboard_enabled"`
 	ModelPlazaEnabled                    bool   `json:"model_plaza_enabled"`
@@ -686,10 +720,21 @@ func (s *SettingService) GetPublicSettingsForInjection(ctx context.Context) (any
 		ImageWorkbenchEnabled:                settings.ImageWorkbenchEnabled,
 		ImageWorkbenchMaxConcurrent:          settings.ImageWorkbenchMaxConcurrent,
 		ImageWorkbenchMaxImageSizeMB:         settings.ImageWorkbenchMaxImageSizeMB,
+		ImageWorkbenchMaxReferenceImages:     settings.ImageWorkbenchMaxReferenceImages,
 		ImageWorkbenchAdminExempt:            settings.ImageWorkbenchAdminExempt,
 		ImageWorkbenchCustomRetentionEnabled: settings.ImageWorkbenchCustomRetentionEnabled,
 		ImageWorkbenchRetentionMinutes:       settings.ImageWorkbenchRetentionMinutes,
 		ImageWorkbenchTutorialURL:            settings.ImageWorkbenchTutorialURL,
+		ImageWorkbenchDocumentationURL:       settings.ImageWorkbenchDocumentationURL,
+		VideoWorkbenchEnabled:                settings.VideoWorkbenchEnabled,
+		VideoWorkbenchMaxConcurrent:          settings.VideoWorkbenchMaxConcurrent,
+		VideoWorkbenchMaxReferenceImages:     settings.VideoWorkbenchMaxReferenceImages,
+		VideoWorkbenchMaxReferenceVideos:     settings.VideoWorkbenchMaxReferenceVideos,
+		VideoWorkbenchMaxReferenceAudios:     settings.VideoWorkbenchMaxReferenceAudios,
+		VideoWorkbenchRetentionMinutes:       settings.VideoWorkbenchRetentionMinutes,
+		VideoWorkbenchTutorialURL:            settings.VideoWorkbenchTutorialURL,
+		VideoWorkbenchDocumentationURL:       settings.VideoWorkbenchDocumentationURL,
+		VideoWorkbenchAnnouncement:           settings.VideoWorkbenchAnnouncement,
 		AvailableChannelsEnabled:             settings.AvailableChannelsEnabled,
 		LeaderboardEnabled:                   settings.LeaderboardEnabled,
 		ModelPlazaEnabled:                    settings.ModelPlazaEnabled,

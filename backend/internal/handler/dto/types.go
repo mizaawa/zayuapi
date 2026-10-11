@@ -126,6 +126,7 @@ type Group struct {
 	// 图片生成计费配置（仅 antigravity 平台使用）
 	AllowImageGeneration         bool    `json:"allow_image_generation"`
 	ImageWorkbenchEnabled        bool    `json:"image_workbench_enabled"`
+	VideoWorkbenchEnabled        bool    `json:"video_workbench_enabled"`
 	AllowBatchImageGeneration    bool    `json:"allow_batch_image_generation"`
 	ImageRateIndependent         bool    `json:"image_rate_independent"`
 	ImageRateMultiplier          float64 `json:"image_rate_multiplier"`

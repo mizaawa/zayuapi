@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -73,24 +74,26 @@ func TestImageWorkbenchSubmissionRequiresGroupDeclaration(t *testing.T) {
 }
 
 func TestImageWorkbenchMetadataValidation(t *testing.T) {
-	_, err := parseImageWorkbenchMetadata("application/json", []byte(`{"model":"gpt-image-2","prompt":"`+strings.Repeat("\u753b", 32000)+`"}`), 50)
+	_, err := parseImageWorkbenchMetadata("application/json", []byte(`{"model":"gpt-image-2","prompt":"`+strings.Repeat("\u753b", 32000)+`"}`), 50, 6)
 	require.NoError(t, err)
-	for _, count := range []string{"1", "3", "5", "10", "20"} {
-		metadata, err := parseImageWorkbenchMetadata("application/json", []byte(`{"model":"gpt-image-2","prompt":"test","n":`+count+`}`), 50)
+	for _, count := range []string{"1"} {
+		metadata, err := parseImageWorkbenchMetadata("application/json", []byte(`{"model":"gpt-image-2","prompt":"test","n":`+count+`}`), 50, 6)
 		require.NoError(t, err)
 		require.Equal(t, "auto", metadata.Quality)
 	}
 	for _, payload := range []string{
 		`{}`, `{"model":"gpt-image-2","prompt":" "}`,
 		`{"model":"gpt-image-2","prompt":"test","n":2}`,
+		`{"model":"gpt-image-2","prompt":"test","n":3}`,
+		`{"model":"gpt-image-2","prompt":"test","n":20}`,
 		`{"model":"gpt-image-2","prompt":"test","quality":"invalid"}`,
 		`{"model":"gpt-image-2","prompt":"test","images":[{},{},{}]}`,
 		`{"model":"gpt-image-2","prompt":"` + strings.Repeat("a", 32001) + `"}`,
 	} {
-		_, err := parseImageWorkbenchMetadata("application/json", []byte(payload), 50)
+		_, err := parseImageWorkbenchMetadata("application/json", []byte(payload), 50, 6)
 		require.Error(t, err)
 	}
-	_, err = parseImageWorkbenchMetadata("multipart/form-data; boundary=test", []byte(`{}`), 50)
+	_, err = parseImageWorkbenchMetadata("multipart/form-data; boundary=test", []byte(`{}`), 50, 6)
 	require.Error(t, err)
 }
 
@@ -112,7 +115,7 @@ func TestImageWorkbenchReferenceSizeBoundary(t *testing.T) {
 				"images": []map[string]string{{"image_url": imageURL}, {"image_url": imageURL}},
 			})
 			require.NoError(t, err)
-			_, err = parseImageWorkbenchMetadata("application/json", payload, tc.limit)
+			_, err = parseImageWorkbenchMetadata("application/json", payload, tc.limit, 6)
 			if tc.valid {
 				require.NoError(t, err)
 			} else {
@@ -125,7 +128,7 @@ func TestImageWorkbenchReferenceSizeBoundary(t *testing.T) {
 			"model": "gpt-image-2", "prompt": "test", "images": []map[string]string{{"image_url": imageURL}},
 		})
 		require.NoError(t, err)
-		_, err = parseImageWorkbenchMetadata("application/json", payload, 0)
+		_, err = parseImageWorkbenchMetadata("application/json", payload, 0, 6)
 		require.Error(t, err, imageURL)
 	}
 }
@@ -162,4 +165,102 @@ func TestImageWorkbenchRejectsOversizeBeforeCreatingTask(t *testing.T) {
 	require.Equal(t, http.StatusBadRequest, rec.Code, rec.Body.String())
 	require.Contains(t, rec.Body.String(), "1 MB")
 	require.Empty(t, store.tasks)
+}
+
+func workbenchReferencePayload(t *testing.T, count int) []byte {
+	t.Helper()
+	images := make([]map[string]string, count)
+	for i := range images {
+		images[i] = map[string]string{"image_url": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII="}
+	}
+	payload, err := json.Marshal(map[string]any{"model": "gpt-image-2", "prompt": "test", "images": images})
+	require.NoError(t, err)
+	return payload
+}
+
+func TestImageWorkbenchReferenceCountBoundary(t *testing.T) {
+	for _, limit := range []int{1, 6, 8} {
+		for _, count := range []int{0, limit, limit + 1} {
+			_, err := parseImageWorkbenchMetadata("application/json", workbenchReferencePayload(t, count), 50, limit)
+			if count <= limit {
+				require.NoError(t, err)
+			} else {
+				require.ErrorContains(t, err, "reference images are allowed")
+			}
+		}
+	}
+}
+
+func TestImageWorkbenchReferenceLimitChangesBeforeSubmission(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	store := &localWorkbenchHandlerStore{asyncImageMemoryStore{tasks: make(map[string]*service.ImageTaskRecord)}}
+	svc := service.NewImageTaskServiceWithUploader(store, nil, time.Hour, time.Minute)
+	var limit atomic.Int64
+	svc.SetWorkbenchSettingsResolver(func(context.Context) service.ImageWorkbenchRuntime {
+		return service.ImageWorkbenchRuntime{Enabled: true, MaxConcurrent: 5, MaxImageSizeMB: 50, MaxReferenceImages: int(limit.Load()), RetentionMinutes: 15}
+	})
+	h := NewAsyncImageHandler(svc, nil)
+	executed := make(chan struct{}, 2)
+	h.execute = func(_ string, c *gin.Context) {
+		executed <- struct{}{}
+		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"message": "local fixture"}})
+	}
+	router := gin.New()
+	router.Use(func(c *gin.Context) {
+		c.Set(string(middleware2.ContextKeyUser), middleware2.AuthSubject{UserID: 2})
+		c.Set(string(middleware2.ContextKeyAPIKey), &service.APIKey{
+			ID: 1, UserID: 2, User: &service.User{ID: 2, Email: "owner@example.com"},
+			Group: &service.Group{ID: 3, Platform: service.PlatformOpenAI, AllowImageGeneration: true, ImageWorkbenchEnabled: true},
+		})
+		c.Next()
+	})
+	router.POST("/v1/images/edits/async", h.Submit)
+	router.GET("/api/v1/image-workbench/tasks", h.ListWorkbench)
+	for _, tc := range []struct {
+		limit, count, status int
+	}{
+		{6, 7, http.StatusBadRequest},
+		{6, 6, http.StatusAccepted},
+		{2, 3, http.StatusBadRequest},
+		{8, 8, http.StatusAccepted},
+	} {
+		limit.Store(int64(tc.limit))
+		list := httptest.NewRecorder()
+		router.ServeHTTP(list, httptest.NewRequest(http.MethodGet, "/api/v1/image-workbench/tasks", nil))
+		require.Equal(t, http.StatusOK, list.Code, list.Body.String())
+		var response struct {
+			Data struct {
+				MaxReferenceImages int `json:"max_reference_images"`
+			} `json:"data"`
+		}
+		require.NoError(t, json.Unmarshal(list.Body.Bytes(), &response))
+		require.Equal(t, tc.limit, response.Data.MaxReferenceImages)
+		req := httptest.NewRequest(http.MethodPost, "/v1/images/edits/async", strings.NewReader(string(workbenchReferencePayload(t, tc.count))))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set(imageOwnerEmailHeader, "owner@example.com")
+		req.Header.Set(imageWorkbenchHeader, "true")
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+		require.Equal(t, tc.status, rec.Code, rec.Body.String())
+		if tc.status == http.StatusAccepted {
+			select {
+			case <-executed:
+			case <-time.After(time.Second):
+				t.Fatal("reference images did not reach local execution")
+			}
+			var task service.ImageTask
+			require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &task))
+			require.Eventually(t, func() bool {
+				result, err := svc.Get(context.Background(), service.ImageTaskOwner{UserID: 2, APIKeyID: 1, UserEmail: "owner@example.com"}, task.ID)
+				return err == nil && result.Status == service.ImageTaskStatusFailed
+			}, time.Second, time.Millisecond)
+		} else {
+			require.Contains(t, rec.Body.String(), "reference images are allowed")
+			select {
+			case <-executed:
+				t.Fatal("excess references reached execution")
+			default:
+			}
+		}
+	}
 }

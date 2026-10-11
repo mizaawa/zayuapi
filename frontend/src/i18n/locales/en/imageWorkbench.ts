@@ -1,5 +1,6 @@
 export default {
   imageWorkbench: {
+    documentation: 'API Docs',
     title: 'Image Workbench',
     navLabel: 'Image Generation',
     workbench: 'Workbench',
@@ -10,7 +11,7 @@ export default {
     references: 'References',
     addReference: 'Add reference image',
     removeReference: 'Remove reference image',
-    referenceCount: '{count} / 2',
+    referenceCount: '{count} / {max}',
     apiKey: 'API key',
     chooseKey: 'Select an API key',
     model: 'Model',
@@ -32,12 +33,13 @@ export default {
     activeCount: '{count} / {max} running',
     outputSize: 'Output size',
     ready: 'Ready',
+    queued: 'Queued',
     processing: 'Generating',
     completed: 'Completed',
     failed: 'Failed',
     expired: 'Expired',
     taskNotice:
-      'Images are generated in the cloud. Submitted tasks keep running after you leave. Up to {max} tasks can run at once. Results expire {minutes} minutes after completion.',
+      'Images are generated in the cloud. Submitted tasks keep running after you leave. Up to {max} tasks run at once; additional tasks wait in the queue. Results expire {minutes} minutes after completion.',
     emptyTasks: 'No image tasks yet',
     emptyFiltered: 'No matching tasks',
     all: 'All',
@@ -64,15 +66,16 @@ export default {
     tasksError: 'Could not load tasks. Waiting to reconnect.',
     unavailable:
       'Image generation is unavailable. Ask an administrator to check storage directory permissions and free disk space.',
-    referencesLimit: 'You can add up to 2 reference images',
+    referencesLimit: 'You can add up to {max} reference images',
     referenceType: 'Only PNG, JPEG and WebP images are supported',
     referenceSize: 'Each reference image must be {max} MB or smaller',
     referenceRead: 'Could not read this image. Select it again.',
     invalidRatio: 'Use integers from 1 to 8192 and a ratio between 1:64 and 64:1',
     promptRequired: 'Enter a prompt first',
     selectionRequired: 'Select an API key and a model',
-    concurrentLimit: '{max} tasks are already running. Wait for a task to finish.',
     created: 'Image task created',
+    createdMany: '{count} independent image tasks created',
+    submitPartial: '{created} tasks confirmed; {failed} requests could not be confirmed. Check the task list before retrying to avoid duplicate images.',
     submitError: 'Could not create image task',
     downloadError: 'Download failed. Try again.',
     deleteError: 'Could not delete task. Try again.',
@@ -84,10 +87,10 @@ export default {
       'The menu lists your available image-enabled API keys. Selecting a key loads its available image models.',
     guideStep2: 'Add your prompt and references',
     guideDetail2:
-      'Describe the subject, composition, style and any text. Add up to 2 references from your files or paste images from your clipboard.',
+      'Describe the subject, composition, style and any text. Add up to {max} references from your files or paste images from your clipboard.',
     guideStep3: 'Set parameters and create a task',
     guideDetail3:
-      'Choose quality, aspect ratio, resolution and quantity. Custom ratios accept positive integers. Supported sizes and quantities depend on the selected model.',
+      'Choose quality, aspect ratio, resolution and quantity. Each image has its own task and waits for a slot when the concurrency limit is reached. Custom ratios accept positive integers; supported sizes depend on the selected model.',
     guideStep4: 'Review and download',
     guideDetail4:
       'Tasks continue in the cloud and return when you reopen this page. Open previews to view original images, or copy the original prompt. Download results within {minutes} minutes before automatic deletion.',

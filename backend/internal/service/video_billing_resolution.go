@@ -24,6 +24,15 @@ func NormalizeVideoBillingDurationSecondsOrDefault(durationSeconds int) int {
 	return normalizeVideoBillingDurationSeconds(durationSeconds, VideoBillingMaxDurationSeconds)
 }
 
+// Custom providers accept their own duration ranges. Never apply xAI's short
+// clip ceiling to a successfully created Custom task or its billing record.
+func NormalizeCustomVideoDurationSeconds(durationSeconds int) int {
+	if durationSeconds <= 0 {
+		return VideoBillingDefaultDurationSeconds
+	}
+	return durationSeconds
+}
+
 func NormalizeVideoBillingDurationSecondsForModelOrDefault(model string, durationSeconds int) int {
 	maxDuration := VideoBillingMaxDurationSeconds
 	if strings.HasPrefix(videoBillingModelBasename(model), "wan-3.0") {

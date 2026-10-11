@@ -683,10 +683,21 @@ export interface SystemSettings {
   image_workbench_enabled: boolean;
   image_workbench_max_concurrent: number;
   image_workbench_max_image_size_mb: number;
+  image_workbench_max_reference_images: number;
   image_workbench_admin_exempt: boolean;
   image_workbench_custom_retention_enabled: boolean;
   image_workbench_retention_minutes: number;
   image_workbench_tutorial_url: string;
+  image_workbench_documentation_url: string;
+  video_workbench_enabled: boolean
+  video_workbench_max_concurrent: number
+  video_workbench_max_reference_images: number
+  video_workbench_max_reference_videos: number
+  video_workbench_max_reference_audios: number
+  video_workbench_retention_minutes: number
+  video_workbench_tutorial_url: string
+  video_workbench_documentation_url: string
+  video_workbench_announcement: string
 
   // Available Channels feature switch
   available_channels_enabled: boolean;
@@ -996,10 +1007,21 @@ export interface UpdateSettingsRequest {
   image_workbench_enabled?: boolean;
   image_workbench_max_concurrent?: number;
   image_workbench_max_image_size_mb?: number;
+  image_workbench_max_reference_images?: number;
   image_workbench_admin_exempt?: boolean;
   image_workbench_custom_retention_enabled?: boolean;
   image_workbench_retention_minutes?: number;
   image_workbench_tutorial_url?: string;
+  image_workbench_documentation_url?: string;
+  video_workbench_enabled?: boolean
+  video_workbench_max_concurrent?: number
+  video_workbench_max_reference_images?: number
+  video_workbench_max_reference_videos?: number
+  video_workbench_max_reference_audios?: number
+  video_workbench_retention_minutes?: number
+  video_workbench_tutorial_url?: string
+  video_workbench_documentation_url?: string
+  video_workbench_announcement?: string
 
   // Available Channels feature switch
   available_channels_enabled?: boolean;

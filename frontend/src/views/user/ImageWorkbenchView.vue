@@ -48,7 +48,7 @@
           <div class="field-title references-title">
             <span>{{ t('imageWorkbench.references') }}</span
             ><span class="reference-counter">{{
-              t('imageWorkbench.referenceCount', { count: references.length })
+              t('imageWorkbench.referenceCount', { count: references.length, max: maxReferenceImages })
             }}</span>
           </div>
           <div
@@ -74,7 +74,7 @@
               </button>
             </div>
             <button
-              v-if="references.length < 2"
+              v-if="references.length < maxReferenceImages"
               type="button"
               class="reference-add"
               :disabled="readingReferences"
@@ -99,6 +99,9 @@
               @change="onFileChange"
             />
           </div>
+          <p v-if="references.length > maxReferenceImages" class="validation-error" role="alert">
+            {{ t('imageWorkbench.referencesLimit', { max: maxReferenceImages }) }}
+          </p>
         </div>
 
         <div class="parameters-column">
@@ -324,29 +327,6 @@
         </div>
       </div>
 
-      <div
-        v-if="tab === 'guide'"
-        id="guide-panel"
-        role="tabpanel"
-        aria-labelledby="guide-tab"
-        class="guide-panel"
-      >
-        <h3>{{ t('imageWorkbench.guideTitle') }}</h3>
-        <ol>
-          <li v-for="step in 4" :key="step">
-            <span class="step-number">{{ String(step).padStart(2, '0') }}</span>
-            <div>
-              <h4>{{ t(`imageWorkbench.guideStep${step}`) }}</h4>
-            <p>{{ t(`imageWorkbench.guideDetail${step}`, { minutes: retentionMinutes }) }}</p>
-            </div>
-          </li>
-        </ol>
-        <div class="guide-limits">
-          <span>{{ t(maxImageSizeMB === 0 ? 'imageWorkbench.guideFormatsUnlimited' : 'imageWorkbench.guideFormats', { max: maxImageSizeMB }) }}</span
-          ><span>{{ t('imageWorkbench.guideLimits', { max: maxConcurrentLabel, minutes: retentionMinutes }) }}</span>
-        </div>
-      </div>
-
       <nav class="workbench-tabs" role="tablist" :aria-label="t('imageWorkbench.title')">
         <button
           v-for="item in tabs"
@@ -362,10 +342,12 @@
           @keydown="onTabKeydown($event, item.id)"
         >
           <Icon :name="item.icon" size="sm" />{{ t(`imageWorkbench.${item.id}`)
-          }}<span v-if="item.id === 'tasks' && activeCount" class="tab-count">{{
-            activeCount
+          }}<span v-if="item.id === 'tasks' && unfinishedCount" class="tab-count">{{
+            unfinishedCount
           }}</span>
         </button>
+        <a v-if="tutorialURL" id="guide-tab" :href="tutorialURL" target="_blank" rel="noopener noreferrer"><Icon name="book" size="sm" />{{ t('imageWorkbench.guide') }}</a>
+        <a v-if="documentationURL" id="documentation-tab" :href="documentationURL" target="_blank" rel="noopener noreferrer"><Icon name="link" size="sm" />{{ t('imageWorkbench.documentation') }}</a>
       </nav>
     </section>
     <BaseDialog
@@ -399,6 +381,7 @@ import Select from '@/components/common/Select.vue'
 import BaseDialog from '@/components/common/BaseDialog.vue'
 import ImageWorkbenchTaskRow from '@/components/user/ImageWorkbenchTaskRow.vue'
 import { keysAPI } from '@/api/keys'
+import { safeWorkbenchLink } from '@/api/videoWorkbench'
 import {
   deleteWorkbenchTask,
   downloadWorkbenchImage,
@@ -406,7 +389,8 @@ import {
   listWorkbenchTasks,
   submitImageTask,
   type ImageModel,
-  type ImageTask
+  type ImageTask,
+  type SubmitImageTaskPayload
 } from '@/api/imageWorkbench'
 import {
   calculateImageSize,
@@ -419,7 +403,7 @@ import { useAuthStore } from '@/stores/auth'
 import { useAppStore } from '@/stores/app'
 import type { ApiKey } from '@/types'
 
-type Tab = 'workbench' | 'tasks' | 'guide'
+type Tab = 'workbench' | 'tasks'
 type Quality = 'auto' | 'low' | 'medium' | 'high'
 interface ReferenceImage {
   id: string
@@ -433,14 +417,13 @@ const appStore = useAppStore()
 const tab = ref<Tab>('workbench')
 const tabs = [
   { id: 'workbench', icon: 'sparkles' },
-  { id: 'tasks', icon: 'clipboard' },
-  { id: 'guide', icon: 'book' }
+  { id: 'tasks', icon: 'clipboard' }
 ] as const
 const qualities: Quality[] = ['auto', 'low', 'medium', 'high']
 const ratios = ['1:1', '4:3', '3:4', '16:9', '9:16']
 const resolutions = ['1K', '2K', '4K', '8K'] as const
 const quantities = [1, 3, 5, 10, 20]
-const statuses = ['all', 'processing', 'completed', 'failed'] as const
+const statuses = ['all', 'queued', 'processing', 'completed', 'failed'] as const
 const form = reactive({
   prompt: '',
   model: '',
@@ -463,14 +446,17 @@ const keysError = ref(false)
 const loadingModels = ref(false)
 const modelsError = ref(false)
 const tasks = ref<ImageTask[]>([])
+const acceptedTasks = new Map<string, ImageTask>()
 const loadingTasks = ref(false)
 const tasksError = ref(false)
 const enabled = ref(false)
 const capabilitiesLoaded = ref(false)
 const maxConcurrent = ref(5)
 const maxImageSizeMB = ref(50)
+const maxReferenceImages = ref(6)
 const retentionMinutes = ref(15)
 const tutorialURL = ref('')
+const documentationURL = ref('')
 const submitting = ref(false)
 const taskFilter = ref<(typeof statuses)[number]>('all')
 const now = ref(Math.floor(Date.now() / 1000))
@@ -491,6 +477,9 @@ const activeCount = computed(
   () =>
     tasks.value.filter((task) => task.status === 'processing' && task.expires_at > now.value).length
 )
+const unfinishedCount = computed(() => tasks.value.filter(
+  task => (task.status === 'queued' || task.status === 'processing') && task.expires_at > now.value
+).length)
 const maxConcurrentLabel = computed(() => maxConcurrent.value > 0 ? String(maxConcurrent.value) : '∞')
 const visibleTasks = computed(() =>
   tasks.value.filter(
@@ -524,8 +513,8 @@ const canSubmit = computed(
       outputSize.value &&
       !submitting.value &&
       !readingReferences.value &&
-      !loadingModels.value &&
-      (maxConcurrent.value === 0 || activeCount.value < maxConcurrent.value)
+      references.value.length <= maxReferenceImages.value &&
+      !loadingModels.value
     )
 )
 
@@ -620,13 +609,21 @@ async function refreshTasks() {
   try {
     const response = await listWorkbenchTasks(lifecycleAbort.signal)
     if (disposed) return
-    tasks.value = [...response.tasks].sort((a, b) => b.created_at - a.created_at)
+    const listedIds = new Set(response.tasks.map(task => task.id))
+    for (const [id, task] of acceptedTasks) {
+      if (listedIds.has(id) || task.expires_at <= now.value) acceptedTasks.delete(id)
+    }
+    // An older in-flight list response must not hide a newly accepted task.
+    tasks.value = [...response.tasks, ...acceptedTasks.values()].sort((a, b) => b.created_at - a.created_at)
     enabled.value = response.enabled
     maxConcurrent.value = Number.isFinite(response.max_concurrent) ? response.max_concurrent : 5
     maxImageSizeMB.value = Number.isSafeInteger(response.max_image_size_mb) && response.max_image_size_mb >= 0
       ? response.max_image_size_mb : 50
+    maxReferenceImages.value = Number.isSafeInteger(response.max_reference_images) && response.max_reference_images > 0
+      ? response.max_reference_images : 6
     retentionMinutes.value = Math.max(1, Math.round((response.retention_seconds || 900) / 60))
-    tutorialURL.value = typeof response.tutorial_url === 'string' ? response.tutorial_url : ''
+    tutorialURL.value = safeWorkbenchLink(response.tutorial_url)
+    documentationURL.value = safeWorkbenchLink(response.documentation_url)
     capabilitiesLoaded.value = true
     tasksError.value = false
   } catch {
@@ -634,16 +631,12 @@ async function refreshTasks() {
   } finally {
     if (!disposed) {
       loadingTasks.value = false
-      pollTimer = setTimeout(refreshTasks, activeCount.value ? 3000 : 5000)
+      pollTimer = setTimeout(refreshTasks, unfinishedCount.value ? 3000 : 5000)
     }
   }
 }
 
 function selectTab(next: Tab): void {
-  if (next === 'guide' && tutorialURL.value) {
-    window.open(tutorialURL.value, '_blank', 'noopener,noreferrer')
-    return
-  }
   tab.value = next
 }
 
@@ -652,8 +645,8 @@ async function addReferences(files: File[]) {
   readingReferences.value = true
   try {
     for (const file of files) {
-      if (references.value.length >= 2) {
-        appStore.showError(t('imageWorkbench.referencesLimit'))
+      if (references.value.length >= maxReferenceImages.value) {
+        appStore.showError(t('imageWorkbench.referencesLimit', { max: maxReferenceImages.value }))
         break
       }
       if (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type)) {
@@ -678,6 +671,10 @@ async function addReferences(files: File[]) {
           image.src = dataUrl
         })
         if (disposed) return
+        if (references.value.length >= maxReferenceImages.value) {
+          appStore.showError(t('imageWorkbench.referencesLimit', { max: maxReferenceImages.value }))
+          break
+        }
         references.value.push({
           id: crypto.randomUUID(),
           file,
@@ -717,37 +714,50 @@ function removeReference(index: number) {
 }
 
 async function submit() {
+  if (references.value.length > maxReferenceImages.value) {
+    appStore.showError(t('imageWorkbench.referencesLimit', { max: maxReferenceImages.value }))
+    return
+  }
   if (!canSubmit.value || !selectedKey.value || !outputSize.value) return
   if (maxImageSizeMB.value > 0 && references.value.some(reference => reference.file.size > maxImageSizeMB.value * 1024 * 1024)) {
     appStore.showError(t('imageWorkbench.referenceSize', { max: maxImageSizeMB.value }))
     return
   }
   submitting.value = true
-  const key = selectedKey.value
+  const apiKey = selectedKey.value.key
+  const email = authStore.user?.email || ''
+  const quantity = form.quantity
+  const payload: SubmitImageTaskPayload = {
+    model: form.model,
+    prompt: form.prompt.trim(),
+    quality: form.quality,
+    size: outputSize.value.size,
+    n: 1,
+    ...(references.value.length
+      ? { images: references.value.map(reference => ({ image_url: reference.dataUrl })) }
+      : {})
+  }
   try {
-    const result = await submitImageTask(
-      key.key,
-      authStore.user?.email || '',
-      {
-        model: form.model,
-        prompt: form.prompt.trim(),
-        quality: form.quality,
-        size: outputSize.value.size,
-        n: form.quantity,
-        ...(references.value.length
-          ? { images: references.value.map((reference) => ({ image_url: reference.dataUrl })) }
-          : {})
-      },
-      lifecycleAbort.signal
-    )
+    // Dispatch the whole snapshot once. Navigation cancels reads, but must not
+    // cancel accepted POSTs or retry an ambiguous response and create duplicates.
+    const results = await Promise.allSettled(Array.from({ length: quantity }, async () => {
+      const result = await submitImageTask(apiKey, email, payload)
+      if (!disposed) {
+        acceptedTasks.set(result.id, result)
+        if (!tasks.value.some(task => task.id === result.id)) tasks.value.unshift(result)
+        tab.value = 'tasks'
+        taskFilter.value = 'all'
+      }
+      return result
+    }))
     if (disposed) return
-    if (!tasks.value.some((task) => task.id === result.id)) tasks.value.unshift(result)
-    tab.value = 'tasks'
-    taskFilter.value = 'all'
-    appStore.showSuccess(t('imageWorkbench.created'))
+    const created = results.filter(result => result.status === 'fulfilled').length
+    if (created === quantity) {
+      appStore.showSuccess(t(quantity === 1 ? 'imageWorkbench.created' : 'imageWorkbench.createdMany', { count: created }))
+    } else {
+      appStore.showError(t('imageWorkbench.submitPartial', { created, failed: quantity - created }))
+    }
     await refreshTasks()
-  } catch (error) {
-    if (!disposed) appStore.showError(message(error, 'imageWorkbench.submitError'))
   } finally {
     if (!disposed) submitting.value = false
   }
@@ -774,6 +784,7 @@ async function deleteTask() {
   const id = deleteTarget.value.id
   try {
     await deleteWorkbenchTask(id)
+    acceptedTasks.delete(id)
     tasks.value = tasks.value.filter((task) => task.id !== id)
     deleteTarget.value = null
   } catch (error) {
@@ -1174,7 +1185,8 @@ fieldset {
   border: 1px solid color-mix(in srgb, var(--md-sys-color-outline) 45%, transparent);
   border-radius: 1.5rem;
 }
-.workbench-tabs button {
+.workbench-tabs button,
+.workbench-tabs a {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1289,45 +1301,6 @@ fieldset {
   color: var(--md-sys-color-on-surface);
   font-size: 12px;
 }
-.guide-panel {
-  max-width: 760px;
-  padding: 8px 0 38px;
-  margin: 0 auto;
-}
-.guide-panel h3 {
-  font-size: 18px;
-  font-weight: 600;
-  margin-bottom: 24px;
-}
-.guide-panel li {
-  display: flex;
-  gap: 22px;
-  padding: 23px 0;
-  border-bottom: 1px solid var(--md-sys-color-outline);
-}
-.step-number {
-  color: var(--md-sys-color-on-surface-variant);
-  font-size: 16px;
-  font-variant-numeric: tabular-nums;
-}
-.guide-panel h4 {
-  font-size: 14px;
-  font-weight: 600;
-  margin-bottom: 9px;
-}
-.guide-panel p {
-  color: var(--md-sys-color-on-surface-variant);
-  font-size: 13px;
-  line-height: 1.9;
-}
-.guide-limits {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px 24px;
-  margin-top: 24px;
-  color: var(--md-sys-color-on-surface-variant);
-  font-size: 11px;
-}
 @media (min-width: 1600px) {
   .workbench-form {
     gap: 56px;
@@ -1397,12 +1370,14 @@ fieldset {
     gap: 3px;
     padding: 5px;
   }
-  .workbench-tabs button {
+  .workbench-tabs button,
+.workbench-tabs a {
     min-width: 0;
     min-height: 42px;
-    padding: 0 13px;
-    gap: 7px;
-    font-size: 12px;
+    padding: 5px 9px;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 11px;
   }
   .reference-strip {
     min-height: 100px;
@@ -1427,9 +1402,6 @@ fieldset {
   }
   .task-toolbar {
     padding-top: 18px;
-  }
-  .guide-panel li {
-    gap: 16px;
   }
 }
 @media (prefers-reduced-motion: reduce) {

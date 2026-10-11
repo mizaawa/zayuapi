@@ -336,6 +336,9 @@ func (s *OpenAIGatewayService) RecordUsage(ctx context.Context, input *OpenAIRec
 		}
 		usageLog.VideoResolution = optionalTrimmedStringPtr(videoResolution)
 		videoDurationSeconds := NormalizeVideoBillingDurationSecondsForModelOrDefault(billingModel, result.VideoDurationSeconds)
+		if isCustomVideoUsageRequest(apiKey, account) {
+			videoDurationSeconds = NormalizeCustomVideoDurationSeconds(result.VideoDurationSeconds)
+		}
 		usageLog.VideoDurationSeconds = &videoDurationSeconds
 	}
 	if cost != nil {
@@ -634,9 +637,18 @@ func (s *OpenAIGatewayService) calculateOpenAIVideoCost(
 		resolution = normalizeCustomVideoBillingResolution(result.VideoResolution)
 	}
 	durationSeconds := NormalizeVideoBillingDurationSecondsForModelOrDefault(billingModel, result.VideoDurationSeconds)
+	if customVideo {
+		durationSeconds = NormalizeCustomVideoDurationSeconds(result.VideoDurationSeconds)
+	}
+	groupVideoCost := func(config *VideoPriceConfig) *CostBreakdown {
+		if customVideo {
+			return s.billingService.CalculateCustomVideoCost(billingModel, resolution, videoCount, durationSeconds, config, multiplier)
+		}
+		return s.billingService.CalculateVideoCost(billingModel, resolution, videoCount, durationSeconds, config, multiplier)
+	}
 	groupConfig := videoPriceConfigFromAPIKey(apiKey)
 	if resolution != "" && apiKeyHasConfiguredVideoPrice(apiKey, resolution) {
-		return s.billingService.CalculateVideoCost(billingModel, resolution, videoCount, durationSeconds, groupConfig, multiplier)
+		return groupVideoCost(groupConfig)
 	}
 	if refreshed := s.apiKeyWithFreshGroupMediaPricing(ctx, apiKey); refreshed != apiKey {
 		apiKey = refreshed
@@ -647,10 +659,11 @@ func (s *OpenAIGatewayService) calculateOpenAIVideoCost(
 			// hydration so an omitted resolution cannot fall back to Grok's 480p
 			// model default.
 			customVideo = true
+			durationSeconds = NormalizeCustomVideoDurationSeconds(result.VideoDurationSeconds)
 			resolution = normalizeCustomVideoBillingResolution(result.VideoResolution)
 		}
 		if resolution != "" && apiKeyHasConfiguredVideoPrice(apiKey, resolution) {
-			return s.billingService.CalculateVideoCost(billingModel, resolution, videoCount, durationSeconds, groupConfig, multiplier)
+			return groupVideoCost(groupConfig)
 		}
 	}
 	if resolved := s.resolveOpenAIChannelPricing(ctx, billingModel, apiKey); resolved != nil &&

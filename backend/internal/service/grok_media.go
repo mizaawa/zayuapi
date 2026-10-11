@@ -101,6 +101,7 @@ type GrokMediaRequestInfo struct {
 	ResolutionProvided bool
 	grokRawResolution  string
 	DurationSeconds    int
+	RawDurationSeconds int
 	InputImageURLs     []string
 	ReferenceVideoURLs []string
 	HasReferenceVideo  bool
@@ -185,6 +186,7 @@ func ParseGrokMediaRequest(contentType string, body []byte) GrokMediaRequestInfo
 	// Custom-compatible value (which may come from resolution_name), while
 	// GrokResolution must retain the pre-existing primary-field behavior.
 	info.GrokResolution = NormalizeVideoBillingResolutionForModelOrDefault(info.Model, info.grokRawResolution, info.Size)
+	info.RawDurationSeconds = info.DurationSeconds
 	info.DurationSeconds = NormalizeVideoBillingDurationSecondsForModelOrDefault(info.Model, info.DurationSeconds)
 	if info.N <= 0 {
 		info.N = 1
@@ -797,7 +799,7 @@ func (s *OpenAIGatewayService) ForwardGrokMedia(
 	if endpoint.RequiresRequestBody() {
 		bodyReader = bytes.NewReader(body)
 	}
-	upstreamCtx, releaseUpstreamCtx := detachUpstreamContext(ctx)
+	upstreamCtx, releaseUpstreamCtx := videoMediaUpstreamContext(ctx)
 	defer releaseUpstreamCtx()
 	upstreamReq, err := http.NewRequestWithContext(upstreamCtx, endpoint.httpMethod(), targetURL, bodyReader)
 	if err != nil {
@@ -846,7 +848,8 @@ func (s *OpenAIGatewayService) ForwardGrokMedia(
 	if endpoint == GrokMediaEndpointImagesGenerations || endpoint == GrokMediaEndpointImagesEdits {
 		if countOpenAIResponseImageOutputsFromJSONBytes(respBody) <= 0 {
 			setOpsUpstreamError(c, http.StatusBadGateway, "xAI upstream returned no image output", truncateString(string(respBody), 512))
-			return nil, &UpstreamFailoverError{
+			failureUsage, _ := extractOpenAIUsageFromJSONBytes(respBody)
+			return imageFailureUsageResult(failureUsage, requestModel, upstreamModel), &UpstreamFailoverError{
 				StatusCode:      http.StatusBadGateway,
 				ResponseBody:    respBody,
 				ResponseHeaders: resp.Header.Clone(),
@@ -910,7 +913,7 @@ func (s *OpenAIGatewayService) forwardGrokMediaVideoContent(
 	token, requestID string,
 	startTime time.Time,
 ) (*OpenAIForwardResult, error) {
-	upstreamCtx, releaseUpstreamCtx := detachUpstreamContext(ctx)
+	upstreamCtx, releaseUpstreamCtx := videoMediaUpstreamContext(ctx)
 	defer releaseUpstreamCtx()
 	proxyURL := ""
 	if account.ProxyID != nil && account.Proxy != nil {
@@ -1266,6 +1269,7 @@ func normalizeCustomVideoForwardBody(endpoint GrokMediaEndpoint, body []byte, co
 }
 
 func normalizeCustomVideoRequestInfo(info GrokMediaRequestInfo) GrokMediaRequestInfo {
+	info.DurationSeconds = NormalizeCustomVideoDurationSeconds(info.RawDurationSeconds)
 	if !info.ResolutionValid {
 		info.Resolution = ""
 	}
@@ -1456,8 +1460,14 @@ func (s *OpenAIGatewayService) handleGrokMediaErrorResponse(
 	account *Account,
 	requestIDHeader string,
 	requestedModel string,
-) (*OpenAIForwardResult, error) {
+) (result *OpenAIForwardResult, resultErr error) {
 	body := s.readUpstreamErrorBody(resp)
+	defer func() {
+		if result == nil {
+			usage, _ := extractOpenAIUsageFromJSONBytes(body)
+			result = imageFailureUsageResult(usage, requestedModel, account.GetMappedModel(requestedModel))
+		}
+	}()
 	// Reconcile Grok quota state before configurable passthrough branches can
 	// return. Custom accounts use the normal OpenAI-compatible failover policy.
 	if account.Platform == PlatformGrok {
@@ -1629,6 +1639,10 @@ func writeGrokMediaResponse(c *gin.Context, resp *http.Response, body []byte, fi
 	c.Data(resp.StatusCode, contentType, body)
 }
 
+// A 200 response alone cannot distinguish a complete download from a stream
+// that failed after its headers were committed.
+const GrokMediaContentCompleteKey = "grok_media_content_complete"
+
 func writeGrokMediaContentResponse(c *gin.Context, resp *http.Response) error {
 	if c == nil || resp == nil || resp.Body == nil {
 		return fmt.Errorf("grok media content response is incomplete")
@@ -1654,6 +1668,9 @@ func writeGrokMediaContentResponse(c *gin.Context, resp *http.Response) error {
 	c.Status(resp.StatusCode)
 	MarkResponseCommitted(c)
 	_, err := io.Copy(c.Writer, resp.Body)
+	if err == nil {
+		c.Set(GrokMediaContentCompleteKey, true)
+	}
 	return err
 }
 

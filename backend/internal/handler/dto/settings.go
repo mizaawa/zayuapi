@@ -314,10 +314,21 @@ type SystemSettings struct {
 	ImageWorkbenchEnabled                bool   `json:"image_workbench_enabled"`
 	ImageWorkbenchMaxConcurrent          int    `json:"image_workbench_max_concurrent"`
 	ImageWorkbenchMaxImageSizeMB         int    `json:"image_workbench_max_image_size_mb"`
+	ImageWorkbenchMaxReferenceImages     int    `json:"image_workbench_max_reference_images"`
 	ImageWorkbenchAdminExempt            bool   `json:"image_workbench_admin_exempt"`
 	ImageWorkbenchCustomRetentionEnabled bool   `json:"image_workbench_custom_retention_enabled"`
 	ImageWorkbenchRetentionMinutes       int    `json:"image_workbench_retention_minutes"`
 	ImageWorkbenchTutorialURL            string `json:"image_workbench_tutorial_url"`
+	ImageWorkbenchDocumentationURL       string `json:"image_workbench_documentation_url"`
+	VideoWorkbenchEnabled                bool   `json:"video_workbench_enabled"`
+	VideoWorkbenchMaxConcurrent          int    `json:"video_workbench_max_concurrent"`
+	VideoWorkbenchMaxReferenceImages     int    `json:"video_workbench_max_reference_images"`
+	VideoWorkbenchMaxReferenceVideos     int    `json:"video_workbench_max_reference_videos"`
+	VideoWorkbenchMaxReferenceAudios     int    `json:"video_workbench_max_reference_audios"`
+	VideoWorkbenchRetentionMinutes       int    `json:"video_workbench_retention_minutes"`
+	VideoWorkbenchTutorialURL            string `json:"video_workbench_tutorial_url"`
+	VideoWorkbenchDocumentationURL       string `json:"video_workbench_documentation_url"`
+	VideoWorkbenchAnnouncement           string `json:"video_workbench_announcement"`
 
 	// Available Channels feature switch (user-facing aggregate view)
 	AvailableChannelsEnabled bool `json:"available_channels_enabled"`
@@ -427,10 +438,21 @@ type PublicSettings struct {
 	ImageWorkbenchEnabled                bool   `json:"image_workbench_enabled"`
 	ImageWorkbenchMaxConcurrent          int    `json:"image_workbench_max_concurrent"`
 	ImageWorkbenchMaxImageSizeMB         int    `json:"image_workbench_max_image_size_mb"`
+	ImageWorkbenchMaxReferenceImages     int    `json:"image_workbench_max_reference_images"`
 	ImageWorkbenchAdminExempt            bool   `json:"image_workbench_admin_exempt"`
 	ImageWorkbenchCustomRetentionEnabled bool   `json:"image_workbench_custom_retention_enabled"`
 	ImageWorkbenchRetentionMinutes       int    `json:"image_workbench_retention_minutes"`
 	ImageWorkbenchTutorialURL            string `json:"image_workbench_tutorial_url"`
+	ImageWorkbenchDocumentationURL       string `json:"image_workbench_documentation_url"`
+	VideoWorkbenchEnabled                bool   `json:"video_workbench_enabled"`
+	VideoWorkbenchMaxConcurrent          int    `json:"video_workbench_max_concurrent"`
+	VideoWorkbenchMaxReferenceImages     int    `json:"video_workbench_max_reference_images"`
+	VideoWorkbenchMaxReferenceVideos     int    `json:"video_workbench_max_reference_videos"`
+	VideoWorkbenchMaxReferenceAudios     int    `json:"video_workbench_max_reference_audios"`
+	VideoWorkbenchRetentionMinutes       int    `json:"video_workbench_retention_minutes"`
+	VideoWorkbenchTutorialURL            string `json:"video_workbench_tutorial_url"`
+	VideoWorkbenchDocumentationURL       string `json:"video_workbench_documentation_url"`
+	VideoWorkbenchAnnouncement           string `json:"video_workbench_announcement"`
 
 	AvailableChannelsEnabled bool `json:"available_channels_enabled"`
 	LeaderboardEnabled       bool `json:"leaderboard_enabled"`

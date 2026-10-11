@@ -155,6 +155,11 @@ func AllowImageGeneration(v bool) predicate.Group {
 	return predicate.Group(sql.FieldEQ(FieldAllowImageGeneration, v))
 }
 
+// VideoWorkbenchEnabled applies equality check predicate on the "video_workbench_enabled" field. It's identical to VideoWorkbenchEnabledEQ.
+func VideoWorkbenchEnabled(v bool) predicate.Group {
+	return predicate.Group(sql.FieldEQ(FieldVideoWorkbenchEnabled, v))
+}
+
 // ImageWorkbenchEnabled applies equality check predicate on the "image_workbench_enabled" field. It's identical to ImageWorkbenchEnabledEQ.
 func ImageWorkbenchEnabled(v bool) predicate.Group {
 	return predicate.Group(sql.FieldEQ(FieldImageWorkbenchEnabled, v))
@@ -1278,6 +1283,16 @@ func AllowImageGenerationEQ(v bool) predicate.Group {
 // AllowImageGenerationNEQ applies the NEQ predicate on the "allow_image_generation" field.
 func AllowImageGenerationNEQ(v bool) predicate.Group {
 	return predicate.Group(sql.FieldNEQ(FieldAllowImageGeneration, v))
+}
+
+// VideoWorkbenchEnabledEQ applies the EQ predicate on the "video_workbench_enabled" field.
+func VideoWorkbenchEnabledEQ(v bool) predicate.Group {
+	return predicate.Group(sql.FieldEQ(FieldVideoWorkbenchEnabled, v))
+}
+
+// VideoWorkbenchEnabledNEQ applies the NEQ predicate on the "video_workbench_enabled" field.
+func VideoWorkbenchEnabledNEQ(v bool) predicate.Group {
+	return predicate.Group(sql.FieldNEQ(FieldVideoWorkbenchEnabled, v))
 }
 
 // ImageWorkbenchEnabledEQ applies the EQ predicate on the "image_workbench_enabled" field.

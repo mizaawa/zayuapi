@@ -33,7 +33,18 @@ func RegisterGatewayRoutes(
 	compositeResolver *service.CompositeRouteResolver,
 	cfg *config.Config,
 ) {
+	if h.AsyncImage != nil {
+		h.AsyncImage.SetWorkbenchAuthRefresh(func(c *gin.Context) error {
+			return middleware.RefreshImageWorkbenchAuth(c, apiKeyService, subscriptionService, cfg)
+		})
+	}
 	bodyLimit := middleware.RequestBodyLimit(cfg.Gateway.MaxBodySize)
+	if h.VideoWorkbench != nil {
+		h.VideoWorkbench.SetAuthRefresh(func(c *gin.Context) error {
+			return middleware.RefreshVideoWorkbenchAuth(c, apiKeyService, subscriptionService, cfg)
+		})
+		r.POST("/v1/video-workbench/tasks", middleware.RequestBodyLimit(service.VideoWorkbenchMaxRequestBytes), gin.HandlerFunc(apiKeyAuth), h.VideoWorkbench.Submit)
+	}
 	textBodyLimit := middleware.RequestBodyLimit(cfg.Gateway.TextMaxBodySize)
 	clientRequestID := middleware.ClientRequestID()
 	opsErrorLogger := handler.OpsErrorLoggerMiddleware(opsService)

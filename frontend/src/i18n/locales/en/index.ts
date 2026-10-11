@@ -3,6 +3,7 @@ import common from './common'
 import dashboard from './dashboard'
 import batchImage from './batchImage'
 import imageWorkbench from './imageWorkbench'
+import videoWorkbench from './videoWorkbench'
 import admin from './admin'
 import misc from './misc'
 
@@ -12,6 +13,7 @@ export default {
   ...dashboard,
   ...batchImage,
   ...imageWorkbench,
+  ...videoWorkbench,
   admin,
   ...misc,
 }

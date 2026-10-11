@@ -1,7 +1,7 @@
 import { apiClient, buildGatewayUrl } from './client'
 
 export type ImageQuality = 'auto' | 'low' | 'medium' | 'high'
-export type ImageTaskStatus = 'processing' | 'completed' | 'failed'
+export type ImageTaskStatus = 'queued' | 'processing' | 'completed' | 'failed'
 
 export interface ImageModel {
   id: string
@@ -22,6 +22,7 @@ export interface ImageTask {
   task_id: string
   status: ImageTaskStatus
   created_at: number
+  started_at?: number
   completed_at?: number
   expires_at: number
   workbench?: ImageWorkbenchMetadata
@@ -34,10 +35,12 @@ export interface WorkbenchTasksResponse {
   enabled: boolean
   max_concurrent: number
   max_image_size_mb: number
+  max_reference_images: number
   user_max_concurrent?: number
   admin_exempt?: boolean
   retention_seconds: number
   tutorial_url?: string
+  documentation_url?: string
   tasks: ImageTask[]
 }
 
@@ -91,7 +94,7 @@ async function responseError(response: Response, apiKey: string): Promise<ImageW
   )
 }
 
-async function gatewayRequest<T>(
+export async function gatewayRequest<T>(
   path: string,
   apiKey: string,
   email: string,

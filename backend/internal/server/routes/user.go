@@ -76,6 +76,11 @@ func RegisterUserRoutes(
 		authenticated.GET("/image-workbench/tasks", h.AsyncImage.ListWorkbench)
 		authenticated.DELETE("/image-workbench/tasks/:task_id", h.AsyncImage.DeleteWorkbench)
 		authenticated.GET("/image-workbench/tasks/:task_id/images/:index", h.AsyncImage.DownloadWorkbenchImage)
+		if h.VideoWorkbench != nil {
+			authenticated.GET("/video-workbench/tasks", h.VideoWorkbench.List)
+			authenticated.DELETE("/video-workbench/tasks/:task_id", h.VideoWorkbench.Delete)
+			authenticated.GET("/video-workbench/tasks/:task_id/content", h.VideoWorkbench.Download)
+		}
 
 		// API Key管理
 		keys := authenticated.Group("/keys")

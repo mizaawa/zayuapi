@@ -1086,6 +1086,10 @@ export default {
         bufferRangeError: 'Safety buffer must be between 0 and 99.99',
         sumTooHigh: 'Min gross margin plus safety buffer must be less than 100%, otherwise every account would be excluded'
       },
+      videoWorkbench: {
+        title: 'Declare video workbench group',
+        hint: 'Allow active keys in this Custom group to use the video workbench.'
+      },
       imageWorkbench: {
         title: 'Declare group image generation support',
         hint: 'When enabled, eligible keys in this group appear in the image workbench. When disabled, they are hidden and cannot submit workbench tasks.'
