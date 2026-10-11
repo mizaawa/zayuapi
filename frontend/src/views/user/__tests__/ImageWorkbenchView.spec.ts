@@ -33,8 +33,8 @@ vi.mock('vue-i18n', async () => ({
 
 const now = Math.floor(new Date('2026-10-10T12:00:00Z').getTime() / 1000)
 const keys = [
-  { id: 1, name: 'Studio key', key: 'sk-studio', status: 'active', group: { platform: 'openai', allow_image_generation: true } },
-  { id: 2, name: 'Secondary key', key: 'sk-secondary', status: 'active', group: { platform: 'openai', allow_image_generation: true } },
+  { id: 1, name: 'Studio key', key: 'sk-studio', status: 'active', group: { platform: 'openai', allow_image_generation: true, image_workbench_enabled: true } },
+  { id: 2, name: 'Secondary key', key: 'sk-secondary', status: 'active', group: { platform: 'openai', allow_image_generation: true, image_workbench_enabled: true } },
 ]
 
 function task(id: string, status: ImageTask['status'] = 'processing'): ImageTask {
@@ -113,6 +113,45 @@ afterEach(() => {
 })
 
 describe('ImageWorkbenchView', () => {
+  it('lists only eligible keys from explicitly declared groups across pages', async () => {
+    listKeys.mockResolvedValueOnce({
+      items: [
+        { ...keys[0], group: { ...keys[0].group, image_workbench_enabled: false } },
+        { ...keys[0], id: 3, group: { platform: 'openai', allow_image_generation: true } },
+        { ...keys[0], id: 4, group: undefined },
+        { ...keys[0], id: 5, status: 'disabled' },
+        { ...keys[0], id: 6, expires_at: new Date((now - 1) * 1000).toISOString() },
+        { ...keys[0], id: 7, group: { ...keys[0].group, allow_image_generation: false } },
+        { ...keys[0], id: 8, group: { ...keys[0].group, platform: 'gemini' } },
+      ], pages: 2,
+    }).mockResolvedValueOnce({
+      items: [keys[1],
+        { ...keys[0], id: 9, name: 'Grok key', group: { ...keys[0].group, platform: 'grok' } },
+        { ...keys[0], id: 10, name: 'Composite key', group: { ...keys[0].group, platform: 'composite' } },
+      ], pages: 2,
+    })
+    const wrapper = mountWorkbench()
+    await flushPromises()
+    expect(wrapper.get('#image-key').findAll('option').map(option => option.text()))
+      .toEqual(['', 'Secondary key', 'Grok key', 'Composite key'])
+    expect(listKeys).toHaveBeenCalledTimes(2)
+    expect(listModels).toHaveBeenCalledWith('sk-secondary', 'owner@example.com', expect.any(AbortSignal))
+  })
+
+  it('cannot submit when no group has declared workbench support', async () => {
+    listKeys.mockResolvedValue({
+      items: keys.map(key => ({ ...key, group: { ...key.group, image_workbench_enabled: false } })), pages: 1,
+    })
+    const wrapper = mountWorkbench()
+    await flushPromises()
+    expect(wrapper.get('.inline-state').text()).toContain('imageWorkbench.noKeys')
+    expect(listModels).not.toHaveBeenCalled()
+    await wrapper.get('#image-prompt').setValue('A lighthouse')
+    await wrapper.get('form').trigger('submit')
+    expect(submitTask).not.toHaveBeenCalled()
+    expect(wrapper.get<HTMLButtonElement>('.create-task').element.disabled).toBe(true)
+  })
+
   it('ignores a stale model response after the selected API key changes', async () => {
     const initial = deferred<ImageModel[]>()
     const secondary = deferred<ImageModel[]>()

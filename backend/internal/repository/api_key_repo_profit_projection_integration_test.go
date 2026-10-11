@@ -22,12 +22,13 @@ func TestGetByKeyForAuthCarriesProfitControlProjection(t *testing.T) {
 	ctx := context.Background()
 	suffix := time.Now().UnixNano()
 	group := mustCreateGroup(t, integrationEntClient, &service.Group{
-		Name:                 fmt.Sprintf("profit-proj-group-%d", suffix),
-		Platform:             service.PlatformOpenAI,
-		RateMultiplier:       0.06,
-		ProfitControlEnabled: true,
-		ProfitMinMargin:      0.2,
-		ProfitSafetyBuffer:   0.05,
+		Name:                  fmt.Sprintf("profit-proj-group-%d", suffix),
+		Platform:              service.PlatformOpenAI,
+		RateMultiplier:        0.06,
+		ProfitControlEnabled:  true,
+		ImageWorkbenchEnabled: true,
+		ProfitMinMargin:       0.2,
+		ProfitSafetyBuffer:    0.05,
 	})
 	user := mustCreateUser(t, integrationEntClient, &service.User{
 		Email: fmt.Sprintf("profit-proj-%d@example.com", suffix), Concurrency: 5,
@@ -51,6 +52,7 @@ func TestGetByKeyForAuthCarriesProfitControlProjection(t *testing.T) {
 	got, err := apiKeyRepo.GetByKeyForAuth(ctx, keyValue)
 	require.NoError(t, err)
 	require.NotNil(t, got.Group, "认证查询必须带出分组")
+	require.True(t, got.Group.ImageWorkbenchEnabled)
 
 	require.Equal(t, service.PlatformOpenAI, got.Group.Platform)
 	require.InDelta(t, 0.06, got.Group.RateMultiplier, 1e-9)

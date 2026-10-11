@@ -853,6 +853,35 @@
           </div>
         </div>
 
+        <div class="flex items-center justify-between gap-3 border-t pt-4">
+          <div class="min-w-0">
+            <label for="create-image-workbench-enabled" class="text-sm font-medium text-gray-700 dark:text-gray-300">
+              {{ t("admin.groups.imageWorkbench.title") }}
+            </label>
+            <p id="create-image-workbench-hint" class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              {{ t("admin.groups.imageWorkbench.hint") }}
+            </p>
+          </div>
+          <button
+            id="create-image-workbench-enabled"
+            type="button"
+            role="switch"
+            :aria-checked="createForm.image_workbench_enabled"
+            :aria-label="t('admin.groups.imageWorkbench.title')"
+            aria-describedby="create-image-workbench-hint"
+            @click="createForm.image_workbench_enabled = !createForm.image_workbench_enabled"
+            :class="[
+              'relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors',
+              createForm.image_workbench_enabled ? 'bg-primary-500' : 'bg-gray-300 dark:bg-dark-600',
+            ]"
+          >
+            <span :class="[
+              'inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform',
+              createForm.image_workbench_enabled ? 'translate-x-6' : 'translate-x-1',
+            ]" />
+          </button>
+        </div>
+
         <!-- 图片生成计费配置 -->
         <div
           v-if="supportsImagePricingPlatform(createForm.platform)"
@@ -2467,6 +2496,35 @@
               </div>
             </div>
           </div>
+        </div>
+
+        <div class="flex items-center justify-between gap-3 border-t pt-4">
+          <div class="min-w-0">
+            <label for="edit-image-workbench-enabled" class="text-sm font-medium text-gray-700 dark:text-gray-300">
+              {{ t("admin.groups.imageWorkbench.title") }}
+            </label>
+            <p id="edit-image-workbench-hint" class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              {{ t("admin.groups.imageWorkbench.hint") }}
+            </p>
+          </div>
+          <button
+            id="edit-image-workbench-enabled"
+            type="button"
+            role="switch"
+            :aria-checked="editForm.image_workbench_enabled"
+            :aria-label="t('admin.groups.imageWorkbench.title')"
+            aria-describedby="edit-image-workbench-hint"
+            @click="editForm.image_workbench_enabled = !editForm.image_workbench_enabled"
+            :class="[
+              'relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors',
+              editForm.image_workbench_enabled ? 'bg-primary-500' : 'bg-gray-300 dark:bg-dark-600',
+            ]"
+          >
+            <span :class="[
+              'inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform',
+              editForm.image_workbench_enabled ? 'translate-x-6' : 'translate-x-1',
+            ]" />
+          </button>
         </div>
 
         <!-- 图片生成计费配置 -->
@@ -4785,6 +4843,7 @@ const createForm = reactive({
   model_pricing: [] as PricingFormEntry[],
   // 图片生成计费配置
   allow_image_generation: false,
+  image_workbench_enabled: false,
   allow_batch_image_generation: false,
   image_rate_independent: false,
   image_rate_multiplier: 1,
@@ -5140,6 +5199,7 @@ const editForm = reactive({
   model_pricing: [] as PricingFormEntry[],
   // 图片生成计费配置
   allow_image_generation: false,
+  image_workbench_enabled: false,
   allow_batch_image_generation: false,
   image_rate_independent: false,
   image_rate_multiplier: 1,
@@ -5590,6 +5650,7 @@ const closeCreateModal = () => {
   createForm.weekly_limit_usd = null;
   createForm.monthly_limit_usd = null;
   createForm.allow_image_generation = false;
+  createForm.image_workbench_enabled = false;
   createForm.allow_batch_image_generation = false;
   createForm.image_rate_independent = false;
   createForm.image_rate_multiplier = 1;
@@ -5796,6 +5857,7 @@ const handleEdit = async (group: AdminGroup) => {
     group.long_context_pricing_enabled ?? true;
   editForm.model_pricing = groupPricingFromAPI(group.model_pricing);
   editForm.allow_image_generation = group.allow_image_generation ?? false;
+  editForm.image_workbench_enabled = group.image_workbench_enabled ?? false;
   editForm.allow_batch_image_generation =
     group.allow_batch_image_generation ?? false;
   editForm.image_rate_independent = group.image_rate_independent ?? false;

@@ -56,6 +56,8 @@ const (
 	FieldDefaultValidityDays = "default_validity_days"
 	// FieldAllowImageGeneration holds the string denoting the allow_image_generation field in the database.
 	FieldAllowImageGeneration = "allow_image_generation"
+	// FieldImageWorkbenchEnabled holds the string denoting the image_workbench_enabled field in the database.
+	FieldImageWorkbenchEnabled = "image_workbench_enabled"
 	// FieldAllowBatchImageGeneration holds the string denoting the allow_batch_image_generation field in the database.
 	FieldAllowBatchImageGeneration = "allow_batch_image_generation"
 	// FieldImageRateIndependent holds the string denoting the image_rate_independent field in the database.
@@ -232,6 +234,7 @@ var Columns = []string{
 	FieldMonthlyLimitUsd,
 	FieldDefaultValidityDays,
 	FieldAllowImageGeneration,
+	FieldImageWorkbenchEnabled,
 	FieldAllowBatchImageGeneration,
 	FieldImageRateIndependent,
 	FieldImageRateMultiplier,
@@ -339,6 +342,8 @@ var (
 	DefaultDefaultValidityDays int
 	// DefaultAllowImageGeneration holds the default value on creation for the "allow_image_generation" field.
 	DefaultAllowImageGeneration bool
+	// DefaultImageWorkbenchEnabled holds the default value on creation for the "image_workbench_enabled" field.
+	DefaultImageWorkbenchEnabled bool
 	// DefaultAllowBatchImageGeneration holds the default value on creation for the "allow_batch_image_generation" field.
 	DefaultAllowBatchImageGeneration bool
 	// DefaultImageRateIndependent holds the default value on creation for the "image_rate_independent" field.
@@ -501,6 +506,11 @@ func ByDefaultValidityDays(opts ...sql.OrderTermOption) OrderOption {
 // ByAllowImageGeneration orders the results by the allow_image_generation field.
 func ByAllowImageGeneration(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldAllowImageGeneration, opts...).ToFunc()
+}
+
+// ByImageWorkbenchEnabled orders the results by the image_workbench_enabled field.
+func ByImageWorkbenchEnabled(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldImageWorkbenchEnabled, opts...).ToFunc()
 }
 
 // ByAllowBatchImageGeneration orders the results by the allow_batch_image_generation field.

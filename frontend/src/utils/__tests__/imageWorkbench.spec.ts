@@ -32,6 +32,13 @@ describe('image workbench dimensions', () => {
 })
 
 describe('safe image URLs', () => {
+  it('accepts only the authenticated workbench image route for relative URLs', () => {
+    const url = '/api/v1/image-workbench/tasks/imgtask_' + 'a'.repeat(32) + '/images/0'
+    expect(safeImageUrl(url)).toBe(url)
+    expect(safeImageUrl(url + '?redirect=https://example.com')).toBe('')
+    expect(safeImageUrl(url + '/../1')).toBe('')
+    expect(createImageFilename('task', 0, 0, url)).toMatch(/\.png$/)
+  })
   it.each(['https://cdn.example.com/image.png?token=abc', 'http://localhost:3000/image.png'])('allows an absolute image URL: %s', value => {
     expect(safeImageUrl(value)).toBe(value)
   })
@@ -47,6 +54,11 @@ describe('safe image URLs', () => {
 
 describe('image filenames', () => {
   const createdAt = new Date(2026, 9, 10, 12).getTime() / 1000
+
+  it.each([['image/png', 'png'], ['image/jpeg', 'jpg'], ['image/webp', 'webp']])('keeps the real %s extension for protected image URLs', (contentType, extension) => {
+    const url = '/api/v1/image-workbench/tasks/imgtask_' + 'a'.repeat(32) + '/images/0'
+    expect(createImageFilename('task', 0, createdAt, url, contentType)).toMatch(new RegExp(`\\.${extension}$`))
+  })
 
   it('uses a stable per-image six-character suffix and the generation date', () => {
     const first = createImageFilename('task-123', 0, createdAt, 'https://cdn.example.com/result.webp?token=1')

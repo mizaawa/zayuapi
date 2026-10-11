@@ -3,6 +3,7 @@
 FRONTEND_CRITICAL_VITEST := \
 	src/api/__tests__/client.spec.ts \
 	src/api/__tests__/tokenRefresh.spec.ts \
+	src/api/__tests__/imageWorkbench.spec.ts \
 	src/views/auth/__tests__/LinuxDoCallbackView.spec.ts \
 	src/views/auth/__tests__/WechatCallbackView.spec.ts \
 	src/views/user/__tests__/PaymentView.spec.ts \
@@ -12,6 +13,9 @@ FRONTEND_CRITICAL_VITEST := \
 	src/components/keys/__tests__/UseKeyModal.spec.ts \
 	src/views/user/__tests__/KeysView.spec.ts \
 	src/views/user/__tests__/UsageView.spec.ts \
+	src/views/user/__tests__/ImageWorkbenchView.spec.ts \
+	src/components/user/__tests__/ImageWorkbenchTaskRow.spec.ts \
+	src/utils/__tests__/imageWorkbench.spec.ts \
 	src/utils/__tests__/usageRequest.spec.ts \
 	src/utils/__tests__/usageRequestQueue.spec.ts \
 	src/components/common/__tests__/Pagination.spec.ts \

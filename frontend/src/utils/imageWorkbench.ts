@@ -33,8 +33,13 @@ export function calculateImageSize(
   return { width, height, size: `${width}x${height}` }
 }
 
+export function isWorkbenchImageUrl(value: unknown): boolean {
+  return typeof value === 'string' && /^\/api\/v1\/image-workbench\/tasks\/imgtask_[a-f0-9]{32}\/images\/\d+$/.test(value)
+}
+
 export function safeImageUrl(value: unknown): string {
   if (typeof value !== 'string' || [...value].some(char => char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127)) return ''
+  if (isWorkbenchImageUrl(value)) return value
   try {
     const url = new URL(value)
     if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password) return ''
@@ -44,7 +49,7 @@ export function safeImageUrl(value: unknown): string {
   }
 }
 
-export function createImageFilename(taskId: string, imageIndex: number, createdAt: number, imageUrl?: string): string {
+export function createImageFilename(taskId: string, imageIndex: number, createdAt: number, imageUrl?: string, contentType?: string): string {
   const date = new Date(createdAt * 1000)
   const datePart = Number.isNaN(date.getTime()) ? '19700101'
     : `${date.getFullYear()}${String(date.getMonth() + 1).padStart(2, '0')}${String(date.getDate()).padStart(2, '0')}`
@@ -54,6 +59,7 @@ export function createImageFilename(taskId: string, imageIndex: number, createdA
   }
   const suffix = ((hash >>> 0) % 2176782336).toString(36).padStart(6, '0')
   const safeUrl = safeImageUrl(imageUrl)
-  const extension = safeUrl ? /\.(png|jpe?g|webp|avif|gif)$/i.exec(new URL(safeUrl).pathname)?.[1].toLowerCase() : undefined
-  return `${datePart}-${suffix}.${extension || 'png'}`
+  const extension = safeUrl && !isWorkbenchImageUrl(safeUrl) ? /\.(png|jpe?g|webp|avif|gif)$/i.exec(new URL(safeUrl).pathname)?.[1].toLowerCase() : undefined
+  const mimeExtension = /^(image)\/(png|jpeg|webp|avif|gif)$/.exec(contentType || '')?.[2]
+  return `${datePart}-${suffix}.${mimeExtension === 'jpeg' ? 'jpg' : mimeExtension || extension || 'png'}`
 }

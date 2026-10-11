@@ -38,6 +38,19 @@ node_modules/
 # Go build cache (will be built in container)
 backend/vendor/
 
+# Local runtime data and generated files
+.codex/
+data/
+backend/data/
+image-workbench/
+backend/image-workbench/
+backend/bin/
+backend/.gocache/
+backend/*.exe
+frontend/*.tsbuildinfo
+frontend/vite.config.js
+frontend/vite.config.d.ts
+
 # Test files
 *_test.go
 **/*.test.js

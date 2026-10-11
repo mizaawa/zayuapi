@@ -567,6 +567,7 @@ async function loadKeys() {
             key.status === 'active' &&
             (!key.expires_at || Date.parse(key.expires_at) > Date.now()) &&
             key.group?.allow_image_generation &&
+            key.group.image_workbench_enabled === true &&
             ['openai', 'grok', 'composite'].includes(key.group.platform)
         )
       )
@@ -752,7 +753,7 @@ async function downloadImage(task: ImageTask, index: number) {
   downloading.add(id)
   try {
     const blob = await downloadWorkbenchImage(task.id, index, lifecycleAbort.signal)
-    if (!disposed) saveBlob(blob, imageFilename(task.id, index, task.created_at, url))
+    if (!disposed) saveBlob(blob, imageFilename(task.id, index, task.created_at, url, blob.type))
   } catch {
     if (!disposed) appStore.showError(t('imageWorkbench.downloadError'))
   } finally {

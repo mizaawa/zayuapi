@@ -302,6 +302,20 @@ func (_c *GroupCreate) SetNillableAllowImageGeneration(v *bool) *GroupCreate {
 	return _c
 }
 
+// SetImageWorkbenchEnabled sets the "image_workbench_enabled" field.
+func (_c *GroupCreate) SetImageWorkbenchEnabled(v bool) *GroupCreate {
+	_c.mutation.SetImageWorkbenchEnabled(v)
+	return _c
+}
+
+// SetNillableImageWorkbenchEnabled sets the "image_workbench_enabled" field if the given value is not nil.
+func (_c *GroupCreate) SetNillableImageWorkbenchEnabled(v *bool) *GroupCreate {
+	if v != nil {
+		_c.SetImageWorkbenchEnabled(*v)
+	}
+	return _c
+}
+
 // SetAllowBatchImageGeneration sets the "allow_batch_image_generation" field.
 func (_c *GroupCreate) SetAllowBatchImageGeneration(v bool) *GroupCreate {
 	_c.mutation.SetAllowBatchImageGeneration(v)
@@ -974,6 +988,10 @@ func (_c *GroupCreate) defaults() error {
 		v := group.DefaultAllowImageGeneration
 		_c.mutation.SetAllowImageGeneration(v)
 	}
+	if _, ok := _c.mutation.ImageWorkbenchEnabled(); !ok {
+		v := group.DefaultImageWorkbenchEnabled
+		_c.mutation.SetImageWorkbenchEnabled(v)
+	}
 	if _, ok := _c.mutation.AllowBatchImageGeneration(); !ok {
 		v := group.DefaultAllowBatchImageGeneration
 		_c.mutation.SetAllowBatchImageGeneration(v)
@@ -1155,6 +1173,9 @@ func (_c *GroupCreate) check() error {
 	}
 	if _, ok := _c.mutation.AllowImageGeneration(); !ok {
 		return &ValidationError{Name: "allow_image_generation", err: errors.New(`ent: missing required field "Group.allow_image_generation"`)}
+	}
+	if _, ok := _c.mutation.ImageWorkbenchEnabled(); !ok {
+		return &ValidationError{Name: "image_workbench_enabled", err: errors.New(`ent: missing required field "Group.image_workbench_enabled"`)}
 	}
 	if _, ok := _c.mutation.AllowBatchImageGeneration(); !ok {
 		return &ValidationError{Name: "allow_batch_image_generation", err: errors.New(`ent: missing required field "Group.allow_batch_image_generation"`)}
@@ -1347,6 +1368,10 @@ func (_c *GroupCreate) createSpec() (*Group, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.AllowImageGeneration(); ok {
 		_spec.SetField(group.FieldAllowImageGeneration, field.TypeBool, value)
 		_node.AllowImageGeneration = value
+	}
+	if value, ok := _c.mutation.ImageWorkbenchEnabled(); ok {
+		_spec.SetField(group.FieldImageWorkbenchEnabled, field.TypeBool, value)
+		_node.ImageWorkbenchEnabled = value
 	}
 	if value, ok := _c.mutation.AllowBatchImageGeneration(); ok {
 		_spec.SetField(group.FieldAllowBatchImageGeneration, field.TypeBool, value)
@@ -1943,6 +1968,18 @@ func (u *GroupUpsert) SetAllowImageGeneration(v bool) *GroupUpsert {
 // UpdateAllowImageGeneration sets the "allow_image_generation" field to the value that was provided on create.
 func (u *GroupUpsert) UpdateAllowImageGeneration() *GroupUpsert {
 	u.SetExcluded(group.FieldAllowImageGeneration)
+	return u
+}
+
+// SetImageWorkbenchEnabled sets the "image_workbench_enabled" field.
+func (u *GroupUpsert) SetImageWorkbenchEnabled(v bool) *GroupUpsert {
+	u.Set(group.FieldImageWorkbenchEnabled, v)
+	return u
+}
+
+// UpdateImageWorkbenchEnabled sets the "image_workbench_enabled" field to the value that was provided on create.
+func (u *GroupUpsert) UpdateImageWorkbenchEnabled() *GroupUpsert {
+	u.SetExcluded(group.FieldImageWorkbenchEnabled)
 	return u
 }
 
@@ -2920,6 +2957,20 @@ func (u *GroupUpsertOne) SetAllowImageGeneration(v bool) *GroupUpsertOne {
 func (u *GroupUpsertOne) UpdateAllowImageGeneration() *GroupUpsertOne {
 	return u.Update(func(s *GroupUpsert) {
 		s.UpdateAllowImageGeneration()
+	})
+}
+
+// SetImageWorkbenchEnabled sets the "image_workbench_enabled" field.
+func (u *GroupUpsertOne) SetImageWorkbenchEnabled(v bool) *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.SetImageWorkbenchEnabled(v)
+	})
+}
+
+// UpdateImageWorkbenchEnabled sets the "image_workbench_enabled" field to the value that was provided on create.
+func (u *GroupUpsertOne) UpdateImageWorkbenchEnabled() *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.UpdateImageWorkbenchEnabled()
 	})
 }
 
@@ -4163,6 +4214,20 @@ func (u *GroupUpsertBulk) SetAllowImageGeneration(v bool) *GroupUpsertBulk {
 func (u *GroupUpsertBulk) UpdateAllowImageGeneration() *GroupUpsertBulk {
 	return u.Update(func(s *GroupUpsert) {
 		s.UpdateAllowImageGeneration()
+	})
+}
+
+// SetImageWorkbenchEnabled sets the "image_workbench_enabled" field.
+func (u *GroupUpsertBulk) SetImageWorkbenchEnabled(v bool) *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.SetImageWorkbenchEnabled(v)
+	})
+}
+
+// UpdateImageWorkbenchEnabled sets the "image_workbench_enabled" field to the value that was provided on create.
+func (u *GroupUpsertBulk) UpdateImageWorkbenchEnabled() *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.UpdateImageWorkbenchEnabled()
 	})
 }
 

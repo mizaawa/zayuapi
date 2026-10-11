@@ -155,6 +155,11 @@ func AllowImageGeneration(v bool) predicate.Group {
 	return predicate.Group(sql.FieldEQ(FieldAllowImageGeneration, v))
 }
 
+// ImageWorkbenchEnabled applies equality check predicate on the "image_workbench_enabled" field. It's identical to ImageWorkbenchEnabledEQ.
+func ImageWorkbenchEnabled(v bool) predicate.Group {
+	return predicate.Group(sql.FieldEQ(FieldImageWorkbenchEnabled, v))
+}
+
 // AllowBatchImageGeneration applies equality check predicate on the "allow_batch_image_generation" field. It's identical to AllowBatchImageGenerationEQ.
 func AllowBatchImageGeneration(v bool) predicate.Group {
 	return predicate.Group(sql.FieldEQ(FieldAllowBatchImageGeneration, v))
@@ -1273,6 +1278,16 @@ func AllowImageGenerationEQ(v bool) predicate.Group {
 // AllowImageGenerationNEQ applies the NEQ predicate on the "allow_image_generation" field.
 func AllowImageGenerationNEQ(v bool) predicate.Group {
 	return predicate.Group(sql.FieldNEQ(FieldAllowImageGeneration, v))
+}
+
+// ImageWorkbenchEnabledEQ applies the EQ predicate on the "image_workbench_enabled" field.
+func ImageWorkbenchEnabledEQ(v bool) predicate.Group {
+	return predicate.Group(sql.FieldEQ(FieldImageWorkbenchEnabled, v))
+}
+
+// ImageWorkbenchEnabledNEQ applies the NEQ predicate on the "image_workbench_enabled" field.
+func ImageWorkbenchEnabledNEQ(v bool) predicate.Group {
+	return predicate.Group(sql.FieldNEQ(FieldImageWorkbenchEnabled, v))
 }
 
 // AllowBatchImageGenerationEQ applies the EQ predicate on the "allow_batch_image_generation" field.

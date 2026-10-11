@@ -26,7 +26,7 @@ export interface ImageTask {
   expires_at: number
   workbench?: ImageWorkbenchMetadata
   image_url?: string
-  result?: { data: Array<{ url: string; size_bytes?: number; revised_prompt?: string }> }
+  result?: { data: Array<{ url: string; size_bytes?: number; content_type?: string; revised_prompt?: string }> }
   error?: { message?: string; code?: string; type?: string } | string
 }
 

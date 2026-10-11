@@ -17,6 +17,15 @@ import (
 
 const defaultImageMaxDownloadBytes int64 = 32 << 20 // 32 MiB
 
+const LocalImageURLPrefix = "local-image:"
+
+type ImageWorkbenchLocalStorage interface {
+	ImageStorage
+	ImageStorageCleaner
+	Ready(context.Context) error
+	Read(ctx context.Context, key string, maxBytes int64) ([]byte, string, error)
+}
+
 // ImageStorage 把图片字节写入对象存储并返回可访问 URL。
 //
 // 这是对象存储的可插拔抽象：适配一个新的对象存储厂商，只需实现本接口
@@ -107,6 +116,9 @@ func (u *ImageResultUploader) RewriteForEmail(ctx context.Context, taskID, email
 		if err != nil {
 			return nil, fmt.Errorf("image %d: %w", i, err)
 		}
+		if int64(len(data)) > u.maxDownloadBytes {
+			return nil, fmt.Errorf("image %d exceeds %d bytes", i, u.maxDownloadBytes)
+		}
 		key := u.buildKey(taskID, email, i, contentType)
 		url, err := u.storage.Save(ctx, key, contentType, data)
 		if err != nil {
@@ -119,6 +131,7 @@ func (u *ImageResultUploader) RewriteForEmail(ctx context.Context, taskID, email
 		item["url"] = urlRaw
 		if strings.HasSuffix(u.prefix, "/workbench/") {
 			item["size_bytes"] = json.RawMessage(strconv.Itoa(len(data)))
+			item["content_type"], _ = json.Marshal(contentType)
 		}
 		delete(item, "b64_json")
 		items[i] = item

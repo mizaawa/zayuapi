@@ -32,18 +32,19 @@ var (
 // ImageTaskRecord is the private Redis representation of an asynchronous image
 // request. Ownership fields are intentionally omitted from the public view.
 type ImageTaskRecord struct {
-	ID          string                  `json:"id"`
-	UserID      int64                   `json:"user_id"`
-	APIKeyID    int64                   `json:"api_key_id"`
-	UserEmail   string                  `json:"user_email,omitempty"`
-	Status      string                  `json:"status"`
-	HTTPStatus  int                     `json:"http_status,omitempty"`
-	Result      json.RawMessage         `json:"result,omitempty"`
-	Error       json.RawMessage         `json:"error,omitempty"`
-	CreatedAt   int64                   `json:"created_at"`
-	CompletedAt *int64                  `json:"completed_at,omitempty"`
-	ExpiresAt   int64                   `json:"expires_at"`
-	Workbench   *ImageWorkbenchMetadata `json:"workbench,omitempty"`
+	ID               string                  `json:"id"`
+	UserID           int64                   `json:"user_id"`
+	APIKeyID         int64                   `json:"api_key_id"`
+	UserEmail        string                  `json:"user_email,omitempty"`
+	Status           string                  `json:"status"`
+	HTTPStatus       int                     `json:"http_status,omitempty"`
+	Result           json.RawMessage         `json:"result,omitempty"`
+	Error            json.RawMessage         `json:"error,omitempty"`
+	CreatedAt        int64                   `json:"created_at"`
+	CompletedAt      *int64                  `json:"completed_at,omitempty"`
+	ExpiresAt        int64                   `json:"expires_at"`
+	Workbench        *ImageWorkbenchMetadata `json:"workbench,omitempty"`
+	WorkbenchStorage string                  `json:"workbench_storage,omitempty"`
 }
 
 // ImageTask is the API-safe task representation returned to callers.
@@ -88,6 +89,7 @@ type ImageTaskService struct {
 	ttl               time.Duration
 	executionTimeout  time.Duration
 	workbenchSettings func(context.Context) ImageWorkbenchRuntime
+	workbenchLocal    ImageWorkbenchLocalStorage
 }
 
 func NewImageTaskService(store ImageTaskStore) *ImageTaskService {
@@ -200,20 +202,26 @@ func (s *ImageTaskService) Get(ctx context.Context, owner ImageTaskOwner, id str
 }
 
 func (s *ImageTaskService) Complete(ctx context.Context, id string, statusCode int, result json.RawMessage) error {
+	if s == nil || s.store == nil {
+		return ErrImageTaskUnavailable
+	}
 	if !json.Valid(result) {
 		return s.Fail(ctx, id, http.StatusBadGateway, imageTaskErrorJSON("api_error", "upstream returned a non-JSON image response"))
 	}
+	task, err := s.store.Get(ctx, id)
+	if err != nil {
+		return err
+	}
 	uploader, enabled := s.current()
+	if task.WorkbenchStorage == ImageWorkbenchStorageLocal {
+		uploader, enabled = s.localWorkbenchUploader()
+	}
 	if s.resolve != nil && (!enabled || uploader == nil) {
 		// Do not fall back to persisting provider base64 in Redis when storage is
 		// disabled or incompletely resolved while an accepted task is still running.
 		return s.Fail(ctx, id, http.StatusServiceUnavailable, imageTaskErrorJSON("api_error", "image storage is no longer available"))
 	}
 	if uploader != nil {
-		task, err := s.store.Get(ctx, id)
-		if err != nil {
-			return err
-		}
 		if NormalizeImageOwnerEmail(task.UserEmail) == "" {
 			return s.Fail(ctx, id, http.StatusForbidden, imageTaskErrorJSON("permission_error", "image task owner email is missing"))
 		}
@@ -224,7 +232,7 @@ func (s *ImageTaskService) Complete(ctx context.Context, id string, statusCode i
 		if err != nil {
 			// 转存失败不回退存 base64，避免大 blob 撑爆 Redis：直接把任务标记为失败。
 			logger.L().Error("image_task.offload_failed", zap.String("task_id", id), zap.Error(err))
-			return s.Fail(ctx, id, http.StatusBadGateway, imageTaskErrorJSON("api_error", "failed to store generated image to object storage"))
+			return s.Fail(ctx, id, http.StatusBadGateway, imageTaskErrorJSON("api_error", "failed to store generated image"))
 		}
 		result = rewritten
 	}
@@ -271,14 +279,18 @@ func imageTaskToPublic(task *ImageTaskRecord) *ImageTask {
 	if task == nil {
 		return nil
 	}
+	result := task.Result
+	if task.WorkbenchStorage == ImageWorkbenchStorageLocal {
+		result = localWorkbenchPublicResult(task.ID, result)
+	}
 	return &ImageTask{
 		ID:          task.ID,
 		TaskID:      task.ID,
 		Object:      "image.generation.task",
 		Status:      task.Status,
 		HTTPStatus:  task.HTTPStatus,
-		ImageURL:    firstImageTaskURL(task.Result),
-		Result:      task.Result,
+		ImageURL:    firstImageTaskURL(result),
+		Result:      result,
 		Error:       task.Error,
 		CreatedAt:   task.CreatedAt,
 		CompletedAt: task.CompletedAt,

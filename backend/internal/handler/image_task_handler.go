@@ -63,7 +63,11 @@ func (h *AsyncImageHandler) Submit(c *gin.Context) {
 		imageTaskError(c, service.ErrImageWorkbenchDisabled)
 		return
 	}
-	if !h.enabled() {
+	enabled := h.enabled()
+	if isImageWorkbenchRequest(c) && h != nil && h.tasks != nil {
+		enabled = h.tasks.WorkbenchEnabled(c.Request.Context())
+	}
+	if !enabled {
 		imageTaskJSONError(c, http.StatusNotFound, "not_found_error", "async image tasks are not enabled")
 		return
 	}
@@ -93,6 +97,10 @@ func (h *AsyncImageHandler) Submit(c *gin.Context) {
 	}
 	if !service.GroupAllowsImageGeneration(apiKey.Group) {
 		imageTaskJSONError(c, http.StatusForbidden, "permission_error", service.ImageGenerationPermissionMessage())
+		return
+	}
+	if isImageWorkbenchRequest(c) && (apiKey.Group == nil || !apiKey.Group.ImageWorkbenchEnabled) {
+		imageTaskJSONError(c, http.StatusForbidden, "permission_error", "This group is not enabled for the image workbench")
 		return
 	}
 	if h == nil || h.tasks == nil || h.execute == nil {
@@ -186,7 +194,7 @@ func (h *AsyncImageHandler) ListWorkbench(c *gin.Context) {
 	policy := h.tasks.WorkbenchRuntime(c.Request.Context())
 	role, _ := middleware2.GetUserRoleFromContext(c)
 	response.Success(c, gin.H{
-		"enabled":             h.enabled() && policy.Enabled,
+		"enabled":             h.tasks.WorkbenchEnabled(c.Request.Context()),
 		"max_concurrent":      policy.Limit(role == service.RoleAdmin),
 		"user_max_concurrent": policy.MaxConcurrent,
 		"admin_exempt":        policy.AdminExempt,

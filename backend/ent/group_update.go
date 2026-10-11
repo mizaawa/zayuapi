@@ -353,6 +353,20 @@ func (_u *GroupUpdate) SetNillableAllowImageGeneration(v *bool) *GroupUpdate {
 	return _u
 }
 
+// SetImageWorkbenchEnabled sets the "image_workbench_enabled" field.
+func (_u *GroupUpdate) SetImageWorkbenchEnabled(v bool) *GroupUpdate {
+	_u.mutation.SetImageWorkbenchEnabled(v)
+	return _u
+}
+
+// SetNillableImageWorkbenchEnabled sets the "image_workbench_enabled" field if the given value is not nil.
+func (_u *GroupUpdate) SetNillableImageWorkbenchEnabled(v *bool) *GroupUpdate {
+	if v != nil {
+		_u.SetImageWorkbenchEnabled(*v)
+	}
+	return _u
+}
+
 // SetAllowBatchImageGeneration sets the "allow_batch_image_generation" field.
 func (_u *GroupUpdate) SetAllowBatchImageGeneration(v bool) *GroupUpdate {
 	_u.mutation.SetAllowBatchImageGeneration(v)
@@ -1474,6 +1488,9 @@ func (_u *GroupUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	if value, ok := _u.mutation.AllowImageGeneration(); ok {
 		_spec.SetField(group.FieldAllowImageGeneration, field.TypeBool, value)
 	}
+	if value, ok := _u.mutation.ImageWorkbenchEnabled(); ok {
+		_spec.SetField(group.FieldImageWorkbenchEnabled, field.TypeBool, value)
+	}
 	if value, ok := _u.mutation.AllowBatchImageGeneration(); ok {
 		_spec.SetField(group.FieldAllowBatchImageGeneration, field.TypeBool, value)
 	}
@@ -2352,6 +2369,20 @@ func (_u *GroupUpdateOne) SetAllowImageGeneration(v bool) *GroupUpdateOne {
 func (_u *GroupUpdateOne) SetNillableAllowImageGeneration(v *bool) *GroupUpdateOne {
 	if v != nil {
 		_u.SetAllowImageGeneration(*v)
+	}
+	return _u
+}
+
+// SetImageWorkbenchEnabled sets the "image_workbench_enabled" field.
+func (_u *GroupUpdateOne) SetImageWorkbenchEnabled(v bool) *GroupUpdateOne {
+	_u.mutation.SetImageWorkbenchEnabled(v)
+	return _u
+}
+
+// SetNillableImageWorkbenchEnabled sets the "image_workbench_enabled" field if the given value is not nil.
+func (_u *GroupUpdateOne) SetNillableImageWorkbenchEnabled(v *bool) *GroupUpdateOne {
+	if v != nil {
+		_u.SetImageWorkbenchEnabled(*v)
 	}
 	return _u
 }
@@ -3506,6 +3537,9 @@ func (_u *GroupUpdateOne) sqlSave(ctx context.Context) (_node *Group, err error)
 	}
 	if value, ok := _u.mutation.AllowImageGeneration(); ok {
 		_spec.SetField(group.FieldAllowImageGeneration, field.TypeBool, value)
+	}
+	if value, ok := _u.mutation.ImageWorkbenchEnabled(); ok {
+		_spec.SetField(group.FieldImageWorkbenchEnabled, field.TypeBool, value)
 	}
 	if value, ok := _u.mutation.AllowBatchImageGeneration(); ok {
 		_spec.SetField(group.FieldAllowBatchImageGeneration, field.TypeBool, value)

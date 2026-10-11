@@ -13,6 +13,14 @@ selected API key and `X-Sub2API-User-Email`. They accept JSON generation or edit
 payloads, up to two reference images, and `n` equal to 1, 3, 5, 10 or 20.
 The selected upstream model still determines which sizes and quantities it supports.
 
+Group creation and editing expose **Declare group image generation support**
+(`image_workbench_enabled`). It defaults to false for new and existing groups.
+The key picker requires this declaration, `allow_image_generation`, an active,
+unexpired key, and an OpenAI, Grok, or composite group. Workbench submissions
+from undeclared groups return `403`; ordinary image API permissions are unchanged.
+Existing tasks remain available until their normal expiry. Administrators must
+enable the declaration on each group they want to offer in the workbench.
+
 The panel session exposes the following user-scoped endpoints:
 
 ```text
@@ -40,8 +48,19 @@ checks expired files every 15 seconds and retries unsuccessful cleanup later.
 Downloads verify ownership and expiry before proxying the image, so the browser
 does not need object-storage CORS permissions. Running tasks cannot be deleted.
 
-Object storage must be enabled as described below. The console shows an
-unavailable state when storage is not configured.
+When object storage is not enabled or configured, the workbench automatically
+creates a private `image-workbench/` directory under `DATA_DIR` (or `/app/data`
+in Docker, otherwise the working directory). No S3 configuration is needed.
+The server must have write permission and sufficient disk space there. Docker's
+existing data volume persists these files across restarts. Multiple server
+instances using local storage must share this directory, or use object storage.
+
+Local images are served only through the authenticated download endpoint above;
+no static file directory is exposed. The browser uses authenticated requests for
+both thumbnails and previews. Task records retain their storage choice so a
+later S3 setting change does not interrupt local downloads or expiry cleanup.
+The durable cleanup worker removes expired files even after a restart or after
+the workbench is disabled. Configured object storage remains supported.
 
 System Settings exposes `image_workbench_enabled`,
 `image_workbench_max_concurrent` (1 to 100), `image_workbench_admin_exempt`,
@@ -65,7 +84,7 @@ The aliases are `/images/generations/async`, `/images/edits/async`, and `/images
 
 Only OpenAI and Grok groups are supported. Requests use the same JSON or multipart payload as the corresponding synchronous endpoint. Streaming image requests are rejected because a polled task returns one final JSON result.
 
-## Enabling the feature (object storage)
+## Enabling the standard async API (object storage)
 
 Asynchronous image tasks are **disabled by default** and gated on object storage. When the switch is off — or the S3 credentials are incomplete — the async endpoints return `404` and never create a task or write to Redis. This is deliberate: without offloading, large `b64_json` results (several MB each, e.g. `gpt-image-1`) would accumulate in Redis and exhaust its memory.
 

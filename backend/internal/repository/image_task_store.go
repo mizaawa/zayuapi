@@ -29,7 +29,7 @@ func (s *imageTaskStore) Save(ctx context.Context, task *service.ImageTaskRecord
 	if task.Workbench == nil {
 		return s.rdb.Set(ctx, imageTaskKey(task.ID), data, ttl).Err()
 	}
-	cleanup, err := json.Marshal(service.ImageWorkbenchCleanup{ID: task.ID, UserEmail: task.UserEmail})
+	cleanup, err := json.Marshal(service.ImageWorkbenchCleanup{ID: task.ID, UserEmail: task.UserEmail, Storage: task.WorkbenchStorage})
 	if err != nil {
 		return err
 	}
@@ -75,7 +75,7 @@ func (s *imageTaskStore) CreateWorkbench(ctx context.Context, task *service.Imag
 	if err != nil {
 		return err
 	}
-	cleanup, err := json.Marshal(service.ImageWorkbenchCleanup{ID: task.ID, UserEmail: task.UserEmail})
+	cleanup, err := json.Marshal(service.ImageWorkbenchCleanup{ID: task.ID, UserEmail: task.UserEmail, Storage: task.WorkbenchStorage})
 	if err != nil {
 		return err
 	}

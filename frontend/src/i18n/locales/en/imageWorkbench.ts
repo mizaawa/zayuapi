@@ -62,7 +62,7 @@ export default {
     keysError: 'Could not load API keys. Try again.',
     tasksError: 'Could not load tasks. Waiting to reconnect.',
     unavailable:
-      'Image generation is not enabled. Contact an administrator to configure image storage.',
+      'Image generation is unavailable. Ask an administrator to check storage directory permissions and free disk space.',
     referencesLimit: 'You can add up to 2 reference images',
     referenceType: 'Only PNG, JPEG and WebP images are supported',
     referenceSize: 'Each reference image must be 10 MB or smaller',

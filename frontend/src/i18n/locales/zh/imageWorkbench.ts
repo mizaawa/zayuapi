@@ -61,7 +61,7 @@ export default {
     modelsError: '模型加载失败，请重试',
     keysError: '密钥加载失败，请重试',
     tasksError: '任务列表加载失败，正在等待重新连接',
-    unavailable: '生图服务尚未启用，请联系管理员配置图片存储。',
+    unavailable: '生图服务暂不可用，请联系管理员检查图片存储目录的写入权限和可用空间。',
     referencesLimit: '最多添加 2 张参考图',
     referenceType: '参考图仅支持 PNG、JPEG 和 WebP',
     referenceSize: '每张参考图不能超过 10 MB',

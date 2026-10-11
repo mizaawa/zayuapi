@@ -224,6 +224,7 @@ type CreateGroupInput struct {
 	MonthlyLimitUSD  *float64 // 月限额 (USD)
 	// 图片生成计费配置（仅 antigravity 平台使用）
 	AllowImageGeneration         bool
+	ImageWorkbenchEnabled        bool
 	AllowBatchImageGeneration    bool
 	ImageRateIndependent         bool
 	ImageRateMultiplier          *float64
@@ -289,6 +290,7 @@ type UpdateGroupInput struct {
 	MonthlyLimitUSD  *float64 // 月限额 (USD)
 	// 图片生成计费配置（仅 antigravity 平台使用）
 	AllowImageGeneration         *bool
+	ImageWorkbenchEnabled        *bool
 	AllowBatchImageGeneration    *bool
 	ImageRateIndependent         *bool
 	ImageRateMultiplier          *float64

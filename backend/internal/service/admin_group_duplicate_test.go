@@ -139,6 +139,7 @@ func TestDuplicateGroupCopiesConfigurationDeeplyAndResetsRuntimeState(t *testing
 		MonthlyLimitUSD:                 groupDuplicateTestPointer(33.0),
 		DefaultValidityDays:             91,
 		AllowImageGeneration:            true,
+		ImageWorkbenchEnabled:           true,
 		AllowBatchImageGeneration:       true,
 		ImageRateIndependent:            true,
 		ImageRateMultiplier:             1.4,

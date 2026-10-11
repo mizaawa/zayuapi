@@ -34,7 +34,7 @@
         :class="{ 'animate-spin': task.status === 'processing' }"
       />
       <span>{{ imageFailed ? t('imageWorkbench.imageLoadError') : statusLabel }}</span>
-      <button v-if="imageFailed" type="button" class="retry-image" @click="imageFailed = false">
+      <button v-if="imageFailed" type="button" class="retry-image" @click="retryImage">
         {{ t('imageWorkbench.retry') }}
       </button>
     </div>
@@ -96,7 +96,7 @@
       <button
         type="button"
         class="download-action"
-        :disabled="!imageUrl || downloading"
+        :disabled="!sourceUrl || downloading"
         @click="$emit('download')"
       >
         <Icon
@@ -115,8 +115,8 @@ import { useI18n } from 'vue-i18n'
 import Icon from '@/components/icons/Icon.vue'
 import { useClipboard } from '@/composables/useClipboard'
 import { formatBytes } from '@/utils/format'
-import { createImageFilename as imageFilename, safeImageUrl } from '@/utils/imageWorkbench'
-import type { ImageTask } from '@/api/imageWorkbench'
+import { createImageFilename as imageFilename, isWorkbenchImageUrl, safeImageUrl } from '@/utils/imageWorkbench'
+import { downloadWorkbenchImage, type ImageTask } from '@/api/imageWorkbench'
 
 const props = defineProps<{
   task: ImageTask
@@ -142,15 +142,38 @@ const errorMessage = computed(
     (typeof props.task.error === 'string' ? props.task.error : props.task.error?.message) ||
     t('imageWorkbench.failed')
 )
-const imageUrl = computed(() =>
+const sourceUrl = computed(() =>
   props.task.expires_at <= props.now ? null : safeImageUrl(image.value?.url)
 )
-watch(imageUrl, () => {
+const localImageUrl = ref('')
+const imageRetry = ref(0)
+const imageUrl = computed(() => isWorkbenchImageUrl(sourceUrl.value) ? localImageUrl.value : sourceUrl.value)
+function retryImage() {
+  imageFailed.value = false
+  imageRetry.value++
+}
+watch([sourceUrl, imageRetry], async ([url], _, onCleanup) => {
   imageFailed.value = false
   actualSize.value = ''
-})
+  localImageUrl.value = ''
+  if (!isWorkbenchImageUrl(url)) return
+  const controller = new AbortController()
+  let objectUrl = ''
+  onCleanup(() => {
+    controller.abort()
+    if (objectUrl) URL.revokeObjectURL(objectUrl)
+  })
+  try {
+    const blob = await downloadWorkbenchImage(props.task.id, props.imageIndex, controller.signal)
+    if (controller.signal.aborted) return
+    objectUrl = URL.createObjectURL(blob)
+    localImageUrl.value = objectUrl
+  } catch {
+    if (!controller.signal.aborted) imageFailed.value = true
+  }
+}, { immediate: true })
 const filename = computed(() =>
-  imageFilename(props.task.id, props.imageIndex, props.task.created_at, image.value?.url)
+  imageFilename(props.task.id, props.imageIndex, props.task.created_at, image.value?.url, image.value?.content_type)
 )
 const date = computed(() =>
   new Date(props.task.created_at * 1000).toLocaleString(locale.value === 'zh' ? 'zh-CN' : 'en-US', {

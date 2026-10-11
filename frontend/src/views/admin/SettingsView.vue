@@ -6858,16 +6858,25 @@
             </div>
 
             <div class="flex items-center justify-between gap-4 border-t border-gray-100 pt-5 dark:border-dark-700">
-              <label
-                for="disable-redeem-code-creation-limit"
-                class="min-w-0 flex-1 text-sm font-medium text-gray-700 dark:text-gray-300"
-              >
-                {{ localText('禁用兑换码创建上限', 'Disable redeem code creation limit') }}
-              </label>
+              <div class="min-w-0 flex-1">
+                <label
+                  for="disable-redeem-code-creation-limit"
+                  class="text-sm font-medium text-gray-700 dark:text-gray-300"
+                >
+                  {{ localText('禁用兑换码创建上限', 'Disable redeem code creation limit') }}
+                </label>
+                <p
+                  id="disable-redeem-code-creation-limit-hint"
+                  class="mt-0.5 text-xs text-gray-500 dark:text-gray-400"
+                >
+                  {{ localText('默认单次最多创建 100 个兑换码；开启后取消数量上限，创建数量仍须为正整数。', 'By default, each request can create up to 100 redeem codes. Enabling this removes the limit; the count must still be a positive integer.') }}
+                </p>
+              </div>
               <Toggle
                 id="disable-redeem-code-creation-limit"
                 v-model="form.disable_redeem_code_creation_limit"
                 :aria-label="localText('禁用兑换码创建上限', 'Disable redeem code creation limit')"
+                aria-describedby="disable-redeem-code-creation-limit-hint"
                 class="shrink-0"
                 data-testid="disable-redeem-code-creation-limit-toggle"
               />

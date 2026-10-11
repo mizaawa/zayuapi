@@ -49,6 +49,24 @@ func TestGroupRepoSuite(t *testing.T) {
 
 // --- Create / GetByID / Update / Delete ---
 
+func (s *GroupRepoSuite) TestImageWorkbenchDeclarationRoundTrip() {
+	group := &service.Group{
+		Name: "workbench-declaration", Platform: service.PlatformOpenAI,
+		RateMultiplier: 1, Status: service.StatusActive, SubscriptionType: service.SubscriptionTypeStandard,
+		AllowImageGeneration: true, ImageWorkbenchEnabled: true,
+	}
+	s.Require().NoError(s.repo.Create(s.ctx, group))
+	loaded, err := s.repo.GetByIDLite(s.ctx, group.ID)
+	s.Require().NoError(err)
+	s.Require().True(loaded.ImageWorkbenchEnabled)
+	loaded.ImageWorkbenchEnabled = false
+	s.Require().NoError(s.repo.Update(s.ctx, loaded))
+	loaded, err = s.repo.GetByID(s.ctx, group.ID)
+	s.Require().NoError(err)
+	s.Require().False(loaded.ImageWorkbenchEnabled)
+	s.Require().True(loaded.AllowImageGeneration)
+}
+
 func (s *GroupRepoSuite) TestCreate() {
 	group := &service.Group{
 		Name:             "test-create",
