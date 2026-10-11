@@ -1,6 +1,7 @@
 export default {
   imageWorkbench: {
     title: 'Image Workbench',
+    navLabel: 'Image Generation',
     workbench: 'Workbench',
     tasks: 'Tasks',
     guide: 'Guide',

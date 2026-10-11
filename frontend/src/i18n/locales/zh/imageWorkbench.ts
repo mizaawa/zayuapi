@@ -1,6 +1,7 @@
 export default {
   imageWorkbench: {
     title: '生图工作台',
+    navLabel: '图片生成',
     workbench: '工作台',
     tasks: '任务列表',
     guide: '使用教程',
