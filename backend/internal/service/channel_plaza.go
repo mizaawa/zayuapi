@@ -46,6 +46,8 @@ type PlazaGroup struct {
 	// = 档位价 × ImageRateMultiplier，不乘分组/用户专属倍率（与计费口径一致）。
 	ImageRateIndependent bool
 	ImageRateMultiplier  float64
+	VideoRateIndependent bool
+	VideoRateMultiplier  float64
 	// ModelsListConfig 仅供 handler 按 API Key 的 /v1/models 配置裁剪广场模型，
 	// 不会暴露到模型广场响应中。
 	ModelsListConfig GroupModelsListConfig
@@ -99,6 +101,8 @@ func (s *ChannelService) ListPlazaGroups(ctx context.Context) ([]PlazaGroup, err
 			IsExclusive:          g.IsExclusive,
 			ImageRateIndependent: g.ImageRateIndependent,
 			ImageRateMultiplier:  g.ImageRateMultiplier,
+			VideoRateIndependent: g.VideoRateIndependent,
+			VideoRateMultiplier:  g.VideoRateMultiplier,
 			ModelsListConfig:     g.ModelsListConfig,
 		}
 		groupEnt[g.ID] = g
@@ -189,6 +193,7 @@ func (s *ChannelService) ListPlazaGroups(ctx context.Context) ([]PlazaGroup, err
 					pricing = fallback[0].Pricing
 				}
 				pricing = plazaImageDisplayPricing(pricing, g)
+				pricing = plazaVideoDisplayPricing(pricing, g)
 				key := modelKey{platform: m.Platform, name: strings.ToLower(m.Name)}
 				if at, seen := idx[key]; seen {
 					// 先见者胜；仅当已存条目无定价而新条目有定价时升级。
@@ -225,7 +230,7 @@ func (s *ChannelService) ListPlazaGroups(ctx context.Context) ([]PlazaGroup, err
 			pg.Models = append(pg.Models, PlazaModel{
 				Name:     m.Name,
 				Platform: m.Platform,
-				Pricing:  plazaImageDisplayPricing(g.GetModelPricing(m.Name), g),
+				Pricing:  plazaVideoDisplayPricing(plazaImageDisplayPricing(g.GetModelPricing(m.Name), g), g),
 			})
 		}
 		if len(pg.Models) == 0 {
@@ -295,6 +300,57 @@ func plazaImageDisplayPricing(p *ChannelModelPricing, g *Group) *ChannelModelPri
 			PerRequestPrice: &v,
 			SortOrder:       i,
 		})
+	}
+	return &clone
+}
+
+// Video group prices override matching channel resolution tiers. Both are USD
+// per second; never mix these with legacy per-request or per-image prices.
+func plazaVideoDisplayPricing(p *ChannelModelPricing, g *Group) *ChannelModelPricing {
+	if p == nil || g == nil || p.BillingMode != BillingModeVideo {
+		return p
+	}
+	if g.VideoPrice480P == nil && g.VideoPrice720P == nil && g.VideoPrice1080P == nil {
+		return p
+	}
+	clone := p.Clone()
+	for _, tier := range []struct {
+		label string
+		price *float64
+	}{
+		{VideoBillingResolution480P, g.VideoPrice480P},
+		{VideoBillingResolution720P, g.VideoPrice720P},
+		{VideoBillingResolution1080P, g.VideoPrice1080P},
+	} {
+		found := false
+		for i := range clone.Intervals {
+			if !strings.EqualFold(clone.Intervals[i].TierLabel, tier.label) {
+				continue
+			}
+			found = true
+			price := tier.price
+			if price == nil && clone.Intervals[i].PerRequestPrice == nil {
+				price = p.PerRequestPrice
+			}
+			if price != nil {
+				value := *price
+				clone.Intervals[i].PerRequestPrice = &value
+			}
+			break
+		}
+		if found {
+			continue
+		}
+		price := tier.price
+		if price == nil {
+			price = p.PerRequestPrice
+		}
+		if price != nil {
+			value := *price
+			clone.Intervals = append(clone.Intervals, PricingInterval{
+				TierLabel: tier.label, PerRequestPrice: &value,
+			})
+		}
 	}
 	return &clone
 }

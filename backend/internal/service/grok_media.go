@@ -208,8 +208,10 @@ func parseGrokMediaJSONRequest(body []byte, info *GrokMediaRequestInfo) {
 		strings.TrimSpace(resolution.String()), resolution.Exists(),
 		strings.TrimSpace(resolutionName.String()), resolutionName.Exists(),
 	)
-	if duration := gjson.GetBytes(body, "duration"); duration.Exists() && duration.Type == gjson.Number {
-		info.DurationSeconds = int(duration.Int())
+	if duration := gjson.GetBytes(body, "duration"); duration.Exists() {
+		if parsed, err := strconv.Atoi(strings.TrimSpace(duration.String())); err == nil {
+			info.DurationSeconds = parsed
+		}
 	} else if seconds := gjson.GetBytes(body, "seconds"); seconds.Exists() {
 		if seconds.Type == gjson.Number {
 			info.DurationSeconds = int(seconds.Int())
@@ -333,6 +335,10 @@ func parseGrokMediaMultipartRequest(contentType string, body []byte, info *GrokM
 			return
 		}
 		name := strings.TrimSpace(part.FormName())
+		switch referenceName := strings.TrimSuffix(name, "[]"); referenceName {
+		case "referenceImages", "reference_images", "image_refs", "referenceVideos", "reference_videos", "video_refs", "referenceAudios", "reference_audios", "audio_refs":
+			name = referenceName
+		}
 		if name == "" {
 			_ = part.Close()
 			continue
@@ -763,6 +769,11 @@ func (s *OpenAIGatewayService) ForwardGrokMedia(
 	if endpoint.IsVideoGenerationRequest() && !validMediaProtocol(account.MediaProtocol()) {
 		return nil, fmt.Errorf("unsupported media protocol; select default, sora or 8yes in account settings")
 	}
+	if endpoint.IsVideoGenerationRequest() {
+		if err := validateVideoBillingFields(body, contentType); err != nil {
+			return nil, err
+		}
+	}
 
 	token, _, err := s.getRequestCredential(ctx, c, account)
 	if err != nil {
@@ -811,6 +822,9 @@ func (s *OpenAIGatewayService) ForwardGrokMedia(
 		if account.MediaProtocol() == "8yes" {
 			requestInfo = normalizeEightYesVideoRequestInfo(requestInfo)
 		} else {
+			if account.MediaProtocol() == "sora" {
+				requestInfo = normalizeSoraVideoRequestInfo(requestInfo)
+			}
 			requestInfo = normalizeCustomVideoRequestInfo(requestInfo)
 		}
 	}
@@ -843,6 +857,9 @@ func (s *OpenAIGatewayService) ForwardGrokMedia(
 			if account.MediaProtocol() == "8yes" {
 				forwardedRequestInfo = normalizeEightYesVideoRequestInfo(forwardedRequestInfo)
 			} else {
+				if account.MediaProtocol() == "sora" {
+					forwardedRequestInfo = normalizeSoraVideoRequestInfo(forwardedRequestInfo)
+				}
 				forwardedRequestInfo = normalizeCustomVideoRequestInfo(forwardedRequestInfo)
 			}
 		}

@@ -263,3 +263,66 @@ func plazaGroupPricingModelsByName(group PlazaGroup) map[string]PlazaModel {
 	}
 	return models
 }
+
+func TestListPlazaGroups_VideoPricingPreservesUnitsTiersAndSources(t *testing.T) {
+	for _, groupOnly := range []bool{false, true} {
+		t.Run(map[bool]string{false: "channel", true: "group only"}[groupOnly], func(t *testing.T) {
+			pricing := ChannelModelPricing{
+				Platform: PlatformCustom, Models: []string{"vendor-video"},
+				BillingMode: BillingModeVideo, PerRequestPrice: testPtrFloat64(0.9),
+				Intervals: []PricingInterval{
+					{TierLabel: "720P", PerRequestPrice: testPtrFloat64(0.8)},
+					{TierLabel: "1080p"},
+					{TierLabel: "2k", PerRequestPrice: testPtrFloat64(1.2)},
+					{TierLabel: "4k", PerRequestPrice: testPtrFloat64(1.6)},
+				},
+			}
+			channels := []Channel{{
+				ID: 1, Name: "channel", Status: StatusActive, GroupIDs: []int64{10},
+				BillingModelSource: BillingModelSourceRequested, ModelPricing: []ChannelModelPricing{pricing},
+			}}
+			groups := []Group{{
+				ID: 10, Name: "custom", Platform: PlatformComposite, RateMultiplier: 0.1,
+				VideoRateIndependent: true, VideoRateMultiplier: 0.5,
+				VideoPrice480P: testPtrFloat64(0), VideoPrice720P: testPtrFloat64(0.2),
+			}}
+			if groupOnly {
+				groups[0].ModelPricing = []ChannelModelPricing{pricing}
+				channels = nil
+			}
+			before := pricing.Clone()
+
+			out, err := newPlazaChannelService(channels, groups, nil).ListPlazaGroups(context.Background())
+
+			require.NoError(t, err)
+			require.Len(t, out, 1)
+			require.True(t, out[0].VideoRateIndependent)
+			require.Equal(t, 0.5, out[0].VideoRateMultiplier)
+			require.Len(t, out[0].Models, 1)
+			result := out[0].Models[0].Pricing
+			require.Equal(t, BillingModeVideo, result.BillingMode)
+			require.Equal(t, 0.9, *result.PerRequestPrice)
+			tiers := map[string]float64{}
+			for _, interval := range result.Intervals {
+				require.NotNil(t, interval.PerRequestPrice)
+				tiers[interval.TierLabel] = *interval.PerRequestPrice
+			}
+			require.Equal(t, map[string]float64{
+				"480p": 0, "720P": 0.2, "1080p": 0.9, "2k": 1.2, "4k": 1.6,
+			}, tiers)
+			require.Equal(t, before, pricing, "display synthesis must not mutate billing configuration")
+		})
+	}
+}
+
+func TestPlazaVideoDisplayPricing_PreservesNonVideoPricing(t *testing.T) {
+	group := &Group{VideoPrice720P: testPtrFloat64(0.2)}
+	for _, mode := range []BillingMode{BillingModeToken, BillingModeImage, BillingModePerRequest} {
+		pricing := &ChannelModelPricing{BillingMode: mode, PerRequestPrice: testPtrFloat64(0.8)}
+		require.Same(t, pricing, plazaVideoDisplayPricing(pricing, group))
+	}
+	pricing := &ChannelModelPricing{BillingMode: BillingModeVideo, PerRequestPrice: testPtrFloat64(0.8)}
+	require.Same(t, pricing, plazaVideoDisplayPricing(pricing, &Group{}))
+	require.Same(t, pricing, plazaVideoDisplayPricing(pricing, nil))
+	require.Nil(t, plazaVideoDisplayPricing(nil, group))
+}

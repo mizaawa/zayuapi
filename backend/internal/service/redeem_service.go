@@ -386,6 +386,14 @@ func unsupportedRedeemTypeError(codeType string) error {
 
 // Redeem 使用兑换码
 func (s *RedeemService) Redeem(ctx context.Context, userID int64, code string) (*RedeemCode, error) {
+	if strings.HasPrefix(strings.ToUpper(strings.TrimSpace(code)), "PAY-") {
+		return nil, ErrRedeemCodeNotFound
+	}
+	return s.redeem(ctx, userID, code)
+}
+
+// Payment fulfillment uses this private entry after validating the order owner.
+func (s *RedeemService) redeem(ctx context.Context, userID int64, code string) (*RedeemCode, error) {
 	// 检查限流
 	if err := s.checkRedeemRateLimit(ctx, userID); err != nil {
 		return nil, err
@@ -451,6 +459,14 @@ func (s *RedeemService) Redeem(ctx context.Context, userID int64, code string) (
 			return nil, ErrRedeemCodeUsed
 		}
 		return nil, fmt.Errorf("mark code as used: %w", err)
+	}
+	// Use holds the row lock; read the benefits after any concurrent admin edit.
+	redeemCode, err = s.redeemRepo.GetByID(txCtx, redeemCode.ID)
+	if err != nil {
+		return nil, fmt.Errorf("get locked redeem code: %w", err)
+	}
+	if redeemCode.Type == RedeemTypeSubscription && redeemCode.GroupID == nil {
+		return nil, infraerrors.BadRequest("REDEEM_CODE_INVALID", "invalid subscription redeem code: missing group_id")
 	}
 
 	// 执行兑换逻辑（兑换码已被锁定，此时可安全操作）

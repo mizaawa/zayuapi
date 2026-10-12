@@ -226,16 +226,23 @@ func (s *PaymentService) executeFulfillment(ctx context.Context, oid int64) erro
 	if err != nil {
 		return fmt.Errorf("get order: %w", err)
 	}
-	if o.OrderType == payment.OrderTypeSubscription {
+	switch o.OrderType {
+	case payment.OrderTypeSubscription:
 		return s.ExecuteSubscriptionFulfillment(ctx, oid)
+	case payment.OrderTypeBalance:
+		return s.ExecuteBalanceFulfillment(ctx, oid)
+	default:
+		return validatePaymentOrderType(o.OrderType)
 	}
-	return s.ExecuteBalanceFulfillment(ctx, oid)
 }
 
 func (s *PaymentService) ExecuteBalanceFulfillment(ctx context.Context, oid int64) error {
 	o, err := s.entClient.PaymentOrder.Get(ctx, oid)
 	if err != nil {
 		return infraerrors.NotFound("NOT_FOUND", "order not found")
+	}
+	if o.OrderType != payment.OrderTypeBalance {
+		return infraerrors.BadRequest("INVALID_ORDER_TYPE", "balance fulfillment requires a balance order")
 	}
 	if o.Status == OrderStatusCompleted {
 		return nil
@@ -338,6 +345,17 @@ func resolveRedeemAction(existing *RedeemCode, lookupErr error) redeemAction {
 func (s *PaymentService) doBalance(ctx context.Context, o *dbent.PaymentOrder, lease *paymentFulfillmentLease) error {
 	// Idempotency: check if redeem code already exists (from a previous partial run)
 	existing, lookupErr := s.redeemService.GetByCode(ctx, o.RechargeCode)
+	if lookupErr != nil && !errors.Is(lookupErr, ErrRedeemCodeNotFound) {
+		return fmt.Errorf("get payment fulfillment code: %w", lookupErr)
+	}
+	if existing != nil {
+		if existing.Type != RedeemTypeBalance || math.IsNaN(existing.Value) || math.IsInf(existing.Value, 0) || existing.Value != o.Amount {
+			return errors.New("payment fulfillment code does not match the order amount and type")
+		}
+		if existing.IsUsed() && (existing.UsedBy == nil || *existing.UsedBy != o.UserID) {
+			return errors.New("payment fulfillment code was not redeemed by the order owner")
+		}
+	}
 	action := resolveRedeemAction(existing, lookupErr)
 
 	switch action {
@@ -355,7 +373,7 @@ func (s *PaymentService) doBalance(ctx context.Context, o *dbent.PaymentOrder, l
 	case redeemActionRedeem:
 		// Code exists but unused — skip creation, proceed to redeem
 	}
-	if _, err := s.redeemService.Redeem(ContextSkipRedeemAffiliate(ctx), o.UserID, o.RechargeCode); err != nil {
+	if _, err := s.redeemService.redeem(ContextSkipRedeemAffiliate(ctx), o.UserID, o.RechargeCode); err != nil {
 		return fmt.Errorf("redeem balance: %w", err)
 	}
 	if err := s.applyAffiliateRebateForOrder(ctx, o); err != nil {
@@ -476,6 +494,9 @@ func (s *PaymentService) ExecuteSubscriptionFulfillment(ctx context.Context, oid
 	o, err := s.entClient.PaymentOrder.Get(ctx, oid)
 	if err != nil {
 		return infraerrors.NotFound("NOT_FOUND", "order not found")
+	}
+	if o.OrderType != payment.OrderTypeSubscription {
+		return infraerrors.BadRequest("INVALID_ORDER_TYPE", "subscription fulfillment requires a subscription order")
 	}
 	if o.Status == OrderStatusCompleted {
 		return nil

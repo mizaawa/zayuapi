@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"math"
 	"sort"
 	"strings"
 	"time"
@@ -882,6 +883,9 @@ func (r *userRepository) filterUsersByAttributes(ctx context.Context, attrs map[
 }
 
 func (r *userRepository) UpdateBalance(ctx context.Context, id int64, amount float64) error {
+	if math.IsNaN(amount) || math.IsInf(amount, 0) {
+		return fmt.Errorf("balance adjustment must be finite")
+	}
 	client := clientFromContext(ctx, r.client)
 	update := client.User.Update().Where(dbuser.IDEQ(id)).AddBalance(amount)
 	// Track cumulative recharge amount for percentage-based notifications
@@ -899,6 +903,9 @@ func (r *userRepository) UpdateBalance(ctx context.Context, id int64, amount flo
 }
 
 func (r *userRepository) ApplyRedeemBalanceAdjustment(ctx context.Context, id int64, delta float64) error {
+	if math.IsNaN(delta) || math.IsInf(delta, 0) {
+		return fmt.Errorf("balance adjustment must be finite")
+	}
 	const updateSQL = `
 		UPDATE users
 		SET balance = GREATEST(balance + $1, 0), updated_at = NOW()
@@ -923,6 +930,9 @@ func (r *userRepository) ApplyRedeemBalanceAdjustment(ctx context.Context, id in
 // 透支策略：允许余额变为负数，确保当前请求能够完成
 // 中间件会阻止余额 <= 0 的用户发起后续请求
 func (r *userRepository) DeductBalance(ctx context.Context, id int64, amount float64) error {
+	if amount < 0 || math.IsNaN(amount) || math.IsInf(amount, 0) {
+		return fmt.Errorf("deduction amount must be finite and nonnegative")
+	}
 	client := clientFromContext(ctx, r.client)
 	n, err := client.User.Update().
 		Where(dbuser.IDEQ(id), dbuser.BalanceGTE(amount)).
@@ -952,8 +962,8 @@ func (r *userRepository) DeductBalance(ctx context.Context, id int64, amount flo
 // Unlike DeductBalance, this refund-specific operation never increases an
 // existing deficit or permits a concurrent deduction to cause an overdraft.
 func (r *userRepository) DeductAvailableBalance(ctx context.Context, id int64, amount float64) (deducted float64, err error) {
-	if amount < 0 {
-		return 0, fmt.Errorf("deduction amount must be nonnegative")
+	if amount < 0 || math.IsNaN(amount) || math.IsInf(amount, 0) {
+		return 0, fmt.Errorf("deduction amount must be finite and nonnegative")
 	}
 	const updateSQL = `
 		WITH target AS (
@@ -995,6 +1005,9 @@ func (r *userRepository) DeductAvailableBalance(ctx context.Context, id int64, a
 // 相比"读余额 → 算新值 → 整行写回"，这里把读与写压进同一条 UPDATE，
 // 并发的计费扣款不会被旧快照覆盖。
 func (r *userRepository) AdjustBalance(ctx context.Context, id int64, delta float64) (service.BalanceChange, error) {
+	if math.IsNaN(delta) || math.IsInf(delta, 0) {
+		return service.BalanceChange{}, fmt.Errorf("balance adjustment must be finite")
+	}
 	const updateSQL = `
 		UPDATE users
 		SET balance = balance + $1, updated_at = NOW()
@@ -1019,6 +1032,9 @@ func (r *userRepository) AdjustBalance(ctx context.Context, id int64, delta floa
 
 // SetBalance 原子地把余额置为 value，并返回变更前后的值。
 func (r *userRepository) SetBalance(ctx context.Context, id int64, value float64) (service.BalanceChange, error) {
+	if math.IsNaN(value) || math.IsInf(value, 0) {
+		return service.BalanceChange{}, fmt.Errorf("balance must be finite")
+	}
 	if value < 0 {
 		// 连同当前余额一起返回，便于上层给出可读的错误信息。
 		current, err := r.currentBalance(ctx, id)

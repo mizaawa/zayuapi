@@ -26,6 +26,9 @@ func (s *PaymentService) CreateOrder(ctx context.Context, req CreateOrderRequest
 	if req.OrderType == "" {
 		req.OrderType = payment.OrderTypeBalance
 	}
+	if err := validatePaymentOrderType(req.OrderType); err != nil {
+		return nil, err
+	}
 	if normalized := NormalizeVisibleMethod(req.PaymentType); normalized != "" {
 		req.PaymentType = normalized
 	}
@@ -112,6 +115,15 @@ func (s *PaymentService) CreateOrder(ctx context.Context, req CreateOrderRequest
 		return nil, err
 	}
 	return resp, nil
+}
+
+func validatePaymentOrderType(orderType string) error {
+	switch orderType {
+	case payment.OrderTypeBalance, payment.OrderTypeSubscription:
+		return nil
+	default:
+		return infraerrors.BadRequest("INVALID_ORDER_TYPE", "order_type must be balance or subscription")
+	}
 }
 
 func (s *PaymentService) validateOrderInput(ctx context.Context, req CreateOrderRequest, cfg *PaymentConfig) (*dbent.SubscriptionPlan, error) {
@@ -213,7 +225,11 @@ func (s *PaymentService) createOrderInTx(ctx context.Context, req CreateOrderReq
 	if err != nil {
 		return nil, fmt.Errorf("create order: %w", err)
 	}
-	code := fmt.Sprintf("PAY-%d-%d", order.ID, time.Now().UnixNano()%100000)
+	code, err := s.redeemService.GenerateRandomCode()
+	if err != nil {
+		return nil, fmt.Errorf("generate payment fulfillment code: %w", err)
+	}
+	code = "PAY-" + code
 	order, err = tx.PaymentOrder.UpdateOneID(order.ID).SetRechargeCode(code).Save(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("set recharge code: %w", err)

@@ -32,6 +32,8 @@ const group: ModelPlazaGroup = {
   is_exclusive: false,
   image_rate_independent: false,
   image_rate_multiplier: 1,
+  video_rate_independent: false,
+  video_rate_multiplier: 1,
   models: [
     {
       name: 'gpt-test',
@@ -49,7 +51,11 @@ function mountSection(groupOverride: Partial<ModelPlazaGroup> = {}) {
       plugins: [createPinia()],
       stubs: {
         GroupBadge: { template: '<span data-group-badge>{{ name }}</span>', props: ['name'] },
-        PlazaModelPricingTable: { template: '<div data-pricing-table>pricing</div>' },
+        PlazaModelPricingTable: {
+          name: 'PlazaModelPricingTable',
+          template: '<div data-pricing-table>pricing</div>',
+          props: ['videoRateIndependent', 'videoRateMultiplier']
+        },
         Icon: { template: '<i :data-icon="name" />', props: ['name'] }
       }
     }
@@ -105,5 +111,15 @@ describe('PlazaGroupSection', () => {
     const wrapper = mountSection({ id: 44, is_exclusive: true })
 
     expect(wrapper.text()).toContain('modelPlaza.badges.exclusive')
+  })
+
+  it('passes video independent pricing to the expanded table', async () => {
+    const wrapper = mountSection({ video_rate_independent: true, video_rate_multiplier: 0.25 })
+    await wrapper.get('[data-testid="group-toggle"]').trigger('click')
+
+    expect(wrapper.getComponent({ name: 'PlazaModelPricingTable' }).props()).toMatchObject({
+      videoRateIndependent: true,
+      videoRateMultiplier: 0.25
+    })
   })
 })

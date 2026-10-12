@@ -45,8 +45,22 @@ func mediaRequestFieldsUnambiguous(contentType string, body []byte) bool {
 				return false
 			}
 			name := part.FormName()
-			// Repeated image files are valid; paid scalar fields must be unique.
-			if part.FileName() == "" && !remember(name) {
+			paidScalar := false
+			switch strings.ToLower(strings.TrimSuffix(strings.TrimSpace(name), "[]")) {
+			case "model", "n", "size", "resolution", "resolution_name", "duration", "seconds", "ratio", "aspect_ratio", "quality", "response_format":
+				paidScalar = true
+			}
+			// Paid fields cannot be files or array aliases that parsers interpret differently.
+			if paidScalar && (part.FileName() != "" || name != strings.TrimSpace(name) || strings.HasSuffix(name, "[]")) {
+				_ = part.Close()
+				return false
+			}
+			repeatedReference := false
+			switch strings.TrimSuffix(name, "[]") {
+			case "referenceImages", "reference_images", "image_refs", "referenceVideos", "reference_videos", "video_refs", "referenceAudios", "reference_audios", "audio_refs":
+				repeatedReference = true
+			}
+			if part.FileName() == "" && !repeatedReference && !remember(name) {
 				_ = part.Close()
 				return false
 			}

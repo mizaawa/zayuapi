@@ -189,4 +189,27 @@ describe('AccountTestModal', () => {
 
     expect(wrapper.text()).toContain('已通过 /v1/chat/completions 验证')
   })
+
+  it('supports explicit image tests for opaque Custom model names', async () => {
+    const wrapper = mount(AccountTestModal, {
+      props: {
+        show: true,
+        account: { ...buildAccount(), platform: 'custom', type: 'apikey' } as any
+      },
+      global: {
+        stubs: { BaseDialog: BaseDialogStub, Select: SelectStub, TextArea: TextAreaStub, Icon: true }
+      }
+    })
+    ;(wrapper.vm as any).selectedModelId = 'svg'
+    ;(wrapper.vm as any).testMode = 'image'
+    ;(wrapper.vm as any).testPrompt = 'draw a square'
+    await flushPromises()
+    await (wrapper.vm as any).startTest()
+    await flushPromises()
+    const [, options] = (global.fetch as any).mock.calls[0]
+    expect(JSON.parse(options.body)).toEqual({ model_id: 'svg', prompt: 'draw a square', mode: 'image' })
+    expect(options.redirect).toBe('error')
+    expect(options.credentials).toBe('omit')
+    wrapper.unmount()
+  })
 })

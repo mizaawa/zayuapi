@@ -661,7 +661,9 @@ export default {
       unitPerMillion: '$ / 1M token',
       perUnitRequest: '/ 次',
       perUnitImage: '/ 张',
+      perUnitSecond: '/ 秒',
       perRequest: '按次计费',
+      perVideoSecond: '视频（按秒）',
       perImage: '按图片计费'
     },
     nav: {

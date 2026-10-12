@@ -245,6 +245,7 @@ func TestToModelPlazaGroupDTO_UserRateAndFieldWhitelist(t *testing.T) {
 	g := service.PlazaGroup{
 		ID: 2, Name: "vip", Description: "d", Platform: "anthropic",
 		SubscriptionType: "standard", RateMultiplier: 1, IsExclusive: true,
+		VideoRateIndependent: true, VideoRateMultiplier: 0.25,
 		Models: []service.PlazaModel{{
 			Name:     "claude-sonnet",
 			Platform: "anthropic",
@@ -271,11 +272,14 @@ func TestToModelPlazaGroupDTO_UserRateAndFieldWhitelist(t *testing.T) {
 		"rate_multiplier", "user_rate_multiplier", "is_exclusive", "models",
 		"peak_rate_enabled", "peak_start", "peak_end", "peak_rate_multiplier",
 		"image_rate_independent", "image_rate_multiplier",
+		"video_rate_independent", "video_rate_multiplier",
 	} {
 		_, exists := decoded[key]
 		require.Truef(t, exists, "plaza group DTO must expose %q", key)
 	}
 	require.InDelta(t, 0.5, decoded["user_rate_multiplier"].(float64), 1e-9)
+	require.Equal(t, true, decoded["video_rate_independent"])
+	require.Equal(t, 0.25, decoded["video_rate_multiplier"])
 
 	// 模型条目:pricing + official_pricing 并存;official 缺失字段输出 null 而非省略
 	models := decoded["models"].([]any)
@@ -301,6 +305,23 @@ func TestToModelPlazaGroupDTO_UserRateAndFieldWhitelist(t *testing.T) {
 
 func TestToModelPlazaOfficialPricing_NilPassthrough(t *testing.T) {
 	require.Nil(t, toModelPlazaOfficialPricing(nil))
+}
+
+func TestToModelPlazaGroupDTO_PreservesVideoPerSecondPricing(t *testing.T) {
+	dto := toModelPlazaGroupDTO(&service.PlazaGroup{Models: []service.PlazaModel{{
+		Name: "vendor-video", Platform: service.PlatformCustom,
+		Pricing: &service.ChannelModelPricing{
+			BillingMode: service.BillingModeVideo, PerRequestPrice: testPtr(0.07),
+			Intervals: []service.PricingInterval{{TierLabel: "1080p", PerRequestPrice: testPtr(0.2)}},
+		},
+	}}}, nil)
+
+	require.Len(t, dto.Models, 1)
+	require.Equal(t, "video", dto.Models[0].Pricing.BillingMode)
+	require.Equal(t, 0.07, *dto.Models[0].Pricing.PerRequestPrice)
+	require.Len(t, dto.Models[0].Pricing.Intervals, 1)
+	require.Equal(t, "1080p", dto.Models[0].Pricing.Intervals[0].TierLabel)
+	require.Equal(t, 0.2, *dto.Models[0].Pricing.Intervals[0].PerRequestPrice)
 }
 
 func testPtr(v float64) *float64 { return &v }

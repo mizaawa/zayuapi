@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -24,6 +25,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/pkg/openai"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/openai_compat"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/xai"
+	"github.com/Wei-Shaw/sub2api/internal/util/logredact"
 	"github.com/Wei-Shaw/sub2api/internal/util/urlvalidator"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -58,9 +60,11 @@ const (
 	defaultOpenAIImageTestPrompt = "Generate a cute orange cat astronaut sticker on a clean pastel background."
 )
 
-// isOpenAIImageModel checks if the model is an OpenAI image generation model (e.g. gpt-image-2).
+// Use the gateway's image families, including compatible image-only models.
 func isOpenAIImageModel(model string) bool {
-	return strings.HasPrefix(strings.ToLower(model), "gpt-image-")
+	model = strings.ToLower(strings.TrimSpace(model))
+	return isOpenAIImageGenerationModel(model) || model == "dall-e-2" || model == "dall-e-3" ||
+		(strings.HasPrefix(model, "gemini-") && strings.Contains(model, "-image"))
 }
 
 // AccountTestService handles account testing operations
@@ -176,7 +180,7 @@ func createTestPayload(modelID string) (map[string]any, error) {
 // TestAccountConnection tests an account's connection by sending a test request
 // All account types use full Claude Code client characteristics, only auth header differs
 // modelID is optional - if empty, defaults to claude.DefaultTestModel
-// mode is optional - "compact" routes OpenAI accounts to the /responses/compact probe path
+// mode is optional; "compact" probes /responses/compact, and "image" probes /images/generations.
 func (s *AccountTestService) TestAccountConnection(c *gin.Context, accountID int64, modelID string, prompt string, mode string) error {
 	initAccountTestLogger(c, accountID, modelID, mode)
 	ctx := c.Request.Context()
@@ -202,8 +206,7 @@ func (s *AccountTestService) TestAccountConnection(c *gin.Context, accountID int
 		return nil
 	}
 
-	// Custom accounts use the same OpenAI-compatible Responses/Chat Completions
-	// probe path as OpenAI API-key accounts.
+	// Custom accounts use the same OpenAI-compatible text and image probe paths.
 	if account.IsOpenAI() || account.IsCustom() {
 		return s.testOpenAIAccountConnection(c, account, modelID, prompt, normalizeAccountTestMode(mode))
 	}
@@ -537,8 +540,11 @@ func (s *AccountTestService) testOpenAIAccountConnection(c *gin.Context, account
 		return s.testOpenAICompactConnection(c, account, testModelID)
 	}
 
-	// Route to image generation test if an image model is selected
-	if isOpenAIImageModel(testModelID) {
+	// Keep the original public model's capability when mapping to an opaque alias.
+	if mode == AccountTestModeImage || isOpenAIImageModel(modelID) || isOpenAIImageModel(testModelID) {
+		if !validMediaProtocol(account.MediaProtocol()) {
+			return s.sendErrorAndEnd(c, "Unsupported media protocol; select default, sora or 8yes in account settings")
+		}
 		imagePrompt := strings.TrimSpace(prompt)
 		if imagePrompt == "" {
 			imagePrompt = defaultOpenAIImageTestPrompt
@@ -1735,11 +1741,12 @@ func (s *AccountTestService) testOpenAIImageAPIKey(c *gin.Context, ctx context.C
 
 	s.sendEvent(c, TestEvent{Type: "test_start", Model: modelID})
 
+	// GPT Image already returns base64 and rejects response_format. Other
+	// compatible providers may return a URL; accept either response shape.
 	payload := map[string]any{
-		"model":           modelID,
-		"prompt":          prompt,
-		"n":               1,
-		"response_format": "b64_json",
+		"model":  modelID,
+		"prompt": prompt,
+		"n":      1,
 	}
 	payloadBytes, _ := json.Marshal(payload)
 
@@ -1765,19 +1772,25 @@ func (s *AccountTestService) testOpenAIImageAPIKey(c *gin.Context, ctx context.C
 	}
 	defer func() { _ = resp.Body.Close() }()
 
-	body, err := io.ReadAll(resp.Body)
+	limit := min(resolveUpstreamResponseReadLimit(s.cfg), int64(32<<20))
+	if resp.StatusCode != http.StatusOK {
+		limit = 64 << 10
+	}
+	body, err := readUpstreamResponseBodyLimited(resp.Body, limit)
 	if err != nil {
 		return s.sendErrorAndEnd(c, fmt.Sprintf("Failed to read response: %s", err.Error()))
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return s.sendErrorAndEnd(c, fmt.Sprintf("API returned %d: %s", resp.StatusCode, string(body)))
+		message := strings.ReplaceAll(string(body), authToken, "[REDACTED]")
+		return s.sendErrorAndEnd(c, fmt.Sprintf("Images API returned %d: %s", resp.StatusCode, message))
 	}
 
 	// Parse {"data": [{"b64_json": "...", "revised_prompt": "..."}]}
 	var result struct {
 		Data []struct {
 			B64JSON       string `json:"b64_json"`
+			URL           string `json:"url"`
 			RevisedPrompt string `json:"revised_prompt"`
 		} `json:"data"`
 	}
@@ -1789,17 +1802,36 @@ func (s *AccountTestService) testOpenAIImageAPIKey(c *gin.Context, ctx context.C
 		return s.sendErrorAndEnd(c, "No images returned from API")
 	}
 
+	imageCount := 0
 	for _, item := range result.Data {
 		if item.RevisedPrompt != "" {
 			s.sendEvent(c, TestEvent{Type: "content", Text: item.RevisedPrompt})
 		}
 		if item.B64JSON != "" {
+			decoded, err := base64.StdEncoding.DecodeString(item.B64JSON)
+			if err != nil {
+				return s.sendErrorAndEnd(c, "Invalid base64 image returned from API")
+			}
+			mimeType := detectedImageContentType(decoded)
+			if mimeType == "" {
+				return s.sendErrorAndEnd(c, "Unsupported image content returned from API")
+			}
 			s.sendEvent(c, TestEvent{
 				Type:     "image",
-				ImageURL: "data:image/png;base64," + item.B64JSON,
-				MimeType: "image/png",
+				ImageURL: "data:" + mimeType + ";base64," + item.B64JSON,
+				MimeType: mimeType,
 			})
+			imageCount++
+		} else if item.URL != "" {
+			if !ValidVideoReferenceURL(item.URL) {
+				return s.sendErrorAndEnd(c, "Unsafe image URL returned from API")
+			}
+			s.sendEvent(c, TestEvent{Type: "image", ImageURL: item.URL})
+			imageCount++
 		}
+	}
+	if imageCount == 0 {
+		return s.sendErrorAndEnd(c, "No images returned from API")
 	}
 
 	s.sendEvent(c, TestEvent{Type: "test_complete", Success: true})
@@ -1943,6 +1975,7 @@ func (s *AccountTestService) sendEvent(c *gin.Context, event TestEvent) {
 
 // sendErrorAndEnd sends an error event and ends the stream
 func (s *AccountTestService) sendErrorAndEnd(c *gin.Context, errorMsg string) error {
+	errorMsg = logredact.RedactText(sanitizeUpstreamErrorMessage(errorMsg), "api_key", "authorization")
 	logAccountTestError(c, errorMsg)
 	s.sendEvent(c, TestEvent{Type: "error", Error: errorMsg})
 	return fmt.Errorf("%s", errorMsg)

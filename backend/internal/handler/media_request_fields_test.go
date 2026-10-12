@@ -78,3 +78,36 @@ func TestMediaRequestsRejectAmbiguousFieldsBeforeCharging(t *testing.T) {
 	require.Zero(t, upstream.calls)
 	require.Empty(t, ledger.reservations)
 }
+
+func TestMediaMultipartReferenceListsAndScalarBoundaries(t *testing.T) {
+	for _, name := range []string{"referenceImages", "reference_images[]", "image_refs", "referenceVideos", "reference_videos[]", "video_refs", "referenceAudios", "reference_audios[]", "audio_refs"} {
+		t.Run(name, func(t *testing.T) {
+			var body bytes.Buffer
+			writer := multipart.NewWriter(&body)
+			require.NoError(t, writer.WriteField("model", "seedance-2-5-720p"))
+			require.NoError(t, writer.WriteField(name, "https://cdn.example.com/first"))
+			require.NoError(t, writer.WriteField(name, "https://cdn.example.com/second"))
+			require.NoError(t, writer.Close())
+			require.True(t, mediaRequestFieldsUnambiguous(writer.FormDataContentType(), body.Bytes()))
+		})
+	}
+	for _, name := range []string{"model", "Model", "n", "duration", "seconds", "resolution", "quality", "model[]", " duration "} {
+		for _, file := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s/file=%t", name, file), func(t *testing.T) {
+				var body bytes.Buffer
+				writer := multipart.NewWriter(&body)
+				require.NoError(t, writer.WriteField(strings.ToLower(strings.TrimSpace(strings.TrimSuffix(name, "[]"))), "1"))
+				if file {
+					part, err := writer.CreateFormFile(name, "field.txt")
+					require.NoError(t, err)
+					_, err = io.WriteString(part, "10")
+					require.NoError(t, err)
+				} else {
+					require.NoError(t, writer.WriteField(name, "10"))
+				}
+				require.NoError(t, writer.Close())
+				require.False(t, mediaRequestFieldsUnambiguous(writer.FormDataContentType(), body.Bytes()))
+			})
+		}
+	}
+}

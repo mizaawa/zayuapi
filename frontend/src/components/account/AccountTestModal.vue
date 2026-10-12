@@ -55,7 +55,7 @@
         />
       </div>
 
-      <div v-if="isOpenAIAccount" class="space-y-1.5">
+      <div v-if="isOpenAICompatibleAccount" class="space-y-1.5">
         <label class="text-sm font-medium text-gray-700 dark:text-gray-300">
           {{ t('admin.accounts.openai.testMode') }}
         </label>
@@ -142,7 +142,7 @@
             class="group/img relative cursor-pointer overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm transition hover:border-primary-300 hover:shadow-md dark:border-dark-500 dark:bg-dark-700"
             @click="previewImageUrl = image.url"
           >
-            <img :src="image.url" :alt="`test-image-${index + 1}`" class="max-h-[360px] w-full object-contain" />
+            <img :src="image.url" :alt="`test-image-${index + 1}`" referrerpolicy="no-referrer" class="max-h-[360px] w-full object-contain" />
             <div class="absolute inset-0 flex items-center justify-center bg-black/0 transition-colors group-hover/img:bg-black/20">
               <Icon name="eye" size="lg" class="text-white opacity-0 drop-shadow-lg transition-opacity group-hover/img:opacity-100" :stroke-width="2" />
             </div>
@@ -169,6 +169,7 @@
             </button>
             <img
               :src="previewImageUrl"
+              referrerpolicy="no-referrer"
               alt="preview"
               class="max-h-[90vh] max-w-[90vw] rounded-lg object-contain shadow-2xl"
             />
@@ -252,6 +253,7 @@ import { useClipboard } from '@/composables/useClipboard'
 import { buildApiUrl } from '@/api/client'
 import { adminAPI } from '@/api/admin'
 import type { Account, ClaudeModel } from '@/types'
+import { isAccountTestImageModel, safeAccountTestImageUrl } from '@/utils/accountTest'
 
 const { t } = useI18n()
 const { copyToClipboard } = useClipboard()
@@ -286,11 +288,13 @@ const testPrompt = ref('')
 const loadingModels = ref(false)
 let abortController: AbortController | null = null
 const generatedImages = ref<PreviewImage[]>([])
-const testMode = ref<'default' | 'compact'>('default')
+const testMode = ref<'default' | 'compact' | 'image'>('default')
 const isOpenAIAccount = computed(() => props.account?.platform === 'openai')
+const isOpenAICompatibleAccount = computed(() => isOpenAIAccount.value || props.account?.platform === 'custom')
 const openAITestModeOptions = computed(() => [
   { value: 'default', label: t('admin.accounts.openai.testModeDefault') },
-  { value: 'compact', label: t('admin.accounts.openai.testModeCompact') }
+  ...(props.account?.type === 'apikey' ? [{ value: 'image', label: t('admin.accounts.openai.testModeImage') }] : []),
+  ...(isOpenAIAccount.value ? [{ value: 'compact', label: t('admin.accounts.openai.testModeCompact') }] : [])
 ])
 const previewImageUrl = ref('')
 const prioritizedGeminiModels = ['gemini-3.1-flash-image', 'gemini-2.5-flash-image', 'gemini-3.5-flash', 'gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-3-flash-preview', 'gemini-3-pro-preview', 'gemini-2.0-flash']
@@ -302,9 +306,10 @@ const supportsGeminiImageTest = computed(() => {
 })
 
 const supportsOpenAIImageTest = computed(() => {
-  const modelID = selectedModelId.value.toLowerCase()
-  if (!modelID.startsWith('gpt-image-')) return false
-  return props.account?.platform === 'openai'
+  if (!isOpenAICompatibleAccount.value || testMode.value === 'compact') return false
+  const mapping = props.account?.credentials?.model_mapping as Record<string, unknown> | undefined
+  return testMode.value === 'image' || isAccountTestImageModel(selectedModelId.value) ||
+    isAccountTestImageModel(mapping?.[selectedModelId.value])
 })
 
 const supportsImageTest = computed(() => supportsGeminiImageTest.value || supportsOpenAIImageTest.value)
@@ -335,7 +340,7 @@ watch(
   }
 )
 
-watch(selectedModelId, () => {
+watch(supportsImageTest, () => {
   if (supportsImageTest.value && !testPrompt.value.trim()) {
     testPrompt.value = t('admin.accounts.imagePromptDefault')
   }
@@ -431,8 +436,10 @@ const startTest = async () => {
       body: JSON.stringify({
         model_id: selectedModelId.value,
         prompt: supportsImageTest.value ? testPrompt.value.trim() : '',
-        mode: isOpenAIAccount.value ? testMode.value : 'default'
+        mode: isOpenAICompatibleAccount.value ? testMode.value : 'default'
       }),
+      redirect: 'error',
+      credentials: 'omit',
       signal: abortController.signal
     })
 
@@ -521,9 +528,9 @@ const handleEvent = (event: {
       break
 
     case 'image':
-      if (event.image_url) {
+      if (safeAccountTestImageUrl(event.image_url)) {
         generatedImages.value.push({
-          url: event.image_url,
+          url: safeAccountTestImageUrl(event.image_url),
           mimeType: event.mime_type
         })
         addLine(t('admin.accounts.imageReceived', { count: generatedImages.value.length }), 'text-purple-300')

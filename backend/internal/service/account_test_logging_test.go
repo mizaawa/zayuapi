@@ -74,12 +74,16 @@ func TestAccountTestFailureLogAttribution(t *testing.T) {
 
 func TestAccountTestErrorLogRedaction(t *testing.T) {
 	core, logs := observer.New(zap.WarnLevel)
-	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
 	c.Request = httptest.NewRequest("POST", "/test", nil).WithContext(logger.IntoContext(context.Background(), zap.New(core)))
 	initAccountTestLogger(c, 1, "", "")
 	message := `API returned 403: {"api_key":"secret-key","access_token":"secret-token","message":"denied"}`
 	err := (&AccountTestService{}).sendErrorAndEnd(c, message)
-	require.EqualError(t, err, message)
+	require.ErrorContains(t, err, "denied")
+	require.NotContains(t, err.Error(), "secret-key")
+	require.NotContains(t, recorder.Body.String(), "secret-key")
+	require.NotContains(t, recorder.Body.String(), "secret-token")
 	entry := logs.FilterMessage("account_test.failed").All()[0]
 	logged, ok := entry.ContextMap()["error"].(string)
 	require.True(t, ok)

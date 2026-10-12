@@ -18,5 +18,8 @@ backend/migrations/*.sql text eol=lf
 *.yaml text eol=lf
 *.yml text eol=lf
 
+# Keep dependency patch hashes identical across operating systems.
+frontend/patches/*.patch text eol=lf
+
 # Dockerfile
 Dockerfile text eol=lf

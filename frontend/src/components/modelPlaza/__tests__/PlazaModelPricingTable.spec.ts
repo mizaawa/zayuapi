@@ -44,7 +44,12 @@ function mountTable(
   models: PlazaModel[],
   rateMultiplier: number,
   userRateMultiplier?: number | null,
-  extraProps?: { imageRateIndependent?: boolean; imageRateMultiplier?: number | null }
+  extraProps?: {
+    imageRateIndependent?: boolean
+    imageRateMultiplier?: number | null
+    videoRateIndependent?: boolean
+    videoRateMultiplier?: number | null
+  }
 ) {
   return mount(PlazaModelPricingTable, {
     props: { models, rateMultiplier, userRateMultiplier: userRateMultiplier ?? null, ...extraProps }
@@ -245,6 +250,69 @@ describe('PlazaModelPricingTable', () => {
     expect(text).toContain('modelPlaza.table.perRequest')
     // 单位后缀跟在价格后(按次 → / 次)
     expect(text).toContain('modelPlaza.table.perUnitRequest')
+  })
+
+  it.each([
+    { independent: false, independentRate: 0.25, expectedPrice: '$0.04', expectedRate: '1x0.5x' },
+    { independent: true, independentRate: 0.25, expectedPrice: '$0.02', expectedRate: '0.25x' },
+    { independent: true, independentRate: 0, expectedPrice: '$0.00', expectedRate: '0x' }
+  ])('shows video prices per second with independent=$independent and rate=$independentRate', ({ independent, independentRate, expectedPrice, expectedRate }) => {
+    const model = tokenModel({ name: 'vendor-video', platform: 'custom', official_pricing: null })
+    model.pricing = { ...model.pricing!, billing_mode: 'video', per_request_price: 0.08 }
+    const wrapper = mountTable([model], 1, 0.5, {
+      videoRateIndependent: independent,
+      videoRateMultiplier: independentRate,
+      imageRateIndependent: true,
+      imageRateMultiplier: 9
+    })
+    const cells = wrapper.findAll('tbody td')
+
+    expect(cells[0].text()).toContain('modelPlaza.table.perVideoSecond')
+    expect(cells[0].text()).not.toContain('modelPlaza.table.perRequest')
+    expect(cells[1].text()).toContain(expectedPrice)
+    expect(cells[1].text()).toContain('modelPlaza.table.perUnitSecond')
+    expect(cells.at(-1)!.text()).toBe(expectedRate)
+    expect(wrapper.find('.pz-unit').exists()).toBe(false)
+  })
+
+  it('preserves resolution tiers and per-second units for video prices', () => {
+    const model = tokenModel({ name: 'vendor-video', platform: 'custom', official_pricing: null })
+    model.pricing = {
+      ...model.pricing!, billing_mode: 'video', per_request_price: null,
+      intervals: [
+        { min_tokens: 0, max_tokens: null, tier_label: '720p', per_request_price: 0.08 },
+        { min_tokens: 0, max_tokens: null, tier_label: '4k', per_request_price: 0.2 }
+      ] as UserPricingInterval[]
+    }
+    const wrapper = mountTable([model], 0.1, 0.05, {
+      videoRateIndependent: true, videoRateMultiplier: 0.5
+    })
+    const priceCell = wrapper.findAll('tbody td')[1]
+
+    expect(priceCell.text()).toContain('720p')
+    expect(priceCell.text()).toContain('$0.04')
+    expect(priceCell.text()).toContain('4k')
+    expect(priceCell.text()).toContain('$0.10')
+    expect(priceCell.text().match(/modelPlaza.table.perUnitSecond/g)).toHaveLength(2)
+    expect(wrapper.find('td .line-through').exists()).toBe(false)
+  })
+
+  it('does not apply video independent rates to per-request or image prices', () => {
+    const models = (['per_request', 'image'] as const).map((mode) => {
+      const model = tokenModel({ name: mode, official_pricing: null })
+      model.pricing = { ...model.pricing!, billing_mode: mode, per_request_price: 0.08 }
+      return model
+    })
+    const wrapper = mountTable(models, 1, 0.5, {
+      videoRateIndependent: true, videoRateMultiplier: 0.01
+    })
+
+    for (const row of wrapper.findAll('tbody tr')) {
+      expect(row.findAll('td')[1].text()).toContain('$0.04')
+    }
+    expect(wrapper.text()).toContain('modelPlaza.table.perUnitRequest')
+    expect(wrapper.text()).toContain('modelPlaza.table.perUnitImage')
+    expect(wrapper.text()).not.toContain('modelPlaza.table.perUnitSecond')
   })
 
   it('token 模型阶梯定价内联进输入/输出列,按倍率折算', () => {

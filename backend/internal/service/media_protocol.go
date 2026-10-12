@@ -28,6 +28,9 @@ func validMediaProtocol(protocol string) bool {
 }
 
 func VideoPrechargeRequestInfo(ctx context.Context, account *Account, body []byte, contentType string) (GrokMediaRequestInfo, error) {
+	if err := validateVideoBillingFields(body, contentType); err != nil {
+		return GrokMediaRequestInfo{}, err
+	}
 	if !validMediaProtocol(account.MediaProtocol()) {
 		return GrokMediaRequestInfo{}, fmt.Errorf("unsupported media protocol; select default, sora or 8yes in account settings")
 	}
@@ -49,10 +52,17 @@ func VideoPrechargeRequestInfo(ctx context.Context, account *Account, body []byt
 		}
 	}
 	info := ParseGrokMediaRequest(contentType, adapted)
-	if account.MediaProtocol() == "sora" && info.RawDurationSeconds == 0 && strings.HasPrefix(strings.ToLower(info.Model), "sora-") {
-		info.RawDurationSeconds, info.DurationSeconds = 4, 4
+	if account.MediaProtocol() == "sora" {
+		info = normalizeSoraVideoRequestInfo(info)
 	}
 	return info, nil
+}
+
+func normalizeSoraVideoRequestInfo(info GrokMediaRequestInfo) GrokMediaRequestInfo {
+	if info.RawDurationSeconds == 0 && strings.HasPrefix(strings.ToLower(info.Model), "sora-") {
+		info.RawDurationSeconds, info.DurationSeconds = 4, 4
+	}
+	return info
 }
 
 func normalizeVideoProtocolBody(ctx context.Context, account *Account, body []byte) ([]byte, error) {

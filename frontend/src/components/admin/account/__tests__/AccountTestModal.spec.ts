@@ -183,6 +183,54 @@ describe('AccountTestModal', () => {
     })
   })
 
+  it.each([
+    { model: 'gpt-image-2', mapped: '', mode: 'default' },
+    { model: 'banana-2', mapped: '', mode: 'default' },
+    { model: 'custom-art', mapped: 'gemini-3.1-flash-image', mode: 'default' },
+    { model: 'svg', mapped: 'provider-art', mode: 'image' }
+  ])('tests Custom image model $model with its prompt and selected mode', async ({ model, mapped, mode }) => {
+    getAvailableModels.mockResolvedValue([{ id: model, display_name: model }])
+    const wrapper = mountModal({
+      id: 15,
+      name: 'Custom image',
+      platform: 'custom',
+      type: 'apikey',
+      status: 'active',
+      credentials: { model_mapping: { [model]: mapped || model } }
+    })
+    await wrapper.setProps({ show: true })
+    await flushPromises()
+    ;(wrapper.vm as any).testMode = mode
+    await flushPromises()
+    const prompt = wrapper.find('textarea.textarea-stub')
+    expect(prompt.exists()).toBe(true)
+    await prompt.setValue('draw a square')
+    await (wrapper.vm as any).startTest()
+    await flushPromises()
+
+    const [, request] = (global.fetch as any).mock.calls[0]
+    expect(JSON.parse(request.body)).toEqual({ model_id: model, prompt: 'draw a square', mode })
+    expect(request.redirect).toBe('error')
+    expect(request.credentials).toBe('omit')
+    expect(wrapper.find('img[alt="test-image-1"]').attributes('referrerpolicy')).toBe('no-referrer')
+    wrapper.unmount()
+  })
+
+  it('rejects executable preview URLs returned by an upstream', async () => {
+    global.fetch = vi.fn().mockResolvedValue(createStreamResponse([
+      'data: {"type":"image","image_url":"javascript:alert(1)"}\n',
+      'data: {"type":"image","image_url":"data:image/svg+xml;base64,PHN2Zy8+"}\n',
+      'data: {"type":"test_complete","success":true}\n'
+    ])) as any
+    const wrapper = mountModal()
+    await wrapper.setProps({ show: true })
+    await flushPromises()
+    await (wrapper.vm as any).startTest()
+    await flushPromises()
+    expect(wrapper.find('img').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
   it('OpenAI Compact 探测会携带 compact 测试模式', async () => {
     getAvailableModels.mockResolvedValue([
       { id: 'gpt-5.4', display_name: 'GPT-5.4' }
