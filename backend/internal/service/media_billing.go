@@ -30,9 +30,12 @@ type MediaBillingReservation struct {
 	Endpoint GrokMediaEndpoint `json:"endpoint"`
 	// Resolution quotes retain the price at admission even if an administrator
 	// edits group/channel prices while an asynchronous job is running.
-	VideoPrices   map[string]MediaBillingQuote `json:"video_prices,omitempty"`
-	FinalQuote    *MediaBillingQuote           `json:"-"`
-	RefundPending bool                         `json:"-"`
+	VideoPrices     map[string]MediaBillingQuote `json:"video_prices,omitempty"`
+	FinalQuote      *MediaBillingQuote           `json:"-"`
+	RefundPending   bool                         `json:"-"`
+	WorkbenchKind   string                       `json:"workbench_kind,omitempty"`
+	QueueLeaseUntil time.Time                    `json:"-"`
+	Dispatched      bool                         `json:"-"`
 }
 
 type MediaBillingRepository interface {
@@ -43,6 +46,9 @@ type MediaBillingRepository interface {
 	BindMediaTask(context.Context, string, string, GrokMediaEndpoint) error
 	FindMediaTask(context.Context, string, int64, int64) (*MediaBillingReservation, error)
 	PendingMedia(context.Context, int) ([]*MediaBillingReservation, error)
+	RenewMediaQueue(context.Context, string, int64, int64) error
+	DispatchMediaQueue(context.Context, string, int64, int64, int64) error
+	RefundMediaQueue(context.Context, string, bool) (*MediaBillingReservation, error)
 }
 
 func (s *OpenAIGatewayService) PrechargeMedia(ctx context.Context, input *OpenAIRecordUsageInput) (*MediaBillingReservation, error) {
@@ -64,7 +70,7 @@ func (s *OpenAIGatewayService) PrechargeMedia(ctx context.Context, input *OpenAI
 	if quote == nil {
 		return nil, errors.New("media price is unavailable")
 	}
-	reservation := &MediaBillingReservation{ID: copyInput.BillingRequestID, Quote: *quote}
+	reservation := &MediaBillingReservation{ID: copyInput.BillingRequestID, Quote: *quote, WorkbenchKind: input.WorkbenchKind}
 	if input.APIKey.GroupID != nil {
 		reservation.GroupID = *input.APIKey.GroupID
 	}
@@ -93,6 +99,99 @@ func (s *OpenAIGatewayService) PrechargeMedia(ctx context.Context, input *OpenAI
 	return reservation, nil
 }
 
+type mediaWorkbenchPrepaymentKey struct{}
+
+// Only server-created queue contexts carry this capability. Headers, payloads
+// and client task IDs cannot grant an exemption from spending checks.
+func WithMediaWorkbenchPrepayment(ctx context.Context, r *MediaBillingReservation) context.Context {
+	return context.WithValue(ctx, mediaWorkbenchPrepaymentKey{}, r)
+}
+
+func MediaWorkbenchPrepaid(ctx context.Context, key *APIKey) bool {
+	r, _ := ctx.Value(mediaWorkbenchPrepaymentKey{}).(*MediaBillingReservation)
+	return r != nil && r.ID != "" && (r.WorkbenchKind == "image" || r.WorkbenchKind == "video") &&
+		key != nil && key.GroupID != nil && r.GroupID == *key.GroupID &&
+		r.Quote.Command.UserID == key.UserID && r.Quote.Command.APIKeyID == key.ID
+}
+
+func mediaPrepaidAccountID(ctx context.Context, groupID *int64) int64 {
+	r, _ := ctx.Value(mediaWorkbenchPrepaymentKey{}).(*MediaBillingReservation)
+	if r == nil || r.WorkbenchKind == "" || groupID == nil || r.GroupID != *groupID {
+		return 0
+	}
+	return r.Quote.Command.AccountID
+}
+
+// Admission chooses a priced account without consuming a generation slot.
+// Execution later acquires that account's normal scheduler/concurrency slot.
+func (s *OpenAIGatewayService) SelectMediaPrechargeAccount(ctx context.Context, groupID *int64, platform, model string, capability OpenAIEndpointCapability, imageCapability OpenAIImagesCapability) (*Account, error) {
+	ctx = s.withOpenAIQuotaAutoPauseContext(WithOpenAIProfitControlSuppressed(ctx))
+	excluded := map[int64]struct{}{}
+	for {
+		account, err := s.selectAccountForModelWithExclusions(ctx, groupID, platform, "", model, excluded, false, 0, capability, false)
+		if err != nil {
+			if imageCapability == OpenAIImagesCapabilityNative {
+				imageCapability, excluded = OpenAIImagesCapabilityBasic, map[int64]struct{}{}
+				continue
+			}
+			return nil, err
+		}
+		if imageCapability == "" || account.SupportsOpenAIImageCapability(imageCapability) {
+			return account, nil
+		}
+		excluded[account.ID] = struct{}{}
+	}
+}
+
+func (s *OpenAIGatewayService) RenewMediaQueue(ctx context.Context, r *MediaBillingReservation) error {
+	if r == nil || r.WorkbenchKind == "" {
+		return nil
+	}
+	repo, ok := s.usageBillingRepo.(MediaBillingRepository)
+	if !ok {
+		return ErrBillingServiceUnavailable
+	}
+	return repo.RenewMediaQueue(ctx, r.ID, r.Quote.Command.UserID, r.Quote.Command.APIKeyID)
+}
+
+func (s *OpenAIGatewayService) DispatchMediaQueue(ctx context.Context, r *MediaBillingReservation, accountID int64) error {
+	if r == nil || r.WorkbenchKind == "" {
+		return nil
+	}
+	repo, ok := s.usageBillingRepo.(MediaBillingRepository)
+	if !ok {
+		return ErrBillingServiceUnavailable
+	}
+	return repo.DispatchMediaQueue(ctx, r.ID, r.Quote.Command.UserID, r.Quote.Command.APIKeyID, accountID)
+}
+
+func (s *OpenAIGatewayService) RefundMediaQueue(ctx context.Context, id string, expiredOnly bool) error {
+	if id == "" {
+		return nil
+	}
+	repo, ok := s.usageBillingRepo.(MediaBillingRepository)
+	if !ok {
+		return ErrBillingServiceUnavailable
+	}
+	r, err := repo.RefundMediaQueue(ctx, id, expiredOnly)
+	if err == nil {
+		s.invalidateMediaBilling(ctx, r)
+	}
+	return err
+}
+
+func MediaRefundUsage(quote MediaBillingQuote) UsageLog {
+	u := quote.Usage
+	u.ActualCost, u.TotalCost = 0, 0
+	u.InputCost, u.OutputCost, u.ImageOutputCost = 0, 0, 0
+	u.ImageInputCost, u.CacheCreationCost, u.CacheReadCost = 0, 0, 0
+	u.InputTokens, u.OutputTokens, u.ImageInputTokens, u.ImageOutputTokens = 0, 0, 0, 0
+	u.CacheCreationTokens, u.CacheReadTokens, u.CacheCreation5mTokens, u.CacheCreation1hTokens = 0, 0, 0, 0
+	zero := 0.0
+	u.AccountStatsCost = &zero
+	return u
+}
+
 func (s *OpenAIGatewayService) RefundMedia(ctx context.Context, id string) error {
 	if id == "" {
 		return nil
@@ -107,16 +206,6 @@ func (s *OpenAIGatewayService) RefundMedia(ctx context.Context, id string) error
 	reservation, err := repo.RefundMedia(ctx, id)
 	if err == nil {
 		s.invalidateMediaBilling(ctx, reservation)
-		if reservation != nil {
-			usage := reservation.Quote.Usage
-			usage.ActualCost, usage.TotalCost = 0, 0
-			usage.InputCost, usage.OutputCost, usage.ImageOutputCost = 0, 0, 0
-			usage.ImageInputCost, usage.CacheCreationCost, usage.CacheReadCost = 0, 0, 0
-			usage.InputTokens, usage.OutputTokens, usage.ImageInputTokens, usage.ImageOutputTokens = 0, 0, 0, 0
-			zero := 0.0
-			usage.AccountStatsCost = &zero
-			writeUsageLogBestEffort(ctx, s.usageLogRepo, &usage, "service.media_billing")
-		}
 	}
 	return err
 }
@@ -137,6 +226,13 @@ func (s *OpenAIGatewayService) invalidateMediaBilling(ctx context.Context, r *Me
 		return
 	}
 	s.invalidateGrokMediaVideoBillingCaches(ctx, &GrokMediaVideoBillingRecord{Command: r.Quote.Command, GroupID: r.GroupID})
+	if keys := s.mediaBillingAPIKeys.Load(); keys != nil {
+		keys.InvalidateAuthCacheByUserID(ctx, r.Quote.Command.UserID)
+	}
+}
+
+func (s *OpenAIGatewayService) SetMediaBillingAPIKeyService(keys *APIKeyService) {
+	s.mediaBillingAPIKeys.Store(keys)
 }
 
 func (s *OpenAIGatewayService) ReconcileMediaTask(ctx context.Context, taskID string, userID, keyID int64, body []byte) (bool, error) {
@@ -204,7 +300,6 @@ func (s *OpenAIGatewayService) settleMediaStatus(ctx context.Context, r *MediaBi
 		return nil
 	}
 	s.invalidateMediaBilling(ctx, r)
-	writeUsageLogBestEffort(ctx, s.usageLogRepo, &quote.Usage, "service.media_billing")
 	return nil
 }
 
@@ -266,11 +361,13 @@ func (s *OpenAIGatewayService) reconcilePendingMedia(ctx context.Context, r *Med
 		result, err := repo.SettleMedia(ctx, r.ID, &r.FinalQuote.Command)
 		if err == nil && result != nil && result.Applied {
 			s.invalidateMediaBilling(ctx, r)
-			writeUsageLogBestEffort(ctx, s.usageLogRepo, &r.FinalQuote.Usage, "service.media_billing")
 		}
 		return err
 	}
 	if r.TaskID == "" {
+		if r.WorkbenchKind != "" && !r.Dispatched {
+			return s.RefundMediaQueue(ctx, r.ID, true)
+		}
 		return fmt.Errorf("media outcome has not been confirmed")
 	}
 	account, err := s.accountRepo.GetByID(ctx, r.Quote.Command.AccountID)

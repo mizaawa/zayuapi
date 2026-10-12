@@ -74,7 +74,9 @@ func parseVideoWorkbenchPayload(body []byte, policy service.VideoWorkbenchRuntim
 	}
 	p.Resolution = strings.ToLower(strings.TrimSpace(p.Resolution))
 	switch p.Resolution {
-	case "", "auto", "480p", "720p", "1080p", "2k", "4k":
+	case "", "auto":
+		p.Resolution = "720p"
+	case "480p", "720p", "1080p", "2k", "4k":
 	default:
 		return nil, errors.New("resolution must be auto, 480p, 720p, 1080p, 2k or 4k")
 	}
@@ -170,6 +172,7 @@ func (h *VideoWorkbenchHandler) Submit(c *gin.Context) {
 		response.ErrorFrom(c, service.ErrVideoTaskForbidden)
 		return
 	}
+	key, _ = middleware.GetAPIKeyFromContext(c)
 	reservedBytes := c.Request.ContentLength
 	if reservedBytes <= 0 || reservedBytes > service.VideoWorkbenchMaxRequestBytes {
 		reservedBytes = service.VideoWorkbenchMaxRequestBytes
@@ -183,11 +186,16 @@ func (h *VideoWorkbenchHandler) Submit(c *gin.Context) {
 	defer func() {
 		if !transferred {
 			release()
+			h.openAI.refundUndispatchedWorkbench(c)
 		}
 	}()
 	body, err := io.ReadAll(http.MaxBytesReader(c.Writer, c.Request.Body, service.VideoWorkbenchMaxRequestBytes))
 	if err != nil {
 		response.Error(c, http.StatusRequestEntityTooLarge, "video reference upload exceeds the request limit")
+		return
+	}
+	if !mediaRequestFieldsUnambiguous(c.GetHeader("Content-Type"), body) {
+		response.BadRequest(c, "Media request fields must be valid and unique")
 		return
 	}
 	payload, err := parseVideoWorkbenchPayload(body, policy)
@@ -202,6 +210,17 @@ func (h *VideoWorkbenchHandler) Submit(c *gin.Context) {
 		return
 	}
 	metadata := service.VideoWorkbenchMetadata{APIKeyID: key.ID, Prompt: payload.Prompt, Model: payload.Model, Ratio: payload.Ratio, Resolution: payload.Resolution, Duration: payload.Duration, ReferenceImages: len(payload.ReferenceImages), ReferenceVideos: len(payload.ReferenceVideos), ReferenceAudios: len(payload.ReferenceAudios)}
+	c.Request = c.Request.WithContext(service.WithVideoWorkbenchContext(c.Request.Context()))
+	if h.openAI != nil {
+		if err := h.openAI.prechargeWorkbench(c, body, service.PlatformCustom, "video"); err != nil {
+			status, _, message := workbenchBillingErrorDetails(err)
+			response.Error(c, status, message)
+			return
+		}
+		if reservation := mediaPrecharge(c); reservation != nil {
+			c.Request = c.Request.WithContext(service.WithMediaWorkbenchPrepayment(c.Request.Context(), reservation))
+		}
+	}
 	task, err := h.tasks.Create(c.Request.Context(), key.UserID, metadata)
 	if err != nil {
 		response.ErrorFrom(c, err)
@@ -214,6 +233,9 @@ func (h *VideoWorkbenchHandler) Submit(c *gin.Context) {
 }
 
 func (h *VideoWorkbenchHandler) run(task *service.VideoWorkbenchRecord, c *gin.Context, body []byte, cancel context.CancelFunc) {
+	defer h.openAI.refundUndispatchedWorkbench(c)
+	stopPrepaymentLease := h.openAI.keepWorkbenchPrepayment(c)
+	defer stopPrepaymentLease()
 	defer func() {
 		cancel()
 		if recovered := recover(); recovered != nil {
@@ -255,7 +277,7 @@ func (h *VideoWorkbenchHandler) run(task *service.VideoWorkbenchRecord, c *gin.C
 	}()
 	created := h.call(c, body, "create", "")
 	if created.Code < 200 || created.Code >= 300 {
-		h.fail(task, videoWorkbenchCreationError(created.Body.Bytes()))
+		h.fail(task, videoWorkbenchErrorCode(created.Body.Bytes(), created.Code, "request_rejected"))
 		return
 	}
 	upstreamID := videoWorkbenchResponseID(created.Body.Bytes())
@@ -264,12 +286,13 @@ func (h *VideoWorkbenchHandler) run(task *service.VideoWorkbenchRecord, c *gin.C
 		return
 	}
 	state := videoWorkbenchResponseState(created.Body.Bytes())
+	stateBody := created.Body.Bytes()
 	for state != "completed" {
 		if state == "failed" {
 			// Query even an immediately failed creation so the standard idempotent
 			// refund path observes and reverses its original billing receipt.
 			_ = h.call(c, nil, "status", upstreamID)
-			h.fail(task, "generation_failed")
+			h.fail(task, videoWorkbenchErrorCode(stateBody, 0, "generation_failed"))
 			return
 		}
 		timer := time.NewTimer(h.pollInterval)
@@ -283,9 +306,10 @@ func (h *VideoWorkbenchHandler) run(task *service.VideoWorkbenchRecord, c *gin.C
 		status := h.call(c, nil, "status", upstreamID)
 		if status.Code >= 200 && status.Code < 300 {
 			state = videoWorkbenchResponseState(status.Body.Bytes())
+			stateBody = status.Body.Bytes()
 		}
 		if status.Code == http.StatusNotFound || status.Code == http.StatusUnauthorized || status.Code == http.StatusForbidden {
-			h.fail(task, "generation_failed")
+			h.fail(task, videoWorkbenchErrorCode(status.Body.Bytes(), status.Code, "generation_failed"))
 			return
 		}
 	}
@@ -387,14 +411,70 @@ func videoWorkbenchResponseState(body []byte) string {
 	return "processing"
 }
 
-func videoWorkbenchCreationError(body []byte) string {
-	for _, path := range []string{"error.code", "error.type"} {
+func videoWorkbenchErrorCode(body []byte, status int, fallback string) string {
+	// Only fixed public codes leave the workbench. Provider messages may contain
+	// private URLs, credentials or internal task identifiers.
+	for _, path := range []string{"error.code", "error.type", "data.error.code", "code"} {
 		switch strings.ToLower(gjson.GetBytes(body, path).String()) {
 		case "model_not_found", "model_not_available", "model_not_exist", "unknown_model":
 			return "model_unavailable"
+		case "insufficient_balance", "insufficient_quota", "media_precharge_insufficient_balance":
+			return "insufficient_balance"
+		case "rate_limit_exceeded", "too_many_requests", "video_task_limit", "video_queue_full":
+			return "rate_limited"
+		case "content_policy_violation", "moderation_blocked", "content_rejected":
+			return "content_rejected"
+		case "invalid_api_key", "authentication_error", "permission_denied":
+			return "authorization_failed"
+		case "invalid_resolution", "unsupported_resolution":
+			return "unsupported_resolution"
+		case "invalid_duration", "unsupported_duration":
+			return "unsupported_duration"
+		case "invalid_aspect_ratio", "unsupported_aspect_ratio":
+			return "unsupported_ratio"
+		case "no_available_accounts", "no_available_channels":
+			return "channel_unavailable"
 		}
 	}
-	return "request_rejected"
+	for _, path := range []string{"error.message", "error", "data.error.message", "message"} {
+		value := gjson.GetBytes(body, path)
+		if value.Type != gjson.String {
+			continue
+		}
+		message := strings.ToLower(value.String())
+		for _, rule := range []struct {
+			code    string
+			phrases []string
+		}{
+			{"upstream_pricing_unavailable", []string{"video model has no configured resolution pricing", "custom video pricing is not configured"}},
+			{"channel_unavailable", []string{"no available channel", "no available account", "no enabled channel", "没有可用渠道", "无可用渠道", "没有启用的可用渠道"}},
+			{"insufficient_balance", []string{"insufficient balance", "insufficient quota", "余额不足", "额度不足"}},
+			{"content_rejected", []string{"content policy", "moderation rejected", "moderation blocked", "内容审核未通过"}},
+			{"unsupported_resolution", []string{"unsupported resolution", "invalid resolution", "invalid video resolution", "resolution must", "resolution is not supported", "分辨率不支持", "不支持的分辨率"}},
+			{"unsupported_duration", []string{"invalid duration", "unsupported duration", "duration must", "video duration must", "duration is not supported", "时长不支持", "不支持的时长"}},
+			{"unsupported_ratio", []string{"invalid aspect ratio", "unsupported aspect ratio", "aspect ratio must", "aspect ratio is not supported", "不支持的宽高比"}},
+			{"invalid_reference", []string{"invalid reference", "too many reference", "reference video is not supported", "reference audio is not supported", "unsupported reference", "素材无效", "参考图数量超出"}},
+		} {
+			for _, phrase := range rule.phrases {
+				if strings.Contains(message, phrase) {
+					return rule.code
+				}
+			}
+		}
+	}
+	switch status {
+	case http.StatusUnauthorized, http.StatusForbidden:
+		return "authorization_failed"
+	case http.StatusPaymentRequired:
+		return "insufficient_balance"
+	case http.StatusTooManyRequests:
+		return "rate_limited"
+	case http.StatusUnprocessableEntity:
+		return "invalid_parameters"
+	case http.StatusBadGateway, http.StatusServiceUnavailable, http.StatusGatewayTimeout:
+		return "service_unavailable"
+	}
+	return fallback
 }
 
 type videoWorkbenchStreamWriter struct {

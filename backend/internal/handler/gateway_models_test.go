@@ -699,3 +699,32 @@ func modelIDsForTest(models []gatewayModelItemForTest) []string {
 	}
 	return ids
 }
+
+func TestGatewayModels_WorkbenchIncludesDeclaredTierPricingAndCustomSelection(t *testing.T) {
+	group := &service.Group{ID: 72, Platform: service.PlatformComposite,
+		ModelPricing: []service.ChannelModelPricing{{Platform: service.PlatformCustom, BillingMode: service.BillingModeVideo, Models: []string{"tier-video", "other-video"}, Intervals: []service.PricingInterval{{TierLabel: "720p"}}}},
+	}
+	repo := &gatewayModelsAccountRepoStub{byGroup: map[int64][]service.Account{group.ID: {{
+		Platform: service.PlatformCustom, Type: service.AccountTypeAPIKey,
+		Credentials: map[string]any{"api_key": "private-key-canary", "base_url": "https://private.invalid", "model_mapping": map[string]string{"account-video": "account-video"}},
+	}}}}
+	h := newGatewayModelsHandlerForTest(repo)
+	for _, selected := range []bool{false, true} {
+		group.ModelsListConfig = service.GroupModelsListConfig{Enabled: selected, Models: []string{"tier-video"}}
+		rec := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(rec)
+		c.Request = httptest.NewRequest(http.MethodGet, "/v1/models?workbench=video", nil)
+		c.Set(string(middleware2.ContextKeyAPIKey), &service.APIKey{GroupID: &group.ID, Group: group})
+		h.Models(c)
+		require.Equal(t, http.StatusOK, rec.Code)
+		var got gatewayModelsResponseForTest
+		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &got))
+		if selected {
+			require.Equal(t, []string{"tier-video"}, modelIDsForTest(got.Data))
+		} else {
+			require.ElementsMatch(t, []string{"account-video", "tier-video", "other-video"}, modelIDsForTest(got.Data))
+		}
+		require.NotContains(t, rec.Body.String(), "private-key-canary")
+		require.NotContains(t, rec.Body.String(), "private.invalid")
+	}
+}

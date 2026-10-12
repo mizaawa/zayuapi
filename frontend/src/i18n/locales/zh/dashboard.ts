@@ -375,6 +375,12 @@ export default {
     firstToken: '首 Token',
     duration: '耗时',
     latency: '延迟',
+    mediaPayment: {
+      request_created: '请求创建',
+      prepaid: '预支付',
+      settled: '支付完成',
+      refunded: '余额退回',
+    },
     latencyFirstToken: '首字',
     latencyDuration: '总耗时',
     outputDeliverySpeed: 'TPS',

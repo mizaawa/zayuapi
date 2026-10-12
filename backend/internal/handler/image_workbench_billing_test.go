@@ -33,6 +33,14 @@ type workbenchBillingAccountRepo struct {
 	openAIImagesFailoverAccountRepo
 }
 
+type workbenchBillingAPIKeyRepo struct {
+	service.APIKeyRepository
+}
+
+func (workbenchBillingAPIKeyRepo) ListKeysByUserID(context.Context, int64) ([]string, error) {
+	return nil, nil
+}
+
 func (workbenchBillingAccountRepo) SetTempUnschedulable(context.Context, int64, time.Time, string) error {
 	return nil
 }
@@ -79,7 +87,7 @@ func newWorkbenchBillingHandler(t *testing.T, platform string, upstream *workben
 		service.NewBillingService(&billingCfg, nil), nil, billingCache, upstream, &service.DeferredService{}, nil, nil, nil, nil, nil, nil, nil,
 	)
 	h := NewOpenAIGatewayHandler(gw, service.NewConcurrencyService(nil), billingCache,
-		service.NewAPIKeyService(nil, nil, nil, nil, nil, nil, cfg), nil, nil, nil, nil, cfg)
+		service.NewAPIKeyService(workbenchBillingAPIKeyRepo{}, nil, nil, nil, nil, nil, cfg), nil, nil, nil, nil, cfg)
 	groupID := int64(2)
 	price := 0.25
 	key := &service.APIKey{ID: 9, UserID: 7, GroupID: &groupID,

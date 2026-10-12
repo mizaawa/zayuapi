@@ -1,5 +1,5 @@
 import { apiClient } from './client'
-import { gatewayRequest, type ImageModel } from './imageWorkbench'
+import { gatewayRequest, ImageWorkbenchError, type ImageModel } from './imageWorkbench'
 
 export type VideoTaskStatus = 'queued' | 'processing' | 'completed' | 'failed'
 export interface VideoTask {
@@ -63,12 +63,33 @@ export function miniMaxVideoModelLimits(model: string) {
   }
   return null
 }
+const videoTaskErrorCodes = [
+  'generation_failed', 'request_rejected', 'invalid_parameters', 'unsupported_resolution',
+  'unsupported_duration', 'unsupported_ratio', 'invalid_reference', 'content_rejected',
+  'model_unavailable', 'channel_unavailable', 'upstream_pricing_unavailable', 'insufficient_balance',
+  'rate_limited', 'service_unavailable', 'storage_failed', 'authorization_failed', 'interrupted', 'timeout'
+] as const
+export function safeVideoTaskErrorCode(code: string | undefined): string {
+  return videoTaskErrorCodes.find(value => value === code) ?? 'generation_failed'
+}
+export function videoSubmissionErrorCode(error: unknown): string | null {
+  if (!(error instanceof ImageWorkbenchError)) return null
+  switch (error.status) {
+    case 400: case 422: return 'invalid_parameters'
+    case 401: case 403: return 'authorization_failed'
+    case 402: return 'insufficient_balance'
+    case 413: return 'request_too_large'
+    case 429: return 'rate_limited'
+    case 503: return 'service_unavailable'
+    default: return null
+  }
+}
 export async function listVideoTasks(signal?: AbortSignal) {
   const { data } = await apiClient.get<{ settings: VideoWorkbenchSettings; tasks: VideoTask[] }>('/video-workbench/tasks', { signal })
   return data
 }
 export async function listVideoModels(key: string, email: string, signal?: AbortSignal): Promise<ImageModel[]> {
-  const result = await gatewayRequest<{ data: ImageModel[] }>('/v1/models', key, email, {}, signal)
+  const result = await gatewayRequest<{ data: ImageModel[] }>('/v1/models?workbench=video', key, email, {}, signal)
   if (!Array.isArray(result.data)) throw new Error('Invalid model response')
   // Custom groups may name video models freely; the group's model list is authoritative.
   return result.data.filter(model => typeof model?.id === 'string' && model.id.trim())

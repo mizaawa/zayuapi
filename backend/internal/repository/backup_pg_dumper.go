@@ -160,7 +160,7 @@ $restore_counters$;
 
 func restoreMediaBillingPostlude() (string, error) {
 	var out strings.Builder
-	for _, filename := range []string{"214_media_precharge.sql", "215_media_billing_outcomes.sql"} {
+	for _, filename := range []string{"214_media_precharge.sql", "215_media_billing_outcomes.sql", "216_media_payment_lifecycle.sql"} {
 		migration, err := migrations.FS.ReadFile(filename)
 		if err != nil {
 			return "", fmt.Errorf("read media billing migration: %w", err)
@@ -168,10 +168,13 @@ func restoreMediaBillingPostlude() (string, error) {
 		content := strings.TrimSpace(string(migration))
 		checksum := fmt.Sprintf("%x", sha256.Sum256([]byte(content)))
 		cleanup := ""
-		if filename == "214_media_precharge.sql" {
+		switch filename {
+		case "214_media_precharge.sql":
 			// Precharge records belong to the restored balances, never to the
 			// database that happened to occupy this server before restoration.
-			cleanup = "DROP TABLE IF EXISTS media_billing_reservations;"
+			cleanup = "DROP TABLE IF EXISTS media_billing_events; DROP TABLE IF EXISTS media_billing_reservations;"
+		case "216_media_payment_lifecycle.sql":
+			cleanup = "DROP TABLE IF EXISTS media_billing_events;"
 		}
 		fmt.Fprintf(&out, `
 DO $restore_media$
@@ -192,6 +195,10 @@ BEGIN
         OR NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema=current_schema() AND table_name='media_billing_reservations' AND column_name='final_quote')
         OR NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema=current_schema() AND table_name='media_billing_reservations' AND column_name='refund_requested') THEN
         RAISE EXCEPTION 'Backup is missing media billing reservation data';
+    END IF;
+    IF to_regclass('media_billing_events') IS NULL
+        OR NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema=current_schema() AND table_name='media_billing_reservations' AND column_name='dispatch_started_at') THEN
+        RAISE EXCEPTION 'Backup is missing media billing lifecycle data';
     END IF;
 END;
 $restore_media$;

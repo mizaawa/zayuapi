@@ -10,6 +10,7 @@ import (
 	dbent "github.com/Wei-Shaw/sub2api/ent"
 	"github.com/Wei-Shaw/sub2api/ent/channelmonitor"
 	"github.com/Wei-Shaw/sub2api/ent/channelmonitorhistory"
+	"github.com/Wei-Shaw/sub2api/ent/group"
 	"github.com/Wei-Shaw/sub2api/internal/service"
 	"github.com/lib/pq"
 
@@ -171,6 +172,7 @@ func (r *channelMonitorRepository) List(ctx context.Context, params service.Chan
 		q = q.Where(channelmonitor.Or(
 			channelmonitor.NameContainsFold(s),
 			channelmonitor.GroupNameContainsFold(s),
+			channelmonitor.HasGroupWith(group.NameContainsFold(s)),
 			channelmonitor.PrimaryModelContainsFold(s),
 		))
 	}

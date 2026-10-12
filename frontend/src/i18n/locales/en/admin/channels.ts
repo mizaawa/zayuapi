@@ -518,7 +518,7 @@ export default {
       form: {
         name: 'Name',
         namePlaceholder: 'Optional monitor name',
-        nameHint: 'Leave blank to use the selected group name',
+        nameHint: 'Leave blank to follow the selected group name, including future renames',
         provider: 'Platform',
         group: 'Select Group',
         groupPlaceholder: 'Select a group',

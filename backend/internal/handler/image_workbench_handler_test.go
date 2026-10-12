@@ -48,7 +48,11 @@ func TestImageWorkbenchSubmissionRequiresGroupDeclaration(t *testing.T) {
 				c.Next()
 			})
 			router.POST("/v1/images/generations/async", handler.Submit)
-			request := httptest.NewRequest(http.MethodPost, "/v1/images/generations/async", strings.NewReader("{"))
+			body := "{"
+			if !tc.workbench {
+				body = `{"model":"gpt-image-2","prompt":"test","n":1}`
+			}
+			request := httptest.NewRequest(http.MethodPost, "/v1/images/generations/async", strings.NewReader(body))
 			request.Header.Set("Content-Type", "application/json")
 			request.Header.Set(imageOwnerEmailHeader, "owner@example.com")
 			if tc.workbench {

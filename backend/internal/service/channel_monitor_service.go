@@ -201,13 +201,14 @@ func (s *ChannelMonitorService) Create(ctx context.Context, p ChannelMonitorCrea
 		if err != nil {
 			return nil, err
 		}
-		if name == "" {
-			name = group.Name
-		}
 		if s.apiKeyManager == nil {
 			return nil, fmt.Errorf("channel monitor api key manager is not configured")
 		}
-		managedKey, err := s.apiKeyManager.CreateChannelMonitorKey(ctx, p.CreatedBy, p.GroupID, name)
+		keyName := name
+		if keyName == "" {
+			keyName = group.Name
+		}
+		managedKey, err := s.apiKeyManager.CreateChannelMonitorKey(ctx, p.CreatedBy, p.GroupID, keyName)
 		if err != nil {
 			return nil, fmt.Errorf("create managed channel monitor key: %w", err)
 		}
@@ -590,14 +591,18 @@ func (s *ChannelMonitorService) Update(ctx context.Context, id int64, p ChannelM
 		existing.GroupName = group.Name
 		existing.GroupRateMultiplier = group.RateMultiplier
 		existing.GroupPlatform = group.Platform
-		if strings.TrimSpace(existing.Name) == "" || (groupChanged && nameFollowedGroup && submittedNameUnchanged) {
-			existing.Name = group.Name
+		if groupChanged && nameFollowedGroup && submittedNameUnchanged {
+			existing.Name = ""
 		}
 		if groupChanged {
 			if s.apiKeyManager == nil || s.encryptor == nil {
 				return nil, fmt.Errorf("channel monitor managed key dependencies are not configured")
 			}
-			managedKey, createErr := s.apiKeyManager.CreateChannelMonitorKey(ctx, existing.CreatedBy, *existing.GroupID, existing.Name)
+			keyName := existing.Name
+			if keyName == "" {
+				keyName = group.Name
+			}
+			managedKey, createErr := s.apiKeyManager.CreateChannelMonitorKey(ctx, existing.CreatedBy, *existing.GroupID, keyName)
 			if createErr != nil {
 				return nil, fmt.Errorf("rotate managed channel monitor key: %w", createErr)
 			}

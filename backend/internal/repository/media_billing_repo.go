@@ -49,10 +49,21 @@ func (r *usageBillingRepository) ReserveMedia(ctx context.Context, reservation *
 	if err != nil {
 		return err
 	}
-	if _, err := tx.ExecContext(ctx, `INSERT INTO media_billing_reservations (id,user_id,api_key_id,account_id,group_id,quote) VALUES ($1,$2,$3,$4,$5,$6)`, reservation.ID, cmd.UserID, cmd.APIKeyID, cmd.AccountID, reservation.GroupID, data); err != nil {
+	if _, err := tx.ExecContext(ctx, `INSERT INTO media_billing_reservations (id,user_id,api_key_id,account_id,group_id,quote,workbench_kind,queue_lease_until) VALUES ($1,$2,$3,$4,$5,$6,$7,CASE WHEN $7<>'' THEN NOW()+INTERVAL '2 minutes' ELSE NULL END)`, reservation.ID, cmd.UserID, cmd.APIKeyID, cmd.AccountID, reservation.GroupID, data, reservation.WorkbenchKind); err != nil {
 		return err
 	}
 	if err := r.applyUsageBillingEffects(ctx, tx, cmd, &service.UsageBillingApplyResult{}); err != nil {
+		return err
+	}
+	if err := writeMediaBillingEvent(ctx, tx, reservation.ID, 1, "request_created", 0); err != nil {
+		return err
+	}
+	if err := writeMediaBillingEvent(ctx, tx, reservation.ID, 2, "prepaid", cmd.BalanceCost+cmd.SubscriptionCost); err != nil {
+		return err
+	}
+	usage := service.MediaRefundUsage(reservation.Quote)
+	usage.ActualCost = cmd.BalanceCost + cmd.SubscriptionCost
+	if err := writeMediaUsageLog(ctx, tx, &usage); err != nil {
 		return err
 	}
 	return tx.Commit()
@@ -150,9 +161,21 @@ func (r *usageBillingRepository) SettleMedia(ctx context.Context, id string, cmd
 		return nil, service.ErrUsageBillingRequestConflict
 	}
 	if reservation.FinalQuote != nil {
+		final := reservation.FinalQuote.Command
+		if final.UserID != cmd.UserID || final.APIKeyID != cmd.APIKeyID || final.RequestID != id {
+			return nil, service.ErrUsageBillingRequestConflict
+		}
 		*cmd = reservation.FinalQuote.Command
 	}
 	cmd.Normalize()
+	for _, amount := range []float64{cmd.BalanceCost, cmd.SubscriptionCost, cmd.APIKeyQuotaCost, cmd.APIKeyRateLimitCost, cmd.AccountQuotaCost, cmd.UserPlatformQuotaCost} {
+		if amount < 0 || math.IsNaN(amount) || math.IsInf(amount, 0) {
+			return nil, errors.New("invalid media price")
+		}
+	}
+	if _, err := tx.ExecContext(ctx, `SELECT id FROM users WHERE id=$1 FOR UPDATE`, cmd.UserID); err != nil {
+		return nil, err
+	}
 	claimed, err := r.claimUsageBillingKey(ctx, tx, cmd)
 	if err != nil {
 		return nil, err
@@ -167,6 +190,23 @@ func (r *usageBillingRepository) SettleMedia(ctx context.Context, id string, cmd
 	if err := r.applyUsageBillingEffects(ctx, tx, cmd, result); err != nil {
 		return nil, err
 	}
+	if err := writeMediaBillingEvent(ctx, tx, id, 3, "settled", cmd.BalanceCost+cmd.SubscriptionCost); err != nil {
+		return nil, err
+	}
+	quote := reservation.Quote
+	if reservation.FinalQuote != nil {
+		quote = *reservation.FinalQuote
+	}
+	quote.Usage.ActualCost = cmd.BalanceCost + cmd.SubscriptionCost
+	if err := writeMediaUsageLog(ctx, tx, &quote.Usage); err != nil {
+		return nil, err
+	}
+	// The provisional row preceded the final billing identity. Preserve its
+	// statistics marker if the detailed log is later cleaned up and recreated.
+	if _, err := tx.ExecContext(ctx, `UPDATE usage_billing_dedup SET counters_recorded=TRUE WHERE request_id=$1 AND api_key_id=$2
+		AND EXISTS (SELECT 1 FROM usage_logs WHERE request_id=$1 AND api_key_id=$2 AND counters_recorded)`, id, cmd.APIKeyID); err != nil {
+		return nil, err
+	}
 	if _, err := tx.ExecContext(ctx, `UPDATE media_billing_reservations SET state='settled',updated_at=NOW() WHERE id=$1`, id); err != nil {
 		return nil, err
 	}
@@ -177,6 +217,14 @@ func (r *usageBillingRepository) SettleMedia(ctx context.Context, id string, cmd
 }
 
 func (r *usageBillingRepository) RefundMedia(ctx context.Context, id string) (*service.MediaBillingReservation, error) {
+	return r.refundMedia(ctx, id, false, false)
+}
+
+func (r *usageBillingRepository) RefundMediaQueue(ctx context.Context, id string, expiredOnly bool) (*service.MediaBillingReservation, error) {
+	return r.refundMedia(ctx, id, true, expiredOnly)
+}
+
+func (r *usageBillingRepository) refundMedia(ctx context.Context, id string, queuedOnly, expiredOnly bool) (*service.MediaBillingReservation, error) {
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, err
@@ -189,10 +237,27 @@ func (r *usageBillingRepository) RefundMedia(ctx context.Context, id string) (*s
 	if state == "refunded" || state == "settled" {
 		return nil, nil
 	}
+	// Recheck under the same lock as dispatch and refunds. A stale sweeper or
+	// cancellation cannot refund a task that crossed the dispatch boundary.
+	if queuedOnly && (reservation.WorkbenchKind == "" || reservation.Dispatched ||
+		(expiredOnly && reservation.QueueLeaseUntil.After(time.Now()))) {
+		return nil, nil
+	}
 	if reservation.FinalQuote != nil {
 		return nil, service.ErrUsageBillingRequestConflict
 	}
+	if _, err := tx.ExecContext(ctx, `SELECT id FROM users WHERE id=$1 FOR UPDATE`, reservation.Quote.Command.UserID); err != nil {
+		return nil, err
+	}
 	if err := r.reverseMediaEffects(ctx, tx, &reservation.Quote.Command); err != nil {
+		return nil, err
+	}
+	cmd := reservation.Quote.Command
+	if err := writeMediaBillingEvent(ctx, tx, id, 3, "refunded", cmd.BalanceCost+cmd.SubscriptionCost); err != nil {
+		return nil, err
+	}
+	usage := service.MediaRefundUsage(reservation.Quote)
+	if err := writeMediaUsageLog(ctx, tx, &usage); err != nil {
 		return nil, err
 	}
 	if _, err := tx.ExecContext(ctx, `UPDATE media_billing_reservations SET state='refunded',updated_at=NOW() WHERE id=$1`, id); err != nil {
@@ -208,7 +273,8 @@ func readMediaReservation(ctx context.Context, tx *sql.Tx, id string) (*service.
 	var data, final []byte
 	var refund bool
 	var state, task, endpoint string
-	if err := tx.QueryRowContext(ctx, `SELECT quote,state,task_id,endpoint,final_quote,refund_requested FROM media_billing_reservations WHERE id=$1 FOR UPDATE`, id).Scan(&data, &state, &task, &endpoint, &final, &refund); err != nil {
+	var lease, dispatched sql.NullTime
+	if err := tx.QueryRowContext(ctx, `SELECT quote,state,task_id,endpoint,final_quote,refund_requested,queue_lease_until,dispatch_started_at FROM media_billing_reservations WHERE id=$1 FOR UPDATE`, id).Scan(&data, &state, &task, &endpoint, &final, &refund, &lease, &dispatched); err != nil {
 		return nil, "", err
 	}
 	var r service.MediaBillingReservation
@@ -217,6 +283,7 @@ func readMediaReservation(ctx context.Context, tx *sql.Tx, id string) (*service.
 	}
 	r.TaskID, r.Endpoint = task, service.GrokMediaEndpoint(endpoint)
 	r.RefundPending = refund
+	r.QueueLeaseUntil, r.Dispatched = lease.Time, dispatched.Valid
 	if len(final) > 0 {
 		if err := json.Unmarshal(final, &r.FinalQuote); err != nil {
 			return nil, "", err
@@ -276,8 +343,8 @@ func (r *usageBillingRepository) FindMediaTask(ctx context.Context, task string,
 
 func (r *usageBillingRepository) PendingMedia(ctx context.Context, limit int) ([]*service.MediaBillingReservation, error) {
 	rows, err := r.db.QueryContext(ctx, `UPDATE media_billing_reservations SET next_check_at=NOW()+INTERVAL '2 minutes' WHERE id IN (
-		SELECT id FROM media_billing_reservations WHERE state IN ('pending','reserved') AND next_check_at<=NOW() AND (task_id<>'' OR final_quote IS NOT NULL OR refund_requested) ORDER BY next_check_at LIMIT $1 FOR UPDATE SKIP LOCKED
-	) RETURNING quote,task_id,endpoint,final_quote,refund_requested`, limit)
+		SELECT id FROM media_billing_reservations WHERE state IN ('pending','reserved') AND next_check_at<=NOW() AND (task_id<>'' OR final_quote IS NOT NULL OR refund_requested OR (workbench_kind<>'' AND dispatch_started_at IS NULL AND queue_lease_until<=NOW())) ORDER BY next_check_at LIMIT $1 FOR UPDATE SKIP LOCKED
+	) RETURNING quote,task_id,endpoint,final_quote,refund_requested,queue_lease_until,dispatch_started_at`, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -287,7 +354,8 @@ func (r *usageBillingRepository) PendingMedia(ctx context.Context, limit int) ([
 		var data, final []byte
 		var refund bool
 		var task, endpoint string
-		if err := rows.Scan(&data, &task, &endpoint, &final, &refund); err != nil {
+		var lease, dispatched sql.NullTime
+		if err := rows.Scan(&data, &task, &endpoint, &final, &refund, &lease, &dispatched); err != nil {
 			return nil, err
 		}
 		var item service.MediaBillingReservation
@@ -296,6 +364,7 @@ func (r *usageBillingRepository) PendingMedia(ctx context.Context, limit int) ([
 		}
 		item.TaskID, item.Endpoint = task, service.GrokMediaEndpoint(endpoint)
 		item.RefundPending = refund
+		item.QueueLeaseUntil, item.Dispatched = lease.Time, dispatched.Valid
 		if len(final) > 0 {
 			if err := json.Unmarshal(final, &item.FinalQuote); err != nil {
 				return nil, err
@@ -304,4 +373,28 @@ func (r *usageBillingRepository) PendingMedia(ctx context.Context, limit int) ([
 		items = append(items, &item)
 	}
 	return items, rows.Err()
+}
+
+func (r *usageBillingRepository) RenewMediaQueue(ctx context.Context, id string, userID, keyID int64) error {
+	result, err := r.db.ExecContext(ctx, `UPDATE media_billing_reservations SET queue_lease_until=NOW()+INTERVAL '2 minutes'
+		WHERE id=$1 AND user_id=$2 AND api_key_id=$3 AND workbench_kind<>'' AND state='reserved' AND NOT refund_requested AND final_quote IS NULL`, id, userID, keyID)
+	return mediaQueueUpdateResult(result, err)
+}
+
+func (r *usageBillingRepository) DispatchMediaQueue(ctx context.Context, id string, userID, keyID, accountID int64) error {
+	result, err := r.db.ExecContext(ctx, `UPDATE media_billing_reservations SET dispatch_started_at=COALESCE(dispatch_started_at,NOW()),updated_at=NOW()
+		WHERE id=$1 AND user_id=$2 AND api_key_id=$3 AND account_id=$4 AND workbench_kind<>'' AND state='reserved'
+		AND NOT refund_requested AND final_quote IS NULL AND queue_lease_until>NOW()`, id, userID, keyID, accountID)
+	return mediaQueueUpdateResult(result, err)
+}
+
+func mediaQueueUpdateResult(result sql.Result, err error) error {
+	if err != nil {
+		return err
+	}
+	n, err := result.RowsAffected()
+	if err == nil && n != 1 {
+		return service.ErrUsageBillingRequestConflict
+	}
+	return err
 }

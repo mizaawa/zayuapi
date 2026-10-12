@@ -1087,6 +1087,10 @@ func (h *GatewayHandler) Models(c *gin.Context) {
 	if forcedPlatform, ok := middleware2.GetForcePlatformFromContext(c); ok && strings.TrimSpace(forcedPlatform) != "" {
 		platform = forcedPlatform
 	}
+	if kind := c.Query("workbench"); (kind == "image" || kind == "video") && apiKey != nil && apiKey.Group != nil {
+		h.workbenchModels(c, apiKey.Group, platform, kind)
+		return
+	}
 
 	if platform == service.PlatformComposite {
 		availableModels := h.compositeAvailableModels(c.Request.Context(), groupID)

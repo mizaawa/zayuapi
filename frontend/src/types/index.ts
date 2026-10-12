@@ -1650,6 +1650,11 @@ export interface UsageLogAPIKeySummary {
 }
 
 export interface UsageLog {
+  billing_events?: Array<{
+    stage: 'request_created' | 'prepaid' | 'settled' | 'refunded'
+    amount: number
+    created_at: string
+  }>
   id: number
   user_id: number
   api_key_id: number

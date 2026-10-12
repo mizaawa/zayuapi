@@ -196,7 +196,10 @@ func apiKeyFailoverModelUnavailable(c *gin.Context, writer *apiKeyFailoverWriter
 }
 
 func setAPIKeyFailoverBilling(c *gin.Context, key *service.APIKey, subscriptions *service.SubscriptionService, cfg *config.Config) error {
-	if key == nil || key.User == nil || key.Group == nil || !key.IsActive() || key.IsExpired() || key.IsQuotaExhausted() {
+	prepaid := service.MediaWorkbenchPrepaid(c.Request.Context(), key)
+	if key == nil || key.User == nil || key.Group == nil ||
+		(!key.IsActive() && (!prepaid || key.Status != service.StatusAPIKeyQuotaExhausted)) ||
+		key.IsExpired() || (!prepaid && key.IsQuotaExhausted()) {
 		return service.ErrAPIKeyFailoverChanged
 	}
 	if !validateAPIKeyGroupAllowed(key) {
@@ -219,6 +222,13 @@ func setAPIKeyFailoverBilling(c *gin.Context, key *service.APIKey, subscriptions
 		if err != nil {
 			return err
 		}
+		if prepaid {
+			if err := subscriptions.ValidateSubscription(c.Request.Context(), subscription); err != nil {
+				return err
+			}
+			c.Set(string(ContextKeySubscription), subscription)
+			return nil
+		}
 		maintenance, err := subscriptions.ValidateAndCheckLimits(subscription, key.Group)
 		if maintenance {
 			subscription, err = subscriptions.EnsureWindowMaintenance(c.Request.Context(), subscription)
@@ -233,7 +243,7 @@ func setAPIKeyFailoverBilling(c *gin.Context, key *service.APIKey, subscriptions
 		c.Set(string(ContextKeySubscription), subscription)
 		return nil
 	}
-	if apiKeyBalanceBelowAuthThreshold(key.User.Balance, cfg) {
+	if !prepaid && apiKeyBalanceBelowAuthThreshold(key.User.Balance, cfg) {
 		return service.ErrInsufficientBalance
 	}
 	return nil

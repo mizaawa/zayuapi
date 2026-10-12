@@ -155,7 +155,7 @@ export async function downloadWorkbenchImage(taskId: string, imageIndex: number,
 }
 
 export async function listImageModels(apiKey: string, email: string, signal?: AbortSignal): Promise<ImageModel[]> {
-  const response = await gatewayRequest<{ data?: unknown }>('/v1/models', apiKey, email, {}, signal)
+  const response = await gatewayRequest<{ data?: unknown }>('/v1/models?workbench=image', apiKey, email, {}, signal)
   if (!Array.isArray(response?.data)) {
     throw new ImageWorkbenchError('Invalid model list response', 0, 'INVALID_RESPONSE')
   }
@@ -166,7 +166,7 @@ export async function listImageModels(apiKey: string, email: string, signal?: Ab
     const id = model.id.trim()
     const normalized = id.toLowerCase()
     // Match the image families accepted by the gateway's Images endpoint.
-    if (!['gpt-2.0', 'gpt-2.5-fast', 'gpt-2.5-pro', 'gpt-2.0-4k', 'banana-2', 'banana-pro'].includes(normalized) && !normalized.startsWith('gpt-image-') && normalized !== 'grok-imagine'
+    if (model.media_type !== 'image' && !['gpt-2.0', 'gpt-2.5-fast', 'gpt-2.5-pro', 'gpt-2.0-4k', 'banana-2', 'banana-pro'].includes(normalized) && !normalized.startsWith('gpt-image-') && normalized !== 'grok-imagine'
       && normalized !== 'grok-imagine-edit' && !normalized.startsWith('grok-imagine-image')) continue
     const displayName = model.display_name ?? model.displayName
     if (!models.has(id)) models.set(id, {

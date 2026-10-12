@@ -1,5 +1,5 @@
 <template>
-  <span class="inline-flex min-w-0 items-center gap-1.5">
+  <span class="inline-flex min-w-0 max-w-full items-center gap-1.5">
     <span class="truncate font-medium text-gray-900 dark:text-gray-100">{{ name }}</span>
     <span
       v-if="rateMultiplier != null"

@@ -203,7 +203,9 @@ describe('ChannelMonitorView sorting', () => {
 
     const sortList = wrapper.get('[data-testid="channel-monitor-sort-list"]')
     const draggable = wrapper.findComponent(VueDraggableStub)
-    expect(draggable.props('animation')).toBe(0)
+    expect(draggable.props('animation')).toBe(200)
+    expect(draggable.attributes('handle')).toBe('.channel-monitor-drag-handle')
+    expect(sortList.findAll('.channel-monitor-drag-handle')).toHaveLength(4)
     expect(draggable.props('forceFallback')).toBe(true)
     expect(draggable.props('fallbackOnBody')).toBe(true)
     expect(draggable.props('fallbackTolerance')).toBe(4)

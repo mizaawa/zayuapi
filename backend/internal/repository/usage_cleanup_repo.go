@@ -302,7 +302,7 @@ func (r *usageCleanupRepository) DeleteUsageLogsBatch(ctx context.Context, filte
 		DELETE FROM usage_logs
 		WHERE id IN (SELECT id FROM target)
 		RETURNING id
-	`, whereClause, len(args))
+	`, whereClause+" AND "+finalizedMediaUsageCondition, len(args))
 
 	rows, err := r.sql.QueryContext(ctx, query, args...)
 	if err != nil {
@@ -405,7 +405,7 @@ func (r *usageCleanupRepository) DeleteUsageLogsBeforeBatch(ctx context.Context,
 		WITH target AS (
 			SELECT tableoid, ctid
 			FROM usage_logs
-			WHERE created_at < $1
+			WHERE created_at < $1 AND `+finalizedMediaUsageCondition+`
 			ORDER BY created_at ASC, id ASC
 			LIMIT $2
 		)
@@ -434,7 +434,7 @@ func (r *usageCleanupRepository) DeleteUsageLogsThroughIDBatch(ctx context.Conte
 		WITH target AS (
 			SELECT tableoid, ctid
 			FROM usage_logs
-			WHERE id <= $1
+			WHERE id <= $1 AND `+finalizedMediaUsageCondition+`
 			ORDER BY id ASC
 			LIMIT $2
 		)

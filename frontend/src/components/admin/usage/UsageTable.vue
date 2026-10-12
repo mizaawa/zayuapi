@@ -226,6 +226,12 @@
             <div v-if="showAccountBilling && row.account_rate_multiplier != null" class="mt-0.5 text-[11px] text-orange-500 dark:text-orange-400">
               A ${{ accountBilled(row).toFixed(6) }}
             </div>
+            <ol v-if="row.billing_events?.length" class="mt-1 space-y-1 text-[11px]" data-testid="media-payment-events">
+              <li v-for="event in row.billing_events" :key="event.stage" class="flex items-center justify-between gap-3 whitespace-nowrap" :title="new Date(event.created_at).toLocaleString()">
+                <span :class="event.stage === 'refunded' ? 'text-amber-600 dark:text-amber-400' : 'text-gray-500 dark:text-gray-400'">{{ t(`usage.mediaPayment.${event.stage}`) }}</span>
+                <span v-if="event.stage !== 'request_created'" class="tabular-nums" :class="event.stage === 'refunded' ? 'text-green-600 dark:text-green-400' : 'text-gray-600 dark:text-gray-300'">{{ event.stage === 'refunded' ? '+' : event.stage === 'prepaid' ? '-' : '' }}${{ event.amount.toFixed(6) }}</span>
+              </li>
+            </ol>
           </div>
         </template>
 

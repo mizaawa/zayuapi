@@ -370,6 +370,12 @@ export default {
     firstToken: 'First Token',
     duration: 'Duration',
     latency: 'Latency',
+    mediaPayment: {
+      request_created: 'Request created',
+      prepaid: 'Prepaid',
+      settled: 'Payment completed',
+      refunded: 'Balance refunded',
+    },
     latencyFirstToken: 'First',
     latencyDuration: 'Total',
     outputDeliverySpeed: 'TPS',

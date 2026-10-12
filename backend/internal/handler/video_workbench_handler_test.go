@@ -82,6 +82,49 @@ func TestVideoWorkbenchMiniMaxRequestValidation(t *testing.T) {
 	}
 }
 
+func TestVideoWorkbenchAutoResolutionForAllModels(t *testing.T) {
+	policy := service.VideoWorkbenchRuntime{MaxReferenceImages: 9, MaxReferenceVideos: 6, MaxReferenceAudios: 3}
+	for _, model := range []string{"sd-2.0", "grok-imagine-video", "MiniMax-H3", "other-video"} {
+		for _, resolution := range []string{"", "auto", "720p"} {
+			p, err := parseVideoWorkbenchPayload([]byte(`{"model":"`+model+`","prompt":"waves","duration":5,"resolution":"`+resolution+`"}`), policy)
+			require.NoError(t, err)
+			require.Equal(t, "720p", p.Resolution)
+			require.Equal(t, "1:1", p.Ratio)
+		}
+	}
+	for _, body := range []string{
+		`{"model":"sd-2.0","prompt":"waves","duration":4}`,
+		`{"model":"sd-2.0","prompt":"waves","duration":16}`,
+		`{"model":"sd-2.0","prompt":"waves","duration":5,"resolution":"1080p"}`,
+	} {
+		_, err := parseVideoWorkbenchPayload([]byte(body), policy)
+		require.NoError(t, err, "model-specific restrictions must remain the provider's responsibility")
+	}
+}
+
+func TestVideoWorkbenchErrorsUseSafeCodes(t *testing.T) {
+	for _, tc := range []struct {
+		body, code string
+		status     int
+	}{
+		{`{"error":{"type":"upstream_error","message":"video model has no configured resolution pricing; private https://internal.example sk-secret"}}`, "upstream_pricing_unavailable", 400},
+		{`{"error":{"code":"model_not_found","message":"private https://internal.example sk-secret"}}`, "model_unavailable", 503},
+		{`{"error":{"message":"unsupported resolution 4k for private https://internal.example sk-secret"}}`, "unsupported_resolution", 400},
+		{`{"error":"video duration must be between 5 and 15; private sk-secret"}`, "unsupported_duration", 200},
+		{`{"error":{"code":"content_policy_violation","message":"private sk-secret"}}`, "content_rejected", 400},
+		{`{"message":"模型没有可用渠道: private sk-secret"}`, "channel_unavailable", 503},
+		{`{"error":{"code":"INSUFFICIENT_BALANCE","message":"private sk-secret"}}`, "insufficient_balance", 400},
+		{`{"error":{"message":"private https://internal.example sk-secret"}}`, "request_rejected", 400},
+		{`upstream proxy error sk-secret`, "request_rejected", 400},
+		{`<html>private sk-secret</html>`, "service_unavailable", 502},
+		{`{}`, "rate_limited", 429},
+		{`{}`, "authorization_failed", 403},
+	} {
+		require.Equal(t, tc.code, videoWorkbenchErrorCode([]byte(tc.body), tc.status, "request_rejected"))
+	}
+	require.Equal(t, "generation_failed", videoWorkbenchErrorCode([]byte(`{"error":"private sk-secret"}`), 200, "generation_failed"))
+}
+
 func TestVideoWorkbenchModelUnavailableDoesNotExposeUpstreamError(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	store := &videoHandlerStore{tasks: make(map[string]service.VideoWorkbenchRecord)}

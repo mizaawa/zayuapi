@@ -2117,6 +2117,12 @@ func (s *OpenAIGatewayService) SelectAccountWithSchedulerForCapability(
 	if len(platformOverride) > 0 {
 		platform = platformOverride[0]
 	}
+	if accountID := mediaPrepaidAccountID(ctx, groupID); accountID > 0 {
+		if _, excluded := excludedIDs[accountID]; excluded {
+			return nil, OpenAIAccountScheduleDecision{}, ErrNoAvailableAccounts
+		}
+		return s.SelectBoundAccountWithSchedulerForCapability(ctx, groupID, accountID, requestedModel, requiredTransport, requiredCapability, platform)
+	}
 	return s.selectAccountWithScheduler(ctx, groupID, previousResponseID, sessionHash, requestedModel, excludedIDs, requiredTransport, requiredCapability, "", requireCompact, platform, previousResponseCanMove, useUpstreamTokenCost)
 }
 
@@ -2254,6 +2260,24 @@ func (s *OpenAIGatewayService) SelectAccountWithSchedulerForImages(
 	platform := PlatformOpenAI
 	if len(platformOverride) > 0 {
 		platform = platformOverride[0]
+	}
+	if accountID := mediaPrepaidAccountID(ctx, groupID); accountID > 0 {
+		if _, excluded := excludedIDs[accountID]; excluded {
+			return nil, OpenAIAccountScheduleDecision{}, ErrNoAvailableAccounts
+		}
+		selection, decision, err := s.SelectBoundAccountWithSchedulerForCapability(ctx, groupID, accountID, requestedModel, OpenAIUpstreamTransportHTTPSSE, "", platform)
+		if err == nil && selection != nil && selection.Account != nil &&
+			(selection.Account.SupportsOpenAIImageCapability(requiredCapability) ||
+				(requiredCapability == OpenAIImagesCapabilityNative && selection.Account.SupportsOpenAIImageCapability(OpenAIImagesCapabilityBasic))) {
+			return selection, decision, nil
+		}
+		if selection != nil && selection.ReleaseFunc != nil {
+			selection.ReleaseFunc()
+		}
+		if err == nil {
+			err = ErrNoAvailableAccounts
+		}
+		return nil, decision, err
 	}
 	selection, decision, err := s.selectAccountWithScheduler(ctx, groupID, "", sessionHash, requestedModel, excludedIDs, OpenAIUpstreamTransportHTTPSSE, "", requiredCapability, false, platform, false, false)
 	if err == nil && selection != nil && selection.Account != nil {

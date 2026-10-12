@@ -23,7 +23,8 @@ func RefreshImageWorkbenchAuth(c *gin.Context, keys imageWorkbenchKeyLookup, sub
 	if err != nil {
 		return service.ErrImageTaskForbidden
 	}
-	if fresh == nil || fresh.ID != previous.ID || fresh.UserID != previous.UserID || !fresh.IsActive() ||
+	if fresh == nil || fresh.ID != previous.ID || fresh.UserID != previous.UserID ||
+		(!fresh.IsActive() && (!service.MediaWorkbenchPrepaid(c.Request.Context(), fresh) || fresh.Status != service.StatusAPIKeyQuotaExhausted)) ||
 		fresh.User == nil || fresh.User.ID != fresh.UserID || !fresh.User.IsActive() || fresh.Group == nil || previous.Group == nil ||
 		fresh.Group.ID != previous.Group.ID || fresh.Group.Platform != previous.Group.Platform ||
 		!fresh.Group.ImageWorkbenchEnabled || !service.GroupAllowsImageGeneration(fresh.Group) {

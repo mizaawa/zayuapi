@@ -112,7 +112,9 @@ func normalizeMiniMaxVideoWorkbenchBody(ctx context.Context, body []byte) ([]byt
 		"model": p.Model, "prompt": p.Prompt, "duration": p.Duration,
 		"ratio": p.Ratio, "metadata": metadata,
 	}
-	if p.Resolution != "" && p.Resolution != "auto" {
+	if p.Resolution == "auto" {
+		out["resolution"] = "720p"
+	} else if p.Resolution != "" {
 		out["resolution"] = p.Resolution
 	}
 	return json.Marshal(out)

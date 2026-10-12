@@ -278,7 +278,8 @@ func TestChannelMonitorCreateCustomAcceptsCompositeGroup(t *testing.T) {
 
 	require.NoError(t, err)
 	require.Equal(t, int64(1), *monitor.GroupID)
-	require.Equal(t, "Composite", monitor.Name)
+	require.Empty(t, monitor.Name)
+	require.Equal(t, "Composite", monitorDisplayName(monitor))
 	require.Equal(t, PlatformComposite, monitor.GroupPlatform)
 	require.Len(t, keys.createCalls, 1)
 }
@@ -380,7 +381,8 @@ func TestChannelMonitorUpdateGroupRefreshesInheritedName(t *testing.T) {
 	})
 
 	require.NoError(t, err)
-	require.Equal(t, "New Group", monitor.Name)
+	require.Empty(t, monitor.Name)
+	require.Equal(t, "New Group", monitorDisplayName(monitor))
 	require.Equal(t, []groupMonitorKeyCreateCall{{userID: 9, groupID: 2, monitorName: "New Group"}}, keys.createCalls)
 }
 
@@ -408,7 +410,8 @@ func TestChannelMonitorUpdateExplicitBlankNameFallsBackToGroupName(t *testing.T)
 	monitor, err := svc.Update(context.Background(), 10, ChannelMonitorUpdateParams{Name: &blankName})
 
 	require.NoError(t, err)
-	require.Equal(t, "OpenAI Group", monitor.Name)
+	require.Empty(t, monitor.Name)
+	require.Equal(t, "OpenAI Group", monitorDisplayName(monitor))
 	require.Empty(t, keys.createCalls)
 }
 
@@ -499,7 +502,8 @@ func TestChannelMonitorUpdateCanSwitchProviderToCustomAndSelectCompositeGroup(t 
 
 	require.NoError(t, err)
 	require.Equal(t, MonitorProviderCustom, monitor.Provider)
-	require.Equal(t, "Custom Group", monitor.Name)
+	require.Empty(t, monitor.Name)
+	require.Equal(t, "Custom Group", monitorDisplayName(monitor))
 	require.Equal(t, PlatformComposite, monitor.GroupPlatform)
 	require.Equal(t, []groupMonitorKeyCreateCall{{userID: 9, groupID: 2, monitorName: "Custom Group"}}, keys.createCalls)
 }

@@ -16,7 +16,8 @@ func RefreshVideoWorkbenchAuth(c *gin.Context, keys imageWorkbenchKeyLookup, sub
 		return service.ErrVideoTaskForbidden
 	}
 	fresh, err := keys.GetByKeyFresh(c.Request.Context(), previous.Key)
-	if err != nil || fresh == nil || fresh.ID != previous.ID || fresh.UserID != previous.UserID || !fresh.IsActive() ||
+	if err != nil || fresh == nil || fresh.ID != previous.ID || fresh.UserID != previous.UserID ||
+		(!fresh.IsActive() && (!service.MediaWorkbenchPrepaid(c.Request.Context(), fresh) || fresh.Status != service.StatusAPIKeyQuotaExhausted)) ||
 		fresh.User == nil || fresh.User.ID != fresh.UserID || !fresh.User.IsActive() || fresh.Group == nil || previous.Group == nil ||
 		fresh.Group.ID != previous.Group.ID || !service.GroupAllowsVideoWorkbench(fresh.Group) {
 		return service.ErrVideoTaskForbidden

@@ -23,6 +23,12 @@ func VideoPrechargeRequestInfo(ctx context.Context, account *Account, body []byt
 	if err != nil {
 		return GrokMediaRequestInfo{}, err
 	}
+	if protocol := account.MediaProtocol(); account.Platform == PlatformCustom && protocol != "sora" && protocol != "968" {
+		adapted, contentType, err = normalizeCustomVideoForwardBody(GrokMediaEndpointVideosGenerations, adapted, contentType)
+		if err != nil {
+			return GrokMediaRequestInfo{}, err
+		}
+	}
 	info := ParseGrokMediaRequest(contentType, adapted)
 	if account.MediaProtocol() == "sora" && info.RawDurationSeconds == 0 && strings.HasPrefix(strings.ToLower(info.Model), "sora-") {
 		info.RawDurationSeconds, info.DurationSeconds = 4, 4
@@ -72,10 +78,16 @@ func normalizeVideoProtocolBody(ctx context.Context, account *Account, body []by
 	if ratio == "" {
 		ratio = "1:1"
 	}
-	resolution := readString("resolution")
+	for _, field := range []string{"resolution", "resolution_name"} {
+		var value string
+		if raw := values[field]; len(raw) > 0 && json.Unmarshal(raw, &value) != nil {
+			return nil, fmt.Errorf("invalid video resolution")
+		}
+	}
+	resolution := strings.ToLower(strings.TrimSpace(readString("resolution", "resolution_name")))
+	delete(values, "resolution_name")
 	if resolution == "auto" {
-		delete(values, "resolution")
-		resolution = ""
+		resolution = "720p"
 	}
 	if resolution != "" {
 		var valid bool
@@ -120,7 +132,7 @@ func normalizeVideoProtocolBody(ctx context.Context, account *Account, body []by
 			duration = 4
 		}
 		if protocol == "968" {
-			switch strings.ToLower(readString("model")) {
+			switch strings.ToLower(strings.TrimSpace(readString("model"))) {
 			case "sd2.5", "sd2.5-1", "sd2.5-s", "sd2.5-sss":
 				duration = 30
 			case "sd-2.0":

@@ -6,6 +6,10 @@
         <span class="activity"><span :class="{ busy: activeCount > 0 }"></span>{{ t('videoWorkbench.activeCount', { count: activeCount, max: settings.max_concurrent }) }}</span>
       </header>
       <p v-if="settings.announcement" class="announcement" role="status"><Icon name="infoCircle" size="sm" /><span>{{ settings.announcement }}</span></p>
+      <div v-if="tab === 'workbench' && (submissionError || recentTaskError)" class="workbench-message error" role="alert">
+        <Icon name="exclamationCircle" size="sm" /><span>{{ t(`videoWorkbench.errors.${submissionError || recentTaskError}`) }}</span>
+        <button v-if="recentTaskError && !submissionError" type="button" @click="tab = 'tasks'">{{ t('videoWorkbench.viewTask') }}</button>
+      </div>
       <div v-if="tasksError" class="workbench-message error" role="alert">
         <Icon name="exclamationCircle" size="sm" /><span>{{ t('videoWorkbench.tasksError') }}</span>
         <button type="button" @click="refreshTasks">{{ t('videoWorkbench.retry') }}</button>
@@ -68,6 +72,7 @@
           <fieldset class="parameter-field">
             <legend>{{ t('videoWorkbench.resolution') }}</legend>
             <Select id="video-resolution" v-model="form.resolution" :options="resolutionOptions" :aria-label="t('videoWorkbench.resolution')" />
+            <p class="parameter-hint">{{ t('videoWorkbench.resolutionHint') }}</p>
           </fieldset>
           <fieldset class="parameter-field">
             <legend>{{ t('videoWorkbench.duration') }}</legend>
@@ -81,6 +86,7 @@
             </div>
             <p v-if="form.duration === 'custom' && form.customDuration !== '' && !validDuration" class="validation-error">{{ modelLimits ? t(modelLimits.fixedDurations ? 'videoWorkbench.fixedModelDuration' : 'videoWorkbench.modelDuration', { min: modelLimits.minDuration, max: modelLimits.maxDuration, durations: modelLimits.durations.join(', ') }) : t('videoWorkbench.invalidDuration') }}</p>
           </fieldset>
+          <p class="parameter-hint">{{ t('videoWorkbench.parameterHint') }}</p>
           <button class="create-task" type="submit" :disabled="!canSubmit"><Icon :name="submitting ? 'refresh' : 'sparkles'" size="sm" :class="{ 'animate-spin': submitting }" />{{ t(submitting ? 'videoWorkbench.submitting' : 'videoWorkbench.create') }}<Icon name="arrowRight" size="sm" /></button>
         </div>
       </form>
@@ -121,7 +127,7 @@ import Pagination from '@/components/common/Pagination.vue'
 import VideoWorkbenchTaskRow from '@/components/user/VideoWorkbenchTaskRow.vue'
 import { keysAPI } from '@/api/keys'
 import { saveBlob } from '@/api/batchImage'
-import { listVideoTasks, listVideoModels, submitVideoTask, downloadVideoTask, deleteVideoTask, safeWorkbenchLink, miniMaxVideoModelLimits, type VideoTask, type VideoWorkbenchSettings, type VideoPayload } from '@/api/videoWorkbench'
+import { listVideoTasks, listVideoModels, submitVideoTask, downloadVideoTask, deleteVideoTask, safeWorkbenchLink, miniMaxVideoModelLimits, safeVideoTaskErrorCode, videoSubmissionErrorCode, type VideoTask, type VideoWorkbenchSettings, type VideoPayload } from '@/api/videoWorkbench'
 import { useAuthStore } from '@/stores/auth'
 import { useAppStore } from '@/stores/app'
 import type { ApiKey } from '@/types'
@@ -153,6 +159,11 @@ const manualRefreshing = ref(false)
 const keysError = ref(false), modelsError = ref(false), tasksError = ref(false), loaded = ref(false)
 const submitting = ref(false), deleting = ref(false)
 const tasks = ref<VideoTask[]>([]), acceptedTasks = new Map<string, VideoTask>()
+const submissionError = ref(''), recentTaskId = ref('')
+const recentTaskError = computed(() => {
+  const task = tasks.value.find(task => task.id === recentTaskId.value && task.expires_at > now.value)
+  return task?.status === 'failed' ? safeVideoTaskErrorCode(task.error_code) : ''
+})
 const deleteTarget = ref<VideoTask | null>(null)
 const downloading = reactive(new Set<string>())
 const filter = ref<(typeof statuses)[number]>('all')
@@ -266,6 +277,7 @@ function readReference(file: File): Promise<string> {
 }
 async function submit() {
   if (!canSubmit.value || !selectedKey.value) return
+  submissionError.value = ''
   submitting.value = true
   const key = selectedKey.value.key, email = authStore.user?.email || ''
   const draft = { ...form }
@@ -277,6 +289,7 @@ async function submit() {
     }
     const result = await submitVideoTask(key, email, payload)
     if (disposed) return
+    recentTaskId.value = result.id
     acceptedTasks.set(result.id, result)
     if (!tasks.value.some(task => task.id === result.id)) tasks.value.unshift(result)
     if (Object.entries(draft).every(([field, value]) => form[field as keyof typeof form] === value) &&
@@ -288,7 +301,13 @@ async function submit() {
       }
     }
     appStore.showSuccess(t('videoWorkbench.created')); void refreshTasks()
-  } catch { if (!disposed) { appStore.showError(t('videoWorkbench.submitError')); void refreshTasks() } }
+  } catch (error) {
+    if (!disposed) {
+      submissionError.value = videoSubmissionErrorCode(error) || ''
+      appStore.showError(submissionError.value ? t(`videoWorkbench.errors.${submissionError.value}`) : t('videoWorkbench.submitError'))
+      void refreshTasks()
+    }
+  }
   finally { if (!disposed) submitting.value = false }
 }
 async function download(task: VideoTask) {
@@ -324,6 +343,8 @@ h2 { font-size: 21px; font-weight: 600; } .activity { gap: 8px; font-size: 12px;
 .activity > span { width: 6px; height: 6px; border-radius: 50%; background: var(--md-sys-color-outline); } .activity .busy { background: var(--md-sys-color-secondary); }
 .announcement,.workbench-message { display: flex; gap: 10px; align-items: flex-start; padding: 12px 0; margin-bottom: 18px; font-size: 13px; line-height: 1.7; border-bottom: 1px solid var(--md-sys-color-outline-variant); }
 .announcement { flex-shrink: 0; max-height: 120px; overflow-y: auto; } .announcement span { white-space: pre-wrap; overflow-wrap: anywhere; } .announcement svg { flex-shrink: 0; margin-top: 3px; } .error { color: var(--md-sys-color-error, #b3261e); } .workbench-message button { margin-left: auto; text-decoration: underline; }
+.workbench-message span { min-width: 0; overflow-wrap: anywhere; } .workbench-message button,.workbench-message svg { flex-shrink: 0; }
+.parameter-hint { color: var(--md-sys-color-on-surface-variant); font-size: 11px; line-height: 1.6; overflow-wrap: anywhere; }
 .workbench-form { display: grid; padding: 0 0 30px; grid-template-columns: minmax(0,1.13fr) minmax(0,1fr); gap: 42px; }
 .creative-column,.parameters-column { min-width: 0; display: flex; flex-direction: column; } .parameters-column { gap: 16px; }
 .field-title { display: flex; justify-content: space-between; gap: 12px; align-items: center; margin-bottom: 12px; font-size: 13px; font-weight: 600; }

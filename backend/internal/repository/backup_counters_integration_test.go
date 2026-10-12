@@ -42,7 +42,13 @@ func TestBackupRestoreCounterCompatibility(t *testing.T) {
 			mediaMigration, err := migrations.FS.ReadFile("214_media_precharge.sql")
 			require.NoError(t, err)
 			execute(string(mediaMigration))
+			for _, filename := range []string{"215_media_billing_outcomes.sql", "216_media_payment_lifecycle.sql"} {
+				mediaMigration, err = migrations.FS.ReadFile(filename)
+				require.NoError(t, err)
+				execute(string(mediaMigration))
+			}
 			execute(`INSERT INTO media_billing_reservations (id,user_id,api_key_id,account_id,quote) VALUES ('old-target',1,1,1,'{}')`)
+			execute(`INSERT INTO media_billing_events (reservation_id,ordinal,stage,amount) VALUES ('old-target',1,'request_created',0)`)
 			execute(`INSERT INTO usage_logs (id, request_id, billing_mode, account_stats_cost) VALUES (2, 'video:snapshot', 'video', 2);
 				DELETE FROM usage_logs WHERE id = 2;
 				UPDATE redeem_codes SET status = 'used', used_by = 1 WHERE id = 2;`)
@@ -60,6 +66,8 @@ func TestBackupRestoreCounterCompatibility(t *testing.T) {
 			execute(postlude)
 			var reservations int
 			require.NoError(t, tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM media_billing_reservations").Scan(&reservations))
+			require.Zero(t, reservations)
+			require.NoError(t, tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM media_billing_events").Scan(&reservations))
 			require.Zero(t, reservations)
 			execute("SAVEPOINT incomplete_media_backup")
 			execute("ALTER TABLE media_billing_reservations DROP COLUMN final_quote")

@@ -3,12 +3,53 @@
 package service
 
 import (
+	"bytes"
 	"context"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 
+	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 	"github.com/tidwall/gjson"
 )
+
+func TestMediaProtocolAutoResolutionMatchesPrechargeAndUsage(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	for _, protocol := range []string{"", "sora", "968"} {
+		for _, model := range []string{"sd-2.0", "grok-imagine-video", "custom-video", "sora-2"} {
+			t.Run(protocol+"/"+model, func(t *testing.T) {
+				account := customVideoTestAccount()
+				account.Credentials["media_protocol"] = protocol
+				body := []byte(`{"model":"` + model + `","prompt":"waves","duration":5,"ratio":"16:9","resolution":"auto"}`)
+				info, err := VideoPrechargeRequestInfo(context.Background(), account, body, "application/json")
+				require.NoError(t, err)
+				require.True(t, info.ResolutionValid)
+				require.Equal(t, "720p", info.Resolution)
+				upstream := &httpUpstreamRecorder{resp: &http.Response{
+					StatusCode: http.StatusAccepted, Header: http.Header{"Content-Type": {"application/json"}},
+					Body: io.NopCloser(strings.NewReader(`{"request_id":"private-task","status":"pending"}`)),
+				}}
+				c, _ := gin.CreateTestContext(httptest.NewRecorder())
+				c.Request = httptest.NewRequest(http.MethodPost, "/v1/videos", bytes.NewReader(body))
+				svc := &OpenAIGatewayService{cfg: customVideoTestConfig(), httpUpstream: upstream}
+				result, err := svc.ForwardGrokMedia(context.Background(), c, account, GrokMediaEndpointVideosGenerations, "", body, "application/json")
+				require.NoError(t, err)
+				require.Len(t, upstream.requests, 1)
+				if protocol == "sora" && model == "sora-2" {
+					require.Equal(t, "1280x720", gjson.GetBytes(upstream.lastBody, "size").String())
+					require.False(t, gjson.GetBytes(upstream.lastBody, "resolution").Exists())
+				} else {
+					require.Equal(t, "720p", gjson.GetBytes(upstream.lastBody, "resolution").String())
+				}
+				require.Equal(t, info.Resolution, result.VideoResolution)
+				require.Equal(t, info.RawDurationSeconds, result.VideoDurationSeconds)
+			})
+		}
+	}
+}
 
 func TestMediaProtocolSoraWorkbench(t *testing.T) {
 	account := &Account{Credentials: map[string]any{"media_protocol": "sora"}}
@@ -34,7 +75,7 @@ func TestMediaProtocol968Video(t *testing.T) {
 	require.Equal(t, "1:1", gjson.GetBytes(body, "aspect_ratio").String())
 	require.Equal(t, "https://example.com/a.png", gjson.GetBytes(body, "image_refs.0").String())
 	require.Equal(t, "https://example.com/a.mp3", gjson.GetBytes(body, "audio_refs.0").String())
-	require.False(t, gjson.GetBytes(body, "resolution").Exists())
+	require.Equal(t, "720p", gjson.GetBytes(body, "resolution").String())
 	s := &OpenAIGatewayService{cfg: customVideoTestConfig()}
 	for _, test := range []struct {
 		endpoint GrokMediaEndpoint

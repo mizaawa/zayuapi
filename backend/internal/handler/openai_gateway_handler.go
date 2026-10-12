@@ -254,6 +254,9 @@ func NewOpenAIGatewayHandler(
 			maxAccountSwitches = cfg.Gateway.MaxAccountSwitches
 		}
 	}
+	if gatewayService != nil {
+		gatewayService.SetMediaBillingAPIKeyService(apiKeyService)
+	}
 	return &OpenAIGatewayHandler{
 		gatewayService:           gatewayService,
 		billingCacheService:      billingCacheService,

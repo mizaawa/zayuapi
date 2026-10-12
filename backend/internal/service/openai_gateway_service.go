@@ -478,6 +478,7 @@ type OpenAIGatewayService struct {
 	openaiCompatAnthropicDigestSessions sync.Map
 	grokMediaVideoBillingRecords        sync.Map
 	mediaBillingCancel                  context.CancelFunc
+	mediaBillingAPIKeys                 atomic.Pointer[APIKeyService]
 }
 
 // NewOpenAIGatewayService creates a new OpenAIGatewayService

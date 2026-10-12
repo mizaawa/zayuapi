@@ -32,3 +32,13 @@ func TestBuildUserViewFromSummaryLeavesUnboundGroupMultiplierNil(t *testing.T) {
 
 	require.Nil(t, view.GroupRateMultiplier)
 }
+
+func TestBuildUserViewBlankMonitorNameFollowsRenamedGroup(t *testing.T) {
+	m := &ChannelMonitor{ID: 7, GroupName: "Original group", PrimaryModel: "test"}
+	require.Equal(t, "Original group", buildUserViewFromSummary(m, MonitorStatusSummary{}, nil, nil).Name)
+	m.GroupName = "Renamed group"
+	require.Equal(t, "Renamed group", buildUserViewFromSummary(m, MonitorStatusSummary{}, nil, nil).Name)
+	require.Empty(t, m.Name, "display fallback never replaces the persisted blank name")
+	m.Name = "Custom monitor"
+	require.Equal(t, "Custom monitor", buildUserViewFromSummary(m, MonitorStatusSummary{}, nil, nil).Name)
+}

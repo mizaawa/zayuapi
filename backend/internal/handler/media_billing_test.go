@@ -47,6 +47,35 @@ func (r *partialUsageBillingRepo) PendingMedia(context.Context, int) ([]*service
 	return nil, nil
 }
 
+var _ service.MediaBillingRepository = (*partialUsageBillingRepo)(nil)
+
+func (r *partialUsageBillingRepo) RenewMediaQueue(_ context.Context, id string, userID, keyID int64) error {
+	reservation := r.reservations[id]
+	if reservation == nil || reservation.Quote.Command.UserID != userID || reservation.Quote.Command.APIKeyID != keyID {
+		return service.ErrUsageBillingRequestConflict
+	}
+	return nil
+}
+
+func (r *partialUsageBillingRepo) DispatchMediaQueue(ctx context.Context, id string, userID, keyID, accountID int64) error {
+	if err := r.RenewMediaQueue(ctx, id, userID, keyID); err != nil {
+		return err
+	}
+	if r.reservations[id].Quote.Command.AccountID != accountID {
+		return service.ErrUsageBillingRequestConflict
+	}
+	r.reservations[id].Dispatched = true
+	return nil
+}
+
+func (r *partialUsageBillingRepo) RefundMediaQueue(ctx context.Context, id string, _ bool) (*service.MediaBillingReservation, error) {
+	reservation := r.reservations[id]
+	if reservation == nil || reservation.WorkbenchKind == "" || reservation.Dispatched {
+		return nil, nil
+	}
+	return r.RefundMedia(ctx, id)
+}
+
 func TestVideoPrechargeRetainsAcceptedWorkWhenPersistenceFails(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	for _, scenario := range []struct {

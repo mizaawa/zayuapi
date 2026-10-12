@@ -223,6 +223,7 @@ func (r *channelMonitorRequestTemplateRepository) CountAssociatedMonitors(ctx co
 func (r *channelMonitorRequestTemplateRepository) ListAssociatedMonitors(ctx context.Context, id int64) ([]*service.AssociatedMonitorBrief, error) {
 	rows, err := r.client.ChannelMonitor.Query().
 		Where(channelmonitor.TemplateIDEQ(id)).
+		WithGroup().
 		Order(dbent.Asc(channelmonitor.FieldName)).
 		All(ctx)
 	if err != nil {
@@ -230,9 +231,13 @@ func (r *channelMonitorRequestTemplateRepository) ListAssociatedMonitors(ctx con
 	}
 	out := make([]*service.AssociatedMonitorBrief, 0, len(rows))
 	for _, row := range rows {
+		name := row.Name
+		if name == "" && row.Edges.Group != nil {
+			name = row.Edges.Group.Name
+		}
 		out = append(out, &service.AssociatedMonitorBrief{
 			ID:       row.ID,
-			Name:     row.Name,
+			Name:     name,
 			Provider: string(row.Provider),
 			APIMode:  defaultAPIModeRepo(row.APIMode),
 			Enabled:  row.Enabled,

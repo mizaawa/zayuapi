@@ -88,3 +88,46 @@ func TestRefreshWorkbenchAuthRevocationAndCurrentContexts(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, fresh.User.Concurrency, subject.Concurrency)
 }
+
+func TestRefreshWorkbenchPrepaidTaskKeepsAuthorizationChecks(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		change  func(*service.APIKey)
+		allowed bool
+	}{
+		{"funded exhausted key", func(k *service.APIKey) {
+			k.User.Balance = 0
+			k.Quota = 1
+			k.QuotaUsed = 1
+			k.Status = service.StatusAPIKeyQuotaExhausted
+		}, true},
+		{"disabled key", func(k *service.APIKey) { k.Status = service.StatusDisabled }, false},
+		{"expired key", func(k *service.APIKey) { v := time.Now().Add(-time.Second); k.ExpiresAt = &v }, false},
+		{"disabled user", func(k *service.APIKey) { k.User.Status = service.StatusDisabled }, false},
+		{"revoked group", func(k *service.APIKey) { k.Group.ImageWorkbenchEnabled = false }, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			previous, fresh := queuedAuthKey(), queuedAuthKey()
+			tc.change(fresh)
+			c, _ := gin.CreateTestContext(httptest.NewRecorder())
+			c.Request = httptest.NewRequest(http.MethodPost, "/v1/images/generations", nil)
+			r := &service.MediaBillingReservation{ID: "media:server-receipt", WorkbenchKind: "image", GroupID: *previous.GroupID, Quote: service.MediaBillingQuote{Command: service.UsageBillingCommand{UserID: previous.UserID, APIKeyID: previous.ID}}}
+			c.Request = c.Request.WithContext(service.WithMediaWorkbenchPrepayment(c.Request.Context(), r))
+			c.Set(string(ContextKeyAPIKey), previous)
+			err := RefreshImageWorkbenchAuth(c, queuedKeyLookupFunc(func(context.Context, string) (*service.APIKey, error) { return fresh, nil }), nil, &config.Config{})
+			if tc.allowed {
+				require.NoError(t, err)
+			} else {
+				require.Error(t, err)
+			}
+		})
+	}
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/images/generations", nil)
+	c.Request.Header.Set("X-Media-Prepaid", "true")
+	c.Set("media_precharge", &service.MediaBillingReservation{ID: "forged"})
+	previous, fresh := queuedAuthKey(), queuedAuthKey()
+	fresh.User.Balance = 0
+	c.Set(string(ContextKeyAPIKey), previous)
+	require.Error(t, RefreshImageWorkbenchAuth(c, queuedKeyLookupFunc(func(context.Context, string) (*service.APIKey, error) { return fresh, nil }), nil, &config.Config{}))
+}

@@ -518,7 +518,7 @@ export default {
       form: {
         name: '名称',
         namePlaceholder: '可选，输入监控名称',
-        nameHint: '留空时默认使用所选分组名称',
+        nameHint: '留空时持续跟随所选分组名称，分组改名后自动更新',
         provider: '平台',
         group: '选择分组',
         groupPlaceholder: '请选择分组',

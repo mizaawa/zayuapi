@@ -32,7 +32,6 @@ func (ChannelMonitor) Mixin() []ent.Mixin {
 func (ChannelMonitor) Fields() []ent.Field {
 	return []ent.Field{
 		field.String("name").
-			NotEmpty().
 			MaxLen(100),
 		field.Enum("provider").
 			Values("openai", "anthropic", "gemini", "grok", "custom"),

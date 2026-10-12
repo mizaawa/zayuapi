@@ -222,7 +222,7 @@ func (r *dashboardAggregationRepository) CleanupUsageLogs(ctx context.Context, c
 			WITH victims AS (
 				SELECT ctid
 				FROM usage_logs
-				WHERE created_at < $1
+				WHERE created_at < $1 AND `+finalizedMediaUsageCondition+`
 				LIMIT $2
 			)
 			DELETE FROM usage_logs
@@ -511,6 +511,15 @@ func (r *dashboardAggregationRepository) dropUsageLogsPartitions(ctx context.Con
 		}
 		month = month.UTC()
 		if month.Before(cutoffMonth) {
+			var pending bool
+			if err := scanSingleRow(ctx, r.sql, `SELECT EXISTS (SELECT 1 FROM usage_logs
+				WHERE created_at >= $1 AND created_at < $2 AND NOT (`+finalizedMediaUsageCondition+`))`,
+				[]any{month, month.AddDate(0, 1, 0)}, &pending); err != nil {
+				return err
+			}
+			if pending {
+				continue
+			}
 			if _, err := r.sql.ExecContext(ctx, fmt.Sprintf("DROP TABLE IF EXISTS %s", pq.QuoteIdentifier(name))); err != nil {
 				return err
 			}

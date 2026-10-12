@@ -3,6 +3,7 @@ import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import { defineComponent, h, ref } from 'vue'
 import VideoWorkbenchView from '../VideoWorkbenchView.vue'
 import type { VideoTask, VideoWorkbenchSettings } from '@/api/videoWorkbench'
+import { ImageWorkbenchError } from '@/api/imageWorkbench'
 
 const mocks = vi.hoisted(() => ({ keys: vi.fn(), models: vi.fn(), list: vi.fn(), submit: vi.fn(), download: vi.fn(), delete: vi.fn(), error: vi.fn(), success: vi.fn(), save: vi.fn() }))
 vi.mock('@/api/keys', () => ({ keysAPI: { list: mocks.keys } }))
@@ -182,6 +183,55 @@ describe('VideoWorkbenchView', () => {
     mocks.list.mockResolvedValue({ settings, tasks: [{ ...task('unavailable', 'failed'), error_code: 'model_unavailable' }] })
     const wrapper = create(); await flushPromises(); await wrapper.get('#video-tasks-tab').trigger('click')
     expect(wrapper.get('.task-error').text()).toBe('videoWorkbench.errors.model_unavailable')
+  })
+
+  it('keeps all resolution options for sd-2.0 and displays parameter guidance', async () => {
+    mocks.models.mockResolvedValue([{ id: 'sd-2.0' }])
+    const wrapper = create(); await flushPromises(); await wrapper.get('#video-prompt').setValue('waves')
+    expect(wrapper.get('#video-resolution').findAll('option').map(option => option.attributes('value'))).toEqual(['auto', '480p', '720p', '1080p', '2k', '4k'])
+    expect(wrapper.findAll('.parameter-hint').map(hint => hint.text())).toEqual(['videoWorkbench.resolutionHint', 'videoWorkbench.parameterHint'])
+    expect(wrapper.find('[data-reference-kind="videos"] .reference-add').exists()).toBe(true)
+    await wrapper.get('form').trigger('submit'); await flushPromises()
+    expect(mocks.submit).toHaveBeenCalledWith('sk-video', 'owner@example.test', expect.objectContaining({ model: 'sd-2.0', duration: 5, resolution: 'auto' }))
+    expect(wrapper.get('#video-workbench-tab').attributes('aria-selected')).toBe('true')
+  })
+
+  it('shows a safe error on the workbench when the newly created task later fails', async () => {
+    const wrapper = create(); await flushPromises(); await wrapper.get('#video-prompt').setValue('waves')
+    await wrapper.get('form').trigger('submit'); await flushPromises()
+    mocks.list.mockResolvedValue({ settings, tasks: [{ ...task('new-task', 'failed'), error_code: 'upstream_pricing_unavailable' }] })
+    await vi.advanceTimersByTimeAsync(3000); await flushPromises()
+    expect(wrapper.get('#video-workbench-tab').attributes('aria-selected')).toBe('true')
+    expect(wrapper.get('.workbench-message[role="alert"]').text()).toContain('videoWorkbench.errors.upstream_pricing_unavailable')
+    await wrapper.get('.workbench-message button').trigger('click')
+    expect(wrapper.get('#video-tasks-tab').attributes('aria-selected')).toBe('true')
+  })
+
+  it('explains rejected submissions using safe status messages and preserves an uncertain request warning', async () => {
+    const wrapper = create(); await flushPromises(); await wrapper.get('#video-prompt').setValue('waves')
+    for (const [status, code] of [[400, 'invalid_parameters'], [402, 'insufficient_balance'], [413, 'request_too_large'], [429, 'rate_limited'], [503, 'service_unavailable']] as const) {
+      mocks.submit.mockRejectedValueOnce(new ImageWorkbenchError('https://internal.example/sk-secret', status, 'private'))
+      await wrapper.get('form').trigger('submit'); await flushPromises()
+      expect(mocks.error).toHaveBeenLastCalledWith(`videoWorkbench.errors.${code}`)
+      expect(wrapper.get('.workbench-message[role="alert"]').text()).toContain(`videoWorkbench.errors.${code}`)
+      expect(wrapper.text()).not.toContain('sk-secret')
+    }
+    mocks.submit.mockRejectedValueOnce(new ImageWorkbenchError('private', 0, 'ETIMEDOUT'))
+    await wrapper.get('form').trigger('submit'); await flushPromises()
+    expect(mocks.error).toHaveBeenLastCalledWith('videoWorkbench.submitError')
+    expect(wrapper.find('.workbench-message[role="alert"]').exists()).toBe(false)
+    expect(wrapper.get<HTMLTextAreaElement>('#video-prompt').element.value).toBe('waves')
+  })
+
+  it('uses safe messages for upstream pricing errors and unknown private error codes', async () => {
+    mocks.list.mockResolvedValue({ settings, tasks: [
+      { ...task('pricing', 'failed'), error_code: 'upstream_pricing_unavailable' },
+      { ...task('unknown', 'failed'), error_code: 'https://internal.example/sk-secret' }
+    ] })
+    const wrapper = create(); await flushPromises(); await wrapper.get('#video-tasks-tab').trigger('click')
+    expect(wrapper.get('[data-task-id="pricing"] .task-error').text()).toBe('videoWorkbench.errors.upstream_pricing_unavailable')
+    expect(wrapper.get('[data-task-id="unknown"] .task-error').text()).toBe('videoWorkbench.errors.generation_failed')
+    expect(wrapper.text()).not.toContain('sk-secret')
   })
 
   it('clears all submitted media and restores defaults while staying on the workbench', async () => {

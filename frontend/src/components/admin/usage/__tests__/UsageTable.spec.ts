@@ -138,6 +138,29 @@ const baseImageRow = {
 }
 
 describe('admin UsageTable tooltip', () => {
+  it.each(['settled', 'refunded'] as const)('shows three associated media payment stages for %s', (outcome) => {
+    const wrapper = mount(UsageTable, {
+      props: {
+        data: [{
+          ...baseImageRow,
+          actual_cost: outcome === 'refunded' ? 0 : 0.4,
+          billing_events: [
+            { stage: 'request_created', amount: 0, created_at: '2026-10-12T00:00:00Z' },
+            { stage: 'prepaid', amount: 0.4, created_at: '2026-10-12T00:00:00Z' },
+            { stage: outcome, amount: 0.4, created_at: '2026-10-12T00:01:00Z' },
+          ],
+        }],
+        columns: [{ key: 'cost', label: 'Cost' }],
+      },
+      global: { stubs: { DataTable: DataTableStub, Icon: true } },
+    })
+    const events = wrapper.get('[data-testid="media-payment-events"]')
+    expect(events.findAll('li')).toHaveLength(3)
+    expect(events.text()).toContain('usage.mediaPayment.prepaid')
+    expect(events.text()).toContain(`usage.mediaPayment.${outcome}`)
+    expect(events.text()).toContain('-$0.400000')
+    expect(events.text().includes('+$0.400000')).toBe(outcome === 'refunded')
+  })
   it.each([true, false])('shows end-to-end speed with admin billing enabled: %s', (showAccountBilling) => {
     const wrapper = mount(UsageTable, {
       props: {

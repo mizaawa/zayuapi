@@ -12,7 +12,7 @@
         <div><dt>{{ t('videoWorkbench.model') }}</dt><dd :title="task.workbench.model">{{ task.workbench.model }}</dd></div>
         <div><dt>{{ t('videoWorkbench.remaining') }}</dt><dd>{{ remaining }}</dd></div>
       </dl>
-      <p class="task-meta"><span v-if="keyName">{{ keyName }}</span><span>{{ task.workbench.ratio }}</span><span>{{ t('videoWorkbench.seconds', { count: task.workbench.duration }) }}</span></p>
+      <p class="task-meta"><span v-if="keyName">{{ keyName }}</span><span>{{ task.workbench.ratio }}</span><span v-if="task.workbench.resolution">{{ task.workbench.resolution === 'auto' ? t('videoWorkbench.auto') : task.workbench.resolution }}</span><span>{{ t('videoWorkbench.seconds', { count: task.workbench.duration }) }}</span></p>
       <p v-if="task.status === 'failed'" class="task-error" role="alert">{{ errorMessage }}</p>
     </div>
     <div class="task-actions">
@@ -30,6 +30,7 @@ import Icon from '@/components/icons/Icon.vue'
 import { useClipboard } from '@/composables/useClipboard'
 import { formatBytes } from '@/utils/format'
 import type { VideoTask } from '@/api/videoWorkbench'
+import { safeVideoTaskErrorCode } from '@/api/videoWorkbench'
 const props = defineProps<{ task: VideoTask; now: number; keyName?: string; downloading: boolean }>()
 defineEmits<{ download: []; delete: [] }>()
 const { t, locale } = useI18n()
@@ -37,10 +38,7 @@ const { copyToClipboard } = useClipboard()
 const date = computed(() => new Date(props.task.created_at * 1000).toLocaleString(locale.value === 'zh' ? 'zh-CN' : 'en-US', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }))
 const elapsed = computed(() => props.task.started_at ? t('videoWorkbench.seconds', { count: Math.max(0, (props.task.completed_at || props.now) - props.task.started_at) }) : '-')
 const remaining = computed(() => ['completed', 'failed'].includes(props.task.status) ? t('videoWorkbench.remainingMinutes', { count: Math.max(0, Math.ceil((props.task.expires_at - props.now) / 60)) }) : '-')
-const errorMessage = computed(() => {
-  const codes = ['generation_failed', 'request_rejected', 'model_unavailable', 'storage_failed', 'authorization_failed', 'interrupted', 'timeout']
-  return t(`videoWorkbench.errors.${codes.includes(props.task.error_code || '') ? props.task.error_code : 'generation_failed'}`)
-})
+const errorMessage = computed(() => t(`videoWorkbench.errors.${safeVideoTaskErrorCode(props.task.error_code)}`))
 </script>
 
 <style scoped>

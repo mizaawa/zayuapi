@@ -122,6 +122,10 @@ func (h *OpenAIGatewayHandler) handleGrokMedia(c *gin.Context, endpoint service.
 	}
 
 	contentType := c.GetHeader("Content-Type")
+	if endpoint.IsGenerationRequest() && !mediaRequestFieldsUnambiguous(contentType, body) {
+		h.errorResponse(c, http.StatusBadRequest, "invalid_request_error", "Media request fields must be valid and unique")
+		return
+	}
 	requestInfo := service.GrokMediaRequestInfo{}
 	if endpoint.IsSeedance() && endpoint == service.SeedanceEndpointCreate {
 		requestInfo, err = service.ParseSeedanceRequest(body)
@@ -259,7 +263,7 @@ func (h *OpenAIGatewayHandler) handleGrokMedia(c *gin.Context, endpoint service.
 		return
 	}
 	if endpoint.IsGenerationRequest() {
-		if err := h.billingCacheService.CheckBillingEligibility(c.Request.Context(), apiKey.User, apiKey, apiKey.Group, subscription, service.QuotaPlatform(c.Request.Context(), apiKey)); err != nil {
+		if err := h.checkMediaBillingEligibility(c, apiKey, subscription); err != nil {
 			reqLog.Info("grok_media.billing_eligibility_check_failed", zap.Error(err))
 			status, code, message, retryAfter := billingErrorDetails(err)
 			if retryAfter > 0 {
@@ -444,6 +448,15 @@ func (h *OpenAIGatewayHandler) handleGrokMedia(c *gin.Context, endpoint service.
 				}
 				status, code, message, _ := billingErrorDetails(err)
 				h.errorResponse(c, status, code, message)
+				return
+			}
+		}
+		if endpoint.IsGenerationRequest() {
+			if err := h.dispatchWorkbenchMedia(c, account.ID); err != nil {
+				if accountReleaseFunc != nil {
+					accountReleaseFunc()
+				}
+				h.errorResponse(c, http.StatusServiceUnavailable, "api_error", "Task prepayment is no longer available")
 				return
 			}
 		}

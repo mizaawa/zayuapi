@@ -24,8 +24,8 @@
           :row-style="monitorRowStyle"
         >
           <template #cell-name="{ row, value }">
-            <div class="flex items-center gap-1.5">
-              <span class="font-medium text-gray-900 dark:text-white">{{ value }}</span>
+            <div class="flex min-w-0 max-w-full items-center gap-1.5">
+              <span class="min-w-0 break-words font-medium text-gray-900 dark:text-white">{{ value || row.group_name }}</span>
               <HelpTooltip v-if="!row.group_id && row.api_key_decrypt_failed" :content="t('admin.channelMonitor.apiKeyDecryptFailed')">
                 <Icon name="exclamationTriangle" size="sm" class="text-red-500" />
               </HelpTooltip>
@@ -137,16 +137,21 @@
           {{ t('common.loading') }}
         </div>
 
-        <div v-else class="max-h-[65vh] space-y-2 overflow-y-auto pr-1">
+        <SortableScrollArea v-else :label="t('admin.channelMonitor.sortOrder')">
           <VueDraggable
             v-if="sortableMonitors.length > 0"
             v-model="sortableMonitors"
-            :animation="0"
+            :animation="200"
+            handle=".channel-monitor-drag-handle"
+            :scroll="true"
+            :scroll-sensitivity="60"
+            :scroll-speed="12"
             :force-fallback="true"
             :fallback-on-body="true"
             :fallback-tolerance="4"
-            ghost-class="channel-monitor-sort-ghost"
-            chosen-class="channel-monitor-sort-chosen"
+            ghost-class="sort-order-ghost"
+            chosen-class="sort-order-chosen"
+            fallback-class="sort-order-fallback"
             class="channel-monitor-sort-list space-y-2"
             data-testid="channel-monitor-sort-list"
           >
@@ -154,24 +159,31 @@
               v-for="monitor in sortableMonitors"
               :key="monitor.id"
               :data-monitor-id="monitor.id"
-              class="flex cursor-grab items-center gap-3 rounded-lg border border-gray-200 bg-white p-3 transition-shadow hover:shadow-md active:cursor-grabbing dark:border-dark-600 dark:bg-dark-700"
+              class="sort-order-item channel-monitor-sort-item flex items-center gap-2 rounded-lg border p-3 transition-shadow hover:shadow-md sm:gap-3"
             >
-              <Icon name="menu" size="md" class="flex-none text-gray-400" />
               <ProviderIcon :provider="monitor.provider" :size="18" class="flex-none" />
               <div class="min-w-0 flex-1">
                 <div class="flex min-w-0 items-center gap-2">
-                  <div class="truncate font-medium text-gray-900 dark:text-white">
-                    {{ monitor.name }}
+                  <div class="truncate font-medium">
+                    {{ monitor.name || monitor.group_name }}
                   </div>
-                  <span class="flex-none text-xs text-gray-400 dark:text-gray-500">
+                  <span class="sort-order-meta hidden flex-none text-xs sm:inline">
                     {{ providerLabel(monitor.provider) }}
                   </span>
                 </div>
-                <div class="truncate text-xs text-gray-500 dark:text-gray-400">
+                <div class="sort-order-meta truncate text-xs">
                   {{ monitor.primary_model }}
                 </div>
               </div>
-              <span class="flex-none text-sm text-gray-400">#{{ monitor.id }}</span>
+              <span class="sort-order-meta flex-none text-xs sm:text-sm">#{{ monitor.id }}</span>
+              <button
+                type="button"
+                class="sort-order-handle channel-monitor-drag-handle flex h-11 w-11 flex-none cursor-grab touch-none items-center justify-center rounded-md transition-colors active:cursor-grabbing"
+                :title="t('admin.channelMonitor.sortOrder')"
+                :aria-label="t('admin.channelMonitor.sortOrder')"
+              >
+                <Icon name="menu" size="md" />
+              </button>
             </div>
           </VueDraggable>
 
@@ -181,7 +193,7 @@
           >
             {{ t('admin.channelMonitor.noMonitorsYet') }}
           </div>
-        </div>
+        </SortableScrollArea>
       </div>
 
       <template #footer>
@@ -250,6 +262,7 @@ import { getPersistedPageSize } from '@/composables/usePersistedPageSize'
 import { useChannelMonitorFormat } from '@/composables/useChannelMonitorFormat'
 import { PROVIDERS } from '@/constants/channelMonitor'
 import { VueDraggable } from 'vue-draggable-plus'
+import SortableScrollArea from '@/components/common/SortableScrollArea.vue'
 
 const { t } = useI18n()
 const appStore = useAppStore()
@@ -301,7 +314,7 @@ const columns = computed<Column[]>(() => [
 ])
 
 const deleteConfirmMessage = computed(() => {
-  const name = deleting.value?.name || ''
+  const name = deleting.value?.name || deleting.value?.group_name || ''
   return t('admin.channelMonitor.deleteConfirm', { name })
 })
 
@@ -522,14 +535,6 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
-:global(.channel-monitor-sort-ghost) {
-  opacity: 0.45;
-}
-
-:global(.channel-monitor-sort-chosen) {
-  cursor: grabbing;
-}
-
 :global(.channel-monitor-sort-open .channel-monitor-glow) {
   animation-play-state: paused;
 }

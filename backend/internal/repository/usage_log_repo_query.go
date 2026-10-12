@@ -53,6 +53,14 @@ func (r *usageLogRepository) GetByIDWithFilters(ctx context.Context, id int64, f
 	if err = rows.Err(); err != nil {
 		return nil, err
 	}
+	logs := []service.UsageLog{*log}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := r.hydrateMediaBillingEvents(ctx, logs); err != nil {
+		return nil, err
+	}
+	*log = logs[0]
 	return log, nil
 }
 
@@ -93,7 +101,7 @@ func (r *usageLogRepository) ListByModelAndTimeRange(ctx context.Context, modelN
 }
 
 func (r *usageLogRepository) Delete(ctx context.Context, id int64) error {
-	_, err := r.sql.ExecContext(ctx, "DELETE FROM usage_logs WHERE id = $1", id)
+	_, err := r.sql.ExecContext(ctx, "DELETE FROM usage_logs WHERE id = $1 AND "+finalizedMediaUsageCondition, id)
 	return err
 }
 
@@ -289,6 +297,12 @@ func (r *usageLogRepository) queryUsageLogs(ctx context.Context, query string, a
 		logs = append(logs, *log)
 	}
 	if err = rows.Err(); err != nil {
+		return nil, err
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := r.hydrateMediaBillingEvents(ctx, logs); err != nil {
 		return nil, err
 	}
 	return logs, nil

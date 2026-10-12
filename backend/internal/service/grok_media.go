@@ -765,9 +765,18 @@ func (s *OpenAIGatewayService) ForwardGrokMedia(
 		return nil, err
 	}
 	if account.Platform == PlatformCustom && endpoint.IsVideoGenerationRequest() {
-		body, contentType, err = normalizeCustomVideoForwardBody(endpoint, body, contentType)
-		if err != nil {
-			return nil, err
+		if protocol := account.MediaProtocol(); endpoint == GrokMediaEndpointVideosGenerations && (protocol == "sora" || protocol == "968") {
+			// Normalize explicit provider defaults before parsing usage so
+			// forwarding, precharge and final billing agree on the parameters.
+			body, err = normalizeVideoProtocolBody(ctx, account, body)
+			if err != nil {
+				return nil, err
+			}
+		} else {
+			body, contentType, err = normalizeCustomVideoForwardBody(endpoint, body, contentType)
+			if err != nil {
+				return nil, err
+			}
 		}
 	}
 	if account.Platform == PlatformGrok {
@@ -809,8 +818,8 @@ func (s *OpenAIGatewayService) ForwardGrokMedia(
 			forwardedRequestInfo = normalizeCustomVideoRequestInfo(forwardedRequestInfo)
 		}
 	}
-	if account.Platform == PlatformCustom && endpoint == GrokMediaEndpointVideosGenerations {
-		// Adapt only internal workbench requests after extracting the original
+	if protocol := account.MediaProtocol(); account.Platform == PlatformCustom && endpoint == GrokMediaEndpointVideosGenerations && protocol != "sora" && protocol != "968" {
+		// MiniMax workbench metadata is built after extracting the original
 		// reference and duration metadata used for billing and audit.
 		body, err = normalizeVideoProtocolBody(ctx, account, body)
 		if err != nil {
@@ -1213,11 +1222,15 @@ func prepareGrokMediaForwardBody(endpoint GrokMediaEndpoint, body []byte, conten
 // needed by transparent Custom video accounts. Unlike Grok, Custom does not
 // infer a billing/upstream resolution from the model name or a missing field:
 // only an explicitly valid resolution (or resolution_name alias) is sent.
+// The explicit auto option selects 720p, independently of the model name.
 func normalizeCustomVideoForwardBody(endpoint GrokMediaEndpoint, body []byte, contentType string) ([]byte, string, error) {
 	if !endpoint.IsVideoGenerationRequest() {
 		return body, contentType, nil
 	}
 	info := ParseGrokMediaRequest(contentType, body)
+	if strings.EqualFold(info.RawResolution, "auto") {
+		info.Resolution, info.ResolutionValid = "720p", true
+	}
 	if gjson.ValidBytes(body) {
 		out := body
 		if info.ResolutionValid {

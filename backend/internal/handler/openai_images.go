@@ -61,6 +61,10 @@ func (h *OpenAIGatewayHandler) Images(c *gin.Context) {
 		h.errorResponse(c, http.StatusBadRequest, "invalid_request_error", "Request body is empty")
 		return
 	}
+	if !mediaRequestFieldsUnambiguous(c.GetHeader("Content-Type"), body) {
+		h.errorResponse(c, http.StatusBadRequest, "invalid_request_error", "Media request fields must be valid and unique")
+		return
+	}
 
 	if isMultipartImagesContentType(c.GetHeader("Content-Type")) {
 		setOpsRequestContext(c, "", false)
@@ -138,7 +142,7 @@ func (h *OpenAIGatewayHandler) Images(c *gin.Context) {
 		defer userReleaseFunc()
 	}
 
-	if err := h.billingCacheService.CheckBillingEligibility(c.Request.Context(), apiKey.User, apiKey, apiKey.Group, subscription, service.QuotaPlatform(c.Request.Context(), apiKey)); err != nil {
+	if err := h.checkMediaBillingEligibility(c, apiKey, subscription); err != nil {
 		reqLog.Info("openai.images.billing_eligibility_check_failed", zap.Error(err))
 		status, code, message, retryAfter := billingErrorDetails(err)
 		if retryAfter > 0 {
@@ -255,6 +259,13 @@ func (h *OpenAIGatewayHandler) Images(c *gin.Context) {
 			}
 			status, code, message, _ := billingErrorDetails(err)
 			h.errorResponse(c, status, code, message)
+			return
+		}
+		if err := h.dispatchWorkbenchMedia(c, account.ID); err != nil {
+			if accountReleaseFunc != nil {
+				accountReleaseFunc()
+			}
+			h.errorResponse(c, http.StatusServiceUnavailable, "api_error", "Task prepayment is no longer available")
 			return
 		}
 		result, err := func() (*service.OpenAIForwardResult, error) {

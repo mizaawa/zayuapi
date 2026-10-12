@@ -14,6 +14,7 @@ import (
 
 const imageWorkbenchTaskIDContextKey = "image_workbench_task_id"
 const mediaPrechargeContextKey = "media_precharge"
+const workbenchPrechargeKindContextKey = "workbench_precharge_kind"
 
 func mediaPrecharge(c *gin.Context) *service.MediaBillingReservation {
 	value, _ := c.Get(mediaPrechargeContextKey)
@@ -55,7 +56,8 @@ func newImageWorkbenchFailureBilling(h *OpenAIGatewayHandler, c *gin.Context, ap
 	return &imageWorkbenchFailureBilling{
 		handler: h, c: c, model: model, size: size, count: max(1, count), mapping: mapping,
 		input: service.OpenAIRecordUsageInput{
-			APIKey: apiKey, User: apiKey.User, Subscription: subscription,
+			WorkbenchKind: c.GetString(workbenchPrechargeKindContextKey),
+			APIKey:        apiKey, User: apiKey.User, Subscription: subscription,
 			InboundEndpoint: GetInboundEndpoint(c), UserAgent: c.GetHeader("User-Agent"),
 			IPAddress: ip.GetClientIP(c), RequestPayloadHash: service.HashUsageRequestPayload(body),
 			APIKeyService: h.apiKeyService, QuotaPlatform: service.QuotaPlatform(c.Request.Context(), apiKey),

@@ -93,6 +93,37 @@ async function fillNewMonitor(wrapper: ReturnType<typeof mountDialog>) {
   await wrapper.get('[data-testid="monitor-primary-model"]').setValue('claude-sonnet-4-5')
 }
 
+describe('channel monitor group names', () => {
+  beforeEach(() => {
+    createMonitor.mockReset().mockResolvedValue({})
+    updateMonitor.mockReset().mockResolvedValue({})
+    showError.mockReset()
+  })
+
+  it('keeps the optional name blank after selecting a group and saving', async () => {
+    const wrapper = mountDialog()
+    await flushPromises()
+    await fillNewMonitor(wrapper)
+
+    expect((wrapper.get('input[type="text"]').element as HTMLInputElement).value).toBe('')
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+    expect(createMonitor).toHaveBeenCalledWith(expect.objectContaining({ name: '', group_id: 1 }))
+    wrapper.unmount()
+  })
+
+  it('preserves a blank name when editing a monitor after its group is renamed', async () => {
+    const wrapper = mountDialog({ ...monitor(false), name: '', group_name: 'Renamed group' })
+    await flushPromises()
+
+    expect((wrapper.get('input[type="text"]').element as HTMLInputElement).value).toBe('')
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+    expect(updateMonitor).toHaveBeenCalledWith(1, expect.objectContaining({ name: '' }))
+    wrapper.unmount()
+  })
+})
+
 describe('channel monitor simulated requests', () => {
   beforeEach(() => {
     createMonitor.mockReset().mockResolvedValue({})

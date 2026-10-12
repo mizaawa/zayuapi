@@ -676,21 +676,7 @@ func init() {
 	// channelmonitorDescName is the schema descriptor for name field.
 	channelmonitorDescName := channelmonitorFields[0].Descriptor()
 	// channelmonitor.NameValidator is a validator for the "name" field. It is called by the builders before save.
-	channelmonitor.NameValidator = func() func(string) error {
-		validators := channelmonitorDescName.Validators
-		fns := [...]func(string) error{
-			validators[0].(func(string) error),
-			validators[1].(func(string) error),
-		}
-		return func(name string) error {
-			for _, fn := range fns {
-				if err := fn(name); err != nil {
-					return err
-				}
-			}
-			return nil
-		}
-	}()
+	channelmonitor.NameValidator = channelmonitorDescName.Validators[0].(func(string) error)
 	// channelmonitorDescAPIMode is the schema descriptor for api_mode field.
 	channelmonitorDescAPIMode := channelmonitorFields[2].Descriptor()
 	// channelmonitor.DefaultAPIMode holds the default value on creation for the api_mode field.

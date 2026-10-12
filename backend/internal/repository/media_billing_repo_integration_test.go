@@ -55,6 +55,148 @@ func TestMediaPrechargeConcurrentBalanceAndRefund(t *testing.T) {
 	require.Zero(t, quota)
 }
 
+func TestMediaWorkbenchPaymentEventsAndStatistics(t *testing.T) {
+	ctx := context.Background()
+	client := testEntClient(t)
+	repo := NewUsageBillingRepository(client, integrationDB).(service.MediaBillingRepository)
+	user := mustCreateUser(t, client, &service.User{Email: uuid.NewString() + "@payment.test", PasswordHash: "hash", Balance: .10, Status: service.StatusActive})
+	key := mustCreateApiKey(t, client, &service.APIKey{UserID: user.ID, Key: "sk-" + uuid.NewString(), Name: "payment", Status: service.StatusAPIKeyActive, Quota: 10})
+	account := mustCreateAccount(t, client, &service.Account{Name: "payment-" + uuid.NewString(), Type: service.AccountTypeAPIKey})
+	newHold := func() *service.MediaBillingReservation {
+		id := "media:" + uuid.NewString()
+		mode := "image"
+		size := "1K"
+		r := &service.MediaBillingReservation{ID: id, WorkbenchKind: "image", Quote: service.MediaBillingQuote{
+			Command: service.UsageBillingCommand{RequestID: id, UserID: user.ID, APIKeyID: key.ID, AccountID: account.ID, AccountType: service.AccountTypeAPIKey, BalanceCost: .03, APIKeyQuotaCost: .03, ChargedAt: time.Now()},
+			Usage:   service.UsageLog{RequestID: id, UserID: user.ID, APIKeyID: key.ID, AccountID: account.ID, Model: "fixture-image", ActualCost: .03, TotalCost: .03, BillingMode: &mode, ImageCount: 1, ImageSize: &size, CreatedAt: time.Now()},
+		}}
+		require.NoError(t, repo.ReserveMedia(ctx, r))
+		return r
+	}
+	success, failure := newHold(), newHold()
+	var balance float64
+	require.NoError(t, integrationDB.QueryRow(`SELECT balance FROM users WHERE id=$1`, user.ID).Scan(&balance))
+	require.InDelta(t, .04, balance, 1e-8, "queued tasks are already paid")
+	cleanup := &usageCleanupRepository{sql: integrationDB}
+	cutoff := time.Now().Add(time.Minute)
+	_, err := cleanup.DeleteUsageLogsBatch(ctx, service.UsageCleanupFilters{StartTime: time.Now().Add(-time.Hour), EndTime: cutoff, UserID: &user.ID}, 10000)
+	require.NoError(t, err)
+	_, err = cleanup.DeleteUsageLogsBeforeBatch(ctx, cutoff, 10000)
+	require.NoError(t, err)
+	var logID int64
+	require.NoError(t, integrationDB.QueryRow(`SELECT MAX(id) FROM usage_logs WHERE user_id=$1`, user.ID).Scan(&logID))
+	_, err = cleanup.DeleteUsageLogsThroughIDBatch(ctx, logID, 10000)
+	require.NoError(t, err)
+	require.NoError(t, (&usageLogRepository{sql: integrationDB}).Delete(ctx, logID))
+	require.NoError(t, (&dashboardAggregationRepository{sql: integrationDB}).CleanupUsageLogs(ctx, cutoff))
+	var pendingLogs int
+	require.NoError(t, integrationDB.QueryRow(`SELECT COUNT(*) FROM usage_logs WHERE user_id=$1`, user.ID).Scan(&pendingLogs))
+	require.Equal(t, 2, pendingLogs, "all cleanup paths preserve pending payment logs")
+	final := success.Quote
+	final.Command.BalanceCost, final.Command.APIKeyQuotaCost, final.Command.RequestFingerprint = .02, .02, ""
+	final.Usage.ActualCost, final.Usage.TotalCost = .02, .02
+	require.NoError(t, repo.StageMediaOutcome(ctx, success.ID, &final))
+	for i := 0; i < 4; i++ {
+		_, err := repo.SettleMedia(ctx, success.ID, &final.Command)
+		require.NoError(t, err)
+		_, err = repo.RefundMediaQueue(ctx, failure.ID, false)
+		require.NoError(t, err)
+	}
+	require.NoError(t, integrationDB.QueryRow(`SELECT balance FROM users WHERE id=$1`, user.ID).Scan(&balance))
+	require.InDelta(t, .08, balance, 1e-8)
+	for _, r := range []*service.MediaBillingReservation{success, failure} {
+		var count int
+		require.NoError(t, integrationDB.QueryRow(`SELECT COUNT(*) FROM media_billing_events WHERE reservation_id=$1`, r.ID).Scan(&count))
+		require.Equal(t, 3, count)
+	}
+	var count int
+	var cost float64
+	require.NoError(t, integrationDB.QueryRow(`SELECT COUNT(*),SUM(actual_cost) FROM usage_logs WHERE user_id=$1`, user.ID).Scan(&count, &cost))
+	require.Equal(t, 2, count)
+	require.InDelta(t, .02, cost, 1e-8, "audit events do not triple billed totals")
+	require.NoError(t, integrationDB.QueryRow(`SELECT SUM(requests),SUM(actual_cost) FROM usage_counters WHERE user_id=$1 AND bucket_date='0001-01-01'`, user.ID).Scan(&count, &cost))
+	require.Equal(t, 2, count)
+	require.InDelta(t, .02, cost, 1e-8)
+	logs := []service.UsageLog{success.Quote.Usage, failure.Quote.Usage}
+	logRepo := &usageLogRepository{sql: integrationDB}
+	require.NoError(t, logRepo.hydrateMediaBillingEvents(ctx, logs))
+	require.Len(t, logs[0].BillingEvents, 3)
+	require.Equal(t, "settled", logs[0].BillingEvents[2].Stage)
+	require.Equal(t, "refunded", logs[1].BillingEvents[2].Stage)
+	forged := []service.UsageLog{{RequestID: success.ID, UserID: user.ID + 1, APIKeyID: key.ID}}
+	require.NoError(t, logRepo.hydrateMediaBillingEvents(ctx, forged))
+	require.Empty(t, forged[0].BillingEvents)
+	deleted, err := cleanup.DeleteUsageLogsBatch(ctx, service.UsageCleanupFilters{StartTime: time.Now().Add(-time.Hour), EndTime: cutoff, UserID: &user.ID}, 10000)
+	require.NoError(t, err)
+	require.EqualValues(t, 2, deleted, "finalized payments can be cleaned normally")
+}
+
+func TestMediaWorkbenchQueueDispatchRefundRace(t *testing.T) {
+	ctx := context.Background()
+	client := testEntClient(t)
+	repo := NewUsageBillingRepository(client, integrationDB).(service.MediaBillingRepository)
+	user := mustCreateUser(t, client, &service.User{Email: uuid.NewString() + "@race.test", PasswordHash: "hash", Balance: 1, Status: service.StatusActive})
+	key := mustCreateApiKey(t, client, &service.APIKey{UserID: user.ID, Key: "sk-" + uuid.NewString(), Name: "race", Status: service.StatusAPIKeyActive, Quota: 10})
+	account := mustCreateAccount(t, client, &service.Account{Name: "race-" + uuid.NewString(), Type: service.AccountTypeAPIKey})
+	newHold := func() *service.MediaBillingReservation {
+		id := "media:" + uuid.NewString()
+		r := &service.MediaBillingReservation{ID: id, WorkbenchKind: "video", Quote: service.MediaBillingQuote{Command: service.UsageBillingCommand{RequestID: id, UserID: user.ID, APIKeyID: key.ID, AccountID: account.ID, AccountType: service.AccountTypeAPIKey, BalanceCost: .03, APIKeyQuotaCost: .03, ChargedAt: time.Now()}}}
+		require.NoError(t, repo.ReserveMedia(ctx, r))
+		return r
+	}
+	r := newHold()
+	_, err := integrationDB.Exec(`UPDATE media_billing_reservations SET queue_lease_until=NOW()-INTERVAL '1 second' WHERE id=$1`, r.ID)
+	require.NoError(t, err)
+	items, err := repo.PendingMedia(ctx, 100)
+	require.NoError(t, err)
+	found := false
+	for _, item := range items {
+		if item.ID == r.ID {
+			found = true
+		}
+	}
+	require.True(t, found, "restart recovery finds expired queued holds")
+	require.NoError(t, repo.RenewMediaQueue(ctx, r.ID, user.ID, key.ID))
+	refunded, err := repo.RefundMediaQueue(ctx, r.ID, true)
+	require.NoError(t, err)
+	require.Nil(t, refunded, "stale expiry snapshot cannot refund renewed lease")
+	for _, args := range [][3]int64{{user.ID + 1, key.ID, account.ID}, {user.ID, key.ID + 1, account.ID}, {user.ID, key.ID, account.ID + 1}} {
+		require.ErrorIs(t, repo.DispatchMediaQueue(ctx, r.ID, args[0], args[1], args[2]), service.ErrUsageBillingRequestConflict)
+	}
+	require.NoError(t, repo.DispatchMediaQueue(ctx, r.ID, user.ID, key.ID, account.ID))
+	refunded, err = repo.RefundMediaQueue(ctx, r.ID, false)
+	require.NoError(t, err)
+	require.Nil(t, refunded, "deletion does not refund an already dispatched generation")
+	_, err = repo.RefundMedia(ctx, r.ID)
+	require.NoError(t, err)
+	require.ErrorIs(t, repo.DispatchMediaQueue(ctx, r.ID, user.ID, key.ID, account.ID), service.ErrUsageBillingRequestConflict)
+	for i := 0; i < 12; i++ {
+		r := newHold()
+		var wg sync.WaitGroup
+		var dispatchErr error
+		var refund *service.MediaBillingReservation
+		var refundErr error
+		wg.Add(2)
+		go func() { defer wg.Done(); dispatchErr = repo.DispatchMediaQueue(ctx, r.ID, user.ID, key.ID, account.ID) }()
+		go func() { defer wg.Done(); refund, refundErr = repo.RefundMediaQueue(ctx, r.ID, false) }()
+		wg.Wait()
+		require.NoError(t, refundErr)
+		if dispatchErr == nil {
+			require.Nil(t, refund)
+		} else {
+			require.ErrorIs(t, dispatchErr, service.ErrUsageBillingRequestConflict)
+			require.NotNil(t, refund)
+		}
+		for j := 0; j < 4; j++ {
+			_, err := repo.RefundMedia(ctx, r.ID)
+			require.NoError(t, err)
+		}
+	}
+	var balance float64
+	require.NoError(t, integrationDB.QueryRow(`SELECT balance FROM users WHERE id=$1`, user.ID).Scan(&balance))
+	require.Equal(t, 1.0, balance, "refund replays never increase the starting balance")
+}
+
 func TestMediaPrechargeSettlementAndOwnership(t *testing.T) {
 	ctx := context.Background()
 	client := testEntClient(t)

@@ -29,6 +29,7 @@ type AsyncImageHandler struct {
 	tasks                *service.ImageTaskService
 	openAI               *OpenAIGatewayHandler
 	execute              func(platform string, c *gin.Context)
+	precharge            func(*gin.Context, []byte, string, string) error
 	refreshWorkbenchAuth func(*gin.Context) error
 }
 
@@ -42,6 +43,9 @@ func isImageWorkbenchRequest(c *gin.Context) bool {
 func NewAsyncImageHandler(tasks *service.ImageTaskService, openAI *OpenAIGatewayHandler) *AsyncImageHandler {
 	h := &AsyncImageHandler{tasks: tasks, openAI: openAI}
 	h.execute = h.executeWithGateway
+	if openAI != nil {
+		h.precharge = openAI.prechargeWorkbench
+	}
 	return h
 }
 
@@ -128,6 +132,10 @@ func (h *AsyncImageHandler) Submit(c *gin.Context) {
 		imageTaskJSONError(c, http.StatusBadRequest, "invalid_request_error", "Request body is empty")
 		return
 	}
+	if !mediaRequestFieldsUnambiguous(c.GetHeader("Content-Type"), body) {
+		imageTaskJSONError(c, http.StatusBadRequest, "invalid_request_error", "Media request fields must be valid and unique")
+		return
+	}
 	if asyncImageRequestStreams(c.GetHeader("Content-Type"), body) {
 		imageTaskJSONError(c, http.StatusBadRequest, "invalid_request_error", "streaming image requests cannot be submitted as asynchronous tasks")
 		return
@@ -159,6 +167,23 @@ func (h *AsyncImageHandler) Submit(c *gin.Context) {
 		}
 		timeout = service.ImageWorkbenchQueueTimeout
 	}
+	if h.precharge != nil {
+		if err := h.precharge(c, body, platform, "image"); err != nil {
+			releasePayload()
+			status, code, message := workbenchBillingErrorDetails(err)
+			imageTaskJSONError(c, status, code, message)
+			return
+		}
+		if reservation := mediaPrecharge(c); reservation != nil {
+			c.Request = c.Request.WithContext(service.WithMediaWorkbenchPrepayment(c.Request.Context(), reservation))
+		}
+	}
+	transferred := false
+	defer func() {
+		if !transferred {
+			h.openAI.refundUndispatchedWorkbench(c)
+		}
+	}()
 	taskCtx, recorder, cancel := newAsyncImageContext(c, body, timeout)
 	owner := service.ImageTaskOwner{UserID: apiKey.UserID, APIKeyID: apiKey.ID, UserEmail: ownerEmail, IsAdmin: apiKey.User != nil && apiKey.User.IsAdmin()}
 	var task *service.ImageTask
@@ -189,8 +214,12 @@ func (h *AsyncImageHandler) Submit(c *gin.Context) {
 		"workbench":  task.Workbench,
 	})
 
+	transferred = true
 	go func() {
 		defer releasePayload()
+		defer h.openAI.refundUndispatchedWorkbench(taskCtx)
+		stopPrepaymentLease := h.openAI.keepWorkbenchPrepayment(taskCtx)
+		defer stopPrepaymentLease()
 		if metadata != nil {
 			authorize := func(ctx context.Context) (service.ImageTaskOwner, error) {
 				taskCtx.Request = taskCtx.Request.WithContext(ctx)

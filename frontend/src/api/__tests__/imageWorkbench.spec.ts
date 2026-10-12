@@ -69,7 +69,7 @@ describe('image workbench API', () => {
       { id: 'grok-imagine', display_name: 'Grok Imagine' },
       { id: 'grok-imagine-edit' }, { id: 'grok-imagine-image-quality' },
     ])
-    expect(fetchMock).toHaveBeenCalledWith('https://gateway.example.com/v1/models', expect.objectContaining({
+    expect(fetchMock).toHaveBeenCalledWith('https://gateway.example.com/v1/models?workbench=image', expect.objectContaining({
       headers: { Authorization: `Bearer ${apiKey}`, 'X-Sub2API-User-Email': email },
       cache: 'no-store',
     }))
@@ -78,6 +78,14 @@ describe('image workbench API', () => {
   it.each([null, {}, { data: {} }])('rejects a malformed model response %s', async body => {
     fetchMock.mockResolvedValue(jsonResponse(body))
     await expect(listImageModels(apiKey, email)).rejects.toMatchObject({ code: 'INVALID_RESPONSE' })
+  })
+
+  it('includes administrator-declared image pricing models while excluding video declarations', async () => {
+    fetchMock.mockResolvedValue(jsonResponse({ data: [
+      { id: 'custom-image', media_type: 'image' },
+      { id: 'custom-video', media_type: 'video' },
+    ] }))
+    await expect(listImageModels(apiKey, email)).resolves.toEqual([{ id: 'custom-image' }])
   })
 
   it('submits generation requests once with ownership and workbench headers', async () => {

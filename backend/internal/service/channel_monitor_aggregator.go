@@ -4,7 +4,15 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strings"
 )
+
+func monitorDisplayName(m *ChannelMonitor) string {
+	if strings.TrimSpace(m.Name) == "" {
+		return m.GroupName
+	}
+	return m.Name
+}
 
 // 渠道监控聚合层：把 latest + availability 拼成 admin/user 视图所需的 summary / detail。
 // 所有方法都遵守"失败仅日志，返回零值"的原则，避免 N+1 查询失败拖垮列表渲染。
@@ -154,7 +162,7 @@ func (s *ChannelMonitorService) GetUserDetail(ctx context.Context, id int64) (*U
 	models := mergeModelDetails(m, latest, availMap)
 	return &UserMonitorDetail{
 		ID:                  m.ID,
-		Name:                m.Name,
+		Name:                monitorDisplayName(m),
 		Provider:            m.Provider,
 		GroupName:           m.GroupName,
 		GroupRateMultiplier: monitorGroupRateMultiplier(m),
@@ -257,7 +265,7 @@ func buildUserViewFromSummary(
 	}
 	view := &UserMonitorView{
 		ID:                  m.ID,
-		Name:                m.Name,
+		Name:                monitorDisplayName(m),
 		Provider:            m.Provider,
 		GroupName:           m.GroupName,
 		GroupRateMultiplier: monitorGroupRateMultiplier(m),
