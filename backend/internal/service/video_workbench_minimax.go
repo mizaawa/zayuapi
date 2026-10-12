@@ -13,6 +13,7 @@ type VideoWorkbenchPayload struct {
 	Model           string   `json:"model"`
 	Prompt          string   `json:"prompt"`
 	Ratio           string   `json:"ratio"`
+	Resolution      string   `json:"resolution,omitempty"`
 	Duration        int      `json:"duration"`
 	ReferenceImages []string `json:"referenceImages,omitempty"`
 	ReferenceVideos []string `json:"referenceVideos,omitempty"`
@@ -107,8 +108,12 @@ func normalizeMiniMaxVideoWorkbenchBody(ctx context.Context, body []byte) ([]byt
 			metadata["last_frame_image"] = p.ReferenceImages[1]
 		}
 	}
-	return json.Marshal(map[string]any{
+	out := map[string]any{
 		"model": p.Model, "prompt": p.Prompt, "duration": p.Duration,
 		"ratio": p.Ratio, "metadata": metadata,
-	})
+	}
+	if p.Resolution != "" && p.Resolution != "auto" {
+		out["resolution"] = p.Resolution
+	}
+	return json.Marshal(out)
 }

@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"strings"
 	"time"
@@ -83,6 +84,7 @@ type postUsageBillingParams struct {
 	APIKeyService          APIKeyQuotaUpdater
 	Platform               string // 来自 APIKey 关联 Group 的平台标识
 	TrackUserPlatformQuota bool
+	MediaReservationID     string
 }
 
 // PlatformFromAPIKey 从 APIKey 关联的 Group 推导 platform 名称。
@@ -329,7 +331,20 @@ func applyUsageBilling(ctx context.Context, requestID string, usageLog *UsageLog
 	billingCtx, cancel := detachedBillingContext(ctx)
 	defer cancel()
 
-	result, err := repo.Apply(billingCtx, cmd)
+	var result *UsageBillingApplyResult
+	var err error
+	if p.MediaReservationID != "" {
+		if invalidator, ok := p.APIKeyService.(apiKeyAuthCacheInvalidator); ok {
+			invalidator.InvalidateAuthCacheByKey(billingCtx, p.APIKey.Key)
+		}
+		mediaRepo, ok := repo.(MediaBillingRepository)
+		if !ok {
+			return false, cmd, errors.New("media precharge repository is unavailable")
+		}
+		result, err = mediaRepo.SettleMedia(billingCtx, p.MediaReservationID, cmd)
+	} else {
+		result, err = repo.Apply(billingCtx, cmd)
+	}
 	if err != nil {
 		return false, cmd, err
 	}
@@ -345,7 +360,22 @@ func applyUsageBilling(ctx context.Context, requestID string, usageLog *UsageLog
 		}
 	}
 
-	finalizePostUsageBilling(billingCtx, &normalizedParams, deps, result)
+	if p.MediaReservationID != "" {
+		// Reserve already consumed the estimate. Invalidate caches after the
+		// atomic replacement instead of deducting the final amount a second time.
+		if deps.billingCacheService != nil {
+			_ = deps.billingCacheService.InvalidateUserBalance(billingCtx, p.User.ID)
+			_ = deps.billingCacheService.InvalidateAPIKeyRateLimit(billingCtx, p.APIKey.ID)
+			if p.APIKey.GroupID != nil {
+				_ = deps.billingCacheService.InvalidateSubscription(billingCtx, p.User.ID, *p.APIKey.GroupID)
+			}
+			if p.Platform != "" {
+				_ = deps.billingCacheService.InvalidateUserPlatformQuota(billingCtx, p.User.ID, p.Platform)
+			}
+		}
+	} else {
+		finalizePostUsageBilling(billingCtx, &normalizedParams, deps, result)
+	}
 	return true, cmd, nil
 }
 

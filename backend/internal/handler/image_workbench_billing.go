@@ -13,16 +13,32 @@ import (
 )
 
 const imageWorkbenchTaskIDContextKey = "image_workbench_task_id"
+const mediaPrechargeContextKey = "media_precharge"
+
+func mediaPrecharge(c *gin.Context) *service.MediaBillingReservation {
+	value, _ := c.Get(mediaPrechargeContextKey)
+	reservation, _ := value.(*service.MediaBillingReservation)
+	return reservation
+}
+
+func mediaReservationID(c *gin.Context) string {
+	if reservation := mediaPrecharge(c); reservation != nil {
+		return reservation.ID
+	}
+	return ""
+}
 
 func imageWorkbenchBillingRequestID(c *gin.Context) string {
 	if c == nil {
 		return ""
 	}
+	if id := mediaReservationID(c); id != "" {
+		return id
+	}
 	return c.GetString(imageWorkbenchTaskIDContextKey)
 }
 
-// A failed workbench attempt still uses the normal group pricing and ledger.
-// Queue admission, local validation failures and retries are not new charges.
+// Image workbench and direct API requests share the same precharge lifecycle.
 type imageWorkbenchFailureBilling struct {
 	handler  *OpenAIGatewayHandler
 	c        *gin.Context
@@ -36,9 +52,6 @@ type imageWorkbenchFailureBilling struct {
 }
 
 func newImageWorkbenchFailureBilling(h *OpenAIGatewayHandler, c *gin.Context, apiKey *service.APIKey, subscription *service.UserSubscription, model, size string, count int, mapping service.ChannelMappingResult, body []byte) *imageWorkbenchFailureBilling {
-	if imageWorkbenchBillingRequestID(c) == "" {
-		return nil
-	}
 	return &imageWorkbenchFailureBilling{
 		handler: h, c: c, model: model, size: size, count: max(1, count), mapping: mapping,
 		input: service.OpenAIRecordUsageInput{
@@ -51,9 +64,9 @@ func newImageWorkbenchFailureBilling(h *OpenAIGatewayHandler, c *gin.Context, ap
 	}
 }
 
-func (b *imageWorkbenchFailureBilling) attempt(account *service.Account) {
+func (b *imageWorkbenchFailureBilling) attempt(account *service.Account) error {
 	if b == nil {
-		return
+		return nil
 	}
 	b.started = time.Now()
 	b.input.Account = account
@@ -66,6 +79,23 @@ func (b *imageWorkbenchFailureBilling) attempt(account *service.Account) {
 		Model: model, UpstreamModel: account.GetMappedModel(model), ImageCount: b.count,
 		ImageSize: service.NormalizeImageBillingTierOrDefault(b.size), ImageInputSize: b.size,
 	}
+	if mediaPrecharge(b.c) != nil {
+		return nil
+	}
+	quoteInput := b.input
+	quoteResult := *b.input.Result
+	// Token-priced image models reserve a conservative output budget; actual
+	// provider usage replaces it on success. Per-image prices ignore tokens.
+	quoteResult.Usage.InputTokens = 32000
+	quoteResult.Usage.OutputTokens = 32768 * b.count
+	quoteResult.Usage.ImageOutputTokens = quoteResult.Usage.OutputTokens
+	quoteInput.Result = &quoteResult
+	quoteInput.ChannelUsageFields = clientRequestedUsageFields(b.c, b.mapping, b.model, quoteResult.UpstreamModel)
+	reservation, err := b.handler.gatewayService.PrechargeMedia(b.c.Request.Context(), &quoteInput)
+	if err == nil && reservation != nil {
+		b.c.Set(mediaPrechargeContextKey, reservation)
+	}
+	return err
 }
 
 func (b *imageWorkbenchFailureBilling) observe(result *service.OpenAIForwardResult) {
@@ -79,7 +109,7 @@ func (b *imageWorkbenchFailureBilling) observe(result *service.OpenAIForwardResu
 	if copy.UpstreamModel == "" {
 		copy.UpstreamModel = b.input.Result.UpstreamModel
 	}
-	copy.ImageCount = b.count
+	copy.ImageCount = min(b.count, result.ImageCount)
 	if len(copy.ImageOutputSizes) > b.count {
 		copy.ImageOutputSizes = copy.ImageOutputSizes[:b.count]
 	}
@@ -106,15 +136,12 @@ func (b *imageWorkbenchFailureBilling) finish() {
 		return
 	}
 	b.recorded = true
-	if b.input.Result.Duration == 0 {
-		b.input.Result.Duration = time.Since(b.started)
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(b.c.Request.Context()), 15*time.Second)
+	defer cancel()
+	if err := b.handler.gatewayService.RefundMedia(ctx, mediaReservationID(b.c)); err != nil {
+		logger.L().Error("media_billing.refund_failed", zap.String("reservation_id", mediaReservationID(b.c)), zap.Error(err))
 	}
-	b.input.ChannelUsageFields = clientRequestedUsageFields(b.c, b.mapping, b.model, b.input.Result.UpstreamModel)
-	input := b.input
-	b.handler.submitMandatoryUsageRecordTask(b.c.Request.Context(), func(ctx context.Context) {
-		if err := b.handler.gatewayService.RecordUsage(ctx, &input); err != nil {
-			logger.L().Error("image_workbench.failure_billing_failed",
-				zap.String("task_id", input.BillingRequestID), zap.Error(err))
-		}
-	})
+	if b.handler.apiKeyService != nil {
+		b.handler.apiKeyService.InvalidateAuthCacheByKey(ctx, b.input.APIKey.Key)
+	}
 }

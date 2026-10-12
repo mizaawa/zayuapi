@@ -1,12 +1,13 @@
 export default {
   videoWorkbench: {
+    protocol: 'Image and video protocol', protocolCompatible: 'Default compatible protocol', protocolHint: 'Match the provider documentation. Sora uses /v1/videos; 968 uses /v1/videos/generations and converts image size and reference fields.',
     title: 'Video Workbench', navLabel: 'Video Generation', workbench: 'Workbench', tasks: 'Tasks',
     guide: 'Tutorial', documentation: 'API Docs', prompt: 'Prompt',
     promptPlaceholder: 'Describe your video...', apiKey: 'API key', model: 'Model',
     chooseKey: 'Select a key', chooseModel: 'Select a model',
     images: 'Reference images', videos: 'Reference videos', audios: 'Reference audio',
     addImages: 'Add reference images', addVideos: 'Upload reference videos', addAudios: 'Upload reference audio', removeReference: 'Remove reference',
-    aspectRatio: 'Aspect ratio', custom: 'Custom', width: 'Width', height: 'Height',
+    aspectRatio: 'Aspect ratio', resolution: 'Resolution', auto: 'Auto', custom: 'Custom', width: 'Width', height: 'Height',
     duration: 'Video duration', customDuration: 'Custom duration (seconds)', customDurationPlaceholder: 'Enter the video duration in seconds',
     seconds: '{count} sec', create: 'Create video task', submitting: 'Creating...',
     activeCount: 'Active {count} / {max}', queued: 'Queued', processing: 'Processing', completed: 'Generated', failed: 'Failed', all: 'All',

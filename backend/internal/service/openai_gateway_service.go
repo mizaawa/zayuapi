@@ -477,6 +477,7 @@ type OpenAIGatewayService struct {
 	openaiCompatSessionResponses        sync.Map
 	openaiCompatAnthropicDigestSessions sync.Map
 	grokMediaVideoBillingRecords        sync.Map
+	mediaBillingCancel                  context.CancelFunc
 }
 
 // NewOpenAIGatewayService creates a new OpenAIGatewayService
@@ -554,6 +555,7 @@ func NewOpenAIGatewayService(
 		openAITokenProvider.SetAccountRuntimeBlocker(svc)
 	}
 	svc.logOpenAIWSModeBootstrap()
+	svc.startMediaReconciler()
 	return svc
 }
 
@@ -676,6 +678,9 @@ func (s *OpenAIGatewayService) billingDeps() *billingDeps {
 // CloseOpenAIWSPool 关闭 OpenAI WebSocket 连接池的后台 worker 和空闲连接。
 // 应在应用优雅关闭时调用。
 func (s *OpenAIGatewayService) CloseOpenAIWSPool() {
+	if s != nil && s.mediaBillingCancel != nil {
+		s.mediaBillingCancel()
+	}
 	if s != nil && s.openaiWSPool != nil {
 		s.openaiWSPool.Close()
 	}

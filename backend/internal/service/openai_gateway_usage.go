@@ -36,8 +36,10 @@ type OpenAIRecordUsageInput struct {
 	// BillingRequestID overrides request-context/upstream identifiers for
 	// durable asynchronous task billing. BillingReceipt receives the exact
 	// normalized command after the unified ledger applies it.
-	BillingRequestID string
-	BillingReceipt   **UsageBillingCommand
+	BillingRequestID   string
+	BillingReceipt     **UsageBillingCommand
+	MediaQuote         **MediaBillingQuote
+	MediaReservationID string
 	// PricingAt 是请求级定价时刻（请求开始捕获，与利润门的 D 同源）：高峰因子
 	// 按该时刻计算，保证同一请求从准入到扣费不中途变价。零值回退记录时刻
 	//（既有行为），供未装配的路径（图片/异步/cyber 等）沿用。
@@ -244,7 +246,7 @@ func (s *OpenAIGatewayService) RecordUsage(ctx context.Context, input *OpenAIRec
 		account,
 	)
 	if err != nil {
-		if !isUsagePricingUnavailableError(err) {
+		if input.MediaQuote != nil || !isUsagePricingUnavailableError(err) {
 			return err
 		}
 		logger.L().With(
@@ -428,19 +430,41 @@ func (s *OpenAIGatewayService) RecordUsage(ctx context.Context, input *OpenAIRec
 		quotaPlatform = PlatformFromAPIKey(apiKey)
 	}
 
+	params := &postUsageBillingParams{
+		Cost:                  cost,
+		User:                  user,
+		APIKey:                apiKey,
+		Account:               account,
+		Subscription:          subscription,
+		RequestPayloadHash:    resolveUsageBillingPayloadFingerprint(ctx, input.RequestPayloadHash),
+		IsSubscriptionBill:    isSubscriptionBilling,
+		AccountRateMultiplier: accountRateMultiplier,
+		APIKeyService:         input.APIKeyService,
+		Platform:              quotaPlatform,
+		MediaReservationID:    input.MediaReservationID,
+	}
+	if input.MediaQuote != nil {
+		if !isSubscriptionBilling && quotaPlatform != "" && s.billingCacheService != nil {
+			params.TrackUserPlatformQuota = s.billingCacheService.HasUserPlatformQuotaLimit(ctx, user.ID, quotaPlatform)
+		}
+		*input.MediaQuote = &MediaBillingQuote{Command: *buildUsageBillingCommand(requestID, usageLog, params), Usage: *usageLog}
+		return nil
+	}
+	if input.MediaReservationID != "" {
+		repo, ok := s.usageBillingRepo.(MediaBillingRepository)
+		if !ok {
+			return ErrBillingServiceUnavailable
+		}
+		if !isSubscriptionBilling && quotaPlatform != "" && s.billingCacheService != nil {
+			params.TrackUserPlatformQuota = s.billingCacheService.HasUserPlatformQuotaLimit(ctx, user.ID, quotaPlatform)
+		}
+		quote := &MediaBillingQuote{Command: *buildUsageBillingCommand(requestID, usageLog, params), Usage: *usageLog}
+		if err := repo.StageMediaOutcome(ctx, input.MediaReservationID, quote); err != nil {
+			return err
+		}
+	}
 	billingErr := func() error {
-		_, receipt, err := applyUsageBilling(ctx, requestID, usageLog, &postUsageBillingParams{
-			Cost:                  cost,
-			User:                  user,
-			APIKey:                apiKey,
-			Account:               account,
-			Subscription:          subscription,
-			RequestPayloadHash:    resolveUsageBillingPayloadFingerprint(ctx, input.RequestPayloadHash),
-			IsSubscriptionBill:    isSubscriptionBilling,
-			AccountRateMultiplier: accountRateMultiplier,
-			APIKeyService:         input.APIKeyService,
-			Platform:              quotaPlatform,
-		}, s.billingDeps(), s.usageBillingRepo)
+		_, receipt, err := applyUsageBilling(ctx, requestID, usageLog, params, s.billingDeps(), s.usageBillingRepo)
 		if input.BillingReceipt != nil {
 			*input.BillingReceipt = receipt
 		}
@@ -448,6 +472,9 @@ func (s *OpenAIGatewayService) RecordUsage(ctx context.Context, input *OpenAIRec
 	}()
 
 	if billingErr != nil {
+		if input.MediaReservationID != "" {
+			return billingErr
+		}
 		usageLog.ActualCost = 0
 		writeUsageLogBestEffort(ctx, s.usageLogRepo, usageLog, "service.openai_gateway")
 		return billingErr
@@ -677,7 +704,7 @@ func (s *OpenAIGatewayService) calculateOpenAIVideoCost(
 			requestCount *= durationSeconds
 		}
 		channelResolved := resolved
-		if customVideo && resolution == "" && len(resolved.RequestTiers) > 0 {
+		if customVideo && len(resolved.RequestTiers) > 0 {
 			// An empty Custom resolution must not fall through to
 			// GetRequestTierPriceByContext, whose legacy fallback can select the
 			// first resolution tier (often 480p). Keep a configured default
@@ -685,6 +712,12 @@ func (s *OpenAIGatewayService) calculateOpenAIVideoCost(
 			// client supplies a valid resolution.
 			cloned := *resolved
 			cloned.RequestTiers = nil
+			for _, tier := range resolved.RequestTiers {
+				if resolution != "" && strings.EqualFold(tier.TierLabel, resolution) && tier.PerRequestPrice != nil {
+					cloned.DefaultPerRequestPrice = *tier.PerRequestPrice
+					break
+				}
+			}
 			channelResolved = &cloned
 		}
 		gid := apiKey.Group.ID
@@ -741,7 +774,14 @@ func (s *OpenAIGatewayService) ValidateCustomVideoPricing(
 	if resolved := s.resolveOpenAIChannelPricing(ctx, model, apiKey); resolved != nil {
 		switch resolved.Mode {
 		case BillingModeVideo, BillingModePerRequest, BillingModeImage:
-			return nil
+			if resolved.DefaultPerRequestPrice > 0 || (resolved.channelPricing != nil && resolved.channelPricing.PerRequestPrice != nil) {
+				return nil
+			}
+			for _, tier := range resolved.RequestTiers {
+				if resolution != "" && strings.EqualFold(tier.TierLabel, resolution) && tier.PerRequestPrice != nil {
+					return nil
+				}
+			}
 		}
 	}
 	if resolution == "" {

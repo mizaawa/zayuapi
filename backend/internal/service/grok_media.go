@@ -264,7 +264,9 @@ func parseGrokMediaJSONRequest(body []byte, info *GrokMediaRequestInfo) {
 	appendJSONImageURLs(gjson.GetBytes(body, "images"))
 	appendJSONImageURLs(gjson.GetBytes(body, "reference_images"))
 	appendJSONImageURLs(gjson.GetBytes(body, "referenceImages"))
-	for _, field := range []string{"referenceVideos", "reference_videos"} {
+	appendJSONImageURLs(gjson.GetBytes(body, "image_refs"))
+	appendJSONImageURLs(gjson.GetBytes(body, "input_reference"))
+	for _, field := range []string{"referenceVideos", "reference_videos", "video_refs"} {
 		value := gjson.GetBytes(body, field)
 		if !value.Exists() {
 			continue
@@ -356,7 +358,7 @@ func parseGrokMediaMultipartRequest(contentType string, body []byte, info *GrokM
 				info.MaskUpload = &upload
 				continue
 			}
-			if name == "image" || strings.HasPrefix(name, "image[") {
+			if name == "image" || name == "input_reference" || strings.HasPrefix(name, "image[") {
 				info.Uploads = append(info.Uploads, upload)
 			}
 			continue
@@ -440,6 +442,12 @@ func setGrokMediaResolutionFields(
 		info.Resolution = normalized
 		info.ResolutionValid = true
 		return
+	}
+	if !resolutionProvided && !resolutionNameProvided {
+		if normalized, ok := normalizeVideoBillingResolution(info.Size); ok {
+			info.Resolution, info.ResolutionValid = normalized, true
+			return
+		}
 	}
 	// Preserve the explicit primary value for diagnostics when present; if it
 	// was omitted, retain the alias value instead. Both remain invalid here.
@@ -644,9 +652,9 @@ func GrokMediaVideoStatusFailed(body []byte) bool {
 	if len(body) == 0 || !gjson.ValidBytes(body) {
 		return false
 	}
-	for _, path := range []string{"status", "data.status", "video.status"} {
+	for _, path := range []string{"status", "data.status", "video.status", "state", "data.state"} {
 		switch strings.ToLower(strings.TrimSpace(gjson.GetBytes(body, path).String())) {
-		case "failed", "cancelled", "canceled":
+		case "failed", "failure", "fail", "error", "cancelled", "canceled", "expired":
 			return true
 		}
 	}
@@ -700,6 +708,13 @@ func (s *OpenAIGatewayService) ResolveGrokMediaVideoRequestAccountDetails(
 	userID, apiKeyID int64,
 ) (*Account, error) {
 	accountID, err := s.ResolveGrokMediaVideoRequestAccount(ctx, groupID, requestID, userID, apiKeyID)
+	if err != nil || accountID <= 0 {
+		if repo, ok := s.usageBillingRepo.(MediaBillingRepository); ok {
+			if receipt, lookupErr := repo.FindMediaTask(ctx, requestID, userID, apiKeyID); lookupErr == nil && receipt != nil && receipt.GroupID == derefGroupID(groupID) {
+				accountID, err = receipt.Quote.Command.AccountID, nil
+			}
+		}
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -797,7 +812,7 @@ func (s *OpenAIGatewayService) ForwardGrokMedia(
 	if account.Platform == PlatformCustom && endpoint == GrokMediaEndpointVideosGenerations {
 		// Adapt only internal workbench requests after extracting the original
 		// reference and duration metadata used for billing and audit.
-		body, err = normalizeMiniMaxVideoWorkbenchBody(ctx, body)
+		body, err = normalizeVideoProtocolBody(ctx, account, body)
 		if err != nil {
 			return nil, err
 		}
@@ -890,7 +905,7 @@ func (s *OpenAIGatewayService) ForwardGrokMedia(
 		VideoDurationSeconds: usage.VideoDurationSeconds,
 		VideoPriceMultiplier: usage.VideoPriceMultiplier,
 	}
-	if account.Platform == PlatformCustom && (endpoint.IsVideoGenerationRequest() || endpoint == GrokMediaEndpointVideoStatus) {
+	if (account.Platform == PlatformCustom || c.GetBool("media_billing_buffer")) && (endpoint.IsVideoGenerationRequest() || endpoint == GrokMediaEndpointVideoStatus) {
 		result.BufferedResponseStatus = resp.StatusCode
 		result.BufferedResponseHeaders = resp.Header.Clone()
 		result.BufferedResponseBody = append([]byte(nil), respBody...)
@@ -1051,6 +1066,37 @@ func (s *OpenAIGatewayService) forwardGrokMediaVideoContent(
 	}
 	if contentResp == nil {
 		return nil, fmt.Errorf("grok media content upstream returned an empty response")
+	}
+	if contentResp.StatusCode >= 300 && contentResp.StatusCode < 400 && (account.MediaProtocol() == "968" || account.MediaProtocol() == "sora") {
+		location, locationErr := contentResp.Location()
+		if locationErr != nil {
+			// Test transports and some adapters omit Response.Request.
+			base, _ := url.Parse(contentURL)
+			location, locationErr = base.Parse(contentResp.Header.Get("Location"))
+		}
+		_ = contentResp.Body.Close()
+		if locationErr != nil || location == nil || location.Scheme != "https" || validateImageDownloadURL(location) != nil {
+			return nil, fmt.Errorf("unsafe video content redirect")
+		}
+		download, buildErr := http.NewRequestWithContext(upstreamCtx, http.MethodGet, location.String(), nil)
+		if buildErr != nil {
+			return nil, fmt.Errorf("invalid video content redirect")
+		}
+		if value := contentReq.Header.Get("Range"); value != "" {
+			download.Header.Set("Range", value)
+		}
+		client := newSSRFSafeHTTPClient(15 * time.Minute)
+		client.CheckRedirect = func(next *http.Request, via []*http.Request) error {
+			if len(via) >= 5 || next.URL.Scheme != "https" {
+				return fmt.Errorf("unsafe video content redirect")
+			}
+			return validateImageDownloadURL(next.URL)
+		}
+		// A CDN never receives the provider key or account header overrides.
+		contentResp, err = client.Do(download)
+		if err != nil {
+			return nil, fmt.Errorf("video content download failed")
+		}
 	}
 	defer func() { _ = contentResp.Body.Close() }()
 	contentRequestID := firstNonEmpty(contentResp.Header.Get("x-request-id"), contentResp.Header.Get("xai-request-id"), statusRequestID)

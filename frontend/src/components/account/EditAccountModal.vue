@@ -50,6 +50,7 @@
             :required="account.platform === 'custom'"
           />
           <p v-if="baseUrlHint" class="input-hint">{{ baseUrlHint }}</p>
+          <MediaProtocolSelect v-if="account.platform === 'custom'" v-model="mediaProtocol" class="mt-4" />
           <GrokBaseUrlPresets
             v-if="account.platform === 'grok'"
             class="mt-2"
@@ -2708,6 +2709,7 @@ import GroupSelector from '@/components/common/GroupSelector.vue'
 import ModelWhitelistSelector from '@/components/account/ModelWhitelistSelector.vue'
 import QuotaLimitCard from '@/components/account/QuotaLimitCard.vue'
 import GrokBaseUrlPresets from '@/components/account/GrokBaseUrlPresets.vue'
+import MediaProtocolSelect from '@/components/account/MediaProtocolSelect.vue'
 import HeaderOverrideEditor from '@/components/account/HeaderOverrideEditor.vue'
 import OllamaCloudUsageSettings from '@/components/account/OllamaCloudUsageSettings.vue'
 import {
@@ -2800,6 +2802,7 @@ interface TempUnschedRuleForm {
 // State
 const submitting = ref(false)
 const editBaseUrl = ref('https://api.anthropic.com')
+const mediaProtocol = ref('')
 const editApiKey = ref('')
 // Bedrock credentials
 const editBedrockAccessKeyId = ref('')
@@ -3603,6 +3606,7 @@ const syncFormFromAccount = (newAccount: Account | null) => {
               ? ''
               : 'https://api.anthropic.com'
     editBaseUrl.value = (credentials.base_url as string) || platformDefaultUrl
+    mediaProtocol.value = typeof credentials.media_protocol === 'string' ? credentials.media_protocol : ''
 
     // Load model mappings and detect mode
     loadModelRestrictionFromMapping(credentials.model_mapping as Record<string, unknown> | undefined)
@@ -4218,7 +4222,8 @@ const handleSubmit = async () => {
       // Always update credentials for apikey type to handle model mapping changes
       const newCredentials: Record<string, unknown> = {
         ...currentCredentials,
-        base_url: newBaseUrl
+        base_url: newBaseUrl,
+        ...(props.account.platform === 'custom' ? { media_protocol: mediaProtocol.value } : {})
       }
 
       // Handle API key

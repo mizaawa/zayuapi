@@ -57,6 +57,7 @@ type VideoWorkbenchMetadata struct {
 	Prompt          string `json:"prompt"`
 	Model           string `json:"model"`
 	Ratio           string `json:"ratio"`
+	Resolution      string `json:"resolution,omitempty"`
 	Duration        int    `json:"duration"`
 	ReferenceImages int    `json:"reference_images"`
 	ReferenceVideos int    `json:"reference_videos"`

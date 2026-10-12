@@ -58,12 +58,16 @@
               <button v-for="ratio in ratios" :key="ratio" type="button" :class="{ selected: form.ratio === ratio }" :aria-pressed="form.ratio === ratio" @click="form.ratio = ratio"><span class="ratio-outline" :style="ratioStyle(ratio)"></span>{{ ratio }}</button>
             </div>
             <div class="custom-ratio">
-              <button type="button" :class="{ selected: form.ratio === 'custom' }" :aria-pressed="form.ratio === 'custom'" @click="form.ratio = form.ratio === 'custom' ? '16:9' : 'custom'">{{ t('videoWorkbench.custom') }}</button>
+              <button type="button" :class="{ selected: form.ratio === 'custom' }" :aria-pressed="form.ratio === 'custom'" @click="form.ratio = form.ratio === 'custom' ? '1:1' : 'custom'">{{ t('videoWorkbench.custom') }}</button>
               <label for="video-width">{{ t('videoWorkbench.width') }}</label><input id="video-width" v-model.number="form.width" type="number" min="1" max="10000" step="1" :disabled="form.ratio !== 'custom'" />
               <span>:</span><label for="video-height">{{ t('videoWorkbench.height') }}</label><input id="video-height" v-model.number="form.height" type="number" min="1" max="10000" step="1" :disabled="form.ratio !== 'custom'" />
             </div>
             <p v-if="!validRatio" class="validation-error">{{ t('videoWorkbench.invalidRatio') }}</p>
             <p v-else-if="!validModelRatio" class="validation-error">{{ t('videoWorkbench.invalidModelRatio', { ratios: modelLimits?.ratios?.join(', ') }) }}</p>
+          </fieldset>
+          <fieldset class="parameter-field">
+            <legend>{{ t('videoWorkbench.resolution') }}</legend>
+            <Select id="video-resolution" v-model="form.resolution" :options="resolutionOptions" :aria-label="t('videoWorkbench.resolution')" />
           </fieldset>
           <fieldset class="parameter-field">
             <legend>{{ t('videoWorkbench.duration') }}</legend>
@@ -135,7 +139,8 @@ const mediaKinds = [
   { id: 'videos', addLabel: 'addVideos', accept: 'video/mp4,video/webm,video/quicktime' },
   { id: 'audios', addLabel: 'addAudios', accept: 'audio/mpeg,audio/mp3,audio/wav,audio/x-wav,audio/ogg,audio/mp4,audio/aac,audio/x-m4a,audio/webm,audio/flac,audio/x-flac' }
 ] as const
-const initialForm = { prompt: '', model: '', ratio: '16:9', width: 16, height: 9, duration: 5 as number | 'custom', customDuration: '' as number | '' }
+const resolutionOptions = computed(() => ['auto', '480p', '720p', '1080p', '2k', '4k'].map(value => ({ value, label: value === 'auto' ? t('videoWorkbench.auto') : value })))
+const initialForm = { prompt: '', model: '', ratio: '1:1', width: 1, height: 1, resolution: 'auto', duration: 5 as number | 'custom', customDuration: '' as number | '' }
 const form = reactive({ ...initialForm })
 const modelLimits = computed(() => miniMaxVideoModelLimits(form.model))
 const durations = computed(() => [...(modelLimits.value?.durations ?? [5, 10, 30, 60]), 'custom'] as (number | 'custom')[])
@@ -264,7 +269,7 @@ async function submit() {
   submitting.value = true
   const key = selectedKey.value.key, email = authStore.user?.email || ''
   const draft = { ...form }
-  const payload: VideoPayload = { model: form.model, prompt: form.prompt.trim(), ratio: form.ratio === 'custom' ? `${form.width}:${form.height}` : form.ratio, duration: seconds.value }
+  const payload: VideoPayload = { model: form.model, prompt: form.prompt.trim(), ratio: form.ratio === 'custom' ? `${form.width}:${form.height}` : form.ratio, resolution: form.resolution, duration: seconds.value }
   const snapshot = { images: [...references.images], videos: [...references.videos], audios: [...references.audios] }
   try {
     for (const [kind, field] of [['images', 'referenceImages'], ['videos', 'referenceVideos'], ['audios', 'referenceAudios']] as const) {

@@ -193,7 +193,7 @@ func apiKeyAuthWithSubscription(apiKeyService *service.APIKeyService, subscripti
 		// Async image task polling only reads data that already belongs to the
 		// authenticated key and must remain available after the completed
 		// generation consumes the key's remaining balance.
-		skipBilling := apiKey.IsManaged() || c.Request.URL.Path == "/v1/usage" || billingInfoRequest || isAsyncImageTaskRead(c.Request.Method, c.Request.URL.Path)
+		skipBilling := apiKey.IsManaged() || c.Request.URL.Path == "/v1/usage" || billingInfoRequest || isAsyncImageTaskRead(c.Request.Method, c.Request.URL.Path) || isAsyncVideoTaskRead(c.Request.Method, c.Request.URL.Path)
 
 		// ── 4. SimpleMode → early return ─────────────────────────────
 
@@ -401,6 +401,18 @@ func isAsyncImageTaskRead(method, path string) bool {
 		return false
 	}
 	return strings.HasPrefix(path, "/v1/images/tasks/") || strings.HasPrefix(path, "/images/tasks/")
+}
+
+func isAsyncVideoTaskRead(method, path string) bool {
+	if method != http.MethodGet {
+		return false
+	}
+	path = strings.TrimPrefix(path, "/v1")
+	if strings.HasPrefix(path, "/videos/") {
+		tail := strings.TrimPrefix(path, "/videos/")
+		return tail != "" && tail != "generations" && tail != "edits" && tail != "extensions"
+	}
+	return strings.HasPrefix(path, "/contents/generations/tasks/") || strings.HasPrefix(path, "/api/v3/contents/generations/tasks/")
 }
 
 // GetAPIKeyFromContext 从上下文中获取API key

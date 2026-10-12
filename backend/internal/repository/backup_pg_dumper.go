@@ -128,7 +128,7 @@ func restoreCountersPostlude() (string, error) {
 	}
 	content := strings.TrimSpace(string(migration))
 	checksum := fmt.Sprintf("%x", sha256.Sum256([]byte(content)))
-	return fmt.Sprintf(`
+	counters := fmt.Sprintf(`
 SET LOCAL search_path TO public;
 SET LOCAL standard_conforming_strings = on;
 DO $restore_counters$
@@ -153,7 +153,50 @@ BEGIN
     END IF;
 END;
 $restore_counters$;
-`, persistentCountersMigration, strings.ReplaceAll(content, "'", "''"), persistentCountersMigration, checksum), nil
+`, persistentCountersMigration, strings.ReplaceAll(content, "'", "''"), persistentCountersMigration, checksum)
+	media, err := restoreMediaBillingPostlude()
+	return counters + media, err
+}
+
+func restoreMediaBillingPostlude() (string, error) {
+	var out strings.Builder
+	for _, filename := range []string{"214_media_precharge.sql", "215_media_billing_outcomes.sql"} {
+		migration, err := migrations.FS.ReadFile(filename)
+		if err != nil {
+			return "", fmt.Errorf("read media billing migration: %w", err)
+		}
+		content := strings.TrimSpace(string(migration))
+		checksum := fmt.Sprintf("%x", sha256.Sum256([]byte(content)))
+		cleanup := ""
+		if filename == "214_media_precharge.sql" {
+			// Precharge records belong to the restored balances, never to the
+			// database that happened to occupy this server before restoration.
+			cleanup = "DROP TABLE IF EXISTS media_billing_reservations;"
+		}
+		fmt.Fprintf(&out, `
+DO $restore_media$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM schema_migrations WHERE filename = '%s') THEN
+        %s
+        EXECUTE '%s';
+        INSERT INTO schema_migrations (filename, checksum) VALUES ('%s', '%s');
+    END IF;
+END;
+$restore_media$;
+`, filename, cleanup, strings.ReplaceAll(content, "'", "''"), filename, checksum)
+	}
+	_, _ = out.WriteString(`
+DO $restore_media$
+BEGIN
+    IF to_regclass('media_billing_reservations') IS NULL
+        OR NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema=current_schema() AND table_name='media_billing_reservations' AND column_name='final_quote')
+        OR NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema=current_schema() AND table_name='media_billing_reservations' AND column_name='refund_requested') THEN
+        RAISE EXCEPTION 'Backup is missing media billing reservation data';
+    END IF;
+END;
+$restore_media$;
+`)
+	return out.String(), nil
 }
 
 func prepareRestoreFile(data io.Reader) (*os.File, error) {

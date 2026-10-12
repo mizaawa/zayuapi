@@ -35,6 +35,10 @@ func ParseSeedanceRequest(body []byte) (GrokMediaRequestInfo, error) {
 		return info, fmt.Errorf("content must be a non-empty array")
 	}
 	info.Model = strings.TrimSpace(model.String())
+	media := ParseGrokMediaRequest("application/json", body)
+	info.DurationSeconds, info.RawDurationSeconds = media.DurationSeconds, media.RawDurationSeconds
+	info.Resolution, info.ResolutionValid = media.Resolution, media.ResolutionValid
+	info.N = 1
 	var texts []string
 	for _, item := range content.Array() {
 		switch strings.TrimSpace(item.Get("type").String()) {
@@ -46,6 +50,8 @@ func ParseSeedanceRequest(body []byte) (GrokMediaRequestInfo, error) {
 			if imageURL := strings.TrimSpace(item.Get("image_url.url").String()); imageURL != "" {
 				info.InputImageURLs = append(info.InputImageURLs, imageURL)
 			}
+		case "video_url":
+			info.HasReferenceVideo = true
 		}
 	}
 	info.Prompt = strings.Join(texts, "\n")
@@ -185,7 +191,7 @@ func (s *OpenAIGatewayService) ForwardSeedance(
 		}
 	}
 
-	if endpoint == SeedanceEndpointCreate {
+	if endpoint == SeedanceEndpointCreate || endpoint == SeedanceEndpointStatus && c.GetBool("media_billing_buffer") {
 		result.BufferedResponseStatus = resp.StatusCode
 		result.BufferedResponseHeaders = resp.Header.Clone()
 		result.BufferedResponseBody = append([]byte(nil), responseBody...)

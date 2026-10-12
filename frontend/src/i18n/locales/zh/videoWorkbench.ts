@@ -1,12 +1,13 @@
 export default {
   videoWorkbench: {
+    protocol: '图片与视频协议', protocolCompatible: '默认兼容协议', protocolHint: '按上游文档选择协议。Sora 使用 /v1/videos；968 使用 /v1/videos/generations，并转换图片尺寸与参考图字段。',
     title: '视频工作台', navLabel: '视频生成', workbench: '工作台', tasks: '任务列表',
     guide: '使用教程', documentation: '对接文档', prompt: '提示词',
     promptPlaceholder: '在此处编辑视频提示词...', apiKey: 'API 密钥', model: '模型',
     chooseKey: '选择密钥', chooseModel: '选择模型',
     images: '参考图', videos: '参考视频', audios: '参考音频',
     addImages: '添加参考图', addVideos: '上传参考视频', addAudios: '上传参考音频', removeReference: '移除参考文件',
-    aspectRatio: '宽高比', custom: '自定义', width: '宽', height: '高',
+    aspectRatio: '宽高比', resolution: '分辨率', auto: '自动', custom: '自定义', width: '宽', height: '高',
     duration: '生成时长', customDuration: '自定义时长（秒）', customDurationPlaceholder: '请输入自定义的视频生成时长',
     seconds: '{count} 秒', create: '创建视频任务', submitting: '正在创建...',
     activeCount: '进行中 {count} / {max}', queued: '待生成', processing: '处理中', completed: '已生成', failed: '失败', all: '全部',

@@ -118,7 +118,7 @@ func workbenchBillingContext(key *service.APIKey, platform, taskID string) (*gin
 	return c, rec
 }
 
-func TestImageWorkbenchBillsExecutedFailuresOnceAtGroupImagePrice(t *testing.T) {
+func TestImageWorkbenchPrechargesAndRefundsFailures(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	for _, platform := range []string{service.PlatformOpenAI, service.PlatformGrok, service.PlatformCustom} {
 		for _, scenario := range []struct {
@@ -150,8 +150,14 @@ func TestImageWorkbenchBillsExecutedFailuresOnceAtGroupImagePrice(t *testing.T) 
 				if scenario.name == "failover then success" {
 					require.Equal(t, 2, upstream.calls)
 				}
+				if scenario.name != "success" && scenario.name != "failover then success" {
+					require.Empty(t, ledger.commands)
+					require.Equal(t, 1, ledger.refunded)
+					require.Empty(t, ledger.reservations)
+					return
+				}
 				require.Len(t, ledger.commands, 1, rec.Body.String())
-				require.Equal(t, "imgtask_independent_1", ledger.commands[0].RequestID)
+				require.True(t, strings.HasPrefix(ledger.commands[0].RequestID, "media:"))
 				require.InDelta(t, 0.5, ledger.commands[0].BalanceCost, 1e-9)
 			})
 		}
@@ -167,8 +173,11 @@ func TestImageWorkbenchBillingUsesIndependentTaskIDsAndSkipsUnexecutedTasks(t *t
 		h.Images(c)
 	}
 	require.Len(t, ledger.commands, 3)
-	for i, cmd := range ledger.commands {
-		require.Equal(t, fmt.Sprintf("imgtask_%d", i), cmd.RequestID)
+	ids := map[string]bool{}
+	for _, cmd := range ledger.commands {
+		require.False(t, ids[cmd.RequestID])
+		ids[cmd.RequestID] = true
+		require.True(t, strings.HasPrefix(cmd.RequestID, "media:"))
 		require.InDelta(t, 0.5, cmd.BalanceCost, 1e-9)
 	}
 	key.Group.AllowImageGeneration = false
@@ -199,11 +208,8 @@ func TestImageWorkbenchBillingRetainsUsageFromFailedResponses(t *testing.T) {
 				} else {
 					h.Images(c)
 				}
-				require.Len(t, ledger.commands, 1)
-				require.Equal(t, 7, ledger.commands[0].InputTokens, "upstream calls: %d, bill: %+v", upstream.calls, ledger.commands[0])
-				require.Equal(t, 2, ledger.commands[0].OutputTokens)
-				require.Equal(t, 1, ledger.commands[0].ImageCount)
-				require.InDelta(t, 0.5, ledger.commands[0].BalanceCost, 1e-9)
+				require.Empty(t, ledger.commands)
+				require.Equal(t, 1, ledger.refunded)
 			})
 		}
 	}

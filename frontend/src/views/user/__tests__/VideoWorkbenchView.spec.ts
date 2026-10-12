@@ -35,6 +35,19 @@ beforeEach(() => {
 afterEach(() => { wrappers.splice(0).forEach(wrapper => wrapper.unmount()); vi.clearAllTimers(); vi.useRealTimers(); vi.unstubAllGlobals() })
 
 describe('VideoWorkbenchView', () => {
+  it('defaults to square auto resolution and forwards each selected tier', async () => {
+    const wrapper = create(); await flushPromises()
+    expect(wrapper.get('.ratio-options .selected').text()).toBe('1:1')
+    const options = wrapper.get('#video-resolution').findAll('option')
+    expect(options.map(option => option.attributes('value'))).toEqual(['auto', '480p', '720p', '1080p', '2k', '4k'])
+    for (const resolution of ['480p', '720p', '1080p', '2k', '4k']) {
+      await wrapper.get('#video-resolution').setValue(resolution)
+      await wrapper.get('#video-prompt').setValue('Resolution test')
+      await wrapper.get('form').trigger('submit'); await flushPromises()
+      expect(mocks.submit).toHaveBeenLastCalledWith('sk-video', 'owner@example.test', expect.objectContaining({ ratio: '1:1', resolution }))
+      expect(wrapper.get<HTMLSelectElement>('#video-resolution').element.value).toBe('auto')
+    }
+  })
   it('filters keys to declared Custom groups and paginates', async () => {
     mocks.keys.mockResolvedValueOnce({ items: [
       { ...key, id: 2, name: 'Undeclared', group: { platform: 'custom', video_workbench_enabled: false } },
@@ -48,7 +61,7 @@ describe('VideoWorkbenchView', () => {
   it('submits sixty seconds and a custom duration without image-only parameters', async () => {
     const wrapper = create(); await flushPromises(); await wrapper.get('#video-prompt').setValue('waves')
     await wrapper.findAll('.duration-options button')[3]!.trigger('click'); await wrapper.get('form').trigger('submit'); await flushPromises()
-    expect(mocks.submit).toHaveBeenCalledWith('sk-video', 'owner@example.test', { model: 'custom-video', prompt: 'waves', duration: 60, ratio: '16:9' })
+    expect(mocks.submit).toHaveBeenCalledWith('sk-video', 'owner@example.test', { model: 'custom-video', prompt: 'waves', duration: 60, ratio: '1:1', resolution: 'auto' })
     await wrapper.get('#video-workbench-tab').trigger('click'); await wrapper.findAll('.duration-options button')[4]!.trigger('click')
     expect(wrapper.get('#video-custom-duration').attributes('placeholder')).toBe('videoWorkbench.customDurationPlaceholder')
     await wrapper.get('#video-prompt').setValue('Next video'); await wrapper.get('#video-custom-duration').setValue(123); await wrapper.get('form').trigger('submit'); await flushPromises()
@@ -109,7 +122,7 @@ describe('VideoWorkbenchView', () => {
     await wrapper.get('form').trigger('submit'); expect(mocks.submit).not.toHaveBeenCalled()
     await wrapper.get('#video-custom-duration').setValue(10)
     await wrapper.get('form').trigger('submit'); await flushPromises()
-    expect(mocks.submit).toHaveBeenCalledWith('sk-video', 'owner@example.test', { model: 'MiniMax-Hailuo-2.3', prompt: 'waves', duration: 10, ratio: '16:9' })
+    expect(mocks.submit).toHaveBeenCalledWith('sk-video', 'owner@example.test', { model: 'MiniMax-Hailuo-2.3', prompt: 'waves', duration: 10, ratio: '1:1', resolution: 'auto' })
     expect(wrapper.get('.duration-options button.selected').text()).toBe('6s')
     expect(wrapper.get('#video-workbench-tab').attributes('aria-selected')).toBe('true')
     expect(wrapper.get<HTMLTextAreaElement>('#video-prompt').element.value).toBe('')

@@ -17,6 +17,7 @@ export interface VideoTask {
     model: string
     prompt: string
     ratio: string
+    resolution?: string
     duration: number
     reference_images: number
     reference_videos: number
@@ -38,6 +39,7 @@ export interface VideoPayload {
   model: string
   prompt: string
   ratio: string
+  resolution?: string
   duration: number
   referenceImages?: string[]
   referenceVideos?: string[]

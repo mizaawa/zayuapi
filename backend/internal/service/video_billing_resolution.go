@@ -6,6 +6,7 @@ const (
 	VideoBillingResolution480P  = "480p"
 	VideoBillingResolution720P  = "720p"
 	VideoBillingResolution1080P = "1080p"
+	VideoBillingResolution2K    = "2k"
 	VideoBillingResolution4K    = "4k"
 )
 
@@ -74,6 +75,7 @@ func NormalizeVideoBillingResolutionForModelOrDefault(model, resolution, size st
 		{suffix: "-720p", resolution: VideoBillingResolution720P},
 		{suffix: "-480p", resolution: VideoBillingResolution480P},
 		{suffix: "-4k", resolution: VideoBillingResolution4K},
+		{suffix: "-2k", resolution: VideoBillingResolution2K},
 	} {
 		if strings.HasSuffix(modelName, candidate.suffix) {
 			return candidate.resolution
@@ -87,13 +89,15 @@ func NormalizeVideoBillingResolutionForModelOrDefault(model, resolution, size st
 
 func normalizeVideoBillingResolution(resolution string) (string, bool) {
 	switch strings.ToLower(strings.TrimSpace(resolution)) {
-	case "480", "480p", "sd", "854x480", "480x854":
+	case "480", "480p", "sd", "854x480", "480x854", "480x480":
 		return VideoBillingResolution480P, true
-	case "720", "720p", "hd", "1280x720", "720x1280":
+	case "720", "720p", "hd", "1280x720", "720x1280", "720x720":
 		return VideoBillingResolution720P, true
-	case "1080", "1080p", "full_hd", "full-hd", "fhd", "1920x1080", "1080x1920":
+	case "1080", "1080p", "full_hd", "full-hd", "fhd", "1920x1080", "1080x1920", "1080x1080", "1024x1792", "1792x1024":
 		return VideoBillingResolution1080P, true
-	case "4k", "2160p", "uhd", "3840x2160", "2160x3840":
+	case "2k", "1440p", "2560x1440", "1440x2560", "1440x1440", "2048x2048":
+		return VideoBillingResolution2K, true
+	case "4k", "2160p", "uhd", "3840x2160", "2160x3840", "2160x2160", "4096x4096":
 		return VideoBillingResolution4K, true
 	default:
 		return "", false

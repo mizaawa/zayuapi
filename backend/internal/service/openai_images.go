@@ -68,6 +68,7 @@ type OpenAIImagesRequest struct {
 	Stream             bool
 	N                  int
 	Size               string
+	Resolution         string
 	ExplicitSize       bool
 	SizeTier           string
 	ResponseFormat     string
@@ -157,6 +158,13 @@ func (r *OpenAIImagesRequest) IsEdits() bool {
 	return r != nil && r.Endpoint == openAIImagesEditsEndpoint
 }
 
+func (r *OpenAIImagesRequest) BillingInputSize() string {
+	if tier, ok := ClassifyImageBillingTier(r.Resolution); ok {
+		return tier
+	}
+	return r.Size
+}
+
 func (r *OpenAIImagesRequest) StickySessionSeed() string {
 	if r == nil {
 		return ""
@@ -219,6 +227,17 @@ func (s *OpenAIGatewayService) ParseOpenAIImagesRequest(c *gin.Context, body []b
 		return nil, err
 	}
 	req.SizeTier = normalizeOpenAIImageSizeTier(req.Size)
+	if strings.HasSuffix(strings.ToLower(req.Model), "-4k") && is968ImageGenerationModel(req.Model) && req.Resolution == "" && !req.ExplicitSize {
+		req.Resolution = "4k"
+	}
+	if tier, valid := ClassifyImageBillingTier(req.Resolution); valid {
+		req.SizeTier = tier
+	} else if req.Resolution != "" && is968ImageGenerationModel(req.Model) {
+		return nil, fmt.Errorf("image resolution must be 1k, 2k or 4k")
+	}
+	if req.N < 1 || req.N > 10 {
+		return nil, fmt.Errorf("n must be between 1 and 10")
+	}
 	req.RequiredCapability = classifyOpenAIImagesCapability(req)
 	return req, nil
 }
@@ -229,6 +248,13 @@ func parseOpenAIImagesJSONRequest(body []byte, req *OpenAIImagesRequest) error {
 		req.ExplicitModel = req.Model != ""
 	}
 	req.Prompt = strings.TrimSpace(gjson.GetBytes(body, "prompt").String())
+	req.Resolution = strings.TrimSpace(gjson.GetBytes(body, "resolution").String())
+	for _, image := range gjson.GetBytes(body, "image_urls").Array() {
+		if image.Type != gjson.String || strings.TrimSpace(image.String()) == "" {
+			return fmt.Errorf("image_urls must contain image URLs")
+		}
+		req.InputImageURLs = append(req.InputImageURLs, image.String())
+	}
 
 	if streamResult := gjson.GetBytes(body, "stream"); streamResult.Exists() {
 		if streamResult.Type != gjson.True && streamResult.Type != gjson.False {
@@ -391,6 +417,8 @@ func parseOpenAIImagesMultipartRequest(body []byte, contentType string, req *Ope
 				return fmt.Errorf("n must be a positive integer")
 			}
 			req.N = n
+		case "resolution":
+			req.Resolution = value
 		case "quality":
 			req.Quality = value
 			req.HasNativeOptions = true
@@ -455,7 +483,16 @@ func applyOpenAIImagesDefaults(req *OpenAIImagesRequest) {
 }
 
 func isOpenAIImageGenerationModel(model string) bool {
-	return IsGPTImageGenerationModel(model) || isGrokImageGenerationModel(model)
+	return IsGPTImageGenerationModel(model) || isGrokImageGenerationModel(model) || is968ImageGenerationModel(model)
+}
+
+func is968ImageGenerationModel(model string) bool {
+	switch strings.ToLower(strings.TrimSpace(model)) {
+	case "gpt-2.0", "gpt-2.5-fast", "gpt-2.5-pro", "gpt-2.0-4k", "banana-2", "banana-pro":
+		return true
+	default:
+		return false
+	}
 }
 
 // IsGPTImageGenerationModel identifies the GPT native image-generation model family.
@@ -601,6 +638,16 @@ func (s *OpenAIGatewayService) forwardOpenAIImagesAPIKey(
 	if err != nil {
 		return nil, err
 	}
+	endpoint := parsed.Endpoint
+	if account.MediaProtocol() == "968" {
+		adapted := *parsed
+		adapted.Model = upstreamModel
+		forwardBody, err = normalize968ImageBody(forwardBody, &adapted)
+		if err != nil {
+			return nil, err
+		}
+		forwardContentType, endpoint = "application/json", openAIImagesGenerationsEndpoint
+	}
 	upstreamCtx, releaseUpstreamCtx := detachStreamUpstreamContext(ctx, parsed.Stream)
 	defer releaseUpstreamCtx()
 
@@ -608,7 +655,7 @@ func (s *OpenAIGatewayService) forwardOpenAIImagesAPIKey(
 	if err != nil {
 		return nil, err
 	}
-	upstreamReq, err := s.buildOpenAIImagesRequest(upstreamCtx, c, account, forwardBody, forwardContentType, token, parsed.Endpoint)
+	upstreamReq, err := s.buildOpenAIImagesRequest(upstreamCtx, c, account, forwardBody, forwardContentType, token, endpoint)
 	if err != nil {
 		return nil, err
 	}
@@ -682,7 +729,7 @@ func (s *OpenAIGatewayService) forwardOpenAIImagesAPIKey(
 					FirstTokenMs:     ttft,
 					ImageCount:       streamCount,
 					ImageSize:        parsed.SizeTier,
-					ImageInputSize:   parsed.Size,
+					ImageInputSize:   parsed.BillingInputSize(),
 					ImageOutputSizes: streamSizes,
 				}, err
 			}
@@ -703,7 +750,7 @@ func (s *OpenAIGatewayService) forwardOpenAIImagesAPIKey(
 			FirstTokenMs:     firstTokenMs,
 			ImageCount:       imageCount,
 			ImageSize:        parsed.SizeTier,
-			ImageInputSize:   parsed.Size,
+			ImageInputSize:   parsed.BillingInputSize(),
 			ImageOutputSizes: imageOutputSizes,
 		}, nil
 	} else {
@@ -726,7 +773,7 @@ func (s *OpenAIGatewayService) forwardOpenAIImagesAPIKey(
 			FirstTokenMs:     firstTokenMs,
 			ImageCount:       imageCount,
 			ImageSize:        parsed.SizeTier,
-			ImageInputSize:   parsed.Size,
+			ImageInputSize:   parsed.BillingInputSize(),
 			ImageOutputSizes: nonStreamSizes,
 		}, nil
 	}

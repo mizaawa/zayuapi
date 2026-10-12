@@ -122,6 +122,9 @@ func (h *OpenAIGatewayHandler) Images(c *gin.Context) {
 
 	subscription, _ := middleware2.GetSubscriptionFromContext(c)
 	workbenchBilling := newImageWorkbenchFailureBilling(h, c, apiKey, subscription, requestModel, parsed.Size, parsed.N, channelMapping, body)
+	if parsed.Resolution != "" {
+		workbenchBilling.size = parsed.SizeTier
+	}
 	defer workbenchBilling.finish()
 
 	service.SetOpsLatencyMs(c, service.OpsAuthLatencyMsKey, time.Since(requestStart).Milliseconds())
@@ -246,7 +249,14 @@ func (h *OpenAIGatewayHandler) Images(c *gin.Context) {
 		}
 		forwardStart := time.Now()
 		writerSizeBeforeForward := service.OpenAIImagesJSONKeepaliveAdjustedWrittenSize(c)
-		workbenchBilling.attempt(account)
+		if err := workbenchBilling.attempt(account); err != nil {
+			if accountReleaseFunc != nil {
+				accountReleaseFunc()
+			}
+			status, code, message, _ := billingErrorDetails(err)
+			h.errorResponse(c, status, code, message)
+			return
+		}
 		result, err := func() (*service.OpenAIForwardResult, error) {
 			defer func() {
 				if accountReleaseFunc != nil {
@@ -394,6 +404,7 @@ func (h *OpenAIGatewayHandler) Images(c *gin.Context) {
 		}
 		sessionID := service.ExtractClientSessionID(c)
 		billingRequestID := imageWorkbenchBillingRequestID(c)
+		reservationID := mediaReservationID(c)
 		result = workbenchBilling.settledByNormalPath(result)
 		h.submitMandatoryUsageRecordTask(c.Request.Context(), func(ctx context.Context) {
 			if err := h.gatewayService.RecordUsage(ctx, &service.OpenAIRecordUsageInput{
@@ -411,6 +422,7 @@ func (h *OpenAIGatewayHandler) Images(c *gin.Context) {
 				QuotaPlatform:      quotaPlatform,
 				SessionID:          sessionID,
 				BillingRequestID:   billingRequestID,
+				MediaReservationID: reservationID,
 				ChannelUsageFields: clientRequestedUsageFields(c, channelMapping, requestModel, upstreamModel),
 			}); err != nil {
 				logger.L().With(

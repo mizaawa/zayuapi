@@ -69,6 +69,15 @@ func parseVideoWorkbenchPayload(body []byte, policy service.VideoWorkbenchRuntim
 		return nil, errors.New("invalid video request")
 	}
 	p.Prompt, p.Model = strings.TrimSpace(p.Prompt), strings.TrimSpace(p.Model)
+	if p.Ratio == "" {
+		p.Ratio = "1:1"
+	}
+	p.Resolution = strings.ToLower(strings.TrimSpace(p.Resolution))
+	switch p.Resolution {
+	case "", "auto", "480p", "720p", "1080p", "2k", "4k":
+	default:
+		return nil, errors.New("resolution must be auto, 480p, 720p, 1080p, 2k or 4k")
+	}
 	if !utf8.ValidString(p.Prompt) || utf8.RuneCountInString(p.Prompt) < 1 || utf8.RuneCountInString(p.Prompt) > 32000 || len(p.Model) == 0 || len(p.Model) > 256 || strings.ContainsAny(p.Model, "\r\n\x00") {
 		return nil, errors.New("prompt and model are required; prompt must not exceed 32000 characters")
 	}
@@ -192,7 +201,7 @@ func (h *VideoWorkbenchHandler) Submit(c *gin.Context) {
 		response.BadRequest(c, "invalid video request")
 		return
 	}
-	metadata := service.VideoWorkbenchMetadata{APIKeyID: key.ID, Prompt: payload.Prompt, Model: payload.Model, Ratio: payload.Ratio, Duration: payload.Duration, ReferenceImages: len(payload.ReferenceImages), ReferenceVideos: len(payload.ReferenceVideos), ReferenceAudios: len(payload.ReferenceAudios)}
+	metadata := service.VideoWorkbenchMetadata{APIKeyID: key.ID, Prompt: payload.Prompt, Model: payload.Model, Ratio: payload.Ratio, Resolution: payload.Resolution, Duration: payload.Duration, ReferenceImages: len(payload.ReferenceImages), ReferenceVideos: len(payload.ReferenceVideos), ReferenceAudios: len(payload.ReferenceAudios)}
 	task, err := h.tasks.Create(c.Request.Context(), key.UserID, metadata)
 	if err != nil {
 		response.ErrorFrom(c, err)

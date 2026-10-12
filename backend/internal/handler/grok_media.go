@@ -75,6 +75,7 @@ func (h *OpenAIGatewayHandler) CompositeVideoContent(c *gin.Context) {
 }
 
 func (h *OpenAIGatewayHandler) handleGrokMedia(c *gin.Context, endpoint service.GrokMediaEndpoint, requestID, targetPlatform string) {
+	c.Set("media_billing_buffer", true)
 	streamStarted := false
 	defer h.recoverResponsesPanic(c, &streamStarted)
 
@@ -214,6 +215,16 @@ func (h *OpenAIGatewayHandler) handleGrokMedia(c *gin.Context, endpoint service.
 		workbenchBilling = newImageWorkbenchFailureBilling(h, c, apiKey, subscription, requestModel, requestInfo.Size, requestInfo.N, channelMapping, body)
 	}
 	defer workbenchBilling.finish()
+	videoTransferred := false
+	defer func() {
+		if endpoint.IsVideoGenerationRequest() && !videoTransferred {
+			ctx, cancel := context.WithTimeout(context.WithoutCancel(c.Request.Context()), 15*time.Second)
+			defer cancel()
+			if err := h.gatewayService.RefundMedia(ctx, mediaReservationID(c)); err != nil {
+				reqLog.Error("media_billing.refund_failed", zap.Error(err))
+			}
+		}
+	}()
 	service.SetOpsLatencyMs(c, service.OpsAuthLatencyMsKey, time.Since(requestStart).Milliseconds())
 
 	userReleaseFunc, acquired := h.acquireResponsesUserSlot(c, subject.UserID, subject.Concurrency, false, &streamStarted, reqLog)
@@ -418,7 +429,24 @@ func (h *OpenAIGatewayHandler) handleGrokMedia(c *gin.Context, endpoint service.
 		service.SetOpsLatencyMs(c, service.OpsRoutingLatencyMsKey, time.Since(routingStart).Milliseconds())
 		forwardStart := time.Now()
 		writerSizeBeforeForward := c.Writer.Size()
-		workbenchBilling.attempt(account)
+		if err := workbenchBilling.attempt(account); err != nil {
+			if accountReleaseFunc != nil {
+				accountReleaseFunc()
+			}
+			status, code, message, _ := billingErrorDetails(err)
+			h.errorResponse(c, status, code, message)
+			return
+		}
+		if endpoint.IsVideoGenerationRequest() {
+			if err := h.prechargeVideo(c, apiKey, subscription, account, endpoint, requestInfo, channelMapping, body); err != nil {
+				if accountReleaseFunc != nil {
+					accountReleaseFunc()
+				}
+				status, code, message, _ := billingErrorDetails(err)
+				h.errorResponse(c, status, code, message)
+				return
+			}
+		}
 		result, err := func() (*service.OpenAIForwardResult, error) {
 			defer func() {
 				if accountReleaseFunc != nil {
@@ -523,8 +551,13 @@ func (h *OpenAIGatewayHandler) handleGrokMedia(c *gin.Context, endpoint service.
 		}
 
 		h.gatewayService.ReportOpenAIAccountScheduleResult(account.ID, grokMediaScheduleModel(account, routingModel, result), true, nil)
-		if targetPlatform == service.PlatformCustom && endpoint == service.GrokMediaEndpointVideoStatus {
-			if service.GrokMediaVideoStatusFailed(result.BufferedResponseBody) {
+		if endpoint == service.GrokMediaEndpointVideoStatus || endpoint == service.SeedanceEndpointStatus {
+			handled, settleErr := h.gatewayService.ReconcileMediaTask(requestCtx, requestID, subject.UserID, apiKey.ID, result.BufferedResponseBody)
+			if settleErr != nil {
+				h.errorResponse(c, http.StatusBadGateway, "billing_error", "Video settlement is pending; retry the status request")
+				return
+			}
+			if !handled && service.GrokMediaVideoStatusFailed(result.BufferedResponseBody) {
 				refundCtx, refundCancel := context.WithTimeout(context.WithoutCancel(requestCtx), 10*time.Second)
 				_, refunded, refundErr := h.gatewayService.RefundFailedGrokMediaVideoTask(
 					refundCtx, apiKey.GroupID, requestID, subject.UserID, apiKey.ID,
@@ -548,7 +581,34 @@ func (h *OpenAIGatewayHandler) handleGrokMedia(c *gin.Context, endpoint service.
 			}
 			return
 		}
-		if endpoint == service.SeedanceEndpointCreate {
+		if endpoint.IsVideoGenerationRequest() && mediaPrecharge(c) != nil {
+			finalizeCtx, finalizeCancel := context.WithTimeout(context.WithoutCancel(requestCtx), 20*time.Second)
+			defer finalizeCancel()
+			reservation := mediaPrecharge(c)
+			// A successful upstream response may already represent paid work.
+			// Retain the reservation if persisting its task ID fails; refunding
+			// here would make an accepted generation free during a DB outage.
+			videoTransferred = true
+			if result.ResponseID == "" {
+				videoTransferred = !service.GrokMediaVideoStatusFailed(result.BufferedResponseBody)
+				reqLog.Error("media_billing.accepted_without_task_id", zap.String("reservation_id", reservation.ID))
+				h.errorResponse(c, http.StatusBadGateway, "upstream_error", "Video response is missing a task ID")
+				return
+			}
+			if err := h.gatewayService.BindMediaTask(finalizeCtx, reservation, result.ResponseID, endpoint); err != nil {
+				reqLog.Error("media_billing.task_binding_pending", zap.String("reservation_id", reservation.ID), zap.String("task_id", result.ResponseID))
+				h.errorResponse(c, http.StatusBadGateway, "billing_error", "Failed to persist video billing")
+				return
+			}
+			if err := h.gatewayService.BindGrokMediaVideoRequestAccount(finalizeCtx, apiKey.GroupID, result.ResponseID, subject.UserID, apiKey.ID, account.ID); err != nil {
+				h.errorResponse(c, http.StatusBadGateway, "upstream_error", "Failed to persist video task")
+				return
+			}
+			if _, err := h.gatewayService.ReconcileMediaTask(finalizeCtx, result.ResponseID, subject.UserID, apiKey.ID, result.BufferedResponseBody); err != nil {
+				reqLog.Error("media_billing.immediate_settlement_failed", zap.Error(err))
+			}
+			h.gatewayService.WriteBufferedGrokMediaResponse(c, result)
+		} else if endpoint == service.SeedanceEndpointCreate {
 			if err := h.gatewayService.BindGrokMediaVideoRequestAccount(
 				requestCtx, apiKey.GroupID, result.ResponseID, subject.UserID, apiKey.ID, account.ID,
 			); err != nil {
@@ -585,6 +645,9 @@ func (h *OpenAIGatewayHandler) handleGrokMedia(c *gin.Context, endpoint service.
 			if shouldRecordGrokMediaUsage(endpoint, requestModel) {
 				result = workbenchBilling.settledByNormalPath(result)
 				recordGrokMediaUsage(c, h, reqLog, apiKey, subject, subscription, account, result, requestModel, channelMapping, body, requestID)
+			}
+			if endpoint.IsVideoGenerationRequest() {
+				h.gatewayService.WriteBufferedGrokMediaResponse(c, result)
 			}
 		}
 		reqLog.Debug("grok_media.request_completed",
@@ -747,6 +810,7 @@ func recordGrokMediaUsage(
 	// BillingModelSource 为空不会触发来源覆盖）。
 	channelUsageFields := channelMapping.ToUsageFields(clientRequestedModel(c, requestModel), result.UpstreamModel)
 	billingRequestID := imageWorkbenchBillingRequestID(c)
+	reservationID := mediaReservationID(c)
 	h.submitOpenAIUsageRecordTask(c.Request.Context(), result, func(ctx context.Context) {
 		if err := h.gatewayService.RecordUsage(ctx, &service.OpenAIRecordUsageInput{
 			Result:             result,
@@ -764,6 +828,7 @@ func recordGrokMediaUsage(
 			SessionID:          sessionID,
 			ChannelUsageFields: channelUsageFields,
 			BillingRequestID:   billingRequestID,
+			MediaReservationID: reservationID,
 		}); err != nil {
 			logger.L().With(
 				zap.String("component", "handler.openai_gateway.grok_media"),

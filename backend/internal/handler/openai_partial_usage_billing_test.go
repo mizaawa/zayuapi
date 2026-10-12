@@ -39,7 +39,10 @@ func (u *partialUsageUpstream) Do(*http.Request, string, int64, int) (*http.Resp
 
 type partialUsageBillingRepo struct {
 	service.UsageBillingRepository
-	commands []*service.UsageBillingCommand
+	commands     []*service.UsageBillingCommand
+	reservations map[string]*service.MediaBillingReservation
+	refunded     int
+	bindMediaErr error
 }
 
 func (r *partialUsageBillingRepo) Apply(_ context.Context, cmd *service.UsageBillingCommand) (*service.UsageBillingApplyResult, error) {
