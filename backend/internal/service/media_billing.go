@@ -23,11 +23,12 @@ type MediaBillingQuote struct {
 }
 
 type MediaBillingReservation struct {
-	ID       string            `json:"id"`
-	Quote    MediaBillingQuote `json:"quote"`
-	GroupID  int64             `json:"group_id"`
-	TaskID   string            `json:"task_id"`
-	Endpoint GrokMediaEndpoint `json:"endpoint"`
+	ID            string            `json:"id"`
+	Quote         MediaBillingQuote `json:"quote"`
+	GroupID       int64             `json:"group_id"`
+	TaskID        string            `json:"task_id"`
+	Endpoint      GrokMediaEndpoint `json:"endpoint"`
+	MediaProtocol string            `json:"media_protocol,omitempty"`
 	// Resolution quotes retain the price at admission even if an administrator
 	// edits group/channel prices while an asynchronous job is running.
 	VideoPrices     map[string]MediaBillingQuote `json:"video_prices,omitempty"`
@@ -70,11 +71,11 @@ func (s *OpenAIGatewayService) PrechargeMedia(ctx context.Context, input *OpenAI
 	if quote == nil {
 		return nil, errors.New("media price is unavailable")
 	}
-	reservation := &MediaBillingReservation{ID: copyInput.BillingRequestID, Quote: *quote, WorkbenchKind: input.WorkbenchKind}
+	reservation := &MediaBillingReservation{ID: copyInput.BillingRequestID, Quote: *quote, WorkbenchKind: input.WorkbenchKind, MediaProtocol: input.Account.MediaProtocol()}
 	if input.APIKey.GroupID != nil {
 		reservation.GroupID = *input.APIKey.GroupID
 	}
-	if input.Result.VideoCount > 0 {
+	if input.Result.VideoCount > 0 && reservation.MediaProtocol != "8yes" {
 		reservation.VideoPrices = map[string]MediaBillingQuote{}
 		for _, resolution := range []string{"", "480p", "720p", "1080p", "2k", "4k"} {
 			result := *input.Result
@@ -262,12 +263,16 @@ func (s *OpenAIGatewayService) settleMediaStatus(ctx context.Context, r *MediaBi
 		return nil
 	}
 	quote := r.Quote
-	for _, path := range []string{"resolution", "video.resolution", "data.resolution", "size"} {
-		if resolution, ok := normalizeVideoBillingResolution(gjson.GetBytes(body, path).String()); ok {
-			if resolved, found := r.VideoPrices[resolution]; found {
-				quote = resolved
+	// 8yes prices the exact requested model, including its resolution suffix.
+	// Its status response may describe the upstream's different internal model.
+	if r.MediaProtocol != "8yes" {
+		for _, path := range []string{"resolution", "video.resolution", "data.resolution", "size"} {
+			if resolution, ok := normalizeVideoBillingResolution(gjson.GetBytes(body, path).String()); ok {
+				if resolved, found := r.VideoPrices[resolution]; found {
+					quote = resolved
+				}
+				break
 			}
-			break
 		}
 	}
 	seconds := 0

@@ -345,7 +345,7 @@ func parseGrokMediaMultipartRequest(contentType string, body []byte, info *GrokM
 		fileName := strings.TrimSpace(part.FileName())
 		partContentType := strings.TrimSpace(part.Header.Get("Content-Type"))
 		if fileName != "" {
-			if name == "referenceVideos" || name == "reference_videos" || strings.HasPrefix(name, "referenceVideos[") || strings.HasPrefix(name, "reference_videos[") {
+			if name == "referenceVideos" || name == "reference_videos" || name == "video_refs" || strings.HasPrefix(name, "referenceVideos[") || strings.HasPrefix(name, "reference_videos[") {
 				info.HasReferenceVideo = true
 			}
 			upload := OpenAIImagesUpload{
@@ -358,7 +358,7 @@ func parseGrokMediaMultipartRequest(contentType string, body []byte, info *GrokM
 				info.MaskUpload = &upload
 				continue
 			}
-			if name == "image" || name == "input_reference" || strings.HasPrefix(name, "image[") {
+			if name == "image" || name == "input_reference" || name == "referenceImages" || name == "reference_images" || strings.HasPrefix(name, "image[") || strings.HasPrefix(name, "referenceImages[") {
 				info.Uploads = append(info.Uploads, upload)
 			}
 			continue
@@ -394,19 +394,32 @@ func parseGrokMediaMultipartRequest(contentType string, body []byte, info *GrokM
 			if value != "" {
 				info.InputImageURLs = append(info.InputImageURLs, value)
 			}
-		case "referenceImages", "reference_images":
-			if value != "" {
-				info.InputImageURLs = append(info.InputImageURLs, value)
-			}
-		case "referenceVideos", "reference_videos":
-			if value != "" {
-				info.ReferenceVideoURLs = append(info.ReferenceVideoURLs, value)
-				info.HasReferenceVideo = true
-			}
+		case "referenceImages", "reference_images", "image_refs":
+			info.InputImageURLs = append(info.InputImageURLs, grokMediaMultipartReferenceURLs(value)...)
+		case "referenceVideos", "reference_videos", "video_refs":
+			info.ReferenceVideoURLs = append(info.ReferenceVideoURLs, grokMediaMultipartReferenceURLs(value)...)
+			info.HasReferenceVideo = info.HasReferenceVideo || len(info.ReferenceVideoURLs) > 0
 		case "mask", "mask_image_url":
 			info.MaskImageURL = value
 		}
 	}
+}
+
+func grokMediaMultipartReferenceURLs(value string) []string {
+	if value == "" {
+		return nil
+	}
+	parsed := gjson.Parse(value)
+	if parsed.IsArray() {
+		var refs []string
+		for _, item := range parsed.Array() {
+			if ref := grokMediaReferenceURL(item); ref != "" {
+				refs = append(refs, ref)
+			}
+		}
+		return refs
+	}
+	return []string{value}
 }
 
 // setGrokMediaResolutionFields records the effective client-supplied
@@ -747,6 +760,9 @@ func (s *OpenAIGatewayService) ForwardGrokMedia(
 	if account.Platform != PlatformGrok && account.Platform != PlatformCustom {
 		return nil, fmt.Errorf("account platform %s is not supported for media", account.Platform)
 	}
+	if endpoint.IsVideoGenerationRequest() && !validMediaProtocol(account.MediaProtocol()) {
+		return nil, fmt.Errorf("unsupported media protocol; select default, sora or 8yes in account settings")
+	}
 
 	token, _, err := s.getRequestCredential(ctx, c, account)
 	if err != nil {
@@ -765,7 +781,12 @@ func (s *OpenAIGatewayService) ForwardGrokMedia(
 		return nil, err
 	}
 	if account.Platform == PlatformCustom && endpoint.IsVideoGenerationRequest() {
-		if protocol := account.MediaProtocol(); endpoint == GrokMediaEndpointVideosGenerations && (protocol == "sora" || protocol == "968") {
+		if endpoint == GrokMediaEndpointVideosGenerations && account.MediaProtocol() == "8yes" {
+			body, contentType, err = normalizeEightYesVideoRequest(body, contentType)
+			if err != nil {
+				return nil, err
+			}
+		} else if protocol := account.MediaProtocol(); endpoint == GrokMediaEndpointVideosGenerations && protocol == "sora" {
 			// Normalize explicit provider defaults before parsing usage so
 			// forwarding, precharge and final billing agree on the parameters.
 			body, err = normalizeVideoProtocolBody(ctx, account, body)
@@ -787,7 +808,11 @@ func (s *OpenAIGatewayService) ForwardGrokMedia(
 	}
 	requestInfo := ParseGrokMediaRequest(contentType, body)
 	if account.Platform == PlatformCustom && endpoint.IsVideoGenerationRequest() {
-		requestInfo = normalizeCustomVideoRequestInfo(requestInfo)
+		if account.MediaProtocol() == "8yes" {
+			requestInfo = normalizeEightYesVideoRequestInfo(requestInfo)
+		} else {
+			requestInfo = normalizeCustomVideoRequestInfo(requestInfo)
+		}
 	}
 	upstreamModel := requestInfo.Model
 	if endpoint.RequiresRequestBody() && account.Platform != PlatformCustom && gjson.ValidBytes(body) {
@@ -815,10 +840,14 @@ func (s *OpenAIGatewayService) ForwardGrokMedia(
 	if endpoint.IsVideoGenerationRequest() {
 		forwardedRequestInfo = ParseGrokMediaRequest(contentType, body)
 		if account.Platform == PlatformCustom {
-			forwardedRequestInfo = normalizeCustomVideoRequestInfo(forwardedRequestInfo)
+			if account.MediaProtocol() == "8yes" {
+				forwardedRequestInfo = normalizeEightYesVideoRequestInfo(forwardedRequestInfo)
+			} else {
+				forwardedRequestInfo = normalizeCustomVideoRequestInfo(forwardedRequestInfo)
+			}
 		}
 	}
-	if protocol := account.MediaProtocol(); account.Platform == PlatformCustom && endpoint == GrokMediaEndpointVideosGenerations && protocol != "sora" && protocol != "968" {
+	if protocol := account.MediaProtocol(); account.Platform == PlatformCustom && endpoint == GrokMediaEndpointVideosGenerations && protocol != "sora" && protocol != "8yes" {
 		// MiniMax workbench metadata is built after extracting the original
 		// reference and duration metadata used for billing and audit.
 		body, err = normalizeVideoProtocolBody(ctx, account, body)
@@ -896,6 +925,10 @@ func (s *OpenAIGatewayService) ForwardGrokMedia(
 		)
 	}
 	usage := grokMediaUsageFromResponse(endpoint, forwardedRequestInfo, respBody)
+	if account.MediaProtocol() == "8yes" && endpoint.IsVideoGenerationRequest() {
+		// task_id identifies an internal provider task and cannot be polled.
+		usage.ResponseID = strings.TrimSpace(gjson.GetBytes(respBody, "id").String())
+	}
 	result := &OpenAIForwardResult{
 		RequestID:            requestIDHeader,
 		ResponseID:           usage.ResponseID,
@@ -1056,7 +1089,7 @@ func (s *OpenAIGatewayService) forwardGrokMediaVideoContent(
 		// Drain and close the failed response before retrying so transports can
 		// reuse the connection and the response body is never leaked.
 		if contentResp.Body != nil {
-			_, _ = io.Copy(io.Discard, contentResp.Body)
+			_, _ = io.Copy(io.Discard, io.LimitReader(contentResp.Body, 64<<10))
 			_ = contentResp.Body.Close()
 		}
 		timer := time.NewTimer(grokMediaVideoContentRetryDelay)
@@ -1076,7 +1109,7 @@ func (s *OpenAIGatewayService) forwardGrokMediaVideoContent(
 	if contentResp == nil {
 		return nil, fmt.Errorf("grok media content upstream returned an empty response")
 	}
-	if contentResp.StatusCode >= 300 && contentResp.StatusCode < 400 && (account.MediaProtocol() == "968" || account.MediaProtocol() == "sora") {
+	if contentResp.StatusCode >= 300 && contentResp.StatusCode < 400 && (account.MediaProtocol() == "8yes" || account.MediaProtocol() == "sora") {
 		location, locationErr := contentResp.Location()
 		if locationErr != nil {
 			// Test transports and some adapters omit Response.Request.

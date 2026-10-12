@@ -4,7 +4,7 @@
     <select id="account-media-protocol" v-model="model" class="input">
       <option value="">{{ t('videoWorkbench.protocolCompatible') }}</option>
       <option value="sora">OpenAI Sora</option>
-      <option value="968">968</option>
+      <option value="8yes">8yes</option>
     </select>
     <p class="input-hint">{{ t('videoWorkbench.protocolHint') }}</p>
   </div>

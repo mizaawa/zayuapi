@@ -80,6 +80,10 @@ type ImageTaskStore interface {
 	Get(ctx context.Context, id string) (*ImageTaskRecord, error)
 }
 
+type ImageTaskFinishStore interface {
+	Finish(ctx context.Context, task *ImageTaskRecord, ttl time.Duration) error
+}
+
 // ImageStorageResolver reports the currently effective object-storage binding.
 // It exists so the async image feature can be switched on and off from the admin
 // UI without a restart: the wiring below is fixed at startup, but the answer to
@@ -218,6 +222,9 @@ func (s *ImageTaskService) Complete(ctx context.Context, id string, statusCode i
 	if err != nil {
 		return err
 	}
+	if task.Status == ImageTaskStatusCompleted || task.Status == ImageTaskStatusFailed {
+		return nil
+	}
 	uploader, enabled := s.current()
 	if task.WorkbenchStorage == ImageWorkbenchStorageLocal {
 		uploader, enabled = s.localWorkbenchUploader()
@@ -263,6 +270,9 @@ func (s *ImageTaskService) finish(ctx context.Context, id, status string, status
 		}
 		return ErrImageTaskUnavailable.WithCause(err)
 	}
+	if task.Status == ImageTaskStatusCompleted || task.Status == ImageTaskStatusFailed {
+		return nil
+	}
 	now := time.Now().UTC()
 	completedAt := now.Unix()
 	task.Status = status
@@ -280,8 +290,14 @@ func (s *ImageTaskService) finish(ctx context.Context, id, status string, status
 		ttl = s.WorkbenchRuntime(ctx).Retention()
 	}
 	task.ExpiresAt = now.Add(ttl).Unix()
-	if err := s.store.Save(ctx, task, ttl); err != nil {
-		return ErrImageTaskUnavailable.WithCause(err)
+	var saveErr error
+	if store, ok := s.store.(ImageTaskFinishStore); ok {
+		saveErr = store.Finish(ctx, task, ttl)
+	} else {
+		saveErr = s.store.Save(ctx, task, ttl)
+	}
+	if saveErr != nil {
+		return ErrImageTaskUnavailable.WithCause(saveErr)
 	}
 	return nil
 }

@@ -119,6 +119,20 @@ func (h *AsyncImageHandler) Submit(c *gin.Context) {
 		return
 	}
 
+	var upload *imageWorkbenchUpload
+	if isImageWorkbenchRequest(c) {
+		var err error
+		upload, err = h.reserveWorkbenchUpload(c)
+		if err != nil {
+			imageTaskError(c, err)
+			return
+		}
+		defer func() {
+			if !upload.transferred {
+				upload.release()
+			}
+		}()
+	}
 	body, err := pkghttputil.ReadRequestBodyWithPrealloc(c.Request)
 	if err != nil {
 		if maxErr, ok := extractMaxBytesError(err); ok {
@@ -160,11 +174,7 @@ func (h *AsyncImageHandler) Submit(c *gin.Context) {
 	releasePayload := func() {}
 	timeout := h.tasks.ExecutionTimeout()
 	if metadata != nil {
-		releasePayload, err = h.tasks.ReserveWorkbenchPayload(len(body))
-		if err != nil {
-			imageTaskError(c, err)
-			return
-		}
+		releasePayload = upload.release
 		timeout = service.ImageWorkbenchQueueTimeout
 	}
 	if h.precharge != nil {
@@ -215,6 +225,9 @@ func (h *AsyncImageHandler) Submit(c *gin.Context) {
 	})
 
 	transferred = true
+	if upload != nil {
+		upload.transferred = true
+	}
 	go func() {
 		defer releasePayload()
 		defer h.openAI.refundUndispatchedWorkbench(taskCtx)

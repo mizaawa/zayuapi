@@ -23,7 +23,7 @@ func NewImageTaskStore(rdb *redis.Client) service.ImageTaskStore {
 
 func (s *imageTaskStore) Save(ctx context.Context, task *service.ImageTaskRecord, ttl time.Duration) error {
 	if task.Workbench != nil {
-		return s.saveWorkbench(ctx, task, ttl, 0)
+		return s.saveWorkbench(ctx, task, ttl, 0, false)
 	}
 	data, err := json.Marshal(task)
 	if err != nil {
@@ -32,10 +32,37 @@ func (s *imageTaskStore) Save(ctx context.Context, task *service.ImageTaskRecord
 	return s.rdb.Set(ctx, imageTaskKey(task.ID), data, ttl).Err()
 }
 
+var finishImageTaskScript = redis.NewScript(`
+local raw = redis.call('GET', KEYS[1])
+if not raw then return -1 end
+local current = cjson.decode(raw)
+if current.user_id ~= tonumber(ARGV[3]) or current.api_key_id ~= tonumber(ARGV[4]) then return -1 end
+if current.status ~= 'processing' and current.status ~= 'queued' then return 0 end
+redis.call('SET', KEYS[1], ARGV[1], 'PX', ARGV[2])
+return 1
+`)
+
+func (s *imageTaskStore) Finish(ctx context.Context, task *service.ImageTaskRecord, ttl time.Duration) error {
+	if task.Workbench != nil {
+		return s.saveWorkbench(ctx, task, ttl, 0, true)
+	}
+	data, err := json.Marshal(task)
+	if err != nil {
+		return err
+	}
+	result, err := finishImageTaskScript.Run(ctx, s.rdb, []string{imageTaskKey(task.ID)}, data, ttl.Milliseconds(), task.UserID, task.APIKeyID).Int()
+	if err == nil && result < 0 {
+		return service.ErrImageTaskNotFound
+	}
+	return err
+}
+
 var saveWorkbenchScript = redis.NewScript(`
 local raw = redis.call('GET', KEYS[1])
 if not raw then return -1 end
 local current = cjson.decode(raw)
+if current.user_id ~= tonumber(ARGV[9]) or current.api_key_id ~= tonumber(ARGV[10]) then return -1 end
+if ARGV[8] == '1' and current.status ~= 'processing' and current.status ~= 'queued' then return 0 end
 if tonumber(ARGV[7]) > 0 and (current.status ~= 'queued' or
   (tonumber(current.queue_lease_until or 0) > tonumber(ARGV[7]) and tonumber(current.queue_deadline or 0) > tonumber(ARGV[7]))) then
   return 0
@@ -52,7 +79,7 @@ redis.call('ZADD', KEYS[4], ARGV[3], ARGV[6])
 return 1
 `)
 
-func (s *imageTaskStore) saveWorkbench(ctx context.Context, task *service.ImageTaskRecord, ttl time.Duration, expiredBefore int64) error {
+func (s *imageTaskStore) saveWorkbench(ctx context.Context, task *service.ImageTaskRecord, ttl time.Duration, expiredBefore int64, terminalOnly bool) error {
 	data, err := json.Marshal(task)
 	if err != nil {
 		return err
@@ -63,7 +90,7 @@ func (s *imageTaskStore) saveWorkbench(ctx context.Context, task *service.ImageT
 	}
 	result, err := saveWorkbenchScript.Run(ctx, s.rdb,
 		[]string{imageTaskKey(task.ID), workbenchTaskIndex(task.UserID), workbenchActiveIndex(task.UserID), workbenchCleanupIndex, workbenchQueueIndex(task.UserID), workbenchQueueLeases},
-		data, ttl.Milliseconds(), task.ExpiresAt, task.ID, task.Status, string(cleanup), expiredBefore).Int()
+		data, ttl.Milliseconds(), task.ExpiresAt, task.ID, task.Status, string(cleanup), expiredBefore, terminalOnly, task.UserID, task.APIKeyID).Int()
 	if err == nil && result == -1 {
 		return service.ErrImageTaskNotFound
 	}

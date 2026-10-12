@@ -282,12 +282,13 @@ describe('ImageWorkbenchView', () => {
       items: [keys[1],
         { ...keys[0], id: 9, name: 'Grok key', group: { ...keys[0].group, platform: 'grok' } },
         { ...keys[0], id: 10, name: 'Composite key', group: { ...keys[0].group, platform: 'composite' } },
+        { ...keys[0], id: 11, name: 'Custom key', group: { ...keys[0].group, platform: 'custom' } },
       ], pages: 2,
     })
     const wrapper = mountWorkbench()
     await flushPromises()
     expect(wrapper.get('#image-key').findAll('option').map(option => option.text()))
-      .toEqual(['', 'Secondary key', 'Grok key', 'Composite key'])
+      .toEqual(['', 'Secondary key', 'Grok key', 'Composite key', 'Custom key'])
     expect(listKeys).toHaveBeenCalledTimes(2)
     expect(listModels).toHaveBeenCalledWith('sk-secondary', 'owner@example.com', expect.any(AbortSignal))
   })

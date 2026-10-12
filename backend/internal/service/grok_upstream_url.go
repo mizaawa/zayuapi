@@ -145,9 +145,6 @@ func (s *OpenAIGatewayService) buildCompatibleMediaURL(account *Account, endpoin
 	}
 	escapedID := url.PathEscape(requestID)
 	videoPath := "/v1/videos"
-	if account.MediaProtocol() == "968" {
-		videoPath += "/generations"
-	}
 	switch endpoint {
 	case GrokMediaEndpointVideosGenerations:
 		return buildOpenAIEndpointURL(validatedBaseURL, videoPath), nil

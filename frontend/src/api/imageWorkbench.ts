@@ -120,6 +120,8 @@ export async function gatewayRequest<T>(
       },
       signal: controller.signal,
       cache: 'no-store',
+      redirect: 'error',
+      credentials: 'omit',
     })
     if (!response.ok) throw await responseError(response, apiKey)
     const body: T = await response.json()
@@ -151,6 +153,9 @@ export async function downloadWorkbenchImage(taskId: string, imageIndex: number,
   const { data } = await apiClient.get<Blob>(`/image-workbench/tasks/${encodeURIComponent(taskId)}/images/${imageIndex}`, {
     responseType: 'blob', signal,
   })
+  if (!(data instanceof Blob) || !/^image\/(?:png|jpeg|webp|avif|gif)$/i.test(data.type) || !data.size) {
+    throw new ImageWorkbenchError('Invalid image response', 0, 'INVALID_RESPONSE')
+  }
   return data
 }
 

@@ -113,6 +113,7 @@ var videoStartScript = redis.NewScript(`
 local raw = redis.call('GET', KEYS[1])
 if not raw then return -1 end
 local task = cjson.decode(raw)
+if task.user_id ~= tonumber(ARGV[7]) or task.workbench.api_key_id ~= tonumber(ARGV[8]) then return -1 end
 if task.status ~= 'queued' or task.lease_until <= tonumber(ARGV[1]) or task.deadline <= tonumber(ARGV[1]) then return -1 end
 task.lease_until = tonumber(ARGV[3])
 redis.call('ZREMRANGEBYSCORE', KEYS[3], '-inf', ARGV[1])
@@ -139,7 +140,7 @@ func (s *videoWorkbenchStore) TryStart(ctx context.Context, task *service.VideoW
 	deadline := now.Add(service.VideoWorkbenchExecutionTimeout).Unix()
 	expires := now.Add(service.VideoWorkbenchExecutionTimeout + retention).Unix()
 	lease := now.Add(service.VideoWorkbenchLease).Unix()
-	n, err := videoStartScript.Run(ctx, s.rdb, videoKeys(task), now.Unix(), task.ID, lease, limit, deadline, expires).Int()
+	n, err := videoStartScript.Run(ctx, s.rdb, videoKeys(task), now.Unix(), task.ID, lease, limit, deadline, expires, task.UserID, task.Workbench.APIKeyID).Int()
 	if err != nil {
 		return false, err
 	}
@@ -156,6 +157,7 @@ var videoHeartbeatScript = redis.NewScript(`
 local raw = redis.call('GET', KEYS[1])
 if not raw then return 0 end
 local task = cjson.decode(raw)
+if task.user_id ~= tonumber(ARGV[4]) or task.workbench.api_key_id ~= tonumber(ARGV[5]) then return 0 end
 if task.status ~= 'processing' or task.lease_until <= tonumber(ARGV[1]) or task.deadline <= tonumber(ARGV[1]) then return 0 end
 task.lease_until = math.min(task.deadline, tonumber(ARGV[3]))
 redis.call('SET', KEYS[1], cjson.encode(task), 'KEEPTTL')
@@ -165,7 +167,7 @@ return 1
 `)
 
 func (s *videoWorkbenchStore) Heartbeat(ctx context.Context, task *service.VideoWorkbenchRecord, now time.Time) error {
-	n, err := videoHeartbeatScript.Run(ctx, s.rdb, videoKeys(task), now.Unix(), task.ID, now.Add(service.VideoWorkbenchLease).Unix()).Int()
+	n, err := videoHeartbeatScript.Run(ctx, s.rdb, videoKeys(task), now.Unix(), task.ID, now.Add(service.VideoWorkbenchLease).Unix(), task.UserID, task.Workbench.APIKeyID).Int()
 	if err != nil {
 		return err
 	}
@@ -179,6 +181,7 @@ var videoFinishScript = redis.NewScript(`
 local raw = redis.call('GET', KEYS[1])
 if not raw then return -1 end
 local current = cjson.decode(raw)
+if current.user_id ~= tonumber(ARGV[6]) or current.workbench.api_key_id ~= tonumber(ARGV[7]) then return -1 end
 if current.status ~= 'processing' and current.status ~= 'queued' then return 0 end
 if tonumber(ARGV[5]) > 0 and current.lease_until > tonumber(ARGV[5]) and current.deadline > tonumber(ARGV[5]) then return 0 end
 redis.call('SET', KEYS[1], ARGV[2], 'PX', ARGV[3])
@@ -196,7 +199,7 @@ func (s *videoWorkbenchStore) Finish(ctx context.Context, task *service.VideoWor
 	if err != nil {
 		return false, err
 	}
-	n, err := videoFinishScript.Run(ctx, s.rdb, videoKeys(task), task.ID, body, ttl.Milliseconds(), task.ExpiresAt, expiredBefore).Int()
+	n, err := videoFinishScript.Run(ctx, s.rdb, videoKeys(task), task.ID, body, ttl.Milliseconds(), task.ExpiresAt, expiredBefore, task.UserID, task.Workbench.APIKeyID).Int()
 	if err == nil && n < 0 {
 		err = service.ErrVideoTaskNotFound
 	}
@@ -206,7 +209,9 @@ func (s *videoWorkbenchStore) Finish(ctx context.Context, task *service.VideoWor
 var videoDeleteScript = redis.NewScript(`
 local raw = redis.call('GET', KEYS[1])
 if not raw then return -1 end
-if cjson.decode(raw).status == 'processing' then return 0 end
+local task = cjson.decode(raw)
+if task.user_id ~= tonumber(ARGV[3]) or task.workbench.api_key_id ~= tonumber(ARGV[4]) then return -1 end
+if task.status == 'processing' then return 0 end
 redis.call('DEL', KEYS[1])
 for i = 2, 5 do redis.call('ZREM', KEYS[i], ARGV[1]) end
 redis.call('ZADD', KEYS[6], ARGV[2], ARGV[1])
@@ -214,7 +219,7 @@ return 1
 `)
 
 func (s *videoWorkbenchStore) Delete(ctx context.Context, task *service.VideoWorkbenchRecord, now time.Time) error {
-	n, err := videoDeleteScript.Run(ctx, s.rdb, videoKeys(task), task.ID, now.Unix()).Int()
+	n, err := videoDeleteScript.Run(ctx, s.rdb, videoKeys(task), task.ID, now.Unix(), task.UserID, task.Workbench.APIKeyID).Int()
 	if err != nil {
 		return err
 	}

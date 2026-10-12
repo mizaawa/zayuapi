@@ -277,11 +277,12 @@ type UpdateBatchImageJobProviderSubmitParams struct {
 }
 
 type BatchImageTransitionOptions struct {
-	EventType    string
-	EventPayload any
-	ErrorCode    *string
-	ErrorMessage *string
-	Now          *time.Time
+	ExpectedStatus string
+	EventType      string
+	EventPayload   any
+	ErrorCode      *string
+	ErrorMessage   *string
+	Now            *time.Time
 }
 
 type MarkBatchImageJobSettledParams struct {

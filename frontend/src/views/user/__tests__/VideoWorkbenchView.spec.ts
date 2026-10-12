@@ -91,6 +91,53 @@ describe('VideoWorkbenchView', () => {
     expect(wrapper.findAll('[data-reference-kind="videos"] .reference-item')).toHaveLength(1)
     expect(mocks.error).toHaveBeenCalledWith('videoWorkbench.uploadLimit')
   })
+  it('submits reference URLs without loading untrusted media in the browser', async () => {
+    const wrapper = create(); await flushPromises()
+    await wrapper.get('#video-prompt').setValue('waves')
+    for (const kind of ['images', 'videos', 'audios']) {
+      await wrapper.get(`[data-reference-kind="${kind}"] button[aria-label="videoWorkbench.addReferenceURL"]`).trigger('click')
+      await wrapper.get(`#video-reference-url-${kind}`).setValue(`https://cdn.example/${kind}?signature=abc`)
+      await wrapper.get(`#video-reference-url-${kind}`).trigger('keydown', { key: 'Enter' })
+    }
+    expect(wrapper.findAll('.reference-item')).toHaveLength(3)
+    expect(wrapper.find('.reference-item img').exists()).toBe(false)
+    expect(wrapper.find('.reference-item a').exists()).toBe(false)
+    await wrapper.get('form').trigger('submit'); await flushPromises()
+    expect(mocks.submit).toHaveBeenCalledWith('sk-video', 'owner@example.test', expect.objectContaining({
+      referenceImages: ['https://cdn.example/images?signature=abc'],
+      referenceVideos: ['https://cdn.example/videos?signature=abc'],
+      referenceAudios: ['https://cdn.example/audios?signature=abc'],
+    }))
+    expect(wrapper.findAll('.reference-item')).toHaveLength(0)
+    expect(URL.createObjectURL).not.toHaveBeenCalled()
+  })
+  it('rejects unsafe reference URL schemes and embedded credentials', async () => {
+    const wrapper = create(); await flushPromises()
+    await wrapper.get('[data-reference-kind="images"] button[aria-label="videoWorkbench.addReferenceURL"]').trigger('click')
+    for (const value of ['javascript:alert(1)', 'data:image/png;base64,AAAA', 'https://user:secret@example.test/a.png', '/relative.png']) {
+      await wrapper.get('#video-reference-url-images').setValue(value)
+      await wrapper.get('#video-reference-url-images').trigger('keydown', { key: 'Enter' })
+      expect(mocks.error).toHaveBeenLastCalledWith('videoWorkbench.invalidReferenceURL')
+    }
+    expect(wrapper.find('.reference-item').exists()).toBe(false)
+  })
+  it('does not dispatch a paid job after navigation during local reference reading', async () => {
+    let completeRead!: () => void
+    vi.stubGlobal('FileReader', class {
+      result = 'data:image/png;base64,aW1hZ2U='
+      onload?: () => void
+      readAsDataURL() { completeRead = () => this.onload?.() }
+    })
+    const wrapper = create(); await flushPromises()
+    await wrapper.get('#video-prompt').setValue('waves')
+    const input = wrapper.get('[data-reference-kind="images"] input')
+    Object.defineProperty(input.element, 'files', { value: [new File(['image'], 'image.png', { type: 'image/png' })] })
+    await input.trigger('change')
+    await wrapper.get('form').trigger('submit')
+    wrapper.unmount()
+    completeRead(); await flushPromises()
+    expect(mocks.submit).not.toHaveBeenCalled()
+  })
   it('hides empty or unsafe documentation links and displays safe external links', async () => {
     const wrapper = create(); await flushPromises(); expect(wrapper.findAll('.workbench-tabs a')).toHaveLength(0)
     mocks.list.mockResolvedValue({ settings: { ...settings, tutorial_url: 'https://docs.example/tutorial', documentation_url: 'javascript:alert(1)', announcement: '<script>alert(1)</script>' }, tasks: [] })

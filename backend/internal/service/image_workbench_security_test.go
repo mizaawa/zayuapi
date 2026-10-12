@@ -56,6 +56,7 @@ func TestImageWorkbenchSanitizesProviderDataBeforePersistence(t *testing.T) {
 	require.NotContains(t, string(store.task.Result), "internal.example")
 	require.NotContains(t, string(store.task.Result), "b64_json")
 	for _, status := range []int{400, 401, 403, 422, 429, 500, 502, 503, 504} {
+		store.task.Status = ImageTaskStatusProcessing
 		require.NoError(t, svc.Fail(context.Background(), store.task.ID, status, json.RawMessage(`{"message":"upstream-secret"}`)))
 		require.NotContains(t, string(store.task.Error), "upstream-secret")
 		require.NotEmpty(t, store.task.Error)

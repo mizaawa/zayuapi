@@ -18,7 +18,7 @@ import (
 
 func TestMediaProtocolAutoResolutionMatchesPrechargeAndUsage(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	for _, protocol := range []string{"", "sora", "968"} {
+	for _, protocol := range []string{"", "sora"} {
 		for _, model := range []string{"sd-2.0", "grok-imagine-video", "custom-video", "sora-2"} {
 			t.Run(protocol+"/"+model, func(t *testing.T) {
 				account := customVideoTestAccount()
@@ -66,40 +66,29 @@ func TestMediaProtocolSoraWorkbench(t *testing.T) {
 	require.Error(t, err)
 }
 
-func TestMediaProtocol968Video(t *testing.T) {
-	account := &Account{Credentials: map[string]any{"media_protocol": "968", "base_url": "https://provider.example/v1"}, Platform: PlatformCustom, Type: AccountTypeAPIKey}
-	body, err := normalizeVideoProtocolBody(context.Background(), account, []byte(`{"model":"wan3-t","seconds":"4","ratio":"1:1","resolution":"auto","referenceImages":["https://example.com/a.png"],"referenceAudios":["https://example.com/a.mp3"]}`))
+func TestMediaProtocolEightYesVideo(t *testing.T) {
+	account := &Account{Credentials: map[string]any{"media_protocol": "8yes", "base_url": "https://provider.example/v1"}, Platform: PlatformCustom, Type: AccountTypeAPIKey}
+	body, err := normalizeVideoProtocolBody(context.Background(), account, []byte(`{"model":"wan-3.0-720p","seconds":"4","ratio":"1:1","resolution":"auto","referenceImages":["https://example.com/a.png"],"referenceAudios":["https://example.com/a.mp3"]}`))
 	require.NoError(t, err)
 	require.Equal(t, int64(4), gjson.GetBytes(body, "duration").Int())
 	require.Equal(t, gjson.Number, gjson.GetBytes(body, "duration").Type)
-	require.Equal(t, "1:1", gjson.GetBytes(body, "aspect_ratio").String())
-	require.Equal(t, "https://example.com/a.png", gjson.GetBytes(body, "image_refs.0").String())
-	require.Equal(t, "https://example.com/a.mp3", gjson.GetBytes(body, "audio_refs.0").String())
-	require.Equal(t, "720p", gjson.GetBytes(body, "resolution").String())
+	require.Equal(t, "1:1", gjson.GetBytes(body, "ratio").String())
+	require.Equal(t, "https://example.com/a.png", gjson.GetBytes(body, "referenceImages.0").String())
+	require.Equal(t, "https://example.com/a.mp3", gjson.GetBytes(body, "referenceAudios.0").String())
+	require.False(t, gjson.GetBytes(body, "resolution").Exists())
 	s := &OpenAIGatewayService{cfg: customVideoTestConfig()}
 	for _, test := range []struct {
 		endpoint GrokMediaEndpoint
 		id, path string
 	}{
-		{GrokMediaEndpointVideosGenerations, "", "/v1/videos/generations"},
-		{GrokMediaEndpointVideoStatus, "task1", "/v1/videos/generations/task1"},
+		{GrokMediaEndpointVideosGenerations, "", "/v1/videos"},
+		{GrokMediaEndpointVideoStatus, "task1", "/v1/videos/task1"},
 		{GrokMediaEndpointVideoContent, "task1", "/v1/videos/task1/content"},
 	} {
 		url, err := s.buildCompatibleMediaURL(account, test.endpoint, test.id)
 		require.NoError(t, err)
 		require.Equal(t, "https://provider.example"+test.path, url)
 	}
-}
-
-func TestMediaProtocol968Images(t *testing.T) {
-	body, err := normalize968ImageBody([]byte(`{"model":"banana-2","prompt":"test","quality":"high"}`), &OpenAIImagesRequest{N: 1, Model: "banana-2", Prompt: "test", Size: "2048x1152", SizeTier: "2K", Quality: "high", InputImageURLs: []string{"https://example.com/a.png"}})
-	require.NoError(t, err)
-	require.Equal(t, "16:9", gjson.GetBytes(body, "size").String())
-	require.Equal(t, "2k", gjson.GetBytes(body, "resolution").String())
-	require.False(t, gjson.GetBytes(body, "quality").Exists())
-	require.Equal(t, "https://example.com/a.png", gjson.GetBytes(body, "image_urls.0").String())
-	_, err = normalize968ImageBody(nil, &OpenAIImagesRequest{N: 3})
-	require.Error(t, err)
 }
 
 func TestMediaProtocolPixelSizeBilling(t *testing.T) {
@@ -117,7 +106,7 @@ func TestMediaProtocolPixelSizeBilling(t *testing.T) {
 }
 
 func TestMediaProtocolDurationAndResolutionAdmission(t *testing.T) {
-	for _, protocol := range []string{"sora", "968"} {
+	for _, protocol := range []string{"sora", "8yes"} {
 		account := &Account{Credentials: map[string]any{"media_protocol": protocol}}
 		for _, body := range []string{
 			`{"model":"grok-imagine-video","duration":-1}`,
@@ -133,7 +122,7 @@ func TestMediaProtocolDurationAndResolutionAdmission(t *testing.T) {
 		protocol, model string
 		duration        int
 	}{
-		{"968", "sd2.5", 30}, {"968", "sd-2.0", 15}, {"968", "wan3-t", 5}, {"sora", "grok-imagine-video", 8},
+		{"8yes", "seedance-2-5-720p", 8}, {"8yes", "grok-imagine-video-480p", 8}, {"sora", "grok-imagine-video", 8},
 	} {
 		account := &Account{Credentials: map[string]any{"media_protocol": test.protocol}}
 		info, err := VideoPrechargeRequestInfo(context.Background(), account, []byte(`{"model":"`+test.model+`"}`), "application/json")

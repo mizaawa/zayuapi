@@ -45,13 +45,19 @@
           <div v-for="kind in mediaKinds" :key="kind.id" class="reference-field">
             <div class="field-title"><span>{{ t(`videoWorkbench.${kind.id}`) }}</span><span>{{ references[kind.id].length }} / {{ referenceLimit(kind.id) }}</span></div>
             <div class="reference-strip" :data-reference-kind="kind.id" @dragover.prevent @drop.prevent="kind.id === 'images' && onImageDrop($event)">
-              <div v-for="(reference, index) in references[kind.id]" :key="reference.id" class="reference-item" :title="reference.file.name">
-                <img v-if="kind.id === 'images'" :src="reference.url" :alt="reference.file.name" />
-                <template v-else><Icon :name="kind.id === 'videos' ? 'play' : 'document'" size="lg" /><span>{{ reference.file.name }}</span></template>
+              <div v-for="(reference, index) in references[kind.id]" :key="reference.id" class="reference-item" :title="reference.name">
+                <img v-if="kind.id === 'images' && reference.file" :src="reference.url" :alt="reference.name" />
+                <template v-else><Icon :name="reference.remoteURL ? 'link' : kind.id === 'videos' ? 'play' : 'document'" size="lg" /><span>{{ reference.name }}</span></template>
                 <button type="button" :title="t('videoWorkbench.removeReference')" :aria-label="t('videoWorkbench.removeReference')" @click="removeReference(kind.id, index)"><Icon name="x" size="xs" /></button>
               </div>
               <button v-if="references[kind.id].length < referenceLimit(kind.id)" class="reference-add" type="button" :aria-label="t(`videoWorkbench.${kind.addLabel}`)" :title="t(`videoWorkbench.${kind.addLabel}`)" :disabled="submitting" @click="fileInputs[kind.id]?.click()"><Icon name="plus" size="lg" /></button>
+              <button v-if="references[kind.id].length < referenceLimit(kind.id)" class="reference-add" type="button" :aria-label="t('videoWorkbench.addReferenceURL')" :title="t('videoWorkbench.addReferenceURL')" :aria-expanded="referenceURLVisible[kind.id]" :disabled="submitting" @click="referenceURLVisible[kind.id] = !referenceURLVisible[kind.id]"><Icon name="link" size="lg" /></button>
               <input :ref="element => setFileInput(kind.id, element)" type="file" multiple :accept="kind.accept" class="sr-only" tabindex="-1" :aria-label="t(`videoWorkbench.${kind.addLabel}`)" @change="onFileChange(kind.id, $event)" />
+            </div>
+            <div v-if="referenceURLVisible[kind.id]" class="reference-url">
+              <label class="sr-only" :for="`video-reference-url-${kind.id}`">{{ t('videoWorkbench.referenceURL') }}</label>
+              <input :id="`video-reference-url-${kind.id}`" v-model="referenceURLs[kind.id]" type="url" maxlength="8192" placeholder="https://" :disabled="submitting" @keydown.enter.prevent="addReferenceURL(kind.id)" />
+              <button type="button" class="icon-button" :title="t('videoWorkbench.addReferenceURL')" :aria-label="t('videoWorkbench.addReferenceURL')" :disabled="submitting || !referenceURLs[kind.id].trim()" @click="addReferenceURL(kind.id)"><Icon name="plus" size="sm" /></button>
             </div>
             <p v-if="references[kind.id].length > referenceLimit(kind.id)" class="validation-error">{{ t('videoWorkbench.uploadLimit', { max: referenceLimit(kind.id) }) }}</p>
             <p v-if="kind.id === 'images' && modelLimits?.requiresImage && !references.images.length" class="validation-error">{{ t('videoWorkbench.referenceImageRequired') }}</p>
@@ -133,7 +139,7 @@ import { useAppStore } from '@/stores/app'
 import type { ApiKey } from '@/types'
 
 type MediaKind = 'images' | 'videos' | 'audios'
-interface Reference { id: string; file: File; url: string }
+interface Reference { id: string; name: string; file?: File; url: string; remoteURL?: string }
 const { t } = useI18n()
 const authStore = useAuthStore(), appStore = useAppStore()
 const tab = ref<'workbench' | 'tasks'>('workbench')
@@ -151,6 +157,8 @@ const form = reactive({ ...initialForm })
 const modelLimits = computed(() => miniMaxVideoModelLimits(form.model))
 const durations = computed(() => [...(modelLimits.value?.durations ?? [5, 10, 30, 60]), 'custom'] as (number | 'custom')[])
 const references = reactive<Record<MediaKind, Reference[]>>({ images: [], videos: [], audios: [] })
+const referenceURLs = reactive<Record<MediaKind, string>>({ images: '', videos: '', audios: '' })
+const referenceURLVisible = reactive<Record<MediaKind, boolean>>({ images: false, videos: false, audios: false })
 const fileInputs: Partial<Record<MediaKind, HTMLInputElement>> = {}
 const keys = ref<ApiKey[]>([]), models = ref<{ id: string }[]>([])
 const selectedKeyId = ref<number | null>(null)
@@ -260,10 +268,19 @@ function addFiles(kind: MediaKind, files: File[]) {
   for (const file of files) {
     if (references[kind].length >= referenceLimit(kind)) { appStore.showError(t('videoWorkbench.uploadLimit', { max: referenceLimit(kind) })); break }
     if (!accept.includes(file.type) || !file.size) { appStore.showError(t('videoWorkbench.uploadType')); continue }
-    const total = Object.values(references).flat().reduce((sum, ref) => sum + ref.file.size, 0)
+    const total = Object.values(references).flat().reduce((sum, ref) => sum + (ref.file?.size ?? 0), 0)
     if (total + file.size > 47 * 1024 * 1024) { appStore.showError(t('videoWorkbench.uploadSize')); break }
-    references[kind].push({ id: crypto.randomUUID(), file, url: kind === 'images' ? URL.createObjectURL(file) : '' })
+    references[kind].push({ id: crypto.randomUUID(), name: file.name, file, url: kind === 'images' ? URL.createObjectURL(file) : '' })
   }
+}
+function addReferenceURL(kind: MediaKind) {
+  if (submitting.value) return
+  if (references[kind].length >= referenceLimit(kind)) { appStore.showError(t('videoWorkbench.uploadLimit', { max: referenceLimit(kind) })); return }
+  const url = safeWorkbenchLink(referenceURLs[kind].trim())
+  if (!url || url.length > 8192) { appStore.showError(t('videoWorkbench.invalidReferenceURL')); return }
+  references[kind].push({ id: crypto.randomUUID(), name: url, url: '', remoteURL: url })
+  referenceURLs[kind] = ''
+  referenceURLVisible[kind] = false
 }
 function onFileChange(kind: MediaKind, event: Event) { const input = event.target as HTMLInputElement; addFiles(kind, Array.from(input.files || [])); input.value = '' }
 function onImageDrop(event: DragEvent) { addFiles('images', Array.from(event.dataTransfer?.files || [])) }
@@ -285,8 +302,9 @@ async function submit() {
   const snapshot = { images: [...references.images], videos: [...references.videos], audios: [...references.audios] }
   try {
     for (const [kind, field] of [['images', 'referenceImages'], ['videos', 'referenceVideos'], ['audios', 'referenceAudios']] as const) {
-      if (snapshot[kind].length) payload[field] = await Promise.all(snapshot[kind].map(ref => readReference(ref.file)))
+      if (snapshot[kind].length) payload[field] = await Promise.all(snapshot[kind].map(ref => ref.remoteURL ?? readReference(ref.file!)))
     }
+    if (disposed) return
     const result = await submitVideoTask(key, email, payload)
     if (disposed) return
     recentTaskId.value = result.id
@@ -298,6 +316,8 @@ async function submit() {
       for (const { id } of mediaKinds) {
         references[id].forEach(reference => { if (reference.url) URL.revokeObjectURL(reference.url) })
         references[id] = []
+        referenceURLs[id] = ''
+        referenceURLVisible[id] = false
       }
     }
     appStore.showSuccess(t('videoWorkbench.created')); void refreshTasks()
@@ -331,7 +351,7 @@ async function onTabKeydown(event: KeyboardEvent) {
   await nextTick(); document.getElementById(`video-${tab.value}-tab`)?.focus()
 }
 onMounted(() => { void loadKeys(); void refreshTasks(); clockTimer = setInterval(() => { now.value = Math.floor(Date.now() / 1000) }, 1000) })
-onUnmounted(() => { disposed = true; lifecycle.abort(); modelAbort?.abort(); clearTimeout(pollTimer); clearInterval(clockTimer); clearTimeout(refreshAnimationTimer); references.images.forEach(ref => URL.revokeObjectURL(ref.url)) })
+onUnmounted(() => { disposed = true; lifecycle.abort(); modelAbort?.abort(); clearTimeout(pollTimer); clearInterval(clockTimer); clearTimeout(refreshAnimationTimer); references.images.forEach(ref => { if (ref.url) URL.revokeObjectURL(ref.url) }) })
 </script>
 
 <style scoped>
@@ -361,6 +381,8 @@ h2 { font-size: 21px; font-weight: 600; } .activity { gap: 8px; font-size: 12px;
 .reference-item > img { width: 100%; height: 100%; object-fit: cover; border-radius: 8px; }
 .reference-item > span { max-width: 100%; padding: 0 5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 10px; }
 .reference-item > button { position: absolute; top: -5px; right: -5px; display: grid; place-items: center; width: 22px; height: 22px; background: var(--md-sys-color-surface); border: 1px solid var(--md-sys-color-outline); border-radius: 50%; }
+.reference-url { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+.reference-url input { min-width: 0; flex: 1; height: 36px; padding: 6px 10px; border: 1px solid var(--md-sys-color-outline); border-radius: 8px; background: var(--md-sys-color-surface); font-size: 12px; }
 .segmented { display: grid; padding: 4px; gap: 4px; border-radius: 19px; background: var(--md-sys-color-surface-container); } .five { grid-template-columns: repeat(5,minmax(0,1fr)); }
 .segmented button { min-width: 0; min-height: 38px; font-size: 13px; border-radius: 16px; color: var(--md-sys-color-on-surface-variant); }
 .segmented button.selected { background: var(--md-sys-color-surface); color: var(--md-sys-color-on-surface); box-shadow: 0 1px 4px rgb(0 0 0 / .08); font-weight: 600; }

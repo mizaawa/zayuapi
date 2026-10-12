@@ -18,12 +18,31 @@ func (a *Account) MediaProtocol() string {
 	return strings.ToLower(strings.TrimSpace(a.GetCredential("media_protocol")))
 }
 
+func validMediaProtocol(protocol string) bool {
+	switch strings.ToLower(strings.TrimSpace(protocol)) {
+	case "", "sora", "8yes":
+		return true
+	default:
+		return false
+	}
+}
+
 func VideoPrechargeRequestInfo(ctx context.Context, account *Account, body []byte, contentType string) (GrokMediaRequestInfo, error) {
+	if !validMediaProtocol(account.MediaProtocol()) {
+		return GrokMediaRequestInfo{}, fmt.Errorf("unsupported media protocol; select default, sora or 8yes in account settings")
+	}
+	if account.MediaProtocol() == "8yes" {
+		adapted, adaptedType, err := normalizeEightYesVideoRequest(body, contentType)
+		if err != nil {
+			return GrokMediaRequestInfo{}, err
+		}
+		return normalizeEightYesVideoRequestInfo(ParseGrokMediaRequest(adaptedType, adapted)), nil
+	}
 	adapted, err := normalizeVideoProtocolBody(ctx, account, body)
 	if err != nil {
 		return GrokMediaRequestInfo{}, err
 	}
-	if protocol := account.MediaProtocol(); account.Platform == PlatformCustom && protocol != "sora" && protocol != "968" {
+	if protocol := account.MediaProtocol(); account != nil && account.Platform == PlatformCustom && protocol != "sora" {
 		adapted, contentType, err = normalizeCustomVideoForwardBody(GrokMediaEndpointVideosGenerations, adapted, contentType)
 		if err != nil {
 			return GrokMediaRequestInfo{}, err
@@ -38,7 +57,10 @@ func VideoPrechargeRequestInfo(ctx context.Context, account *Account, body []byt
 
 func normalizeVideoProtocolBody(ctx context.Context, account *Account, body []byte) ([]byte, error) {
 	protocol := account.MediaProtocol()
-	if protocol != "sora" && protocol != "968" {
+	if protocol == "8yes" {
+		return normalizeEightYesVideoJSON(body)
+	}
+	if protocol != "sora" {
 		return normalizeMiniMaxVideoWorkbenchBody(ctx, body)
 	}
 	var values map[string]json.RawMessage
@@ -56,14 +78,6 @@ func normalizeVideoProtocolBody(ctx context.Context, account *Account, body []by
 		return ""
 	}
 	set := func(key string, value any) { values[key], _ = json.Marshal(value) }
-	alias := func(to string, from ...string) {
-		for _, field := range from {
-			if len(values[to]) == 0 && len(values[field]) > 0 {
-				values[to] = values[field]
-			}
-			delete(values, field)
-		}
-	}
 	ratio := readString("ratio", "aspect_ratio")
 	if ratio == "" {
 		parts := strings.Split(readString("size"), "x")
@@ -131,91 +145,58 @@ func normalizeVideoProtocolBody(ctx context.Context, account *Account, body []by
 		if protocol == "sora" && strings.HasPrefix(strings.ToLower(readString("model")), "sora-") {
 			duration = 4
 		}
-		if protocol == "968" {
-			switch strings.ToLower(strings.TrimSpace(readString("model"))) {
-			case "sd2.5", "sd2.5-1", "sd2.5-s", "sd2.5-sss":
-				duration = 30
-			case "sd-2.0":
-				duration = 15
-			case "wan3-t", "wan3-ts":
-				duration = 5
-			}
-		}
 	}
-	if protocol == "968" {
-		set("duration", duration)
-		delete(values, "seconds")
-		alias("image_refs", "referenceImages", "reference_images")
-		alias("video_refs", "referenceVideos", "reference_videos")
-		alias("audio_refs", "referenceAudios", "reference_audios")
-		if reference := values["input_reference"]; len(reference) > 0 {
-			var ref struct {
-				ImageURL string `json:"image_url"`
-			}
-			if json.Unmarshal(reference, &ref) != nil || ref.ImageURL == "" {
-				return nil, fmt.Errorf("968 requires an image URL reference")
-			}
-			if len(values["image_refs"]) == 0 {
-				set("image_refs", []string{ref.ImageURL})
-			}
-			delete(values, "input_reference")
-		}
-		set("aspect_ratio", ratio)
-		delete(values, "ratio")
-		delete(values, "size")
-	} else {
-		set("seconds", strconv.Itoa(duration))
-		delete(values, "duration")
-		var images []string
-		for _, field := range []string{"referenceImages", "reference_images", "image_refs"} {
-			if raw := values[field]; len(raw) > 0 {
-				if err := json.Unmarshal(raw, &images); err != nil {
-					return nil, fmt.Errorf("invalid Sora reference images")
-				}
-				delete(values, field)
-			}
-		}
-		if len(images) > 1 {
-			return nil, fmt.Errorf("sora supports one input reference image")
-		}
-		if len(images) == 1 {
-			set("input_reference", map[string]string{"image_url": images[0]})
-		}
-		for _, field := range []string{"referenceVideos", "reference_videos", "video_refs", "referenceAudios", "reference_audios", "audio_refs"} {
-			if raw := values[field]; len(raw) > 0 && string(raw) != "[]" && string(raw) != "null" {
-				return nil, fmt.Errorf("sora creation does not support reference video or audio")
+	set("seconds", strconv.Itoa(duration))
+	delete(values, "duration")
+	var images []string
+	for _, field := range []string{"referenceImages", "reference_images", "image_refs"} {
+		if raw := values[field]; len(raw) > 0 {
+			if err := json.Unmarshal(raw, &images); err != nil {
+				return nil, fmt.Errorf("invalid Sora reference images")
 			}
 			delete(values, field)
 		}
-		if readString("size") == "" && resolution != "" {
-			size, err := videoProtocolPixelSize(ratio, resolution)
+	}
+	if len(images) > 1 {
+		return nil, fmt.Errorf("sora supports one input reference image")
+	}
+	if len(images) == 1 {
+		set("input_reference", map[string]string{"image_url": images[0]})
+	}
+	for _, field := range []string{"referenceVideos", "reference_videos", "video_refs", "referenceAudios", "reference_audios", "audio_refs"} {
+		if raw := values[field]; len(raw) > 0 && string(raw) != "[]" && string(raw) != "null" {
+			return nil, fmt.Errorf("sora creation does not support reference video or audio")
+		}
+		delete(values, field)
+	}
+	if readString("size") == "" && resolution != "" {
+		size, err := videoProtocolPixelSize(ratio, resolution)
+		if err != nil {
+			return nil, err
+		}
+		set("size", size)
+	}
+	// Relay models (including Grok) accept these extensions even when size
+	// is automatic. Native Sora uses only its documented pixel size.
+	if strings.HasPrefix(strings.ToLower(readString("model")), "sora-") {
+		if readString("size") == "" {
+			size, err := videoProtocolPixelSize(ratio, "720p")
 			if err != nil {
 				return nil, err
 			}
 			set("size", size)
 		}
-		// Relay models (including Grok) accept these extensions even when size
-		// is automatic. Native Sora uses only its documented pixel size.
-		if strings.HasPrefix(strings.ToLower(readString("model")), "sora-") {
-			if readString("size") == "" {
-				size, err := videoProtocolPixelSize(ratio, "720p")
-				if err != nil {
-					return nil, err
-				}
-				set("size", size)
-			}
-			switch readString("size") {
-			case "720x1280", "1280x720", "1024x1792", "1792x1024", "1080x1920", "1920x1080":
-			default:
-				return nil, fmt.Errorf("sora requires a supported landscape or portrait size")
-			}
-			delete(values, "resolution")
-			delete(values, "aspect_ratio")
-		} else {
-			set("aspect_ratio", ratio)
+		switch readString("size") {
+		case "720x1280", "1280x720", "1024x1792", "1792x1024", "1080x1920", "1920x1080":
+		default:
+			return nil, fmt.Errorf("sora requires a supported landscape or portrait size")
 		}
-		delete(values, "ratio")
+		delete(values, "resolution")
+		delete(values, "aspect_ratio")
+	} else {
+		set("aspect_ratio", ratio)
 	}
+	delete(values, "ratio")
 	return json.Marshal(values)
 }
 
@@ -243,65 +224,4 @@ func videoProtocolPixelSize(ratio, resolution string) (string, error) {
 		return "", fmt.Errorf("video dimensions exceed provider limits")
 	}
 	return fmt.Sprintf("%dx%d", width, height), nil
-}
-
-func normalize968ImageBody(body []byte, parsed *OpenAIImagesRequest) ([]byte, error) {
-	if parsed.N != 1 {
-		return nil, fmt.Errorf("968 supports one image per request")
-	}
-	if parsed.HasMask {
-		return nil, fmt.Errorf("968 does not support image masks")
-	}
-	var fields map[string]any
-	if json.Unmarshal(body, &fields) != nil {
-		fields = map[string]any{"model": parsed.Model, "prompt": parsed.Prompt}
-	}
-	ratio := parsed.Size
-	if !strings.Contains(ratio, ":") {
-		parts := strings.Split(ratio, "x")
-		if len(parts) == 2 {
-			w, _ := strconv.Atoi(parts[0])
-			h, _ := strconv.Atoi(parts[1])
-			if w > 0 && h > 0 {
-				a, b := w, h
-				for b != 0 {
-					a, b = b, a%b
-				}
-				ratio = fmt.Sprintf("%d:%d", w/a, h/a)
-			}
-		}
-	}
-	if !strings.Contains(ratio, ":") {
-		ratio = "1:1"
-	}
-	fields["size"] = ratio
-	if _, ok := fields["resolution"]; !ok {
-		fields["resolution"] = strings.ToLower(parsed.SizeTier)
-	}
-	if strings.HasSuffix(strings.ToLower(parsed.Model), "-4k") && parsed.Resolution == "" && !parsed.ExplicitSize {
-		fields["resolution"] = "4k"
-	}
-	fields["n"], fields["response_format"] = 1, "url"
-	images := append([]string(nil), parsed.InputImageURLs...)
-	for _, upload := range parsed.Uploads {
-		if len(upload.Data) > 20<<20 {
-			return nil, fmt.Errorf("968 reference images cannot exceed 20 MB")
-		}
-		images = append(images, upload.ModerationDataURL())
-	}
-	if len(images) > 8 {
-		return nil, fmt.Errorf("968 supports at most eight reference images")
-	}
-	if len(images) > 0 {
-		fields["image_urls"] = images
-	}
-	if strings.HasPrefix(strings.ToLower(parsed.Model), "banana-") {
-		delete(fields, "quality")
-	} else if parsed.Quality != "" && parsed.Quality != "auto" {
-		fields["quality"] = parsed.Quality
-	}
-	delete(fields, "images")
-	delete(fields, "aspect_ratio")
-	delete(fields, "stream")
-	return json.Marshal(fields)
 }

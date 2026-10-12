@@ -1218,11 +1218,14 @@ describe('EditAccountModal', () => {
     expect(updateAccountMock).not.toHaveBeenCalled()
 
     await baseUrl.setValue('https://relay.example/v1')
+    expect(wrapper.get('#account-media-protocol').findAll('option').map(option => option.attributes('value'))).toEqual(['', 'sora', '8yes'])
+    await wrapper.get('#account-media-protocol').setValue('8yes')
     await wrapper.get('form#edit-account-form').trigger('submit.prevent')
 
     expect(updateAccountMock).toHaveBeenCalledWith(account.id, expect.objectContaining({
       credentials: expect.objectContaining({
-        base_url: 'https://relay.example/v1'
+        base_url: 'https://relay.example/v1',
+        media_protocol: '8yes'
       })
     }))
   })

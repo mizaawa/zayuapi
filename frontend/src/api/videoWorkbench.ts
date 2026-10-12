@@ -110,7 +110,7 @@ export async function downloadVideoTask(id: string, signal?: AbortSignal): Promi
   return data
 }
 export function safeWorkbenchLink(value: string | undefined): string {
-  if (!value) return ''
+  if (!value || [...value].some(char => char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127)) return ''
   try {
     const url = new URL(value)
     return ['https:', 'http:'].includes(url.protocol) && !url.username && !url.password ? url.href : ''

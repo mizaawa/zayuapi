@@ -751,9 +751,15 @@ func (s *BatchImagePublicService) Cancel(ctx context.Context, owner BatchImageOw
 		}
 		return BatchImageJobToPublic(updated), nil
 	}
+	// Once uploading starts, creation may already be running at the provider.
+	// Wait for its task ID so cancellation can be confirmed before refunding.
+	if job.Status != BatchImageJobStatusCreated {
+		return nil, ErrBatchImageCancelFailed
+	}
 	if err := s.Repo.TransitionBatchImageJobStatus(ctx, job.BatchID, BatchImageJobStatusCancelled, BatchImageTransitionOptions{
-		EventType:    "job_cancelled",
-		EventPayload: map[string]any{"batch_id": job.BatchID},
+		ExpectedStatus: BatchImageJobStatusCreated,
+		EventType:      "job_cancelled",
+		EventPayload:   map[string]any{"batch_id": job.BatchID},
 	}); err != nil {
 		return nil, err
 	}

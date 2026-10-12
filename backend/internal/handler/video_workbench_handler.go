@@ -121,6 +121,9 @@ func parseVideoWorkbenchPayload(body []byte, policy service.VideoWorkbenchRuntim
 }
 
 func validVideoWorkbenchReference(raw, kind string) bool {
+	if service.ValidVideoReferenceURL(raw) {
+		return true
+	}
 	header, encoded, found := strings.Cut(raw, ",")
 	if !found || !strings.HasPrefix(header, "data:") || !strings.HasSuffix(header, ";base64") {
 		return false

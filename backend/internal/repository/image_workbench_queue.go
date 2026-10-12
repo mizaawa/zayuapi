@@ -102,5 +102,5 @@ func (s *imageTaskStore) ExpiredWorkbenchQueue(ctx context.Context, now time.Tim
 }
 
 func (s *imageTaskStore) FailExpiredWorkbenchQueue(ctx context.Context, task *service.ImageTaskRecord, now time.Time, ttl time.Duration) error {
-	return s.saveWorkbench(ctx, task, ttl, now.Unix())
+	return s.saveWorkbench(ctx, task, ttl, now.Unix(), true)
 }

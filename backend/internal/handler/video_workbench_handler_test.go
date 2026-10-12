@@ -345,7 +345,7 @@ func TestVideoWorkbenchPayloadEnforcesMediaLimitsAndSafeFields(t *testing.T) {
 	for _, extra := range []string{
 		`,"referenceImages":["http://127.0.0.1/admin"]`,
 		`,"referenceVideos":["file:///etc/passwd"]`,
-		`,"referenceAudios":["https://public.example/redirect"]`,
+		`,"referenceAudios":["https://metadata.google.internal/audio"]`,
 		`,"referenceImages":["data:image/svg+xml;base64,PHN2Zy8+"]`,
 		`,"referenceVideos":["data:video/mp4;base64,PGh0bWw+c2VjcmV0PC9odG1sPg=="]`,
 		`,"callback_url":"http://127.0.0.1"`,

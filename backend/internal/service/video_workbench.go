@@ -205,16 +205,39 @@ func (s *VideoWorkbenchService) Heartbeat(ctx context.Context, task *VideoWorkbe
 }
 
 func (s *VideoWorkbenchService) Complete(ctx context.Context, task *VideoWorkbenchRecord, content io.Reader) error {
+	current, err := s.store.Get(ctx, task.ID)
+	if err != nil {
+		return err
+	}
+	if current.UserID != task.UserID || current.Workbench.APIKeyID != task.Workbench.APIKeyID {
+		return ErrVideoTaskNotFound
+	}
+	if current.Status == "completed" {
+		return nil
+	}
+	if current.Status != "processing" {
+		return ErrVideoTaskNotFound
+	}
 	retention := s.Runtime(ctx).Retention()
 	size, contentType, err := s.storage.Write(ctx, task.ID, content, retention)
 	if err != nil {
 		return err
 	}
-	finished := *task
+	finished := *current
 	finished.Status, finished.SizeBytes, finished.ContentType = "completed", size, contentType
 	ok, err := s.finishWithRetention(ctx, &finished, 0, retention)
 	if err != nil || !ok {
-		_ = s.storage.Delete(context.WithoutCancel(ctx), task.ID)
+		// A committed finish can lose its Redis response. Preserve the file on
+		// ambiguous errors; the durable expiry marker still bounds retention.
+		checkCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+		stored, checkErr := s.store.Get(checkCtx, task.ID)
+		if checkErr == nil && (stored.Status == "failed" || err == nil && stored.Status != "completed") || errors.Is(checkErr, ErrVideoTaskNotFound) {
+			_ = s.storage.Delete(checkCtx, task.ID)
+		}
+		cancel()
+		if checkErr == nil && stored.Status == "completed" {
+			return nil
+		}
 		if err == nil {
 			err = ErrVideoTaskNotFound
 		}

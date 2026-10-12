@@ -518,7 +518,7 @@ func (r *fakeBatchImageRepository) TransitionBatchImageJobStatus(_ context.Conte
 	if !ok {
 		return ErrBatchImageJobNotFound
 	}
-	if !CanTransitionBatchImageJob(job.Status, toStatus) {
+	if opts.ExpectedStatus != "" && job.Status != opts.ExpectedStatus || !CanTransitionBatchImageJob(job.Status, toStatus) {
 		return ErrBatchImageInvalidTransition
 	}
 	if r.transitionErr != nil {

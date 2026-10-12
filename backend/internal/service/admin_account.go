@@ -362,6 +362,12 @@ func validateCustomAccountCredentials(platform, accountType string, credentials 
 	if strings.TrimSpace(baseURL) == "" {
 		return infraerrors.BadRequest("CUSTOM_BASE_URL_REQUIRED", "custom accounts require a base_url")
 	}
+	if raw, exists := credentials["media_protocol"]; exists {
+		protocol, ok := raw.(string)
+		if !ok || !validMediaProtocol(protocol) {
+			return infraerrors.BadRequest("CUSTOM_MEDIA_PROTOCOL_INVALID", "media protocol must be default, sora or 8yes")
+		}
+	}
 	return nil
 }
 

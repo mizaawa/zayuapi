@@ -56,6 +56,16 @@ describe('image workbench API', () => {
     await expect(downloadWorkbenchImage('expired-task', 0)).rejects.toBe(error)
   })
 
+  it.each(['text/html', 'image/svg+xml', 'application/javascript', 'application/octet-stream'])('rejects unsafe image download MIME type %s', async type => {
+    get.mockResolvedValue({ data: new Blob(['<script>localStorage.clear()</script>'], { type }) })
+    await expect(downloadWorkbenchImage('task', 0)).rejects.toMatchObject({ code: 'INVALID_RESPONSE' })
+  })
+
+  it('rejects an empty image response', async () => {
+    get.mockResolvedValue({ data: new Blob([], { type: 'image/png' }) })
+    await expect(downloadWorkbenchImage('task', 0)).rejects.toMatchObject({ code: 'INVALID_RESPONSE' })
+  })
+
   it('only lists model families executable by the Images gateway, while preserving IDs and labels', async () => {
     fetchMock.mockResolvedValue(jsonResponse({ data: [
       { id: 'gpt-image-2', display_name: 'GPT Image 2' },
@@ -72,6 +82,8 @@ describe('image workbench API', () => {
     expect(fetchMock).toHaveBeenCalledWith('https://gateway.example.com/v1/models?workbench=image', expect.objectContaining({
       headers: { Authorization: `Bearer ${apiKey}`, 'X-Sub2API-User-Email': email },
       cache: 'no-store',
+      redirect: 'error',
+      credentials: 'omit',
     }))
   })
 

@@ -566,6 +566,19 @@ func TestBatchImagePublicService_ListModels(t *testing.T) {
 
 func TestBatchImagePublicService_StatusItemsAndCancel(t *testing.T) {
 	ctx := context.Background()
+	t.Run("cannot refund while provider submission is in flight", func(t *testing.T) {
+		svc, repo, _, provider, _ := newTestBatchImagePublicService(true)
+		owner := testBatchImageOwner()
+		repo.jobs["imgbatch_uploading"] = &BatchImageJob{
+			BatchID: "imgbatch_uploading", UserID: owner.UserID, APIKeyID: &owner.APIKeyID,
+			Provider: BatchImageProviderGeminiAPI, Status: BatchImageJobStatusUploading, EstimatedCost: 1,
+		}
+		_, err := svc.Cancel(ctx, owner, "imgbatch_uploading")
+		require.ErrorIs(t, err, ErrBatchImageCancelFailed)
+		require.Equal(t, BatchImageJobStatusUploading, repo.jobs["imgbatch_uploading"].Status)
+		require.Empty(t, svc.BillingRepo.(*fakeBatchImageBillingRepo).releases)
+		require.Zero(t, provider.cancelCount)
+	})
 
 	t.Run("status is owner scoped and maps public status", func(t *testing.T) {
 		svc, repo, _, _, _ := newTestBatchImagePublicService(true)

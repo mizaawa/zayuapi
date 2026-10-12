@@ -578,7 +578,7 @@ async function loadKeys() {
             (!key.expires_at || Date.parse(key.expires_at) > Date.now()) &&
             key.group?.allow_image_generation &&
             key.group.image_workbench_enabled === true &&
-            ['openai', 'grok', 'composite'].includes(key.group.platform)
+            ['openai', 'grok', 'custom', 'composite'].includes(key.group.platform)
         )
       )
       if (!response.items.length || page >= response.pages) break

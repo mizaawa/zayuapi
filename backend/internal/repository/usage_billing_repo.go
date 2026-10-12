@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"math"
 	"strings"
 	"time"
 
@@ -351,20 +352,21 @@ func (r *usageBillingRepository) claimUsageBillingRequest(ctx context.Context, t
 }
 
 func (r *usageBillingRepository) ReserveBatchImageBalance(ctx context.Context, cmd *service.BatchImageBalanceHoldCommand) (*service.BatchImageBalanceHoldResult, error) {
-	return r.applyBatchImageBalanceHold(ctx, cmd, reserveUsageBillingBatchImageBalance)
+	return r.applyBatchImageBalanceHold(ctx, cmd, "reserve", reserveUsageBillingBatchImageBalance)
 }
 
 func (r *usageBillingRepository) CaptureBatchImageBalance(ctx context.Context, cmd *service.BatchImageBalanceHoldCommand) (*service.BatchImageBalanceHoldResult, error) {
-	return r.applyBatchImageBalanceHold(ctx, cmd, captureUsageBillingBatchImageBalance)
+	return r.applyBatchImageBalanceHold(ctx, cmd, "capture", captureUsageBillingBatchImageBalance)
 }
 
 func (r *usageBillingRepository) ReleaseBatchImageBalance(ctx context.Context, cmd *service.BatchImageBalanceHoldCommand) (*service.BatchImageBalanceHoldResult, error) {
-	return r.applyBatchImageBalanceHold(ctx, cmd, releaseUsageBillingBatchImageBalance)
+	return r.applyBatchImageBalanceHold(ctx, cmd, "release", releaseUsageBillingBatchImageBalance)
 }
 
 func (r *usageBillingRepository) applyBatchImageBalanceHold(
 	ctx context.Context,
 	cmd *service.BatchImageBalanceHoldCommand,
+	operation string,
 	apply func(context.Context, *sql.Tx, *service.BatchImageBalanceHoldCommand) (*service.BatchImageBalanceHoldResult, error),
 ) (_ *service.BatchImageBalanceHoldResult, err error) {
 	if cmd == nil {
@@ -372,6 +374,14 @@ func (r *usageBillingRepository) applyBatchImageBalanceHold(
 	}
 	if r == nil || r.db == nil {
 		return nil, errors.New("usage billing repository db is nil")
+	}
+	if cmd.UserID <= 0 || cmd.APIKeyID <= 0 || strings.TrimSpace(cmd.BatchID) == "" {
+		return nil, service.ErrUsageBillingRequestConflict
+	}
+	for _, amount := range []float64{cmd.HoldAmount, cmd.ActualAmount} {
+		if amount < 0 || math.IsNaN(amount) || math.IsInf(amount, 0) {
+			return nil, errors.New("invalid batch image billing amount")
+		}
 	}
 	cmd.Normalize()
 	if cmd.RequestID == "" {
@@ -387,6 +397,19 @@ func (r *usageBillingRepository) applyBatchImageBalanceHold(
 			_ = tx.Rollback()
 		}
 	}()
+
+	// Capture and release have different dedup IDs but consume the same hold.
+	// Serialize the entire lifecycle before checking either terminal operation.
+	if _, err := tx.ExecContext(ctx, "SELECT pg_advisory_xact_lock($1)", advisoryLockHash("batch_image_billing:"+cmd.BatchID)); err != nil {
+		return nil, err
+	}
+	allowed, err := batchImageHoldOperationAllowed(ctx, tx, cmd, operation)
+	if err != nil {
+		return nil, err
+	}
+	if !allowed {
+		return &service.BatchImageBalanceHoldResult{}, nil
+	}
 
 	applied, err := r.claimUsageBillingRequest(ctx, tx, cmd.RequestID, cmd.APIKeyID, cmd.RequestFingerprint)
 	if err != nil {
@@ -410,6 +433,33 @@ func (r *usageBillingRepository) applyBatchImageBalanceHold(
 	}
 	tx = nil
 	return result, nil
+}
+
+func batchImageHoldOperationAllowed(ctx context.Context, tx *sql.Tx, cmd *service.BatchImageBalanceHoldCommand, operation string) (bool, error) {
+	captured, err := batchImageHoldClaimExists(ctx, tx, service.BatchImageCaptureRequestID(cmd.BatchID), cmd.APIKeyID)
+	if err != nil {
+		return false, err
+	}
+	if captured && operation == "release" {
+		return false, nil
+	}
+	released, err := batchImageHoldClaimExists(ctx, tx, service.BatchImageReleaseRequestID(cmd.BatchID), cmd.APIKeyID)
+	if err != nil {
+		return false, err
+	}
+	if released && operation != "release" || captured && operation == "reserve" {
+		return false, service.ErrUsageBillingRequestConflict
+	}
+	if operation == "capture" && cmd.HoldAmount > 0 {
+		held, err := batchImageHoldClaimExists(ctx, tx, service.BatchImageHoldRequestID(cmd.BatchID), cmd.APIKeyID)
+		if err != nil {
+			return false, err
+		}
+		if !held {
+			return false, service.ErrUsageBillingRequestConflict
+		}
+	}
+	return true, nil
 }
 
 func (r *usageBillingRepository) applyUsageBillingEffects(ctx context.Context, tx *sql.Tx, cmd *service.UsageBillingCommand, result *service.UsageBillingApplyResult) error {

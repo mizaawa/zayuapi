@@ -12,6 +12,7 @@
         :src="imageUrl"
         :alt="task.workbench?.prompt || task.workbench?.model || ''"
         loading="lazy"
+        referrerpolicy="no-referrer"
         @load="onImageLoad"
         @error="imageFailed = true"
       />

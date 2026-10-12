@@ -359,7 +359,7 @@ func (r *batchImageRepository) transitionBatchImageJobStatusWithSQL(ctx context.
 	if err := sqlq.QueryRowContext(ctx, `SELECT status FROM batch_image_jobs WHERE batch_id = $1 FOR UPDATE`, batchID).Scan(&current); err != nil {
 		return translatePersistenceError(err, service.ErrBatchImageJobNotFound, nil)
 	}
-	if !service.CanTransitionBatchImageJob(current, toStatus) {
+	if opts.ExpectedStatus != "" && current != opts.ExpectedStatus || !service.CanTransitionBatchImageJob(current, toStatus) {
 		return service.ErrBatchImageInvalidTransition
 	}
 

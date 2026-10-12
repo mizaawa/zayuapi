@@ -227,12 +227,12 @@ func (s *OpenAIGatewayService) ParseOpenAIImagesRequest(c *gin.Context, body []b
 		return nil, err
 	}
 	req.SizeTier = normalizeOpenAIImageSizeTier(req.Size)
-	if strings.HasSuffix(strings.ToLower(req.Model), "-4k") && is968ImageGenerationModel(req.Model) && req.Resolution == "" && !req.ExplicitSize {
+	if strings.HasSuffix(strings.ToLower(req.Model), "-4k") && isCompatibleImageGenerationModel(req.Model) && req.Resolution == "" && !req.ExplicitSize {
 		req.Resolution = "4k"
 	}
 	if tier, valid := ClassifyImageBillingTier(req.Resolution); valid {
 		req.SizeTier = tier
-	} else if req.Resolution != "" && is968ImageGenerationModel(req.Model) {
+	} else if req.Resolution != "" && isCompatibleImageGenerationModel(req.Model) {
 		return nil, fmt.Errorf("image resolution must be 1k, 2k or 4k")
 	}
 	if req.N < 1 || req.N > 10 {
@@ -483,10 +483,10 @@ func applyOpenAIImagesDefaults(req *OpenAIImagesRequest) {
 }
 
 func isOpenAIImageGenerationModel(model string) bool {
-	return IsGPTImageGenerationModel(model) || isGrokImageGenerationModel(model) || is968ImageGenerationModel(model)
+	return IsGPTImageGenerationModel(model) || isGrokImageGenerationModel(model) || isCompatibleImageGenerationModel(model)
 }
 
-func is968ImageGenerationModel(model string) bool {
+func isCompatibleImageGenerationModel(model string) bool {
 	switch strings.ToLower(strings.TrimSpace(model)) {
 	case "gpt-2.0", "gpt-2.5-fast", "gpt-2.5-pro", "gpt-2.0-4k", "banana-2", "banana-pro":
 		return true
@@ -596,6 +596,12 @@ func (s *OpenAIGatewayService) ForwardImages(
 	if parsed == nil {
 		return nil, fmt.Errorf("parsed images request is required")
 	}
+	if account == nil {
+		return nil, fmt.Errorf("media account is required")
+	}
+	if !validMediaProtocol(account.MediaProtocol()) {
+		return nil, fmt.Errorf("unsupported media protocol; select default, sora or 8yes in account settings")
+	}
 	switch account.Type {
 	case AccountTypeAPIKey:
 		return s.forwardOpenAIImagesAPIKey(ctx, c, account, body, parsed, channelMappedModel)
@@ -639,15 +645,6 @@ func (s *OpenAIGatewayService) forwardOpenAIImagesAPIKey(
 		return nil, err
 	}
 	endpoint := parsed.Endpoint
-	if account.MediaProtocol() == "968" {
-		adapted := *parsed
-		adapted.Model = upstreamModel
-		forwardBody, err = normalize968ImageBody(forwardBody, &adapted)
-		if err != nil {
-			return nil, err
-		}
-		forwardContentType, endpoint = "application/json", openAIImagesGenerationsEndpoint
-	}
 	upstreamCtx, releaseUpstreamCtx := detachStreamUpstreamContext(ctx, parsed.Stream)
 	defer releaseUpstreamCtx()
 

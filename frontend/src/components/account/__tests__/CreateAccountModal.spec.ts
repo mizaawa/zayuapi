@@ -357,6 +357,8 @@ describe('CreateAccountModal OpenAI long-context billing', () => {
     expect(createAccountMock).not.toHaveBeenCalled()
 
     await wrapper.get('input[placeholder="https://api.example.com/v1"]').setValue('https://8yes.cc/v1')
+    expect(wrapper.get('#account-media-protocol').findAll('option').map(option => option.attributes('value'))).toEqual(['', 'sora', '8yes'])
+    await wrapper.get('#account-media-protocol').setValue('8yes')
     await wrapper.get('form#create-account-form').trigger('submit.prevent')
     await flushPromises()
 
@@ -366,6 +368,7 @@ describe('CreateAccountModal OpenAI long-context billing', () => {
       credentials: expect.objectContaining({
         base_url: 'https://8yes.cc/v1',
         api_key: 'sk-custom',
+        media_protocol: '8yes',
       }),
     }))
   })

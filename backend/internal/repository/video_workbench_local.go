@@ -16,10 +16,15 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/service"
 )
 
-type LocalVideoWorkbenchStorage struct{ directory string }
+const videoWorkbenchMaxFileBytes int64 = 1 << 30
+
+type LocalVideoWorkbenchStorage struct {
+	directory string
+	maxBytes  int64
+}
 
 func NewLocalVideoWorkbenchStorage(directory string) *LocalVideoWorkbenchStorage {
-	return &LocalVideoWorkbenchStorage{directory: directory}
+	return &LocalVideoWorkbenchStorage{directory: directory, maxBytes: videoWorkbenchMaxFileBytes}
 }
 
 func ProvideVideoWorkbenchLocalStorage() service.VideoWorkbenchLocalStorage {
@@ -66,7 +71,9 @@ func (s *LocalVideoWorkbenchStorage) Write(ctx context.Context, id string, input
 	if contentType != "video/mp4" && contentType != "video/webm" && contentType != "video/quicktime" {
 		return 0, "", errors.New("upstream content is not a supported video")
 	}
-	if err := root.Mkdir(id, 0700); err != nil && !errors.Is(err, fs.ErrExist) {
+	// A task directory belongs to exactly one writer, including after success.
+	// A duplicate writer must never overwrite or clean up the original output.
+	if err := root.Mkdir(id, 0700); err != nil {
 		return 0, "", err
 	}
 	success := false
@@ -84,13 +91,20 @@ func (s *LocalVideoWorkbenchStorage) Write(ctx context.Context, id string, input
 	if err != nil {
 		return 0, "", err
 	}
-	count, copyErr := io.Copy(file, &videoContextReader{ctx: ctx, reader: reader})
+	limit := s.maxBytes
+	if limit <= 0 {
+		limit = videoWorkbenchMaxFileBytes
+	}
+	count, copyErr := io.Copy(file, io.LimitReader(&videoContextReader{ctx: ctx, reader: reader}, limit+1))
 	closeErr := file.Close()
 	if copyErr != nil {
 		return 0, "", copyErr
 	}
 	if closeErr != nil {
 		return 0, "", closeErr
+	}
+	if count > limit {
+		return 0, "", errors.New("video content exceeds storage limit")
 	}
 	if err := ctx.Err(); err != nil {
 		return 0, "", err
