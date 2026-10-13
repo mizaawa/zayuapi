@@ -36,6 +36,9 @@ type VideoWorkbenchHandler struct {
 
 func NewVideoWorkbenchHandler(tasks *service.VideoWorkbenchService, openAI *OpenAIGatewayHandler) *VideoWorkbenchHandler {
 	h := &VideoWorkbenchHandler{tasks: tasks, openAI: openAI, pollInterval: 5 * time.Second}
+	if openAI != nil && openAI.gatewayService != nil {
+		openAI.gatewayService.SetMediaBillingVideoWorkbench(tasks)
+	}
 	h.execute = func(c *gin.Context, operation string) {
 		switch operation {
 		case "create":
@@ -229,6 +232,13 @@ func (h *VideoWorkbenchHandler) Submit(c *gin.Context) {
 		response.ErrorFrom(c, err)
 		return
 	}
+	if h.openAI != nil && h.openAI.gatewayService != nil {
+		if err := h.openAI.gatewayService.BindMediaWorkbenchTask(c.Request.Context(), mediaPrecharge(c), task.ID); err != nil {
+			h.fail(task, "interrupted")
+			response.Error(c, http.StatusServiceUnavailable, "Video task prepayment could not be persisted")
+			return
+		}
+	}
 	taskCtx, _, cancel := newAsyncImageContext(c, body, service.VideoWorkbenchQueueTimeout)
 	transferred = true
 	c.JSON(http.StatusAccepted, task.VideoWorkbenchTask)
@@ -236,6 +246,17 @@ func (h *VideoWorkbenchHandler) Submit(c *gin.Context) {
 }
 
 func (h *VideoWorkbenchHandler) run(task *service.VideoWorkbenchRecord, c *gin.Context, body []byte, cancel context.CancelFunc) {
+	var completedBody []byte
+	defer func() {
+		if h.openAI == nil || h.openAI.gatewayService == nil {
+			return
+		}
+		ctx, finalizeCancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer finalizeCancel()
+		if err := h.openAI.gatewayService.FinalizeMediaWorkbenchVideo(ctx, mediaPrecharge(c), completedBody); err != nil {
+			logger.L().Error("video_workbench.billing_finalization_pending", zap.String("task_id", task.ID), zap.Error(err))
+		}
+	}()
 	defer h.openAI.refundUndispatchedWorkbench(c)
 	stopPrepaymentLease := h.openAI.keepWorkbenchPrepayment(c)
 	defer stopPrepaymentLease()
@@ -313,6 +334,13 @@ func (h *VideoWorkbenchHandler) run(task *service.VideoWorkbenchRecord, c *gin.C
 		}
 		if status.Code == http.StatusNotFound || status.Code == http.StatusUnauthorized || status.Code == http.StatusForbidden {
 			h.fail(task, videoWorkbenchErrorCode(status.Body.Bytes(), status.Code, "generation_failed"))
+			return
+		}
+	}
+	completedBody = stateBody
+	if h.openAI != nil && h.openAI.gatewayService != nil {
+		if err := h.openAI.gatewayService.PrepareMediaWorkbenchVideoDelivery(ctx, mediaPrecharge(c), completedBody); err != nil {
+			h.fail(task, "interrupted")
 			return
 		}
 	}

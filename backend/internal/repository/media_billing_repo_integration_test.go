@@ -5,6 +5,7 @@ package repository
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -53,6 +54,104 @@ func TestMediaPrechargeConcurrentBalanceAndRefund(t *testing.T) {
 	require.InDelta(t, 0.10, balance, 1e-8)
 	require.NoError(t, integrationDB.QueryRow(`SELECT quota_used FROM api_keys WHERE id=$1`, key.ID).Scan(&quota))
 	require.Zero(t, quota)
+}
+
+func TestVideoWorkbenchDeliveryBillingDurability(t *testing.T) {
+	ctx := context.Background()
+	client := testEntClient(t)
+	repo := NewUsageBillingRepository(client, integrationDB).(service.MediaBillingRepository)
+	deliveryRepo := repo.(service.MediaWorkbenchBillingRepository)
+	user := mustCreateUser(t, client, &service.User{Email: uuid.NewString() + "@video-delivery.test", PasswordHash: "hash", Balance: 2, Status: service.StatusActive})
+	key := mustCreateApiKey(t, client, &service.APIKey{UserID: user.ID, Key: "sk-" + uuid.NewString(), Name: "delivery", Status: service.StatusAPIKeyActive, Quota: 10})
+	account := mustCreateAccount(t, client, &service.Account{Name: "delivery-" + uuid.NewString(), Type: service.AccountTypeAPIKey})
+	newHold := func() *service.MediaBillingReservation {
+		id := "media:" + uuid.NewString()
+		mode, seconds := string(service.BillingModeVideo), 5
+		r := &service.MediaBillingReservation{ID: id, WorkbenchKind: "video", WorkbenchDelivery: true, Quote: service.MediaBillingQuote{
+			Command: service.UsageBillingCommand{RequestID: id, UserID: user.ID, APIKeyID: key.ID, AccountID: account.ID, AccountType: service.AccountTypeAPIKey, BalanceCost: .6, APIKeyQuotaCost: .6, ChargedAt: time.Now()},
+			Usage:   service.UsageLog{RequestID: id, UserID: user.ID, APIKeyID: key.ID, AccountID: account.ID, Model: "grok-imagine-video", ActualCost: .6, TotalCost: .6, BillingMode: &mode, VideoCount: 1, VideoDurationSeconds: &seconds, CreatedAt: time.Now()},
+		}}
+		require.NoError(t, repo.ReserveMedia(ctx, r))
+		localID := "vidtask_" + strings.ReplaceAll(uuid.NewString(), "-", "")
+		require.ErrorIs(t, deliveryRepo.BindMediaWorkbenchTask(ctx, r.ID, localID, user.ID+1, key.ID), service.ErrUsageBillingRequestConflict)
+		require.NoError(t, deliveryRepo.BindMediaWorkbenchTask(ctx, r.ID, localID, user.ID, key.ID))
+		require.NoError(t, repo.DispatchMediaQueue(ctx, r.ID, user.ID, key.ID, account.ID))
+		require.NoError(t, repo.BindMediaTask(ctx, r.ID, "upstream-"+uuid.NewString(), service.GrokMediaEndpointVideosGenerations))
+		return r
+	}
+	failed, delivered := newHold(), newHold()
+	final := delivered.Quote
+	final.Command.BalanceCost, final.Command.APIKeyQuotaCost, final.Command.RequestFingerprint = .36, .36, ""
+	final.Usage.ActualCost, final.Usage.TotalCost = .36, .36
+	for _, r := range []*service.MediaBillingReservation{failed, delivered} {
+		quote := r.Quote
+		quote.Command.BalanceCost, quote.Command.APIKeyQuotaCost, quote.Command.RequestFingerprint = .36, .36, ""
+		require.NoError(t, deliveryRepo.StageMediaWorkbenchVideoOutcome(ctx, r.ID, &quote))
+		_, err := repo.SettleMedia(ctx, r.ID, &quote.Command)
+		require.ErrorIs(t, err, service.ErrUsageBillingRequestConflict, "provider completion alone cannot settle a workbench task")
+	}
+	var balance, quota float64
+	require.NoError(t, integrationDB.QueryRow(`SELECT balance FROM users WHERE id=$1`, user.ID).Scan(&balance))
+	require.InDelta(t, .8, balance, 1e-8)
+	items, err := repo.PendingMedia(ctx, 1000)
+	require.NoError(t, err)
+	for _, r := range []*service.MediaBillingReservation{failed, delivered} {
+		var recovered *service.MediaBillingReservation
+		for _, item := range items {
+			if item.ID == r.ID {
+				recovered = item
+			}
+		}
+		require.NotNil(t, recovered)
+		require.True(t, recovered.WorkbenchDelivery)
+		require.True(t, service.ValidVideoWorkbenchTaskID(recovered.WorkbenchTaskID))
+		require.NotNil(t, recovered.VideoOutcome)
+		require.Nil(t, recovered.FinalQuote, "the persisted candidate must remain refundable")
+		require.InDelta(t, .36, recovered.VideoOutcome.Command.BalanceCost, 1e-8)
+	}
+	// A content 403 can refund even though the provider already completed.
+	require.NoError(t, repo.StageMediaOutcome(ctx, failed.ID, nil))
+	for range 3 {
+		_, err = repo.RefundMedia(ctx, failed.ID)
+		require.NoError(t, err)
+	}
+	// A successful local save stages its terminal outcome before ledger writes.
+	require.NoError(t, repo.StageMediaOutcome(ctx, delivered.ID, &final))
+	_, err = repo.RefundMedia(ctx, delivered.ID)
+	require.ErrorIs(t, err, service.ErrUsageBillingRequestConflict)
+	_, err = integrationDB.Exec(`UPDATE media_billing_reservations SET next_check_at=NOW() WHERE id=$1`, delivered.ID)
+	require.NoError(t, err)
+	items, err = repo.PendingMedia(ctx, 1000)
+	require.NoError(t, err)
+	var recovered *service.MediaBillingReservation
+	for _, item := range items {
+		if item.ID == delivered.ID {
+			recovered = item
+		}
+	}
+	require.NotNil(t, recovered)
+	require.NotNil(t, recovered.FinalQuote)
+	for i := range 3 {
+		result, err := repo.SettleMedia(ctx, recovered.ID, &recovered.FinalQuote.Command)
+		require.NoError(t, err)
+		require.Equal(t, i == 0, result.Applied)
+	}
+	require.NoError(t, integrationDB.QueryRow(`SELECT balance FROM users WHERE id=$1`, user.ID).Scan(&balance))
+	require.NoError(t, integrationDB.QueryRow(`SELECT quota_used FROM api_keys WHERE id=$1`, key.ID).Scan(&quota))
+	require.InDelta(t, 1.64, balance, 1e-8)
+	require.InDelta(t, .36, quota, 1e-8)
+	for _, r := range []*service.MediaBillingReservation{failed, delivered} {
+		var count int
+		var stage string
+		require.NoError(t, integrationDB.QueryRow(`SELECT COUNT(*) FROM media_billing_events WHERE reservation_id=$1`, r.ID).Scan(&count))
+		require.Equal(t, 3, count)
+		require.NoError(t, integrationDB.QueryRow(`SELECT stage FROM media_billing_events WHERE reservation_id=$1 ORDER BY ordinal DESC LIMIT 1`, r.ID).Scan(&stage))
+		if r.ID == failed.ID {
+			require.Equal(t, "refunded", stage)
+		} else {
+			require.Equal(t, "settled", stage)
+		}
+	}
 }
 
 func TestMediaWorkbenchPaymentEventsAndStatistics(t *testing.T) {

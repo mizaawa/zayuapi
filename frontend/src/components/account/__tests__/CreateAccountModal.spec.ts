@@ -339,7 +339,10 @@ describe('CreateAccountModal OpenAI long-context billing', () => {
     expect(createOpenAICodexPATMock.mock.calls[0]?.[0]?.extra?.openai_long_context_billing_enabled).toBe(false)
   })
 
-  it('creates Custom accounts through the only available API Key path and requires Base URL', async () => {
+  it.each([
+    ['8yes', 'https://8yes.cc/v1'],
+    ['openai', 'https://momoapi.xin/v1'],
+  ])('creates Custom %s video accounts through the API Key path and requires Base URL', async (protocol, baseUrl) => {
     createAccountMock.mockResolvedValue({ id: 42, platform: 'custom', type: 'apikey' })
     const wrapper = mountModal()
 
@@ -356,9 +359,9 @@ describe('CreateAccountModal OpenAI long-context billing', () => {
     await flushPromises()
     expect(createAccountMock).not.toHaveBeenCalled()
 
-    await wrapper.get('input[placeholder="https://api.example.com/v1"]').setValue('https://8yes.cc/v1')
-    expect(wrapper.get('#account-media-protocol').findAll('option').map(option => option.attributes('value'))).toEqual(['', 'sora', '8yes'])
-    await wrapper.get('#account-media-protocol').setValue('8yes')
+    await wrapper.get('input[placeholder="https://api.example.com/v1"]').setValue(baseUrl)
+    expect(wrapper.get('#account-media-protocol').findAll('option').map(option => option.attributes('value'))).toEqual(['', 'openai', 'sora', '8yes'])
+    await wrapper.get('#account-media-protocol').setValue(protocol)
     await wrapper.get('form#create-account-form').trigger('submit.prevent')
     await flushPromises()
 
@@ -366,9 +369,9 @@ describe('CreateAccountModal OpenAI long-context billing', () => {
       platform: 'custom',
       type: 'apikey',
       credentials: expect.objectContaining({
-        base_url: 'https://8yes.cc/v1',
+        base_url: baseUrl,
         api_key: 'sk-custom',
-        media_protocol: '8yes',
+        media_protocol: protocol,
       }),
     }))
   })

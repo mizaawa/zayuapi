@@ -543,7 +543,7 @@ func (s *AccountTestService) testOpenAIAccountConnection(c *gin.Context, account
 	// Keep the original public model's capability when mapping to an opaque alias.
 	if mode == AccountTestModeImage || isOpenAIImageModel(modelID) || isOpenAIImageModel(testModelID) {
 		if !validMediaProtocol(account.MediaProtocol()) {
-			return s.sendErrorAndEnd(c, "Unsupported media protocol; select default, sora or 8yes in account settings")
+			return s.sendErrorAndEnd(c, "Unsupported media protocol; select default, openai, sora or 8yes in account settings")
 		}
 		imagePrompt := strings.TrimSpace(prompt)
 		if imagePrompt == "" {

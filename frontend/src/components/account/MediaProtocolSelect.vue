@@ -3,6 +3,7 @@
     <label class="input-label" for="account-media-protocol">{{ t('videoWorkbench.protocol') }}</label>
     <select id="account-media-protocol" v-model="model" class="input">
       <option value="">{{ t('videoWorkbench.protocolCompatible') }}</option>
+      <option value="openai">{{ t('videoWorkbench.protocolOpenAI') }}</option>
       <option value="sora">OpenAI Sora</option>
       <option value="8yes">8yes</option>
     </select>

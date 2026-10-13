@@ -49,6 +49,9 @@ func TestMain(m *testing.M) {
 		log.Printf("failed to init timezone: %v", err)
 		os.Exit(1)
 	}
+	if dsn := strings.TrimSpace(os.Getenv("SUB2API_TEST_POSTGRES_DSN")); dsn != "" {
+		os.Exit(runExternalIntegration(m, ctx, dsn))
+	}
 
 	if !dockerIsAvailable(ctx) {
 		// In CI we expect Docker to be available so integration tests should fail loudly.
@@ -132,6 +135,35 @@ func TestMain(m *testing.M) {
 	_ = integrationDB.Close()
 
 	os.Exit(code)
+}
+
+// Explicit local test services keep database integration tests usable without Docker.
+func runExternalIntegration(m *testing.M, ctx context.Context, dsn string) int {
+	redisURL := strings.TrimSpace(os.Getenv("SUB2API_TEST_REDIS_URL"))
+	redisOptions, err := redisclient.ParseURL(redisURL)
+	if err != nil {
+		log.Printf("SUB2API_TEST_REDIS_URL must identify the external test Redis instance: %v", err)
+		return 1
+	}
+	integrationDB, err = openSQLWithRetry(ctx, dsn, 30*time.Second)
+	if err != nil {
+		log.Printf("failed to connect to external test PostgreSQL: %v", err)
+		return 1
+	}
+	defer integrationDB.Close()
+	if err := ApplyMigrations(ctx, integrationDB); err != nil {
+		log.Printf("failed to migrate external test PostgreSQL: %v", err)
+		return 1
+	}
+	integrationEntClient = dbent.NewClient(dbent.Driver(entsql.OpenDB(dialect.Postgres, integrationDB)))
+	defer integrationEntClient.Close()
+	integrationRedis = redisclient.NewClient(redisOptions)
+	defer integrationRedis.Close()
+	if err := integrationRedis.Ping(ctx).Err(); err != nil {
+		log.Printf("failed to connect to external test Redis: %v", err)
+		return 1
+	}
+	return m.Run()
 }
 
 func dockerIsAvailable(ctx context.Context) bool {

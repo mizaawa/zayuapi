@@ -268,7 +268,10 @@ func parseGrokMediaJSONRequest(body []byte, info *GrokMediaRequestInfo) {
 	appendJSONImageURLs(gjson.GetBytes(body, "referenceImages"))
 	appendJSONImageURLs(gjson.GetBytes(body, "image_refs"))
 	appendJSONImageURLs(gjson.GetBytes(body, "input_reference"))
-	for _, field := range []string{"referenceVideos", "reference_videos", "video_refs"} {
+	appendJSONImageURLs(gjson.GetBytes(body, "reference_image_urls"))
+	appendJSONImageURLs(gjson.GetBytes(body, "first_frame_image_url"))
+	appendJSONImageURLs(gjson.GetBytes(body, "last_frame_image_url"))
+	for _, field := range []string{"referenceVideos", "reference_videos", "video_refs", "reference_video_urls"} {
 		value := gjson.GetBytes(body, field)
 		if !value.Exists() {
 			continue
@@ -767,7 +770,7 @@ func (s *OpenAIGatewayService) ForwardGrokMedia(
 		return nil, fmt.Errorf("account platform %s is not supported for media", account.Platform)
 	}
 	if endpoint.IsVideoGenerationRequest() && !validMediaProtocol(account.MediaProtocol()) {
-		return nil, fmt.Errorf("unsupported media protocol; select default, sora or 8yes in account settings")
+		return nil, fmt.Errorf("unsupported media protocol; select default, openai, sora or 8yes in account settings")
 	}
 	if endpoint.IsVideoGenerationRequest() {
 		if err := validateVideoBillingFields(body, contentType); err != nil {
@@ -797,7 +800,7 @@ func (s *OpenAIGatewayService) ForwardGrokMedia(
 			if err != nil {
 				return nil, err
 			}
-		} else if protocol := account.MediaProtocol(); endpoint == GrokMediaEndpointVideosGenerations && protocol == "sora" {
+		} else if protocol := account.MediaProtocol(); endpoint == GrokMediaEndpointVideosGenerations && (protocol == "sora" || protocol == "openai") {
 			// Normalize explicit provider defaults before parsing usage so
 			// forwarding, precharge and final billing agree on the parameters.
 			body, err = normalizeVideoProtocolBody(ctx, account, body)
@@ -864,7 +867,7 @@ func (s *OpenAIGatewayService) ForwardGrokMedia(
 			}
 		}
 	}
-	if protocol := account.MediaProtocol(); account.Platform == PlatformCustom && endpoint == GrokMediaEndpointVideosGenerations && protocol != "sora" && protocol != "8yes" {
+	if protocol := account.MediaProtocol(); account.Platform == PlatformCustom && endpoint == GrokMediaEndpointVideosGenerations && protocol != "sora" && protocol != "8yes" && protocol != "openai" {
 		// MiniMax workbench metadata is built after extracting the original
 		// reference and duration metadata used for billing and audit.
 		body, err = normalizeVideoProtocolBody(ctx, account, body)
@@ -1126,33 +1129,28 @@ func (s *OpenAIGatewayService) forwardGrokMediaVideoContent(
 	if contentResp == nil {
 		return nil, fmt.Errorf("grok media content upstream returned an empty response")
 	}
-	if contentResp.StatusCode >= 300 && contentResp.StatusCode < 400 && (account.MediaProtocol() == "8yes" || account.MediaProtocol() == "sora") {
-		location, locationErr := contentResp.Location()
-		if locationErr != nil {
-			// Test transports and some adapters omit Response.Request.
-			base, _ := url.Parse(contentURL)
-			location, locationErr = base.Parse(contentResp.Header.Get("Location"))
+	if account.Platform == PlatformCustom && (account.MediaProtocol() == "sora" || account.MediaProtocol() == "openai") && ((contentResp.StatusCode >= 400 && contentResp.StatusCode != http.StatusRequestedRangeNotSatisfiable) || isVideoContentJSONResponse(contentResp)) {
+		fallbackResp, fallbackErr := s.customMediaVideoContentFallback(upstreamCtx, account, token, requestID, contentReq, contentResp)
+		if fallbackErr != nil {
+			_ = contentResp.Body.Close()
+			return nil, fallbackErr
 		}
+		if fallbackResp != nil {
+			_ = contentResp.Body.Close()
+			contentResp = fallbackResp
+		}
+	}
+	if contentResp.StatusCode >= 300 && contentResp.StatusCode < 400 && account.Platform == PlatformCustom && (account.MediaProtocol() == "8yes" || account.MediaProtocol() == "sora" || account.MediaProtocol() == "openai") {
+		base := contentReq.URL
+		if contentResp.Request != nil {
+			base = contentResp.Request.URL
+		}
+		location, locationErr := resolveVideoContentDownloadURL(contentResp.Header.Get("Location"), base)
 		_ = contentResp.Body.Close()
-		if locationErr != nil || location == nil || location.Scheme != "https" || validateImageDownloadURL(location) != nil {
+		if locationErr != nil {
 			return nil, fmt.Errorf("unsafe video content redirect")
 		}
-		download, buildErr := http.NewRequestWithContext(upstreamCtx, http.MethodGet, location.String(), nil)
-		if buildErr != nil {
-			return nil, fmt.Errorf("invalid video content redirect")
-		}
-		if value := contentReq.Header.Get("Range"); value != "" {
-			download.Header.Set("Range", value)
-		}
-		client := newSSRFSafeHTTPClient(15 * time.Minute)
-		client.CheckRedirect = func(next *http.Request, via []*http.Request) error {
-			if len(via) >= 5 || next.URL.Scheme != "https" {
-				return fmt.Errorf("unsafe video content redirect")
-			}
-			return validateImageDownloadURL(next.URL)
-		}
-		// A CDN never receives the provider key or account header overrides.
-		contentResp, err = client.Do(download)
+		contentResp, err = s.customMediaVideoContentDownload(upstreamCtx, account, token, contentReq, location.String())
 		if err != nil {
 			return nil, fmt.Errorf("video content download failed")
 		}
@@ -1164,6 +1162,9 @@ func (s *OpenAIGatewayService) forwardGrokMediaVideoContent(
 	}
 	if contentResp.StatusCode >= 400 && contentResp.StatusCode != http.StatusRequestedRangeNotSatisfiable {
 		return s.handleGrokMediaErrorResponse(ctx, contentResp, c, account, contentRequestID, "")
+	}
+	if account.Platform == PlatformCustom && isVideoContentJSONResponse(contentResp) {
+		return nil, fmt.Errorf("video content upstream returned JSON instead of a video file")
 	}
 
 	if account.Platform == PlatformGrok {

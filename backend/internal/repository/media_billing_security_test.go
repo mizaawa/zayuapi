@@ -14,6 +14,7 @@ func TestMediaSettlementTerminalStateProtection(t *testing.T) {
 	for _, tc := range []struct {
 		name, state                                 string
 		refund, refundPending, finalQuote, conflict bool
+		delivery                                    bool
 	}{
 		{name: "repeat-settlement", state: "settled"},
 		{name: "settlement-after-refund", state: "refunded", conflict: true},
@@ -21,6 +22,7 @@ func TestMediaSettlementTerminalStateProtection(t *testing.T) {
 		{name: "repeat-refund", state: "refunded", refund: true},
 		{name: "refund-after-settlement", state: "settled", refund: true},
 		{name: "refund-after-staged-success", state: "pending", refund: true, finalQuote: true, conflict: true},
+		{name: "workbench-before-delivery", state: "pending", delivery: true, conflict: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			db, mock, err := sqlmock.New()
@@ -28,6 +30,7 @@ func TestMediaSettlementTerminalStateProtection(t *testing.T) {
 			t.Cleanup(func() { _ = db.Close() })
 			repo := &usageBillingRepository{db: db}
 			reservation := &service.MediaBillingReservation{ID: "media:state", MediaProtocol: "8yes", Quote: service.MediaBillingQuote{Command: service.UsageBillingCommand{RequestID: "media:state", UserID: 7, APIKeyID: 9, BalanceCost: 1}}}
+			reservation.WorkbenchDelivery = tc.delivery
 			encoded, err := json.Marshal(reservation)
 			require.NoError(t, err)
 			var final []byte

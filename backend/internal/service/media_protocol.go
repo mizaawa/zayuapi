@@ -20,7 +20,7 @@ func (a *Account) MediaProtocol() string {
 
 func validMediaProtocol(protocol string) bool {
 	switch strings.ToLower(strings.TrimSpace(protocol)) {
-	case "", "sora", "8yes":
+	case "", "openai", "sora", "8yes":
 		return true
 	default:
 		return false
@@ -32,7 +32,7 @@ func VideoPrechargeRequestInfo(ctx context.Context, account *Account, body []byt
 		return GrokMediaRequestInfo{}, err
 	}
 	if !validMediaProtocol(account.MediaProtocol()) {
-		return GrokMediaRequestInfo{}, fmt.Errorf("unsupported media protocol; select default, sora or 8yes in account settings")
+		return GrokMediaRequestInfo{}, fmt.Errorf("unsupported media protocol; select default, openai, sora or 8yes in account settings")
 	}
 	if account.MediaProtocol() == "8yes" {
 		adapted, adaptedType, err := normalizeEightYesVideoRequest(body, contentType)
@@ -45,7 +45,7 @@ func VideoPrechargeRequestInfo(ctx context.Context, account *Account, body []byt
 	if err != nil {
 		return GrokMediaRequestInfo{}, err
 	}
-	if protocol := account.MediaProtocol(); account != nil && account.Platform == PlatformCustom && protocol != "sora" {
+	if protocol := account.MediaProtocol(); account != nil && account.Platform == PlatformCustom && protocol != "sora" && protocol != "openai" {
 		adapted, contentType, err = normalizeCustomVideoForwardBody(GrokMediaEndpointVideosGenerations, adapted, contentType)
 		if err != nil {
 			return GrokMediaRequestInfo{}, err
@@ -67,6 +67,9 @@ func normalizeSoraVideoRequestInfo(info GrokMediaRequestInfo) GrokMediaRequestIn
 
 func normalizeVideoProtocolBody(ctx context.Context, account *Account, body []byte) ([]byte, error) {
 	protocol := account.MediaProtocol()
+	if protocol == "openai" {
+		return normalizeOpenAIVideoJSON(body)
+	}
 	if protocol == "8yes" {
 		return normalizeEightYesVideoJSON(body)
 	}

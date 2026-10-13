@@ -1,6 +1,7 @@
 export default {
   videoWorkbench: {
-    protocol: 'Image and video protocol', protocolCompatible: 'Default compatible protocol', protocolHint: 'Match the provider documentation. Sora and 8yes use /v1/videos. For 8yes, the model name determines resolution.',
+    protocol: 'Image and video protocol', protocolCompatible: 'Default compatible protocol', protocolOpenAI: 'OpenAI Video (/v1/videos)',
+    protocolHint: 'Match the provider documentation. OpenAI Video uses JSON duration/resolution parameters. Sora uses seconds/size. For 8yes, the model name determines resolution.',
     title: 'Video Workbench', navLabel: 'Video Generation', workbench: 'Workbench', tasks: 'Tasks',
     guide: 'Tutorial', documentation: 'API Docs', prompt: 'Prompt',
     promptPlaceholder: 'Describe your video...', apiKey: 'API key', model: 'Model',

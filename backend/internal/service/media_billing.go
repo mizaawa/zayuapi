@@ -31,12 +31,21 @@ type MediaBillingReservation struct {
 	MediaProtocol string            `json:"media_protocol,omitempty"`
 	// Resolution quotes retain the price at admission even if an administrator
 	// edits group/channel prices while an asynchronous job is running.
-	VideoPrices     map[string]MediaBillingQuote `json:"video_prices,omitempty"`
-	FinalQuote      *MediaBillingQuote           `json:"-"`
-	RefundPending   bool                         `json:"-"`
-	WorkbenchKind   string                       `json:"workbench_kind,omitempty"`
-	QueueLeaseUntil time.Time                    `json:"-"`
-	Dispatched      bool                         `json:"-"`
+	VideoPrices   map[string]MediaBillingQuote `json:"video_prices,omitempty"`
+	FinalQuote    *MediaBillingQuote           `json:"-"`
+	RefundPending bool                         `json:"-"`
+	WorkbenchKind string                       `json:"workbench_kind,omitempty"`
+	// Only new workbench reservations wait for a locally downloadable result.
+	WorkbenchDelivery bool               `json:"workbench_delivery,omitempty"`
+	WorkbenchTaskID   string             `json:"workbench_task_id,omitempty"`
+	VideoOutcome      *MediaBillingQuote `json:"video_outcome,omitempty"`
+	QueueLeaseUntil   time.Time          `json:"-"`
+	Dispatched        bool               `json:"-"`
+}
+
+type MediaWorkbenchBillingRepository interface {
+	BindMediaWorkbenchTask(context.Context, string, string, int64, int64) error
+	StageMediaWorkbenchVideoOutcome(context.Context, string, *MediaBillingQuote) error
 }
 
 type MediaBillingRepository interface {
@@ -72,12 +81,16 @@ func (s *OpenAIGatewayService) PrechargeMedia(ctx context.Context, input *OpenAI
 		return nil, errors.New("media price is unavailable")
 	}
 	reservation := &MediaBillingReservation{ID: copyInput.BillingRequestID, Quote: *quote, WorkbenchKind: input.WorkbenchKind, MediaProtocol: input.Account.MediaProtocol()}
+	reservation.WorkbenchDelivery = input.WorkbenchKind == "video"
 	if input.APIKey.GroupID != nil {
 		reservation.GroupID = *input.APIKey.GroupID
 	}
 	if input.Result.VideoCount > 0 && reservation.MediaProtocol != "8yes" {
 		reservation.VideoPrices = map[string]MediaBillingQuote{}
 		for _, resolution := range []string{"", "480p", "720p", "1080p", "2k", "4k"} {
+			if isCustomVideoBillingRequest(input.APIKey, input.Account) && s.ValidateCustomVideoPricing(ctx, input.APIKey, input.Result.Model, resolution) != nil {
+				continue
+			}
 			result := *input.Result
 			result.VideoResolution = resolution
 			copyInput.Result = &result
@@ -222,6 +235,108 @@ func (s *OpenAIGatewayService) BindMediaTask(ctx context.Context, reservation *M
 	return repo.BindMediaTask(ctx, reservation.ID, taskID, endpoint)
 }
 
+func (s *OpenAIGatewayService) SetMediaBillingVideoWorkbench(tasks *VideoWorkbenchService) {
+	s.mediaBillingVideoWorkbench.Store(tasks)
+}
+
+func (s *OpenAIGatewayService) BindMediaWorkbenchTask(ctx context.Context, r *MediaBillingReservation, taskID string) error {
+	if r == nil || !r.WorkbenchDelivery {
+		return nil
+	}
+	if !ValidVideoWorkbenchTaskID(taskID) {
+		return ErrVideoTaskNotFound
+	}
+	repo, ok := s.usageBillingRepo.(MediaWorkbenchBillingRepository)
+	if !ok {
+		return ErrBillingServiceUnavailable
+	}
+	if err := repo.BindMediaWorkbenchTask(ctx, r.ID, taskID, r.Quote.Command.UserID, r.Quote.Command.APIKeyID); err != nil {
+		return err
+	}
+	r.WorkbenchTaskID = taskID
+	return nil
+}
+
+func (s *OpenAIGatewayService) PrepareMediaWorkbenchVideoDelivery(ctx context.Context, r *MediaBillingReservation, body []byte) error {
+	if r == nil || !r.WorkbenchDelivery {
+		return nil
+	}
+	quote, complete := mediaVideoStatusQuote(r, body)
+	if !complete {
+		return fmt.Errorf("video generation is not completed")
+	}
+	repo, ok := s.usageBillingRepo.(MediaWorkbenchBillingRepository)
+	if !ok {
+		return ErrBillingServiceUnavailable
+	}
+	if err := repo.StageMediaWorkbenchVideoOutcome(ctx, r.ID, &quote); err != nil {
+		return err
+	}
+	r.VideoOutcome = &quote
+	return nil
+}
+
+// The local terminal state arbitrates completion against cleanup and failure.
+// An upstream success is only a price snapshot until the file is delivered.
+func (s *OpenAIGatewayService) FinalizeMediaWorkbenchVideo(ctx context.Context, r *MediaBillingReservation, body []byte) error {
+	if r == nil || !r.WorkbenchDelivery {
+		return nil
+	}
+	copyReservation := *r
+	if quote, complete := mediaVideoStatusQuote(r, body); complete {
+		copyReservation.VideoOutcome = &quote
+	}
+	return s.reconcileMediaWorkbenchVideo(ctx, &copyReservation)
+}
+
+func (s *OpenAIGatewayService) reconcileMediaWorkbenchVideo(ctx context.Context, r *MediaBillingReservation) error {
+	if r.WorkbenchTaskID == "" {
+		return s.RefundMediaQueue(ctx, r.ID, true)
+	}
+	tasks := s.mediaBillingVideoWorkbench.Load()
+	if tasks == nil || tasks.store == nil {
+		return ErrBillingServiceUnavailable
+	}
+	task, err := tasks.store.Get(ctx, r.WorkbenchTaskID)
+	if errors.Is(err, ErrVideoTaskNotFound) {
+		if r.QueueLeaseUntil.After(time.Now()) {
+			return nil
+		}
+		return s.RefundMedia(ctx, r.ID)
+	}
+	if err != nil {
+		return err
+	}
+	if task.UserID != r.Quote.Command.UserID || task.Workbench.APIKeyID != r.Quote.Command.APIKeyID {
+		return ErrUsageBillingRequestConflict
+	}
+	now := time.Now().UTC()
+	if (task.Status == "queued" || task.Status == "processing") && (task.LeaseUntil <= now.Unix() || task.Deadline <= now.Unix()) {
+		failed := *task
+		failed.Status, failed.ErrorCode = "failed", "interrupted"
+		if _, err := tasks.finish(ctx, &failed, now.Unix()); err != nil {
+			return err
+		}
+		// A heartbeat or successful finish may have won the atomic store update.
+		task, err = tasks.store.Get(ctx, r.WorkbenchTaskID)
+		if err != nil {
+			return err
+		}
+	}
+	switch task.Status {
+	case "failed":
+		return s.RefundMedia(ctx, r.ID)
+	case "completed":
+		quote := r.Quote
+		if r.VideoOutcome != nil {
+			quote = *r.VideoOutcome
+		}
+		return s.settleMediaQuote(ctx, r, &quote)
+	default:
+		return nil
+	}
+}
+
 func (s *OpenAIGatewayService) invalidateMediaBilling(ctx context.Context, r *MediaBillingReservation) {
 	if r == nil {
 		return
@@ -249,18 +364,40 @@ func (s *OpenAIGatewayService) ReconcileMediaTask(ctx context.Context, taskID st
 }
 
 func (s *OpenAIGatewayService) settleMediaStatus(ctx context.Context, r *MediaBillingReservation, body []byte) error {
+	if r.WorkbenchDelivery {
+		quote, complete := mediaVideoStatusQuote(r, body)
+		if !complete {
+			return nil
+		}
+		repo, ok := s.usageBillingRepo.(MediaWorkbenchBillingRepository)
+		if !ok {
+			return ErrBillingServiceUnavailable
+		}
+		return repo.StageMediaWorkbenchVideoOutcome(ctx, r.ID, &quote)
+	}
 	if GrokMediaVideoStatusFailed(body) {
 		return s.RefundMedia(ctx, r.ID)
 	}
+	quote, complete := mediaVideoStatusQuote(r, body)
+	if !complete {
+		return nil
+	}
+	return s.settleMediaQuote(ctx, r, &quote)
+}
+
+func mediaVideoStatusQuote(r *MediaBillingReservation, body []byte) (MediaBillingQuote, bool) {
+	if GrokMediaVideoStatusFailed(body) {
+		return MediaBillingQuote{}, false
+	}
 	complete := false
 	for _, path := range []string{"status", "data.status", "video.status", "state", "data.state"} {
-		switch strings.ToLower(gjson.GetBytes(body, path).String()) {
+		switch strings.ToLower(strings.TrimSpace(gjson.GetBytes(body, path).String())) {
 		case "completed", "succeeded", "success", "done":
 			complete = true
 		}
 	}
 	if !complete {
-		return nil
+		return MediaBillingQuote{}, false
 	}
 	quote := r.Quote
 	// 8yes prices the exact requested model, including its resolution suffix.
@@ -290,11 +427,15 @@ func (s *OpenAIGatewayService) settleMediaStatus(ctx context.Context, r *MediaBi
 	}
 	quote.Command.RequestFingerprint = ""
 	quote.Command.Normalize()
+	return quote, true
+}
+
+func (s *OpenAIGatewayService) settleMediaQuote(ctx context.Context, r *MediaBillingReservation, quote *MediaBillingQuote) error {
 	repo, ok := s.usageBillingRepo.(MediaBillingRepository)
 	if !ok {
 		return ErrBillingServiceUnavailable
 	}
-	if err := repo.StageMediaOutcome(ctx, r.ID, &quote); err != nil {
+	if err := repo.StageMediaOutcome(ctx, r.ID, quote); err != nil {
 		return err
 	}
 	result, err := repo.SettleMedia(ctx, r.ID, &quote.Command)
@@ -368,6 +509,9 @@ func (s *OpenAIGatewayService) reconcilePendingMedia(ctx context.Context, r *Med
 			s.invalidateMediaBilling(ctx, r)
 		}
 		return err
+	}
+	if r.WorkbenchDelivery {
+		return s.reconcileMediaWorkbenchVideo(ctx, r)
 	}
 	if r.TaskID == "" {
 		if r.WorkbenchKind != "" && !r.Dispatched {

@@ -1196,13 +1196,14 @@ describe('EditAccountModal', () => {
     )
   })
 
-  it('preserves and validates the Base URL for Custom API Key accounts', async () => {
+  it.each(['8yes', 'openai'])('preserves the %s video protocol and validates the Base URL for Custom API Key accounts', async (protocol) => {
     const account = buildAccount()
     account.platform = 'custom'
     account.name = 'Custom video upstream'
     account.credentials = {
       api_key: 'sk-custom',
-      base_url: 'https://8yes.cc/v1'
+      base_url: 'https://8yes.cc/v1',
+      media_protocol: protocol
     }
     updateAccountMock.mockReset()
     checkMixedChannelRiskMock.mockReset().mockResolvedValue({ has_risk: false })
@@ -1212,20 +1213,21 @@ describe('EditAccountModal', () => {
     const baseUrl = wrapper.get<HTMLInputElement>('input[placeholder="https://api.example.com/v1"]')
     expect(baseUrl.element.value).toBe('https://8yes.cc/v1')
     expect(baseUrl.attributes('required')).toBeDefined()
+    expect(wrapper.get<HTMLSelectElement>('#account-media-protocol').element.value).toBe(protocol)
 
     await baseUrl.setValue('')
     await wrapper.get('form#edit-account-form').trigger('submit.prevent')
     expect(updateAccountMock).not.toHaveBeenCalled()
 
     await baseUrl.setValue('https://relay.example/v1')
-    expect(wrapper.get('#account-media-protocol').findAll('option').map(option => option.attributes('value'))).toEqual(['', 'sora', '8yes'])
-    await wrapper.get('#account-media-protocol').setValue('8yes')
+    expect(wrapper.get('#account-media-protocol').findAll('option').map(option => option.attributes('value'))).toEqual(['', 'openai', 'sora', '8yes'])
+    await wrapper.get('#account-media-protocol').setValue(protocol)
     await wrapper.get('form#edit-account-form').trigger('submit.prevent')
 
     expect(updateAccountMock).toHaveBeenCalledWith(account.id, expect.objectContaining({
       credentials: expect.objectContaining({
         base_url: 'https://relay.example/v1',
-        media_protocol: '8yes'
+        media_protocol: protocol
       })
     }))
   })

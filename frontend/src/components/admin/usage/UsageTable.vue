@@ -226,10 +226,16 @@
             <div v-if="showAccountBilling && row.account_rate_multiplier != null" class="mt-0.5 text-[11px] text-orange-500 dark:text-orange-400">
               A ${{ accountBilled(row).toFixed(6) }}
             </div>
-            <ol v-if="row.billing_events?.length" class="mt-1 space-y-1 text-[11px]" data-testid="media-payment-events">
-              <li v-for="event in row.billing_events" :key="event.stage" class="flex items-center justify-between gap-3 whitespace-nowrap" :title="new Date(event.created_at).toLocaleString()">
-                <span :class="event.stage === 'refunded' ? 'text-amber-600 dark:text-amber-400' : 'text-gray-500 dark:text-gray-400'">{{ t(`usage.mediaPayment.${event.stage}`) }}</span>
-                <span v-if="event.stage !== 'request_created'" class="tabular-nums" :class="event.stage === 'refunded' ? 'text-green-600 dark:text-green-400' : 'text-gray-600 dark:text-gray-300'">{{ event.stage === 'refunded' ? '+' : event.stage === 'prepaid' ? '-' : '' }}${{ event.amount.toFixed(6) }}</span>
+            <ol v-if="row.billing_events?.length" class="mt-1 grid w-48 max-w-full gap-1 text-[11px]" data-testid="media-payment-events">
+              <li
+                v-for="event in row.billing_events"
+                :key="event.stage"
+                class="flex min-w-0 flex-wrap items-center justify-between gap-x-2 gap-y-0.5 whitespace-normal rounded-md px-2 py-1 text-left font-medium leading-4 ring-1 ring-inset"
+                :class="mediaPaymentBadgeClass(event.stage)"
+                :title="new Date(event.created_at).toLocaleString()"
+              >
+                <span class="min-w-0 break-words">{{ t(`usage.mediaPayment.${event.stage}`) }}</span>
+                <span v-if="event.stage !== 'request_created'" class="ml-auto min-w-0 break-all text-right tabular-nums">{{ event.stage === 'refunded' ? '+' : event.stage === 'prepaid' ? '-' : '' }}${{ event.amount.toFixed(6) }}</span>
               </li>
             </ol>
           </div>
@@ -621,6 +627,15 @@ const showUpstreamEndpoint = props.showUpstreamEndpoint
 const ipGeoBatchLoading = ref(false)
 
 const showIpGeoToolbar = computed(() => props.columns.some((col) => col.key === 'ip_address'))
+
+const MEDIA_PAYMENT_BADGE_CLASSES = {
+  request_created: 'bg-sky-500/10 text-sky-700 ring-sky-500/15',
+  prepaid: 'bg-amber-500/10 text-amber-800 ring-amber-500/15',
+  settled: 'bg-emerald-500/10 text-emerald-700 ring-emerald-500/15',
+  refunded: 'bg-violet-500/10 text-violet-700 ring-violet-500/15',
+} as const
+
+const mediaPaymentBadgeClass = (stage: keyof typeof MEDIA_PAYMENT_BADGE_CLASSES): string => MEDIA_PAYMENT_BADGE_CLASSES[stage]
 
 const sentUpstreamModel = (row: AdminUsageLog): string => row.upstream_model?.trim() || row.model?.trim() || ''
 

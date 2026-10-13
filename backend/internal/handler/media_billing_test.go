@@ -46,6 +46,20 @@ func (r *partialUsageBillingRepo) FindMediaTask(context.Context, string, int64, 
 func (r *partialUsageBillingRepo) PendingMedia(context.Context, int) ([]*service.MediaBillingReservation, error) {
 	return nil, nil
 }
+func (r *partialUsageBillingRepo) BindMediaWorkbenchTask(_ context.Context, id, taskID string, userID, keyID int64) error {
+	reservation := r.reservations[id]
+	if reservation == nil || reservation.Quote.Command.UserID != userID || reservation.Quote.Command.APIKeyID != keyID {
+		return service.ErrUsageBillingRequestConflict
+	}
+	reservation.WorkbenchTaskID = taskID
+	return nil
+}
+func (r *partialUsageBillingRepo) StageMediaWorkbenchVideoOutcome(_ context.Context, id string, quote *service.MediaBillingQuote) error {
+	if reservation := r.reservations[id]; reservation != nil {
+		reservation.VideoOutcome = quote
+	}
+	return nil
+}
 
 var _ service.MediaBillingRepository = (*partialUsageBillingRepo)(nil)
 
