@@ -212,18 +212,54 @@ func (s *ImageTaskService) Get(ctx context.Context, owner ImageTaskOwner, id str
 }
 
 func (s *ImageTaskService) Complete(ctx context.Context, id string, statusCode int, result json.RawMessage) error {
+	_, err := s.complete(ctx, id, statusCode, result)
+	return err
+}
+
+// Deliver stores a successful generation result and reports whether its owner
+// can retrieve it. Billing follows this answer, not the provider's success: a
+// failed upload or task write leaves the owner without an image. A non-nil
+// error means the stored state could not be determined.
+func (s *ImageTaskService) Deliver(ctx context.Context, id string, statusCode int, result json.RawMessage) (bool, error) {
+	attempted, err := s.complete(ctx, id, statusCode, result)
+	if !attempted {
+		if err != nil {
+			logger.L().Warn("image_task.delivery_not_stored", zap.String("task_id", id), zap.Error(err))
+		}
+		return false, nil
+	}
+	if err == nil {
+		return true, nil
+	}
+	// The completed record may have been written before its response was lost.
+	checkCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+	defer cancel()
+	task, getErr := s.store.Get(checkCtx, id)
+	switch {
+	case getErr == nil:
+		return task.Status == ImageTaskStatusCompleted, nil
+	case errors.Is(getErr, ErrImageTaskNotFound):
+		return false, nil
+	default:
+		return false, err
+	}
+}
+
+// complete reports attempted=true once the result was uploaded and a completed
+// record write was issued, or the task was already completed.
+func (s *ImageTaskService) complete(ctx context.Context, id string, statusCode int, result json.RawMessage) (bool, error) {
 	if s == nil || s.store == nil {
-		return ErrImageTaskUnavailable
+		return false, ErrImageTaskUnavailable
 	}
 	if !json.Valid(result) {
-		return s.Fail(ctx, id, http.StatusBadGateway, imageTaskErrorJSON("api_error", "upstream returned a non-JSON image response"))
+		return false, s.Fail(ctx, id, http.StatusBadGateway, imageTaskErrorJSON("api_error", "upstream returned a non-JSON image response"))
 	}
 	task, err := s.store.Get(ctx, id)
 	if err != nil {
-		return err
+		return false, err
 	}
 	if task.Status == ImageTaskStatusCompleted || task.Status == ImageTaskStatusFailed {
-		return nil
+		return task.Status == ImageTaskStatusCompleted, nil
 	}
 	uploader, enabled := s.current()
 	if task.WorkbenchStorage == ImageWorkbenchStorageLocal {
@@ -232,11 +268,11 @@ func (s *ImageTaskService) Complete(ctx context.Context, id string, statusCode i
 	if s.resolve != nil && (!enabled || uploader == nil) {
 		// Do not fall back to persisting provider base64 in Redis when storage is
 		// disabled or incompletely resolved while an accepted task is still running.
-		return s.Fail(ctx, id, http.StatusServiceUnavailable, imageTaskErrorJSON("api_error", "image storage is no longer available"))
+		return false, s.Fail(ctx, id, http.StatusServiceUnavailable, imageTaskErrorJSON("api_error", "image storage is no longer available"))
 	}
 	if uploader != nil {
 		if NormalizeImageOwnerEmail(task.UserEmail) == "" {
-			return s.Fail(ctx, id, http.StatusForbidden, imageTaskErrorJSON("permission_error", "image task owner email is missing"))
+			return false, s.Fail(ctx, id, http.StatusForbidden, imageTaskErrorJSON("permission_error", "image task owner email is missing"))
 		}
 		if task.Workbench != nil {
 			uploader = uploader.forWorkbench()
@@ -245,11 +281,11 @@ func (s *ImageTaskService) Complete(ctx context.Context, id string, statusCode i
 		if err != nil {
 			// 转存失败不回退存 base64，避免大 blob 撑爆 Redis：直接把任务标记为失败。
 			logger.L().Error("image_task.offload_failed", zap.String("task_id", id), zap.Error(err))
-			return s.Fail(ctx, id, http.StatusBadGateway, imageTaskErrorJSON("api_error", "failed to store generated image"))
+			return false, s.Fail(ctx, id, http.StatusBadGateway, imageTaskErrorJSON("api_error", "failed to store generated image"))
 		}
 		result = rewritten
 	}
-	return s.finish(ctx, id, ImageTaskStatusCompleted, statusCode, result, nil)
+	return true, s.finish(ctx, id, ImageTaskStatusCompleted, statusCode, result, nil)
 }
 
 func (s *ImageTaskService) Fail(ctx context.Context, id string, statusCode int, taskErr json.RawMessage) error {

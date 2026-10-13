@@ -824,7 +824,7 @@ func recordGrokMediaUsage(
 	channelUsageFields := channelMapping.ToUsageFields(clientRequestedModel(c, requestModel), result.UpstreamModel)
 	billingRequestID := imageWorkbenchBillingRequestID(c)
 	reservationID := mediaReservationID(c)
-	h.submitOpenAIUsageRecordTask(c.Request.Context(), result, func(ctx context.Context) {
+	recordUsage := func(ctx context.Context) {
 		if err := h.gatewayService.RecordUsage(ctx, &service.OpenAIRecordUsageInput{
 			Result:             result,
 			APIKey:             apiKey,
@@ -853,5 +853,9 @@ func recordGrokMediaUsage(
 			).Error("grok_media.record_usage_failed", zap.Error(err))
 			reqLog.Debug("grok_media.record_usage_failed", zap.Error(err))
 		}
-	})
+	}
+	// Asynchronous image tasks bill only after the result is stored for the owner.
+	if !holdAsyncImageUsage(c, recordUsage) {
+		h.submitOpenAIUsageRecordTask(c.Request.Context(), result, recordUsage)
+	}
 }

@@ -55,7 +55,7 @@ func TestVideoWorkbenchDeliveryRetriesDurableSettlement(t *testing.T) {
 	r := &MediaBillingReservation{ID: "media:delivered", WorkbenchKind: "video", WorkbenchDelivery: true, WorkbenchTaskID: "local", Quote: MediaBillingQuote{Command: UsageBillingCommand{RequestID: "media:delivered", UserID: 7, APIKeyID: 9, BalanceCost: .6}}}
 	store := &mediaDeliveryStore{task: VideoWorkbenchRecord{VideoWorkbenchTask: VideoWorkbenchTask{ID: "local", Status: "completed", Workbench: VideoWorkbenchMetadata{APIKeyID: 9}}, UserID: 7}}
 	s.SetMediaBillingVideoWorkbench(NewVideoWorkbenchServiceWithSettings(store, nil, nil))
-	require.Error(t, s.FinalizeMediaWorkbenchVideo(context.Background(), r, []byte(`{"status":"completed"}`)))
+	require.Error(t, s.FinalizeMediaWorkbenchVideo(context.Background(), r, []byte(`{"status":"completed"}`), true))
 	require.NotNil(t, repo.staged, "delivery must be durable before attempting ledger writes")
 	require.Nil(t, repo.settled)
 	require.Zero(t, repo.refunds)
@@ -70,6 +70,34 @@ func TestVideoWorkbenchDeliveryRetriesDurableSettlement(t *testing.T) {
 func (r *mediaOutcomeRepository) RefundMedia(context.Context, string) (*MediaBillingReservation, error) {
 	r.refunds++
 	return nil, nil
+}
+
+type deletedVideoTaskStore struct{ VideoWorkbenchStore }
+
+func (deletedVideoTaskStore) Get(context.Context, string) (*VideoWorkbenchRecord, error) {
+	return nil, ErrVideoTaskNotFound
+}
+
+func TestVideoWorkbenchFinalizationTrustsRunnerDeliveryOverDeletedTask(t *testing.T) {
+	for _, delivered := range []bool{true, false} {
+		repo := &mediaOutcomeRepository{}
+		s := &OpenAIGatewayService{usageBillingRepo: repo}
+		s.SetMediaBillingVideoWorkbench(NewVideoWorkbenchServiceWithSettings(deletedVideoTaskStore{}, nil, nil))
+		seconds, mode := 5, string(BillingModeVideo)
+		r := &MediaBillingReservation{ID: "media:deleted", WorkbenchKind: "video", WorkbenchDelivery: true, WorkbenchTaskID: "local", Quote: MediaBillingQuote{
+			Command: UsageBillingCommand{RequestID: "media:deleted", UserID: 7, APIKeyID: 9, BalanceCost: .5},
+			Usage:   UsageLog{ActualCost: .5, TotalCost: .5, BillingMode: &mode, VideoDurationSeconds: &seconds},
+		}}
+		require.NoError(t, s.FinalizeMediaWorkbenchVideo(context.Background(), r, []byte(`{"status":"completed","duration":4}`), delivered))
+		if delivered {
+			require.NotNil(t, repo.settled, "a stored video is billed even after its task is deleted")
+			require.InDelta(t, .4, repo.settled.BalanceCost, 1e-8)
+			require.Zero(t, repo.refunds)
+		} else {
+			require.Nil(t, repo.settled)
+			require.Equal(t, 1, repo.refunds)
+		}
+	}
 }
 
 func TestMediaSettlementUsesActualDurationAndAdmissionPrice(t *testing.T) {

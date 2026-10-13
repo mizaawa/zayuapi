@@ -278,13 +278,23 @@ func (s *OpenAIGatewayService) PrepareMediaWorkbenchVideoDelivery(ctx context.Co
 
 // The local terminal state arbitrates completion against cleanup and failure.
 // An upstream success is only a price snapshot until the file is delivered.
-func (s *OpenAIGatewayService) FinalizeMediaWorkbenchVideo(ctx context.Context, r *MediaBillingReservation, body []byte) error {
+// delivered reports that this runner stored the file as a completed task. Its
+// own outcome is authoritative: the owner may download and delete a completed
+// task immediately, so the task index can no longer prove that delivery.
+func (s *OpenAIGatewayService) FinalizeMediaWorkbenchVideo(ctx context.Context, r *MediaBillingReservation, body []byte, delivered bool) error {
 	if r == nil || !r.WorkbenchDelivery {
 		return nil
 	}
 	copyReservation := *r
 	if quote, complete := mediaVideoStatusQuote(r, body); complete {
 		copyReservation.VideoOutcome = &quote
+	}
+	if delivered {
+		quote := copyReservation.Quote
+		if copyReservation.VideoOutcome != nil {
+			quote = *copyReservation.VideoOutcome
+		}
+		return s.settleMediaQuote(ctx, &copyReservation, &quote)
 	}
 	return s.reconcileMediaWorkbenchVideo(ctx, &copyReservation)
 }

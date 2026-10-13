@@ -226,6 +226,46 @@ func TestVideoWorkbenchGenerationOwnershipAndDownloadHTTP(t *testing.T) {
 	require.Equal(t, 404, request("GET", path, "owner", "").Code)
 }
 
+func TestVideoWorkbenchQueuedUnknownLengthUploadHoldsOnlyItsBody(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	store := &videoHandlerStore{tasks: make(map[string]service.VideoWorkbenchRecord)}
+	svc := service.NewVideoWorkbenchServiceWithSettings(store, &videoHandlerStorage{files: make(map[string][]byte)}, func(context.Context) service.VideoWorkbenchRuntime {
+		return service.VideoWorkbenchRuntime{Enabled: true, MaxConcurrent: 3, RetentionMinutes: 15}
+	})
+	h := NewVideoWorkbenchHandler(svc, nil)
+	h.SetAuthRefresh(func(*gin.Context) error { return nil })
+	running, finish := make(chan struct{}), make(chan struct{})
+	h.execute = func(c *gin.Context, operation string) {
+		close(running)
+		<-finish
+		c.JSON(http.StatusBadRequest, gin.H{"error": "stop"})
+	}
+	router := gin.New()
+	router.Use(func(c *gin.Context) {
+		c.Set(string(middleware.ContextKeyUser), middleware.AuthSubject{UserID: 7})
+		c.Set(string(middleware.ContextKeyAPIKey), &service.APIKey{ID: 9, UserID: 7, User: &service.User{ID: 7}, Group: &service.Group{Platform: service.PlatformComposite, VideoWorkbenchEnabled: true}})
+		c.Next()
+	})
+	router.POST("/v1/video-workbench/tasks", h.Submit)
+	request := httptest.NewRequest(http.MethodPost, "/v1/video-workbench/tasks", strings.NewReader(`{"model":"custom-video","prompt":"waves","duration":5,"ratio":"16:9"}`))
+	request.ContentLength = -1 // chunked: admitted at the full request limit
+	request.Header.Set("Content-Type", "application/json")
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, request)
+	require.Equal(t, http.StatusAccepted, response.Code, response.Body.String())
+	defer close(finish)
+	select {
+	case <-running:
+	case <-time.After(3 * time.Second):
+		t.Fatal("queued video task did not start")
+	}
+	// The shared budget is four request limits. This fits only if the running
+	// task no longer holds its full-size admission estimate.
+	release, err := svc.ReservePayload(3*service.VideoWorkbenchMaxRequestBytes + 1)
+	require.NoError(t, err, "a small running task must not keep the full admission estimate")
+	release()
+}
+
 type videoHandlerStore struct {
 	service.VideoWorkbenchStore
 	mu    sync.Mutex

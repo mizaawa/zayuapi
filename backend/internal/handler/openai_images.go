@@ -417,7 +417,7 @@ func (h *OpenAIGatewayHandler) Images(c *gin.Context) {
 		billingRequestID := imageWorkbenchBillingRequestID(c)
 		reservationID := mediaReservationID(c)
 		result = workbenchBilling.settledByNormalPath(result)
-		h.submitMandatoryUsageRecordTask(c.Request.Context(), func(ctx context.Context) {
+		recordUsage := func(ctx context.Context) {
 			if err := h.gatewayService.RecordUsage(ctx, &service.OpenAIRecordUsageInput{
 				Result:             result,
 				APIKey:             apiKey,
@@ -445,7 +445,11 @@ func (h *OpenAIGatewayHandler) Images(c *gin.Context) {
 					zap.Int64("account_id", account.ID),
 				).Error("openai.images.record_usage_failed", zap.Error(err))
 			}
-		})
+		}
+		// Asynchronous tasks bill only after the result is stored for the owner.
+		if !holdAsyncImageUsage(c, recordUsage) {
+			h.submitMandatoryUsageRecordTask(c.Request.Context(), recordUsage)
+		}
 
 		reqLog.Debug("openai.images.request_completed",
 			zap.Int64("account_id", account.ID),

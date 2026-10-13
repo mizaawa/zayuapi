@@ -183,11 +183,12 @@ func (h *VideoWorkbenchHandler) Submit(c *gin.Context) {
 	if reservedBytes <= 0 || reservedBytes > service.VideoWorkbenchMaxRequestBytes {
 		reservedBytes = service.VideoWorkbenchMaxRequestBytes
 	}
-	release, err := h.tasks.ReservePayload(int(reservedBytes))
+	upload, err := h.tasks.ReserveUpload(int(reservedBytes))
 	if err != nil {
 		response.ErrorFrom(c, err)
 		return
 	}
+	release := upload.Release
 	transferred := false
 	defer func() {
 		if !transferred {
@@ -215,6 +216,8 @@ func (h *VideoWorkbenchHandler) Submit(c *gin.Context) {
 		response.BadRequest(c, "invalid video request")
 		return
 	}
+	// The queued task retains only the canonical body, not its admission estimate.
+	upload.Shrink(len(body))
 	metadata := service.VideoWorkbenchMetadata{APIKeyID: key.ID, Prompt: payload.Prompt, Model: payload.Model, Ratio: payload.Ratio, Resolution: payload.Resolution, Duration: payload.Duration, ReferenceImages: len(payload.ReferenceImages), ReferenceVideos: len(payload.ReferenceVideos), ReferenceAudios: len(payload.ReferenceAudios)}
 	c.Request = c.Request.WithContext(service.WithVideoWorkbenchContext(c.Request.Context()))
 	if h.openAI != nil {
@@ -247,16 +250,20 @@ func (h *VideoWorkbenchHandler) Submit(c *gin.Context) {
 
 func (h *VideoWorkbenchHandler) run(task *service.VideoWorkbenchRecord, c *gin.Context, body []byte, cancel context.CancelFunc) {
 	var completedBody []byte
-	defer func() {
-		if h.openAI == nil || h.openAI.gatewayService == nil {
+	finalized := false
+	finalize := func(delivered bool) {
+		if finalized || h.openAI == nil || h.openAI.gatewayService == nil {
 			return
 		}
+		finalized = true
 		ctx, finalizeCancel := context.WithTimeout(context.Background(), 15*time.Second)
 		defer finalizeCancel()
-		if err := h.openAI.gatewayService.FinalizeMediaWorkbenchVideo(ctx, mediaPrecharge(c), completedBody); err != nil {
+		if err := h.openAI.gatewayService.FinalizeMediaWorkbenchVideo(ctx, mediaPrecharge(c), completedBody, delivered); err != nil {
 			logger.L().Error("video_workbench.billing_finalization_pending", zap.String("task_id", task.ID), zap.Error(err))
 		}
-	}()
+	}
+	// Failure paths reconcile against the task index; delivery settles below.
+	defer finalize(false)
 	defer h.openAI.refundUndispatchedWorkbench(c)
 	stopPrepaymentLease := h.openAI.keepWorkbenchPrepayment(c)
 	defer stopPrepaymentLease()
@@ -365,7 +372,11 @@ func (h *VideoWorkbenchHandler) run(task *service.VideoWorkbenchRecord, c *gin.C
 	<-contentDone
 	if err != nil {
 		h.fail(task, "storage_failed")
+		return
 	}
+	// Settle from this runner's own result before the owner can delete the
+	// completed task and make the index look like an undelivered video.
+	finalize(true)
 }
 
 func (h *VideoWorkbenchHandler) fail(task *service.VideoWorkbenchRecord, code string) {

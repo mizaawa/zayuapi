@@ -74,7 +74,7 @@ func newWorkbenchBillingHandler(t *testing.T, platform string, upstream *workben
 	for i := range accounts {
 		accounts[i] = service.Account{
 			ID: int64(i + 1), Name: "billing-test", Platform: platform, Type: service.AccountTypeAPIKey,
-			Status: service.StatusActive, Schedulable: true, Priority: i,
+			Status: service.StatusActive, Schedulable: true, Priority: i, GroupIDs: []int64{2},
 			Credentials: map[string]any{"api_key": "test-only-key", "base_url": "https://api.example.com"},
 		}
 	}

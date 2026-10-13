@@ -36,21 +36,65 @@ type imageWorkbenchPayloadBudget struct {
 	bytes int64
 }
 
-func (s *ImageTaskService) ReserveWorkbenchPayload(size int) (func(), error) {
-	budget := &s.workbenchPayloads
-	budget.mu.Lock()
-	defer budget.mu.Unlock()
-	if size < 0 || budget.count >= workbenchPayloadLimit || int64(size) > workbenchPayloadBytes-budget.bytes {
-		return nil, ErrImageWorkbenchQueueFull
+// WorkbenchPayloadReservation accounts for one accepted request body that a
+// queued task keeps in process memory until its worker exits.
+type WorkbenchPayloadReservation struct {
+	budget   *imageWorkbenchPayloadBudget
+	size     int64
+	released bool
+}
+
+func (b *imageWorkbenchPayloadBudget) reserve(size int, full error) (*WorkbenchPayloadReservation, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if size < 0 || b.count >= workbenchPayloadLimit || int64(size) > workbenchPayloadBytes-b.bytes {
+		return nil, full
 	}
-	budget.count++
-	budget.bytes += int64(size)
-	return sync.OnceFunc(func() {
-		budget.mu.Lock()
-		defer budget.mu.Unlock()
-		budget.count--
-		budget.bytes -= int64(size)
-	}), nil
+	b.count++
+	b.bytes += int64(size)
+	return &WorkbenchPayloadReservation{budget: b, size: int64(size)}, nil
+}
+
+// Shrink lowers the admission estimate to the bytes actually retained. Bodies
+// without a declared length are admitted at the request limit; left at that
+// size, one small queued upload would hold the shared budget for every user.
+func (r *WorkbenchPayloadReservation) Shrink(size int) {
+	if r == nil || size < 0 {
+		return
+	}
+	r.budget.mu.Lock()
+	defer r.budget.mu.Unlock()
+	if r.released || int64(size) >= r.size {
+		return
+	}
+	r.budget.bytes -= r.size - int64(size)
+	r.size = int64(size)
+}
+
+func (r *WorkbenchPayloadReservation) Release() {
+	if r == nil {
+		return
+	}
+	r.budget.mu.Lock()
+	defer r.budget.mu.Unlock()
+	if r.released {
+		return
+	}
+	r.released = true
+	r.budget.count--
+	r.budget.bytes -= r.size
+}
+
+func (s *ImageTaskService) ReserveWorkbenchUpload(size int) (*WorkbenchPayloadReservation, error) {
+	return s.workbenchPayloads.reserve(size, ErrImageWorkbenchQueueFull)
+}
+
+func (s *ImageTaskService) ReserveWorkbenchPayload(size int) (func(), error) {
+	reservation, err := s.ReserveWorkbenchUpload(size)
+	if err != nil {
+		return nil, err
+	}
+	return reservation.Release, nil
 }
 
 func (s *ImageTaskService) StartWorkbench(ctx context.Context, owner ImageTaskOwner, id string) (bool, error) {

@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"sort"
 	"strings"
-	"sync"
 	"time"
 
 	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
@@ -130,21 +129,18 @@ func (s *VideoWorkbenchService) Runtime(ctx context.Context) VideoWorkbenchRunti
 	return parseVideoWorkbenchRuntime(nil)
 }
 
+// ReserveUpload applies the same process memory budget as the image queue,
+// independently.
+func (s *VideoWorkbenchService) ReserveUpload(size int) (*WorkbenchPayloadReservation, error) {
+	return s.payloads.reserve(size, ErrVideoQueueFull)
+}
+
 func (s *VideoWorkbenchService) ReservePayload(size int) (func(), error) {
-	// Apply the same process memory budget as the image queue, independently.
-	s.payloads.mu.Lock()
-	defer s.payloads.mu.Unlock()
-	if size < 0 || s.payloads.count >= workbenchPayloadLimit || int64(size) > workbenchPayloadBytes-s.payloads.bytes {
-		return nil, ErrVideoQueueFull
+	reservation, err := s.ReserveUpload(size)
+	if err != nil {
+		return nil, err
 	}
-	s.payloads.count++
-	s.payloads.bytes += int64(size)
-	return sync.OnceFunc(func() {
-		s.payloads.mu.Lock()
-		defer s.payloads.mu.Unlock()
-		s.payloads.count--
-		s.payloads.bytes -= int64(size)
-	}), nil
+	return reservation.Release, nil
 }
 
 func (s *VideoWorkbenchService) Create(ctx context.Context, userID int64, metadata VideoWorkbenchMetadata) (*VideoWorkbenchRecord, error) {

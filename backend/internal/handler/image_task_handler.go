@@ -146,6 +146,10 @@ func (h *AsyncImageHandler) Submit(c *gin.Context) {
 		imageTaskJSONError(c, http.StatusBadRequest, "invalid_request_error", "Request body is empty")
 		return
 	}
+	if upload != nil {
+		// The queued task retains exactly this body, not its admission estimate.
+		upload.reservation.Shrink(len(body))
+	}
 	if !mediaRequestFieldsUnambiguous(c.GetHeader("Content-Type"), body) {
 		imageTaskJSONError(c, http.StatusBadRequest, "invalid_request_error", "Media request fields must be valid and unique")
 		return
@@ -194,7 +198,7 @@ func (h *AsyncImageHandler) Submit(c *gin.Context) {
 			h.openAI.refundUndispatchedWorkbench(c)
 		}
 	}()
-	taskCtx, recorder, cancel := newAsyncImageContext(c, body, timeout)
+	taskCtx, recorder, cancel := newAsyncImageTaskContext(c, body, timeout)
 	owner := service.ImageTaskOwner{UserID: apiKey.UserID, APIKeyID: apiKey.ID, UserEmail: ownerEmail, IsAdmin: apiKey.User != nil && apiKey.User.IsAdmin()}
 	var task *service.ImageTask
 	if metadata != nil {
@@ -555,6 +559,9 @@ func (h *AsyncImageHandler) executeWithGateway(platform string, c *gin.Context) 
 }
 
 func (h *AsyncImageHandler) run(taskID, platform string, taskCtx *gin.Context, recorder *httptest.ResponseRecorder, cancel context.CancelFunc) {
+	delivered := false
+	// Runs last, after panic recovery: bill a stored result or refund the task.
+	defer func() { h.settleAsyncImageUsage(taskCtx, delivered) }()
 	defer cancel()
 	defer func() {
 		if recovered := recover(); recovered != nil {
@@ -587,9 +594,14 @@ func (h *AsyncImageHandler) run(taskID, platform string, taskCtx *gin.Context, r
 				return
 			}
 		}
-		if err := h.tasks.Complete(context.Background(), taskID, statusCode, json.RawMessage(body)); err != nil {
+		stored, err := h.tasks.Deliver(context.Background(), taskID, statusCode, json.RawMessage(body))
+		if err != nil {
+			// The completed record may exist; keep the provider charge rather
+			// than making a possibly delivered image free.
 			logger.L().Error("image_task.complete_store_failed", zap.String("task_id", taskID), zap.Error(err))
+			stored = true
 		}
+		delivered = stored
 		return
 	}
 	h.failTask(taskID, statusCode, extractImageTaskError(body))

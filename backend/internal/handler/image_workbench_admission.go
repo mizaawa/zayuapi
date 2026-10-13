@@ -12,6 +12,7 @@ const imageWorkbenchUploadKey = "image_workbench_upload_admission"
 const imageWorkbenchMaxUploadBytes int64 = 256 << 20
 
 type imageWorkbenchUpload struct {
+	reservation *service.WorkbenchPayloadReservation
 	release     func()
 	transferred bool
 }
@@ -51,11 +52,11 @@ func (h *AsyncImageHandler) reserveWorkbenchUpload(c *gin.Context) (*imageWorkbe
 	if size <= 0 || size > imageWorkbenchMaxUploadBytes {
 		size = imageWorkbenchMaxUploadBytes
 	}
-	release, err := h.tasks.ReserveWorkbenchPayload(int(size))
+	reservation, err := h.tasks.ReserveWorkbenchUpload(int(size))
 	if err != nil {
 		return nil, err
 	}
-	upload := &imageWorkbenchUpload{release: release}
+	upload := &imageWorkbenchUpload{reservation: reservation, release: reservation.Release}
 	c.Set(imageWorkbenchUploadKey, upload)
 	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, size)
 	return upload, nil
