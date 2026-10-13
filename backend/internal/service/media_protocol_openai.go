@@ -31,7 +31,11 @@ func normalizeOpenAIVideoJSON(body []byte) ([]byte, error) {
 	if info.N > 1 {
 		return nil, fmt.Errorf("video creation accepts one task per request")
 	}
-	set("duration", NormalizeCustomVideoDurationSeconds(info.RawDurationSeconds))
+	duration := info.RawDurationSeconds
+	if duration == 0 {
+		duration = 5
+	}
+	set("duration", duration)
 	delete(fields, "seconds")
 	resolution, err := readString("resolution")
 	if err != nil {
@@ -80,6 +84,27 @@ func normalizeOpenAIVideoJSON(body []byte) ([]byte, error) {
 		set("aspect_ratio", ratio)
 	}
 	delete(fields, "ratio")
+	referenceModes := 0
+	for _, mode := range [][]string{
+		{"input_reference"},
+		{"first_frame_image_url", "last_frame_image_url"},
+	} {
+		present := false
+		for _, key := range mode {
+			if _, exists := fields[key]; !exists {
+				continue
+			}
+			value, err := readString(key)
+			if err != nil || value == "" {
+				return nil, fmt.Errorf("invalid video %s", key)
+			}
+			set(key, value)
+			present = true
+		}
+		if present {
+			referenceModes++
+		}
+	}
 	for _, ref := range []struct {
 		field   string
 		aliases []string
@@ -111,7 +136,11 @@ func normalizeOpenAIVideoJSON(body []byte) ([]byte, error) {
 		}
 		if len(selected) > 0 {
 			set(ref.field, selected)
+			referenceModes++
 		}
+	}
+	if referenceModes > 1 {
+		return nil, fmt.Errorf("video creation accepts only one reference mode: single image, first/last frames, image URLs, video URLs or audio URLs")
 	}
 	return json.Marshal(fields)
 }
