@@ -305,17 +305,29 @@
         </div>
       </div>
       <div v-else class="space-y-4">
-        <div v-if="preview.url" class="overflow-hidden rounded-xl bg-black">
-          <img v-if="preview.kind === 'image'" :src="preview.url" :alt="preview.name" class="mx-auto max-h-[60vh] w-auto object-contain" />
-          <video v-else :src="preview.url" class="mx-auto max-h-[60vh] w-full" controls autoplay playsinline></video>
+        <div v-if="preview.url" class="flex max-h-[60vh] items-center justify-center overflow-hidden rounded-xl bg-black p-2">
+          <img
+            v-if="preview.kind === 'image'"
+            :src="preview.url"
+            :alt="preview.name"
+            class="max-h-[calc(60vh-1rem)] max-w-full object-contain"
+          />
+          <video
+            v-else
+            :src="preview.url"
+            class="max-h-[calc(60vh-1rem)] w-full"
+            controls
+            autoplay
+            playsinline
+          ></video>
         </div>
         <p v-else class="rounded-xl bg-gray-50 p-6 text-center text-sm text-gray-500 dark:bg-dark-900 dark:text-gray-400">
           {{ t('admin.resourceLibrary.previewUnavailable') }}
         </p>
 
         <dl class="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2 lg:grid-cols-3">
-          <div v-for="field in previewFields" :key="field.label" class="min-w-0 rounded-xl bg-gray-50 p-3 dark:bg-dark-900">
-            <dt class="text-xs font-medium uppercase tracking-wide text-gray-400">{{ field.label }}</dt>
+          <div v-for="field in previewFields" :key="field.label" class="min-w-0 overflow-hidden rounded-xl bg-gray-50 p-3 dark:bg-dark-900">
+            <dt class="break-words text-xs font-medium uppercase tracking-wide text-gray-400">{{ field.label }}</dt>
             <dd class="mt-1 break-all text-gray-800 dark:text-gray-100">{{ field.value }}</dd>
           </div>
         </dl>
@@ -384,6 +396,7 @@ const pageSize = ref(20)
 const models = ref<string[]>([])
 const groups = ref<ResourceGroupOption[]>([])
 const truncated = ref(false)
+const liveTotal = ref(0)
 const savedTotal = ref(0)
 const liveItems = ref<ResourceItem[]>([])
 const savedItems = ref<SavedResource[]>([])
@@ -417,9 +430,11 @@ const confirmDelete = reactive<{
   action: (() => Promise<void>) | null
 }>({ open: false, loading: false, message: '', action: null })
 
+// Each tab keeps its own total; the active tab's `total` must not leak into the
+// other tab's badge.
 const tabs = computed((): { key: TabKey; icon: 'grid' | 'inbox'; count: number }[] => [
-  { key: 'live', icon: 'grid', count: activeTab.value === 'live' ? total.value : savedTotal.value },
-  { key: 'saved', icon: 'inbox', count: activeTab.value === 'saved' ? total.value : savedTotal.value }
+  { key: 'live', icon: 'grid', count: liveTotal.value },
+  { key: 'saved', icon: 'inbox', count: savedTotal.value }
 ])
 
 const kindOptions = computed(() => [
@@ -485,6 +500,22 @@ function formatDetailValue(value: unknown): string {
   if (value === null || value === undefined || value === '') return '—'
   if (typeof value === 'object') return JSON.stringify(value)
   return String(value)
+}
+
+// The backend emits machine keys (quality, ratio, reference_images, ...); they
+// must never reach the UI verbatim. Unknown keys fall back to the raw key so a
+// future backend addition is still visible rather than silently dropped.
+function detailLabel(key: string): string {
+  const i18nKey = `admin.resourceLibrary.details.${key}`
+  const translated = t(i18nKey)
+  return translated === i18nKey ? key : translated
+}
+
+function detailFields(details: Record<string, unknown> | undefined): { label: string; value: string }[] {
+  return Object.entries(details ?? {}).map(([key, value]) => ({
+    label: detailLabel(key),
+    value: formatDetailValue(value)
+  }))
 }
 
 function billingBadge(state: string | undefined): { label: string; className: string } | null {
@@ -557,10 +588,10 @@ async function load() {
       const result = await adminAPI.resourceLibrary.listItems(params)
       liveItems.value = result.items ?? []
       total.value = result.total ?? 0
+      liveTotal.value = result.total ?? 0
       models.value = result.models ?? []
       groups.value = result.groups ?? []
       truncated.value = result.truncated === true
-      savedTotal.value = Math.max(savedTotal.value, liveItems.value.filter(item => item.saved_id).length)
     } else {
       const result = await adminAPI.resourceLibrary.listSaved(params)
       savedItems.value = result.items ?? []
@@ -747,7 +778,7 @@ function livePreviewFields(item: ResourceItem): { label: string; value: string }
     { label: t('admin.resourceLibrary.fields.billingId'), value: item.billing_id || '—' },
     { label: t('admin.resourceLibrary.fields.contentType'), value: item.content_type || '—' },
     { label: t('admin.resourceLibrary.fields.fileName'), value: item.name },
-    ...Object.entries(item.details ?? {}).map(([label, value]) => ({ label, value: formatDetailValue(value) }))
+    ...detailFields(item.details)
   ]
 }
 
@@ -768,7 +799,7 @@ function savedPreviewFields(item: SavedResource): { label: string; value: string
     { label: t('admin.resourceLibrary.fields.contentType'), value: item.content_type || '—' },
     { label: t('admin.resourceLibrary.fields.fileName'), value: item.name },
     { label: t('admin.resourceLibrary.fields.sha256'), value: item.sha256 },
-    ...Object.entries(item.details ?? {}).map(([label, value]) => ({ label, value: formatDetailValue(value) }))
+    ...detailFields(item.details)
   ]
 }
 

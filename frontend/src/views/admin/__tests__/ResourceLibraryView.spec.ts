@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import ResourceLibraryView from '@/views/admin/ResourceLibraryView.vue'
 
 const {
+  t,
   listItems,
   listSaved,
   fetchItemContent,
@@ -14,6 +15,7 @@ const {
   showSuccess,
   showError,
 } = vi.hoisted(() => ({
+  t: vi.fn((key: string) => key),
   listItems: vi.fn(),
   listSaved: vi.fn(),
   fetchItemContent: vi.fn(),
@@ -49,7 +51,7 @@ vi.mock('@/composables/useClipboard', () => ({
 
 vi.mock('vue-i18n', async () => ({
   ...await vi.importActual<typeof import('vue-i18n')>('vue-i18n'),
-  useI18n: () => ({ t: (key: string) => key }),
+  useI18n: () => ({ t: (key: string) => t(key) }),
 }))
 
 // URL has no createObjectURL in jsdom for blobs; stub it so cards can render.
@@ -79,7 +81,19 @@ function liveItem(overrides: Record<string, unknown> = {}) {
     expires_at: 1700003600,
     cost: 0.125,
     billing_state: 'settled',
-    details: { quality: 'auto' },
+    details: {
+      quality: 'auto',
+      size: '1024x1024',
+      count: 1,
+      ratio: '16:9',
+      resolution: '1080p',
+      duration: 8,
+      reference_images: 2,
+      reference_videos: 0,
+      reference_audios: 1,
+      completed_at: 1700000100,
+      billing_state: 'settled'
+    },
     ...overrides,
   }
 }
@@ -225,11 +239,94 @@ describe('ResourceLibraryView', () => {
     expect(text).toContain('—')
   })
 
+  it('never renders a raw i18n key for detail labels', async () => {
+    const wrapper = mountView()
+    await flushPromises()
+    // Open the preview so the detail block is rendered.
+    const previewButton = wrapper.findAll('button').find(button =>
+      button.text().includes('admin.resourceLibrary.actions.preview')
+    )
+    expect(previewButton).toBeTruthy()
+    await previewButton!.trigger('click')
+    await flushPromises()
+
+    // In this suite `t` is identity, so a translated label would equal its i18n
+    // key and `detailLabel` would fall back to the raw key. The real proof that
+    // the view never prints backend machine keys verbatim is that it performs an
+    // i18n lookup for every documented detail key.
+    const documentedDetailKeys = [
+      'quality', 'size', 'count', 'ratio', 'resolution', 'duration',
+      'reference_images', 'reference_videos', 'reference_audios',
+      'completed_at', 'billing_state'
+    ]
+    for (const key of documentedDetailKeys) {
+      expect(t).toHaveBeenCalledWith(`admin.resourceLibrary.details.${key}`)
+    }
+
+    // And it must not have asked for a translation of the raw key itself.
+    expect(t).not.toHaveBeenCalledWith('quality')
+    expect(t).not.toHaveBeenCalledWith('reference_images')
+  })
+
+  it('keeps the live and saved tab counters independent', async () => {
+    listItems.mockResolvedValue({
+      items: [liveItem(), liveItem({ task_id: 'imgtask_ffffffffffffffffffffffffffffffff', index: 1, name: 'second.png' })],
+      total: 2, page: 1, page_size: 20, pages: 1,
+      models: ['gpt-image-1'], groups: [{ id: 2, name: 'A组' }], truncated: false
+    })
+    listSaved.mockResolvedValue({
+      items: [savedItem()],
+      total: 1, page: 1, page_size: 20, pages: 1,
+      models: ['veo-3'], groups: [{ id: 2, name: 'A组' }]
+    })
+    const wrapper = mountView()
+    await flushPromises()
+
+    const badges = wrapper.findAll('button').filter(b => b.text().includes('admin.resourceLibrary.tabs.'))
+    expect(badges.length).toBeGreaterThanOrEqual(2)
+    // Live tab shows its own total (2), not the archived count.
+    expect(badges[0]!.text()).toContain('2')
+    expect(badges[1]!.text()).toContain('1')
+  })
+
   it('surfaces the disabled state when the API reports 404', async () => {
     listItems.mockRejectedValue({ status: 404 })
     mountView()
     await flushPromises()
 
     expect(showError).toHaveBeenCalledWith('admin.resourceLibrary.disabled')
+  })
+})
+
+// 与真实语言包联动：让上面的 t spy 改走真实的 zh 语言包，断言页面渲染的是译文，
+// 而不是 admin.resourceLibrary.* 这类原始 key。这是最能直接复现线上问题的断言：
+// 只要语言包结构写错（例如多包一层 admin 覆盖了同级模块），页面立刻退化成原始 key。
+describe('ResourceLibraryView with real zh messages', () => {
+  it('renders translated Chinese labels instead of raw i18n keys', async () => {
+    const zh = (await import('@/i18n/locales/zh')).default as Record<string, unknown>
+    const resolve = (obj: unknown, path: string): unknown =>
+      path.split('.').reduce<unknown>((acc, part) => {
+        if (acc && typeof acc === 'object') return (acc as Record<string, unknown>)[part]
+        return undefined
+      }, obj)
+
+    t.mockImplementation(((key: string) => {
+      const value = resolve(zh, key)
+      return typeof value === 'string' ? value : key
+    }) as never)
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const text = wrapper.text()
+    expect(text).toContain('资源库')
+    expect(text).toContain('生成资源')
+    expect(text).toContain('搜索')
+    expect(text).not.toContain('admin.resourceLibrary.title')
+    expect(text).not.toContain('admin.resourceLibrary.actions.preview')
+    expect(text).not.toContain('admin.resourceLibrary.filters.q')
+
+    // Restore the identity implementation for any later assertions.
+    t.mockImplementation(((key: string) => key) as never)
   })
 })

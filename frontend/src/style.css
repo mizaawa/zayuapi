@@ -517,6 +517,10 @@
   .modal-title {
     color: var(--md-sys-color-on-surface);
     @apply text-lg font-semibold;
+    /* Long unbreakable identifiers (task ids, file names) must wrap instead of
+       widening the panel past the viewport on narrow screens. */
+    min-width: 0;
+    @apply break-words;
   }
 
   .modal-close { color: var(--md-sys-color-on-surface-variant); }

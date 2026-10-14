@@ -1,5 +1,4 @@
 export default {
-  admin: {
     resourceLibrary: {
       title: '资源库',
       description: '集中监管生图与视频工作台已生成、尚未被删除的图片与视频，并可将需要留存的内容归档保存。',
@@ -62,6 +61,19 @@ export default {
         prompt: '提示词（原文，未脱敏）',
         sha256: 'SHA256'
       },
+      details: {
+        quality: '画质',
+        size: '尺寸',
+        count: '张数',
+        ratio: '宽高比',
+        resolution: '分辨率',
+        duration: '时长（秒）',
+        reference_images: '参考图',
+        reference_videos: '参考视频',
+        reference_audios: '参考音频',
+        completed_at: '完成时间',
+        billing_state: '计费状态'
+      },
       actions: {
         preview: '预览',
         download: '下载',
@@ -76,5 +88,4 @@ export default {
         savedMessage: '将永久删除已保存的「{name}」及其存档文件，此操作不可撤销。'
       }
     }
-  }
 }

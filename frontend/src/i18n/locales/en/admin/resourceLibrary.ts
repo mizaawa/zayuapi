@@ -1,5 +1,4 @@
 export default {
-  admin: {
     resourceLibrary: {
       title: 'Resource Library',
       description: 'Review every generated image and video still retained by the image and video workbenches, and archive the ones that must be kept.',
@@ -62,6 +61,19 @@ export default {
         prompt: 'Prompt (raw, unmasked)',
         sha256: 'SHA256'
       },
+      details: {
+        quality: 'Quality',
+        size: 'Size',
+        count: 'Count',
+        ratio: 'Aspect ratio',
+        resolution: 'Resolution',
+        duration: 'Duration (s)',
+        reference_images: 'Reference images',
+        reference_videos: 'Reference videos',
+        reference_audios: 'Reference audios',
+        completed_at: 'Completed',
+        billing_state: 'Billing state'
+      },
       actions: {
         preview: 'Preview',
         download: 'Download',
@@ -76,5 +88,4 @@ export default {
         savedMessage: 'This permanently deletes the archived "{name}" and its file. This cannot be undone.'
       }
     }
-  }
 }

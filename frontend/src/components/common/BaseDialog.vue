@@ -13,14 +13,14 @@
         <!-- Modal panel -->
         <div ref="dialogRef" :class="['modal-content', widthClasses]" @click.stop>
           <!-- Header -->
-          <div class="modal-header">
-            <h3 :id="dialogId" class="modal-title">
+          <div class="modal-header gap-3">
+            <h3 :id="dialogId" class="modal-title flex-1">
               {{ title }}
             </h3>
             <button
               v-if="showCloseButton"
               @click="emit('close')"
-              class="modal-close -mr-2 rounded-xl p-2 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/30"
+              class="modal-close -mr-2 flex-shrink-0 rounded-xl p-2 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/30"
               aria-label="Close modal"
             >
               <Icon name="x" size="md" />
