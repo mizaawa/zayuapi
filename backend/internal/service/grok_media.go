@@ -271,7 +271,10 @@ func parseGrokMediaJSONRequest(body []byte, info *GrokMediaRequestInfo) {
 	appendJSONImageURLs(gjson.GetBytes(body, "reference_image_urls"))
 	appendJSONImageURLs(gjson.GetBytes(body, "first_frame_image_url"))
 	appendJSONImageURLs(gjson.GetBytes(body, "last_frame_image_url"))
-	for _, field := range []string{"referenceVideos", "reference_videos", "video_refs", "reference_video_urls"} {
+	for _, frame := range gjson.GetBytes(body, "keyframes").Array() {
+		appendJSONImageURLs(frame.Get("image_url"))
+	}
+	for _, field := range []string{"referenceVideos", "reference_videos", "video_refs", "reference_video_urls", "reference_video_url"} {
 		value := gjson.GetBytes(body, field)
 		if !value.Exists() {
 			continue
@@ -915,6 +918,11 @@ func (s *OpenAIGatewayService) ForwardGrokMedia(
 
 	requestIDHeader := firstNonEmpty(resp.Header.Get("x-request-id"), resp.Header.Get("xai-request-id"))
 	requestModel := requestInfo.Model
+	if endpoint == GrokMediaEndpointVideoStatus {
+		if err := s.normalizeCompatibleVideoStatusResponse(account, requestID, resp); err != nil {
+			return nil, err
+		}
+	}
 	if resp.StatusCode >= 400 {
 		return s.handleGrokMediaErrorResponse(ctx, resp, c, account, requestIDHeader, requestModel)
 	}

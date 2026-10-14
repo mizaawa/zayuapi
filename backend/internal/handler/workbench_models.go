@@ -28,8 +28,12 @@ func (h *GatewayHandler) workbenchModels(c *gin.Context, group *service.Group, p
 	items := make([]gin.H, 0, len(models))
 	created := time.Now().Unix()
 	for _, model := range models {
+		if kind == "video" && !service.GroupAllowsWorkbenchVideoModel(group, model) {
+			continue
+		}
 		item := gin.H{"id": model, "object": "model", "owned_by": platform, "created": created}
-		if _, declared := declarations[model]; declared {
+		_, declared := declarations[model]
+		if declared || (kind == "video" && service.GroupHasWorkbenchModelPricing(group, platform, kind)) {
 			item["media_type"] = kind
 		}
 		items = append(items, item)

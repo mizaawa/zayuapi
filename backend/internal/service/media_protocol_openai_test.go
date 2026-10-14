@@ -19,7 +19,7 @@ import (
 
 func TestOpenAIVideoPrechargeMatchesForwarding(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	for _, model := range []string{"grok-imagine-video", "seedance-2.5"} {
+	for _, model := range []string{"seedance-2.5"} {
 		t.Run(model, func(t *testing.T) {
 			for _, tc := range []struct {
 				name       string

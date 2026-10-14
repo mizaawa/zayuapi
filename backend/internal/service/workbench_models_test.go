@@ -52,3 +52,30 @@ func TestWorkbenchPricedModelsGroupAndAccountIsolation(t *testing.T) {
 	group.ModelPricing = nil
 	require.Equal(t, []string{"tier-only"}, s.GetWorkbenchPricedModels(ctx, group, PlatformComposite, "video"))
 }
+
+func TestWorkbenchPricedModelsSharedChannelUsesGroupVideoDeclaration(t *testing.T) {
+	ctx := context.Background()
+	channels := []Channel{{ID: 1, Status: StatusActive, GroupIDs: []int64{42, 43},
+		ModelPricing: []ChannelModelPricing{{Platform: PlatformCustom, BillingMode: BillingModeVideo, Models: []string{"video-a", "video-b"}}},
+	}}
+	channelService := NewChannelService(&mockChannelRepository{
+		listAllFn: func(context.Context) ([]Channel, error) { return channels, nil },
+		getGroupPlatformsFn: func(context.Context, []int64) (map[int64]string, error) {
+			return map[int64]string{42: PlatformComposite, 43: PlatformComposite}, nil
+		},
+	}, nil, nil, nil)
+	shared := Account{Platform: PlatformCustom, Type: AccountTypeAPIKey,
+		Credentials: map[string]any{"api_key": "test", "base_url": "https://example.invalid"}}
+	s := &GatewayService{channelService: channelService, accountRepo: &workbenchModelsAccountRepo{
+		accounts: map[int64][]Account{42: {shared}, 43: {shared}},
+	}}
+	a := &Group{ID: 42, Platform: PlatformComposite, ModelPricing: []ChannelModelPricing{{Platform: PlatformCustom, BillingMode: BillingModeVideo, Models: []string{"video-a"}}}}
+	b := &Group{ID: 43, Platform: PlatformComposite, ModelPricing: []ChannelModelPricing{{Platform: PlatformCustom, BillingMode: BillingModeVideo, Models: []string{"video-b"}}}}
+	require.True(t, GroupHasWorkbenchModelPricing(a, PlatformComposite, "video"))
+	require.Equal(t, []string{"video-a"}, s.GetWorkbenchPricedModels(ctx, a, PlatformComposite, "video"))
+	require.Equal(t, []string{"video-b"}, s.GetWorkbenchPricedModels(ctx, b, PlatformComposite, "video"))
+	a.ModelPricing[0].Models = []string{"video-*"}
+	require.Equal(t, []string{"video-a", "video-b"}, s.GetWorkbenchPricedModels(ctx, a, PlatformComposite, "video"))
+	require.True(t, GroupAllowsWorkbenchVideoModel(a, "video-a"))
+	require.False(t, GroupAllowsWorkbenchVideoModel(a, "other-video"))
+}

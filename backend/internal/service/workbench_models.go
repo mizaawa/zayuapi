@@ -41,6 +41,9 @@ func (s *GatewayService) GetWorkbenchPricedModels(ctx context.Context, group *Gr
 	}
 	models := make([]string, 0, len(candidates))
 	for model := range candidates {
+		if kind == "video" && !GroupAllowsWorkbenchVideoModel(group, model) {
+			continue
+		}
 		if override := group.GetModelPricing(model); override != nil && string(override.BillingMode) != kind {
 			continue
 		}
@@ -71,4 +74,34 @@ func (s *GatewayService) GetWorkbenchPricedModels(ctx context.Context, group *Gr
 	}
 	sort.Strings(models)
 	return models
+}
+
+// GroupHasWorkbenchModelPricing reports whether a group explicitly declares
+// models for this workbench. Such declarations scope its video catalogue when
+// multiple groups share a channel with a broader pricing list.
+func GroupHasWorkbenchModelPricing(group *Group, platform, kind string) bool {
+	if group == nil {
+		return false
+	}
+	if platform == PlatformComposite {
+		platform = PlatformCustom
+	}
+	for _, entry := range group.ModelPricing {
+		if entry.Platform == platform && string(entry.BillingMode) == kind {
+			for _, model := range entry.Models {
+				if strings.TrimSpace(model) != "" {
+					return true
+				}
+			}
+		}
+	}
+	return false
+}
+
+func GroupAllowsWorkbenchVideoModel(group *Group, model string) bool {
+	if group == nil || !GroupHasWorkbenchModelPricing(group, group.Platform, "video") {
+		return true
+	}
+	pricing := group.GetModelPricing(model)
+	return pricing != nil && pricing.BillingMode == BillingModeVideo
 }

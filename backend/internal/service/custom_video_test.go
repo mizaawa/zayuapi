@@ -786,6 +786,24 @@ func TestValidateCustomVideoPricingAcceptsChannelAndGroupPrices(t *testing.T) {
 	require.NoError(t, svc.ValidateCustomVideoPricing(context.Background(), apiKey, model, VideoBillingResolution720P))
 }
 
+func TestValidateCustomVideoPricingRejectsOtherGroupModelOnSharedChannel(t *testing.T) {
+	const groupID = int64(714)
+	price := 0.2
+	apiKey := &APIKey{
+		GroupID: testInt64Pointer(groupID),
+		Group: &Group{ID: groupID, Platform: PlatformComposite,
+			ModelPricing: []ChannelModelPricing{{Platform: PlatformCustom, BillingMode: BillingModeVideo, Models: []string{"video-a"}, PerRequestPrice: &price}},
+		},
+	}
+	svc := &OpenAIGatewayService{
+		resolver: newCustomVideoChannelPricingResolverForTest(groupID, "video-b", BillingModeVideo, 0.25),
+	}
+	require.NoError(t, svc.ValidateCustomVideoPricing(context.Background(), apiKey, "video-a", VideoBillingResolution720P))
+	require.ErrorIs(t, svc.ValidateCustomVideoPricing(context.Background(), apiKey, "video-b", VideoBillingResolution720P), ErrCustomVideoPricingUnavailable)
+	apiKey.Group.VideoPrice720P = &price
+	require.ErrorIs(t, svc.ValidateCustomVideoPricing(context.Background(), apiKey, "video-b", VideoBillingResolution720P), ErrCustomVideoPricingUnavailable)
+}
+
 func TestValidateCustomVideoPricingDoesNotUse480PGroupPriceFor4K(t *testing.T) {
 	const groupID = int64(713)
 	groupPrice := 0.2

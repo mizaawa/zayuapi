@@ -112,6 +112,9 @@ func (s *OpenAIGatewayService) customMediaVideoContentFallback(ctx context.Conte
 		return nil, nil
 	}
 	defer func() { _ = statusResp.Body.Close() }()
+	if err := s.normalizeCompatibleVideoStatusResponse(account, requestID, statusResp); err != nil {
+		return nil, err
+	}
 	if statusResp.StatusCode < 200 || statusResp.StatusCode >= 300 {
 		return nil, nil
 	}

@@ -11,7 +11,7 @@ Content-Type: application/json
 
 `GET https://YOUR_SITE/v1/models` 获取当前密钥可用的模型。工作台还要求分组声明对应的图片或视频功能。不要将供应商密钥填写到用户侧密钥栏。
 
-工作台分别请求 `GET /v1/models?workbench=image` 和 `GET /v1/models?workbench=video`。这两个目录同时包含账号映射模型和当前分组、渠道中明确声明为对应媒体计费类型的模型，包括只有分辨率阶梯单价的模型。返回的 `media_type` 为 `image` 或 `video`；管理员启用的自定义模型列表仍然限制最终可选范围。通配符定价规则不会被当成实际模型名，其他分组或平台的定价模型不会加入目录。
+工作台分别请求 `GET /v1/models?workbench=image` 和 `GET /v1/models?workbench=video`。这两个目录包含账号映射模型和当前分组、渠道中明确声明为对应媒体计费类型的模型，包括只有分辨率阶梯单价的模型。分组明确声明视频模型定价时，该声明限定视频目录及创建权限；即使 A、B 分组共用账号或渠道，也不会相互展示或调用未授权的视频模型。通配符声明只匹配已有的实际模型，不作为模型名返回。返回的 `media_type` 为 `image` 或 `video`；管理员启用的自定义模型列表仍然限制最终可选范围。
 
 ## 图片
 
@@ -77,12 +77,17 @@ Content-Type: application/json
 | 协议 | 创建视频 | 查询视频 | 参考资料 |
 | --- | --- | --- | --- |
 | 默认兼容协议 | `/v1/videos` | `/v1/videos/{id}` | 保留既有透传和 MiniMax 工作台适配 |
+| OpenAI 视频（/v1/videos） | `/v1/videos` | `/v1/videos/{id}` | JSON `duration`、`resolution`；Grok 使用 `mode`、`images`、`reference_video_url` |
 | OpenAI Sora | `/v1/videos` | `/v1/videos/{id}` | `seconds`、`size`、`input_reference`；Grok 兼容模型允许分辨率及比例扩展 |
-| 968 | `/v1/videos/generations` | `/v1/videos/generations/{id}` | `duration`、`resolution`、`aspect_ratio`、`image_refs` / `video_refs` / `audio_refs` |
+| 8yes | `/v1/videos` | `/v1/videos/{id}` | `duration`、`ratio`；分辨率由模型名决定，支持模型对应的图片、视频和音频参考字段 |
 
 Base URL 可带或不带 `/v1`，不会重复拼接版本路径。协议选择是账号级配置，不会在付费创建失败后自动切换路径重发。
 
-968 视频结果可能包含 `video.url` 和 `video.duration`，结算优先采用实际上游时长。其可用模型以 `/models` 为准；接口文档列出模型不代表当前密钥已开通。
+`momoapi.xin` 的 `grok-imagine-video` 和 `grok-imagine-video-1.5` 应选择 **OpenAI 视频（/v1/videos）**，配置值为 `openai`。它与 Sora 仅路径相同，字段协议不同，因此保留两个选项。Grok 未指定时长时使用文档默认的 8 秒；工作台显式选择的时长仍原样发送。单图自动转换为 `mode: "image-to-video"` 和 `images`，多图为 `reference-images`；参考模式可同时携带首尾帧、关键帧及声线 ID。视频编辑转换为 `video-edit` 和单个 `reference_video_url`。参考音频 URL 不能替代 `reference_voice_ids`。
+
+部分 New API 上游在查询中返回 HTTP 500，并把 `new_api_panic` 错误 JSON 与正确的视频任务 JSON 连续写入响应。本站只在第二个对象具有与当前查询一致的任务 ID、`object: "video"` 和已知状态，且没有多余对象或尾部数据时恢复这个状态。其他错误仍按上游错误处理；创建请求不会应用这项恢复，也不会自动重发。视频成功下载并保存后才完成工作台任务及结算。
+
+视频结果可能包含 `video.url` 和 `video.duration`，结算优先采用实际上游时长。可用模型以供应商模型列表为准；接口文档列出模型不代表当前密钥已开通。
 
 ## 预扣费与退款
 

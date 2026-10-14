@@ -765,14 +765,14 @@ func (s *OpenAIGatewayService) ValidateCustomVideoPricing(
 		return nil
 	}
 	resolution = normalizeCustomVideoBillingResolution(resolution)
-	if resolution != "" && apiKeyHasConfiguredVideoPrice(apiKey, resolution) {
-		return nil
-	}
 	if refreshed := s.apiKeyWithFreshGroupMediaPricing(ctx, apiKey); refreshed != apiKey {
 		apiKey = refreshed
-		if resolution != "" && apiKeyHasConfiguredVideoPrice(apiKey, resolution) {
-			return nil
-		}
+	}
+	if !GroupAllowsWorkbenchVideoModel(apiKey.Group, model) {
+		return fmt.Errorf("%w for model %q", ErrCustomVideoPricingUnavailable, strings.TrimSpace(model))
+	}
+	if resolution != "" && apiKeyHasConfiguredVideoPrice(apiKey, resolution) {
+		return nil
 	}
 	if resolved := s.resolveOpenAIChannelPricing(ctx, model, apiKey); resolved != nil {
 		switch resolved.Mode {

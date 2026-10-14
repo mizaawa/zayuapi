@@ -111,17 +111,33 @@ func normalizeVideoProtocolBody(ctx context.Context, account *Account, body []by
 			return nil, fmt.Errorf("invalid video resolution")
 		}
 	}
-	resolution := strings.ToLower(strings.TrimSpace(readString("resolution", "resolution_name")))
+	resolution := strings.ToLower(strings.TrimSpace(readString("resolution")))
+	resolutionName := strings.ToLower(strings.TrimSpace(readString("resolution_name")))
+	autoResolution := resolution == "auto" || resolutionName == "auto"
 	delete(values, "resolution_name")
-	if resolution == "auto" {
+	for _, candidate := range []string{resolution, resolutionName} {
+		if candidate == "" || candidate == "auto" {
+			continue
+		}
+		if _, valid := normalizeVideoBillingResolution(candidate); !valid {
+			return nil, fmt.Errorf("invalid video resolution")
+		}
+	}
+	if resolution != "" && resolution != "auto" && resolutionName != "" && resolutionName != "auto" {
+		primary, _ := normalizeVideoBillingResolution(resolution)
+		alias, _ := normalizeVideoBillingResolution(resolutionName)
+		if primary != alias {
+			return nil, fmt.Errorf("conflicting video resolutions")
+		}
+	}
+	if resolution == "" || resolution == "auto" {
+		resolution = resolutionName
+	}
+	if resolution == "auto" || (resolution == "" && autoResolution) {
 		resolution = "720p"
 	}
 	if resolution != "" {
-		var valid bool
-		resolution, valid = normalizeVideoBillingResolution(resolution)
-		if !valid {
-			return nil, fmt.Errorf("invalid video resolution")
-		}
+		resolution, _ = normalizeVideoBillingResolution(resolution)
 		set("resolution", resolution)
 	}
 	readSeconds := func(key string) (int, error) {
@@ -164,9 +180,14 @@ func normalizeVideoProtocolBody(ctx context.Context, account *Account, body []by
 	var images []string
 	for _, field := range []string{"referenceImages", "reference_images", "image_refs"} {
 		if raw := values[field]; len(raw) > 0 {
-			if err := json.Unmarshal(raw, &images); err != nil {
+			var refs []string
+			if err := json.Unmarshal(raw, &refs); err != nil {
 				return nil, fmt.Errorf("invalid Sora reference images")
 			}
+			if len(images) > 0 && len(refs) > 0 {
+				return nil, fmt.Errorf("conflicting Sora reference image fields")
+			}
+			images = append(images, refs...)
 			delete(values, field)
 		}
 	}
@@ -174,6 +195,9 @@ func normalizeVideoProtocolBody(ctx context.Context, account *Account, body []by
 		return nil, fmt.Errorf("sora supports one input reference image")
 	}
 	if len(images) == 1 {
+		if _, exists := values["input_reference"]; exists {
+			return nil, fmt.Errorf("conflicting Sora reference image fields")
+		}
 		set("input_reference", map[string]string{"image_url": images[0]})
 	}
 	for _, field := range []string{"referenceVideos", "reference_videos", "video_refs", "referenceAudios", "reference_audios", "audio_refs"} {

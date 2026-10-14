@@ -66,6 +66,34 @@ func TestMediaProtocolSoraWorkbench(t *testing.T) {
 	require.Error(t, err)
 }
 
+func TestMediaProtocolSoraResolutionAliasAndReferenceConflicts(t *testing.T) {
+	account := &Account{Credentials: map[string]any{"media_protocol": "sora"}}
+	for _, test := range []struct {
+		name       string
+		body       string
+		resolution string
+	}{
+		{"auto defaults to 720p", `{"model":"relay-video","resolution":"auto"}`, "720p"},
+		{"auto uses explicit alias", `{"model":"relay-video","resolution":"auto","resolution_name":"1080p"}`, "1080p"},
+		{"matching aliases", `{"model":"relay-video","resolution":"720p","resolution_name":"1280x720"}`, "720p"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			body, err := normalizeVideoProtocolBody(context.Background(), account, []byte(test.body))
+			require.NoError(t, err)
+			require.Equal(t, test.resolution, gjson.GetBytes(body, "resolution").String())
+			require.False(t, gjson.GetBytes(body, "resolution_name").Exists())
+		})
+	}
+	for _, body := range []string{
+		`{"model":"relay-video","resolution":"480p","resolution_name":"720p"}`,
+		`{"model":"relay-video","referenceImages":["https://example.com/a.png"],"reference_images":["https://example.com/b.png"]}`,
+		`{"model":"relay-video","referenceImages":["https://example.com/a.png"],"input_reference":{"image_url":"https://example.com/b.png"}}`,
+	} {
+		_, err := VideoPrechargeRequestInfo(context.Background(), account, []byte(body), "application/json")
+		require.Error(t, err, body)
+	}
+}
+
 func TestMediaProtocolEightYesVideo(t *testing.T) {
 	account := &Account{Credentials: map[string]any{"media_protocol": "8yes", "base_url": "https://provider.example/v1"}, Platform: PlatformCustom, Type: AccountTypeAPIKey}
 	body, err := normalizeVideoProtocolBody(context.Background(), account, []byte(`{"model":"wan-3.0-720p","seconds":"4","ratio":"1:1","resolution":"auto","referenceImages":["https://example.com/a.png"],"referenceAudios":["https://example.com/a.mp3"]}`))

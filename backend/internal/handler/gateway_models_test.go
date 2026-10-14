@@ -722,9 +722,44 @@ func TestGatewayModels_WorkbenchIncludesDeclaredTierPricingAndCustomSelection(t 
 		if selected {
 			require.Equal(t, []string{"tier-video"}, modelIDsForTest(got.Data))
 		} else {
-			require.ElementsMatch(t, []string{"account-video", "tier-video", "other-video"}, modelIDsForTest(got.Data))
+			require.ElementsMatch(t, []string{"tier-video", "other-video"}, modelIDsForTest(got.Data))
 		}
 		require.NotContains(t, rec.Body.String(), "private-key-canary")
 		require.NotContains(t, rec.Body.String(), "private.invalid")
+	}
+}
+
+func TestGatewayModels_VideoWorkbenchGroupPricingIsolatesSharedAccountModels(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	groups := []*service.Group{
+		{ID: 81, Platform: service.PlatformComposite, ModelPricing: []service.ChannelModelPricing{{Platform: service.PlatformCustom, BillingMode: service.BillingModeVideo, Models: []string{"video-a"}}}},
+		{ID: 82, Platform: service.PlatformComposite, ModelPricing: []service.ChannelModelPricing{{Platform: service.PlatformCustom, BillingMode: service.BillingModeVideo, Models: []string{"video-b"}}}},
+	}
+	shared := service.Account{
+		Platform: service.PlatformCustom, Type: service.AccountTypeAPIKey,
+		Credentials: map[string]any{
+			"api_key": "test", "base_url": "https://example.invalid",
+			"model_mapping": map[string]string{"video-a": "video-a", "video-b": "video-b"},
+		},
+	}
+	h := newGatewayModelsHandlerForTest(&gatewayModelsAccountRepoStub{byGroup: map[int64][]service.Account{
+		81: {shared}, 82: {shared},
+	}})
+	for _, tc := range []struct {
+		group *service.Group
+		want  string
+	}{
+		{groups[0], "video-a"},
+		{groups[1], "video-b"},
+	} {
+		rec := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(rec)
+		c.Request = httptest.NewRequest(http.MethodGet, "/v1/models?workbench=video", nil)
+		c.Set(string(middleware2.ContextKeyAPIKey), &service.APIKey{GroupID: &tc.group.ID, Group: tc.group})
+		h.Models(c)
+		require.Equal(t, http.StatusOK, rec.Code)
+		var got gatewayModelsResponseForTest
+		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &got))
+		require.Equal(t, []string{tc.want}, modelIDsForTest(got.Data))
 	}
 }
