@@ -3,7 +3,6 @@ package repository
 import (
 	"context"
 	"database/sql"
-	"fmt"
 	"sync"
 	"testing"
 	"time"
@@ -21,7 +20,7 @@ import (
 func newUserEntRepo(t *testing.T) (*userRepository, *dbent.Client) {
 	t.Helper()
 
-	db, err := sql.Open("sqlite", fmt.Sprintf("file:%s?mode=memory&cache=shared&_fk=1", t.Name()))
+	db, err := sql.Open("sqlite", sqliteMemoryDSN(t.Name(), "_fk=1"))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = db.Close() })
 	db.SetMaxOpenConns(10)

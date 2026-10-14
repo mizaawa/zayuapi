@@ -4,12 +4,15 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"net/url"
+	"os"
 	"strings"
 	"testing"
 
 	dbent "github.com/Wei-Shaw/sub2api/ent"
 	"github.com/Wei-Shaw/sub2api/ent/enttest"
 	"github.com/Wei-Shaw/sub2api/internal/payment"
+	"github.com/stretchr/testify/require"
 
 	"entgo.io/ent/dialect"
 	entsql "entgo.io/ent/dialect/sql"
@@ -382,13 +385,30 @@ func TestGetPaymentConfigKeepsStoredEnabledTypes(t *testing.T) {
 	}
 }
 
+// sqliteMemoryTestName turns a test name into a safe file-URI path segment.
+// Reserved characters must be percent-encoded: an unescaped "#" (produced by an
+// empty subtest name, "#00") starts a URI fragment, which silently drops
+// "?mode=memory" and makes the driver create a real file in the package
+// directory instead of an in-memory database.
+func sqliteMemoryTestName(name string) string {
+	var b strings.Builder
+	for _, r := range name {
+		switch r {
+		case '/', ' ', '\\':
+			b.WriteByte('_')
+		case '#', '?', '%', '&', ':', '"', '<', '>', '|', '*', '\'':
+			fmt.Fprintf(&b, "%%%02X", r)
+		default:
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
+}
+
 func newPaymentConfigServiceTestClient(t *testing.T) *dbent.Client {
 	t.Helper()
 
-	dbName := fmt.Sprintf(
-		"file:%s?mode=memory&cache=shared",
-		strings.NewReplacer("/", "_", " ", "_").Replace(t.Name()),
-	)
+	dbName := "file:" + sqliteMemoryTestName(t.Name()) + "?mode=memory&cache=shared"
 	db, err := sql.Open("sqlite", dbName)
 	if err != nil {
 		t.Fatalf("open sqlite: %v", err)
@@ -553,4 +573,61 @@ func TestUpdatePaymentConfig_PersistsExplicitEmptyAndFalseValues(t *testing.T) {
 
 func paymentConfigStrPtr(value string) *string {
 	return &value
+}
+
+// The empty subtest name ("#00") previously produced a "#" in the DSN; because
+// everything after "#" is a URI fragment, "?mode=memory" was dropped and SQLite
+// created a real database file in the package directory.
+func TestSqliteMemoryTestNameEscapesURIReservedCharacters(t *testing.T) {
+	cases := map[string]string{
+		"TestFoo":                      "TestFoo",
+		"TestFoo/custom":               "TestFoo_custom",
+		"TestFoo/#00":                  "TestFoo_%2300",
+		"TestFoo/balance ":             "TestFoo_balance_",
+		"TestFoo/a?b":                  "TestFoo_a%3Fb",
+		"TestFoo/a%b":                  "TestFoo_a%25b",
+		"TestFoo/a&b=c":                "TestFoo_a%26b=c",
+		"TestFoo/sub/deeper":           "TestFoo_sub_deeper",
+		"TestFoo/unicode-\u4e2d\u6587": "TestFoo_unicode-\u4e2d\u6587",
+	}
+	for name, want := range cases {
+		if got := sqliteMemoryTestName(name); got != want {
+			t.Errorf("sqliteMemoryTestName(%q) = %q, want %q", name, got, want)
+		}
+	}
+	// The result must contain no raw fragment/query delimiter: every reserved
+	// character has to arrive as a %XX escape.
+	for _, name := range []string{"TestFoo/#00", "TestFoo/a?b", "TestFoo/a#b?c", "TestFoo/a%b"} {
+		got := sqliteMemoryTestName(name)
+		if strings.ContainsAny(got, "#") {
+			t.Errorf("sqliteMemoryTestName(%q) = %q still contains a fragment delimiter", name, got)
+		}
+		unescaped, err := url.PathUnescape(got)
+		if err != nil {
+			t.Errorf("sqliteMemoryTestName(%q) = %q is not valid percent-encoding: %v", name, got, err)
+			continue
+		}
+		if want := strings.NewReplacer("/", "_", " ", "_", "\\", "_").Replace(name); unescaped != want {
+			t.Errorf("sqliteMemoryTestName(%q) round-trips to %q, want %q", name, unescaped, want)
+		}
+	}
+}
+
+// Guard the DSN shape itself: the in-memory URI must stay a file URI whose
+// parameters are reachable, and it must not create an on-disk database.
+func TestPaymentConfigTestClientUsesInMemoryDatabase(t *testing.T) {
+	dbName := "file:" + sqliteMemoryTestName("TestFoo/#00") + "?mode=memory&cache=shared"
+	db, err := sql.Open("sqlite", dbName)
+	require.NoError(t, err)
+	defer func() { _ = db.Close() }()
+	_, err = db.Exec("CREATE TABLE t (id INTEGER); INSERT INTO t VALUES (1)")
+	require.NoError(t, err)
+	if _, statErr := os.Stat("TestFoo_"); statErr == nil {
+		_ = os.Remove("TestFoo_")
+		t.Fatal("in-memory DSN created an on-disk database file")
+	}
+	if _, statErr := os.Stat("TestFoo_%2300"); statErr == nil {
+		_ = os.Remove("TestFoo_%2300")
+		t.Fatal("in-memory DSN created an on-disk database file")
+	}
 }

@@ -5,7 +5,6 @@ package repository
 import (
 	"context"
 	"database/sql"
-	"fmt"
 	"testing"
 	"time"
 
@@ -14,7 +13,7 @@ import (
 )
 
 func TestGetPublicUserSpendingRankingReturnsOnlyParticipatingUserAvatars(t *testing.T) {
-	db, err := sql.Open("sqlite", fmt.Sprintf("file:%s?mode=memory&cache=shared", t.Name()))
+	db, err := sql.Open("sqlite", sqliteMemoryDSN(t.Name()))
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, db.Close()) })
 	_, err = db.Exec(`
