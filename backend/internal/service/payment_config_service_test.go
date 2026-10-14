@@ -390,16 +390,19 @@ func TestGetPaymentConfigKeepsStoredEnabledTypes(t *testing.T) {
 // empty subtest name, "#00") starts a URI fragment, which silently drops
 // "?mode=memory" and makes the driver create a real file in the package
 // directory instead of an in-memory database.
+//
+// WriteByte/WriteRune on strings.Builder never return an error, but errcheck
+// still requires the result to be consumed.
 func sqliteMemoryTestName(name string) string {
 	var b strings.Builder
 	for _, r := range name {
 		switch r {
 		case '/', ' ', '\\':
-			b.WriteByte('_')
+			_ = b.WriteByte('_')
 		case '#', '?', '%', '&', ':', '"', '<', '>', '|', '*', '\'':
-			fmt.Fprintf(&b, "%%%02X", r)
+			_, _ = fmt.Fprintf(&b, "%%%02X", r)
 		default:
-			b.WriteRune(r)
+			_, _ = b.WriteRune(r)
 		}
 	}
 	return b.String()
