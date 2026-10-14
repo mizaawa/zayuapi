@@ -188,6 +188,7 @@ func (s *SettingService) InitializeDefaultSettings(ctx context.Context) error {
 		SettingKeyOpsMetricsIntervalSeconds:    "60",
 
 		SettingKeyDisableRedeemCodeCreationLimit: "false",
+		SettingKeyResourceLibraryEnabled:         "false",
 
 		// Channel monitor defaults (enabled, 60s)
 		SettingKeyChannelMonitorEnabled:                "true",
@@ -816,6 +817,7 @@ func (s *SettingService) parseSettings(settings map[string]string) *SystemSettin
 	}
 
 	result.DisableRedeemCodeCreationLimit = settings[SettingKeyDisableRedeemCodeCreationLimit] == "true"
+	result.ResourceLibraryEnabled = settings[SettingKeyResourceLibraryEnabled] == "true"
 
 	// Channel monitor feature (default: enabled, 60s)
 	result.ChannelMonitorEnabled = !isFalseSettingValue(settings[SettingKeyChannelMonitorEnabled])

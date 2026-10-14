@@ -674,6 +674,9 @@ export interface SystemSettings {
 
   disable_redeem_code_creation_limit: boolean;
 
+  // 资源库（工作台生成内容监管与存档）
+  resource_library_enabled: boolean;
+
   // Channel Monitor feature switch
   channel_monitor_enabled: boolean;
   channel_monitor_hide_usage_logs: boolean;
@@ -997,6 +1000,9 @@ export interface UpdateSettingsRequest {
   account_quota_notify_emails?: NotifyEmailEntry[];
 
   disable_redeem_code_creation_limit?: boolean;
+
+  // 资源库（工作台生成内容监管与存档）
+  resource_library_enabled?: boolean;
 
   // Channel Monitor feature switch
   channel_monitor_enabled?: boolean;

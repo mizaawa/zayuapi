@@ -304,6 +304,7 @@ type SystemSettings struct {
 	AccountQuotaNotifyEmails        []NotifyEmailEntry `json:"account_quota_notify_emails"`
 
 	DisableRedeemCodeCreationLimit bool `json:"disable_redeem_code_creation_limit"`
+	ResourceLibraryEnabled         bool `json:"resource_library_enabled"`
 
 	// Channel Monitor feature switch
 	ChannelMonitorEnabled                bool   `json:"channel_monitor_enabled"`

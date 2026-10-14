@@ -154,6 +154,7 @@ export default {
     leaderboard: '排行榜',
     adminPanel: '管理面板',
     dashboard: '仪表盘',
+    resourceLibrary: '资源库',
     announcements: '公告',
     apiKeys: 'API 密钥',
     batchImage: '批量生图',

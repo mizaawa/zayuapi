@@ -21,7 +21,8 @@ FRONTEND_CRITICAL_VITEST := \
 	src/utils/__tests__/usageRequest.spec.ts \
 	src/utils/__tests__/usageRequestQueue.spec.ts \
 	src/components/common/__tests__/Pagination.spec.ts \
-	src/views/admin/__tests__/SettingsView.spec.ts
+	src/views/admin/__tests__/SettingsView.spec.ts \
+	src/views/admin/__tests__/ResourceLibraryView.spec.ts
 
 # 一键编译前后端
 build: build-backend build-frontend

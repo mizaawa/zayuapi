@@ -542,6 +542,32 @@ const ServerIcon = {
     )
 }
 
+const LibraryIcon = {
+  render: () =>
+    h(
+      'svg',
+      { fill: 'none', viewBox: '0 0 24 24', stroke: 'currentColor', 'stroke-width': '1.5' },
+      [
+        h('path', {
+          'stroke-linecap': 'round',
+          'stroke-linejoin': 'round',
+          d: 'M3.75 6.75h11.25a1.5 1.5 0 011.5 1.5v8.25a1.5 1.5 0 01-1.5 1.5H3.75a1.5 1.5 0 01-1.5-1.5V8.25a1.5 1.5 0 011.5-1.5z'
+        }),
+        h('path', {
+          'stroke-linecap': 'round',
+          'stroke-linejoin': 'round',
+          d: 'M19.5 8.25a1.5 1.5 0 011.5 1.5v7.5a3.75 3.75 0 01-3.75 3.75H8.25a1.5 1.5 0 01-1.5-1.5'
+        }),
+        h('path', {
+          'stroke-linecap': 'round',
+          'stroke-linejoin': 'round',
+          d: 'M6 13.5l2.25-2.25 2.25 2.25 2.25-3 3 3.75'
+        }),
+        h('path', { 'stroke-linecap': 'round', 'stroke-linejoin': 'round', d: 'M7.5 9.75h.008v.008H7.5V9.75z' })
+      ]
+    )
+}
+
 const BellIcon = {
   render: () =>
     h(
@@ -732,6 +758,8 @@ const flagRiskControl = makeSidebarFlag(FeatureFlags.riskControl)
 const flagOpsMonitoring = () => adminSettingsStore.opsMonitoringEnabled
 const flagAdminPayment = () => adminSettingsStore.paymentEnabled
 const flagBatchImageAccess = () => canUseBatchImage.value
+// Admin-only: the resource library switch lives in admin settings, not public settings.
+const flagResourceLibrary = () => adminSettingsStore.resourceLibraryEnabled
 
 function buildCustomNavItem(item: CustomMenuItem): NavItem {
   const openInNewWindow = appStore.cachedPublicSettings?.custom_menu_force_new_tab === true
@@ -824,6 +852,7 @@ const adminNavItems = computed((): NavItem[] => {
     },
     { path: '/admin/subscriptions', label: t('nav.subscriptions'), icon: CreditCardIcon, hideInSimpleMode: true },
     { path: '/admin/accounts', label: t('nav.accounts'), icon: GlobeIcon },
+    { path: '/admin/resource-library', label: t('nav.resourceLibrary'), icon: LibraryIcon, hideInSimpleMode: true, featureFlag: flagResourceLibrary },
     { path: '/admin/announcements', label: t('nav.announcements'), icon: BellIcon },
     { path: '/admin/proxies', label: t('nav.proxies'), icon: ServerIcon },
     {

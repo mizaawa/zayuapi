@@ -375,6 +375,7 @@ func (h *SettingHandler) GetSettings(c *gin.Context) {
 		PaymentAlipayMobilePrecreateDeepLink:                   paymentCfg.AlipayMobilePrecreateDeepLink,
 
 		DisableRedeemCodeCreationLimit: settings.DisableRedeemCodeCreationLimit,
+		ResourceLibraryEnabled:         settings.ResourceLibraryEnabled,
 
 		ChannelMonitorEnabled:                settings.ChannelMonitorEnabled,
 		ChannelMonitorHideUsageLogs:          settings.ChannelMonitorHideUsageLogs,

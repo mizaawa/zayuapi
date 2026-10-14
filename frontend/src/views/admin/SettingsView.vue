@@ -6900,6 +6900,29 @@
 
             <div class="flex items-center justify-between gap-4 border-t border-gray-100 pt-5 dark:border-dark-700">
               <div class="min-w-0 flex-1">
+                <label for="resource-library-enabled" class="text-sm font-medium text-gray-700 dark:text-gray-300">
+                  {{ localText('开启资源库管理功能', 'Enable resource library management') }}
+                </label>
+                <p class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+                  {{
+                    localText(
+                      '开启后会在「账号管理」与「公告」菜单之间新增「资源库」入口，集中展示生图/视频工作台已生成且未被删除的图片与视频，支持云端预览、下载、删除、复制提示词、保存留存，并按图片/视频、模型、分组筛选和按名称搜索。',
+                      'When enabled, a Resource Library entry appears between Account Management and Announcements. It lists every generated image/video still retained by the image and video workbenches, with cloud preview, download, delete, prompt copy and permanent archiving, plus filtering by kind, model and group and search by file name.'
+                    )
+                  }}
+                </p>
+              </div>
+              <Toggle
+                id="resource-library-enabled"
+                v-model="form.resource_library_enabled"
+                :aria-label="localText('开启资源库管理功能', 'Enable resource library management')"
+                class="shrink-0"
+                data-testid="resource-library-enabled-toggle"
+              />
+            </div>
+
+            <div class="flex items-center justify-between gap-4 border-t border-gray-100 pt-5 dark:border-dark-700">
+              <div class="min-w-0 flex-1">
                 <label
                   for="channel-monitor-hide-usage-logs"
                   class="text-sm font-medium text-gray-700 dark:text-gray-300"
@@ -9839,6 +9862,7 @@ const form = reactive<SettingsForm>({
   response_model_audit_bypass_enabled: false,
   disable_temp_unschedulable: false,
   disable_redeem_code_creation_limit: false,
+  resource_library_enabled: false,
   // Affiliate (邀请返利) feature switch
   affiliate_enabled: false,
   // Allow user view error requests
@@ -11530,6 +11554,7 @@ async function saveSettings() {
       response_model_audit_bypass_enabled: form.response_model_audit_bypass_enabled,
       disable_temp_unschedulable: form.disable_temp_unschedulable,
       disable_redeem_code_creation_limit: form.disable_redeem_code_creation_limit,
+      resource_library_enabled: form.resource_library_enabled,
       // Affiliate (邀请返利) feature switch
       affiliate_enabled: form.affiliate_enabled,
       allow_user_view_error_requests: form.allow_user_view_error_requests,

@@ -230,7 +230,11 @@ func (h *VideoWorkbenchHandler) Submit(c *gin.Context) {
 			c.Request = c.Request.WithContext(service.WithMediaWorkbenchPrepayment(c.Request.Context(), reservation))
 		}
 	}
-	task, err := h.tasks.Create(c.Request.Context(), key.UserID, metadata)
+	owner := service.VideoWorkbenchOwner{UserID: key.UserID, BillingID: mediaReservationID(c)}
+	if key.GroupID != nil {
+		owner.GroupID = *key.GroupID
+	}
+	task, err := h.tasks.CreateFor(c.Request.Context(), owner, metadata)
 	if err != nil {
 		response.ErrorFrom(c, err)
 		return

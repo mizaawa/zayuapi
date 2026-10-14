@@ -42,6 +42,9 @@ func RegisterAdminRoutes(
 		// 账号管理
 		registerAccountRoutes(admin, h, stepUpAuth)
 
+		// 资源库（工作台生成内容监管与存档）
+		registerResourceLibraryRoutes(admin, h)
+
 		// 公告管理
 		registerAnnouncementRoutes(admin, h)
 
@@ -412,6 +415,21 @@ func registerAccountRoutes(admin *gin.RouterGroup, h *handler.Handlers, stepUpAu
 		accounts.POST("/exchange-setup-token-code", h.Admin.OAuth.ExchangeSetupTokenCode)
 		accounts.POST("/cookie-auth", h.Admin.OAuth.CookieAuth)
 		accounts.POST("/setup-token-cookie-auth", h.Admin.OAuth.SetupTokenCookieAuth)
+	}
+}
+
+func registerResourceLibraryRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
+	library := admin.Group("/resource-library")
+	{
+		library.GET("/items", h.Admin.ResourceLibrary.List)
+		library.GET("/items/:kind/:task_id", h.Admin.ResourceLibrary.Get)
+		library.GET("/items/:kind/:task_id/content", h.Admin.ResourceLibrary.Content)
+		library.DELETE("/items/:kind/:task_id", h.Admin.ResourceLibrary.Delete)
+		library.POST("/items/:kind/:task_id/save", h.Admin.ResourceLibrary.Save)
+		library.GET("/saved", h.Admin.ResourceLibrary.ListSaved)
+		library.GET("/saved/:id", h.Admin.ResourceLibrary.GetSaved)
+		library.GET("/saved/:id/content", h.Admin.ResourceLibrary.SavedContent)
+		library.DELETE("/saved/:id", h.Admin.ResourceLibrary.DeleteSaved)
 	}
 }
 

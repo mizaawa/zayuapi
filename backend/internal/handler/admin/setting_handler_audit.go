@@ -579,6 +579,9 @@ func diffSettings(before *service.SystemSettings, after *service.SystemSettings,
 	if before.DisableRedeemCodeCreationLimit != after.DisableRedeemCodeCreationLimit {
 		changed = append(changed, "disable_redeem_code_creation_limit")
 	}
+	if before.ResourceLibraryEnabled != after.ResourceLibraryEnabled {
+		changed = append(changed, "resource_library_enabled")
+	}
 	if before.ChannelMonitorEnabled != after.ChannelMonitorEnabled {
 		changed = append(changed, "channel_monitor_enabled")
 	}

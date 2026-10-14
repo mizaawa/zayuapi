@@ -199,7 +199,10 @@ func (h *AsyncImageHandler) Submit(c *gin.Context) {
 		}
 	}()
 	taskCtx, recorder, cancel := newAsyncImageTaskContext(c, body, timeout)
-	owner := service.ImageTaskOwner{UserID: apiKey.UserID, APIKeyID: apiKey.ID, UserEmail: ownerEmail, IsAdmin: apiKey.User != nil && apiKey.User.IsAdmin()}
+	owner := service.ImageTaskOwner{UserID: apiKey.UserID, APIKeyID: apiKey.ID, UserEmail: ownerEmail, IsAdmin: apiKey.User != nil && apiKey.User.IsAdmin(), BillingID: mediaReservationID(c)}
+	if apiKey.GroupID != nil {
+		owner.GroupID = *apiKey.GroupID
+	}
 	var task *service.ImageTask
 	if metadata != nil {
 		task, err = h.tasks.CreateWorkbench(c.Request.Context(), owner, *metadata)

@@ -154,6 +154,7 @@ export default {
   nav: {
     adminPanel: 'Admin Panel',
     dashboard: 'Dashboard',
+    resourceLibrary: 'Resource Library',
     announcements: 'Announcements',
     apiKeys: 'API Keys',
     batchImage: 'Batch Images',

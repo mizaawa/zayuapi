@@ -49,6 +49,9 @@ type ImageTaskRecord struct {
 	WorkbenchStorage string                  `json:"workbench_storage,omitempty"`
 	QueueDeadline    int64                   `json:"queue_deadline,omitempty"`
 	QueueLeaseUntil  int64                   `json:"queue_lease_until,omitempty"`
+	// Admin-only provenance; never copied into the public ImageTask view.
+	GroupID   int64  `json:"group_id,omitempty"`
+	BillingID string `json:"billing_id,omitempty"`
 }
 
 // ImageTask is the API-safe task representation returned to callers.
@@ -73,6 +76,8 @@ type ImageTaskOwner struct {
 	APIKeyID  int64
 	UserEmail string
 	IsAdmin   bool
+	GroupID   int64
+	BillingID string
 }
 
 type ImageTaskStore interface {

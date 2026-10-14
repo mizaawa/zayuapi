@@ -82,6 +82,16 @@ type VideoWorkbenchRecord struct {
 	UserID     int64 `json:"user_id"`
 	LeaseUntil int64 `json:"lease_until"`
 	Deadline   int64 `json:"deadline"`
+	// Admin-only provenance; List returns only the embedded public task.
+	GroupID   int64  `json:"group_id,omitempty"`
+	BillingID string `json:"billing_id,omitempty"`
+}
+
+// VideoWorkbenchOwner identifies who a queued task bills and belongs to.
+type VideoWorkbenchOwner struct {
+	UserID    int64
+	GroupID   int64
+	BillingID string
 }
 
 type VideoWorkbenchStore interface {
@@ -144,6 +154,11 @@ func (s *VideoWorkbenchService) ReservePayload(size int) (func(), error) {
 }
 
 func (s *VideoWorkbenchService) Create(ctx context.Context, userID int64, metadata VideoWorkbenchMetadata) (*VideoWorkbenchRecord, error) {
+	return s.CreateFor(ctx, VideoWorkbenchOwner{UserID: userID}, metadata)
+}
+
+func (s *VideoWorkbenchService) CreateFor(ctx context.Context, owner VideoWorkbenchOwner, metadata VideoWorkbenchMetadata) (*VideoWorkbenchRecord, error) {
+	userID := owner.UserID
 	p := s.Runtime(ctx)
 	if !p.Enabled {
 		return nil, ErrVideoWorkbenchDisabled
@@ -162,6 +177,7 @@ func (s *VideoWorkbenchService) Create(ctx context.Context, userID int64, metada
 			Status: "queued", CreatedAt: now.Unix(), ExpiresAt: now.Add(ttl).Unix(), Workbench: metadata,
 		},
 		UserID: userID, LeaseUntil: now.Add(VideoWorkbenchLease).Unix(), Deadline: now.Add(VideoWorkbenchQueueTimeout).Unix(),
+		GroupID: owner.GroupID, BillingID: owner.BillingID,
 	}
 	if err := s.store.Create(ctx, task, ttl); err != nil {
 		return nil, err
@@ -314,6 +330,12 @@ func (s *VideoWorkbenchService) Delete(ctx context.Context, userID int64, id str
 	if err != nil {
 		return err
 	}
+	return s.deleteTask(ctx, task)
+}
+
+// deleteTask removes an authorized task and its private file. Callers have
+// already established ownership (user path) or administrator access.
+func (s *VideoWorkbenchService) deleteTask(ctx context.Context, task *VideoWorkbenchRecord) error {
 	if err := s.store.Delete(ctx, task, time.Now().UTC()); err != nil {
 		return err
 	}

@@ -334,6 +334,7 @@ type UpdateSettingsRequest struct {
 	PaymentAlipayMobilePrecreateDeepLink *bool `json:"payment_alipay_mobile_precreate_deep_link"`
 
 	DisableRedeemCodeCreationLimit *bool `json:"disable_redeem_code_creation_limit"`
+	ResourceLibraryEnabled         *bool `json:"resource_library_enabled"`
 
 	// Channel Monitor feature switch
 	ChannelMonitorEnabled                *bool   `json:"channel_monitor_enabled"`
@@ -1928,6 +1929,12 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 			}
 			return previousSettings.DisableRedeemCodeCreationLimit
 		}(),
+		ResourceLibraryEnabled: func() bool {
+			if req.ResourceLibraryEnabled != nil {
+				return *req.ResourceLibraryEnabled
+			}
+			return previousSettings.ResourceLibraryEnabled
+		}(),
 
 		ChannelMonitorEnabled: func() bool {
 			if req.ChannelMonitorEnabled != nil {
@@ -2509,6 +2516,7 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		PaymentAlipayMobilePrecreateDeepLink:                   updatedPaymentCfg.AlipayMobilePrecreateDeepLink,
 
 		DisableRedeemCodeCreationLimit: updatedSettings.DisableRedeemCodeCreationLimit,
+		ResourceLibraryEnabled:         updatedSettings.ResourceLibraryEnabled,
 
 		ChannelMonitorEnabled:                updatedSettings.ChannelMonitorEnabled,
 		ChannelMonitorHideUsageLogs:          updatedSettings.ChannelMonitorHideUsageLogs,

@@ -162,6 +162,12 @@ func (s *ImageTaskService) DeleteWorkbench(ctx context.Context, userID int64, id
 	if task.UserID != userID || task.Workbench == nil || task.ExpiresAt <= time.Now().Unix() {
 		return ErrImageTaskNotFound
 	}
+	return s.deleteWorkbenchTask(ctx, store, task)
+}
+
+// deleteWorkbenchTask removes one authorized task. Callers have already
+// established ownership (user path) or administrator access (resource library).
+func (s *ImageTaskService) deleteWorkbenchTask(ctx context.Context, store ImageWorkbenchStore, task *ImageTaskRecord) error {
 	if task.Status == ImageTaskStatusProcessing {
 		return ErrImageTaskProcessing
 	}
@@ -200,6 +206,10 @@ func (s *ImageTaskService) DownloadWorkbenchImage(ctx context.Context, userID in
 	if task.UserID != userID || task.Workbench == nil || task.ExpiresAt <= time.Now().Unix() || task.Status != ImageTaskStatusCompleted {
 		return nil, "", ErrImageTaskNotFound
 	}
+	return s.readWorkbenchImage(ctx, task, index)
+}
+
+func (s *ImageTaskService) readWorkbenchImage(ctx context.Context, task *ImageTaskRecord, index int) ([]byte, string, error) {
 	var result imageWorkbenchResult
 	if json.Unmarshal(task.Result, &result) != nil || index < 0 || index >= len(result.Data) || result.Data[index].URL == "" {
 		return nil, "", ErrImageTaskNotFound
@@ -255,6 +265,8 @@ func (s *ImageTaskService) CreateWorkbench(ctx context.Context, owner ImageTaskO
 		Workbench:       &metadata,
 		QueueDeadline:   now.Add(ImageWorkbenchQueueTimeout).Unix(),
 		QueueLeaseUntil: now.Add(ImageWorkbenchQueueLease).Unix(),
+		GroupID:         owner.GroupID,
+		BillingID:       owner.BillingID,
 	}
 	if !s.Enabled() {
 		task.WorkbenchStorage = ImageWorkbenchStorageLocal

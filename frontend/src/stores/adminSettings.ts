@@ -50,6 +50,7 @@ export const useAdminSettingsStore = defineStore('adminSettings', () => {
   const opsQueryModeDefault = ref(readCachedString('ops_query_mode_default_cached', 'auto'))
   const paymentEnabled = ref(readCachedBool('payment_enabled_cached', false))
   const disableRedeemCodeCreationLimit = ref(false)
+  const resourceLibraryEnabled = ref(readCachedBool('resource_library_enabled_cached', false))
   const customMenuItems = ref<CustomMenuItem[]>([])
 
   async function fetch(force = false): Promise<void> {
@@ -76,6 +77,8 @@ export const useAdminSettingsStore = defineStore('adminSettings', () => {
 
       customMenuItems.value = Array.isArray(settings.custom_menu_items) ? settings.custom_menu_items : []
       disableRedeemCodeCreationLimit.value = settings.disable_redeem_code_creation_limit === true
+      resourceLibraryEnabled.value = settings.resource_library_enabled === true
+      writeCachedBool('resource_library_enabled_cached', resourceLibraryEnabled.value)
 
       if (paymentConfigResp) {
         paymentEnabled.value = paymentConfigResp.data?.enabled ?? false
@@ -101,6 +104,12 @@ export const useAdminSettingsStore = defineStore('adminSettings', () => {
   function setOpsRealtimeMonitoringEnabledLocal(value: boolean) {
     opsRealtimeMonitoringEnabled.value = value
     writeCachedBool('ops_realtime_monitoring_enabled_cached', value)
+    loaded.value = true
+  }
+
+  function setResourceLibraryEnabledLocal(value: boolean) {
+    resourceLibraryEnabled.value = value
+    writeCachedBool('resource_library_enabled_cached', value)
     loaded.value = true
   }
 
@@ -148,11 +157,13 @@ export const useAdminSettingsStore = defineStore('adminSettings', () => {
     opsQueryModeDefault,
     paymentEnabled,
     disableRedeemCodeCreationLimit,
+    resourceLibraryEnabled,
     customMenuItems,
     fetch,
     setOpsMonitoringEnabledLocal,
     setOpsRealtimeMonitoringEnabledLocal,
     setPaymentEnabledLocal,
+    setResourceLibraryEnabledLocal,
     setOpsQueryModeDefaultLocal
   }
 })

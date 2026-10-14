@@ -204,6 +204,7 @@ type SystemSettings struct {
 	OpsMetricsIntervalSeconds    int
 
 	DisableRedeemCodeCreationLimit bool `json:"disable_redeem_code_creation_limit"`
+	ResourceLibraryEnabled         bool `json:"resource_library_enabled"`
 
 	// Channel Monitor feature
 	ChannelMonitorEnabled                bool   `json:"channel_monitor_enabled"`

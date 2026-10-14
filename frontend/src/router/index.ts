@@ -562,6 +562,19 @@ const routes: RouteRecordRaw[] = [
     }
   },
   {
+    path: '/admin/resource-library',
+    name: 'AdminResourceLibrary',
+    component: () => import('@/views/admin/ResourceLibraryView.vue'),
+    meta: {
+      requiresAuth: true,
+      requiresAdmin: true,
+      requiresResourceLibrary: true,
+      title: 'Resource Library',
+      titleKey: 'admin.resourceLibrary.title',
+      descriptionKey: 'admin.resourceLibrary.description'
+    }
+  },
+  {
     path: '/admin/announcements',
     name: 'AdminAnnouncements',
     component: () => import('@/views/admin/AnnouncementsView.vue'),
@@ -924,6 +937,16 @@ router.beforeEach(async (to, _from, next) => {
     // User is authenticated but not admin, redirect to user dashboard
     next('/dashboard')
     return
+  }
+
+  if (requiresAdmin && authStore.isAdmin && to.meta.requiresResourceLibrary === true) {
+    if (!adminSettingsStore.loaded) {
+      await adminSettingsStore.fetch()
+    }
+    if (adminSettingsStore.loaded && adminSettingsStore.resourceLibraryEnabled !== true) {
+      next('/admin/dashboard')
+      return
+    }
   }
 
   if (requiresAdmin && authStore.isAdmin) {

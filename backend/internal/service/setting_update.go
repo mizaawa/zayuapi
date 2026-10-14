@@ -414,6 +414,7 @@ func (s *SettingService) buildSystemSettingsUpdates(ctx context.Context, setting
 	}
 
 	updates[SettingKeyDisableRedeemCodeCreationLimit] = strconv.FormatBool(settings.DisableRedeemCodeCreationLimit)
+	updates[SettingKeyResourceLibraryEnabled] = strconv.FormatBool(settings.ResourceLibraryEnabled)
 
 	// Channel monitor feature switch
 	updates[SettingKeyChannelMonitorEnabled] = strconv.FormatBool(settings.ChannelMonitorEnabled)
