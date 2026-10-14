@@ -19,6 +19,19 @@ type gatewayModelsAccountRepoStub struct {
 	byGroup map[int64][]service.Account
 }
 
+type gatewayModelsChannelRepoStub struct {
+	service.ChannelRepository
+	channels []service.Channel
+}
+
+func (s *gatewayModelsChannelRepoStub) ListAll(context.Context) ([]service.Channel, error) {
+	return s.channels, nil
+}
+
+func (s *gatewayModelsChannelRepoStub) GetGroupPlatforms(context.Context, []int64) (map[int64]string, error) {
+	return map[int64]string{81: service.PlatformComposite, 82: service.PlatformComposite}, nil
+}
+
 type gatewayModelsResponseForTest struct {
 	Object string                    `json:"object"`
 	Data   []gatewayModelItemForTest `json:"data"`
@@ -51,12 +64,19 @@ func (s *gatewayModelsAccountRepoStub) ListSchedulableByGroupID(ctx context.Cont
 	return out, nil
 }
 
-func newGatewayModelsHandlerForTest(repo service.AccountRepository) *GatewayHandler {
+func newGatewayModelsHandlerForTest(repo service.AccountRepository, channels ...*service.ChannelService) *GatewayHandler {
+	var channelService *service.ChannelService
+	if len(channels) > 0 {
+		channelService = channels[0]
+	}
 	return &GatewayHandler{
 		gatewayService: service.NewGatewayService(
 			repo,
-			nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil,
-			nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil,
+			nil, nil, nil, nil, nil,
+			nil, nil, nil, nil, nil,
+			nil, nil, nil, nil, nil,
+			nil, nil, nil, nil, nil,
+			nil, nil, channelService, nil, nil, nil, nil,
 		),
 	}
 }
@@ -761,5 +781,76 @@ func TestGatewayModels_VideoWorkbenchGroupPricingIsolatesSharedAccountModels(t *
 		var got gatewayModelsResponseForTest
 		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &got))
 		require.Equal(t, []string{tc.want}, modelIDsForTest(got.Data))
+	}
+}
+
+func TestGatewayModels_VideoWorkbenchKeysIsolateAccountsOnSharedChannel(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	account := func(id, groupID int64, model string) service.Account {
+		return service.Account{ID: id, GroupIDs: []int64{groupID}, Platform: service.PlatformCustom, Type: service.AccountTypeAPIKey,
+			Credentials: map[string]any{"api_key": "test", "base_url": "https://example.invalid", "model_mapping": map[string]string{model: model}}}
+	}
+	channels := service.NewChannelService(&gatewayModelsChannelRepoStub{channels: []service.Channel{{
+		ID: 1, Status: service.StatusActive, GroupIDs: []int64{81, 82},
+		ModelPricing: []service.ChannelModelPricing{{Platform: service.PlatformCustom, BillingMode: service.BillingModeVideo, Models: []string{"video-a", "video-b"}}},
+	}}}, nil, nil, nil)
+	repo := &gatewayModelsAccountRepoStub{byGroup: map[int64][]service.Account{
+		81: {account(1, 81, "video-a")}, 82: {account(2, 82, "video-b")},
+	}}
+	h := newGatewayModelsHandlerForTest(repo, channels)
+	for _, tc := range []struct {
+		groupID int64
+		want    string
+	}{{81, "video-a"}, {82, "video-b"}} {
+		group := &service.Group{ID: tc.groupID, Platform: service.PlatformComposite}
+		rec := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(rec)
+		c.Request = httptest.NewRequest(http.MethodGet, "/v1/models?workbench=video", nil)
+		c.Set(string(middleware2.ContextKeyAPIKey), &service.APIKey{GroupID: &group.ID, Group: group})
+		h.Models(c)
+		require.Equal(t, http.StatusOK, rec.Code)
+		var got gatewayModelsResponseForTest
+		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &got))
+		require.Equal(t, []string{tc.want}, modelIDsForTest(got.Data))
+	}
+	repo.byGroup[81] = []service.Account{account(1, 81, "video-b")}
+	updated := httptest.NewRecorder()
+	updatedContext, _ := gin.CreateTestContext(updated)
+	updatedContext.Request = httptest.NewRequest(http.MethodGet, "/v1/models?workbench=video", nil)
+	updatedGroup := &service.Group{ID: 81, Platform: service.PlatformComposite}
+	updatedContext.Set(string(middleware2.ContextKeyAPIKey), &service.APIKey{GroupID: &updatedGroup.ID, Group: updatedGroup})
+	h.Models(updatedContext)
+	require.Equal(t, http.StatusOK, updated.Code)
+	var updatedModels gatewayModelsResponseForTest
+	require.NoError(t, json.Unmarshal(updated.Body.Bytes(), &updatedModels))
+	require.Equal(t, []string{"video-b"}, modelIDsForTest(updatedModels.Data))
+
+	group := &service.Group{ID: 81, Platform: service.PlatformComposite,
+		ModelsListConfig: service.GroupModelsListConfig{Enabled: true}}
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = httptest.NewRequest(http.MethodGet, "/v1/models?workbench=video", nil)
+	c.Set(string(middleware2.ContextKeyAPIKey), &service.APIKey{GroupID: &group.ID, Group: group})
+	h.Models(c)
+	require.Equal(t, http.StatusOK, rec.Code)
+	var got gatewayModelsResponseForTest
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &got))
+	require.Empty(t, got.Data)
+
+	shared := service.Account{ID: 3, GroupIDs: []int64{81, 82}, Platform: service.PlatformCustom, Type: service.AccountTypeAPIKey,
+		Credentials: map[string]any{"api_key": "test", "base_url": "https://example.invalid", "model_mapping": map[string]string{"video-a": "video-a", "video-b": "video-b"}}}
+	repo.byGroup[81] = []service.Account{shared}
+	repo.byGroup[82] = []service.Account{shared}
+	for _, groupID := range []int64{81, 82} {
+		group := &service.Group{ID: groupID, Platform: service.PlatformComposite}
+		rec := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(rec)
+		c.Request = httptest.NewRequest(http.MethodGet, "/v1/models?workbench=video", nil)
+		c.Set(string(middleware2.ContextKeyAPIKey), &service.APIKey{GroupID: &group.ID, Group: group})
+		h.Models(c)
+		require.Equal(t, http.StatusOK, rec.Code)
+		var got gatewayModelsResponseForTest
+		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &got))
+		require.Empty(t, got.Data)
 	}
 }

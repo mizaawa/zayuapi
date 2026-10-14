@@ -119,11 +119,15 @@ func (g *Group) GetModelPricing(model string) *ChannelModelPricing {
 	if g == nil {
 		return nil
 	}
+	return matchPlatformModelPricing(g.ModelPricing, g.Platform, model)
+}
+
+func matchPlatformModelPricing(entries []ChannelModelPricing, platform, model string) *ChannelModelPricing {
 	model = normalizeChannelPricingModelName(model)
 	var wildcard *ChannelModelPricing
-	for i := range g.ModelPricing {
-		pricing := &g.ModelPricing[i]
-		if pricing.Platform != "" && !isPlatformPricingMatch(g.Platform, pricing.Platform) {
+	for i := range entries {
+		pricing := &entries[i]
+		if pricing.Platform != "" && !isPlatformPricingMatch(platform, pricing.Platform) {
 			continue
 		}
 		for _, pattern := range pricing.Models {

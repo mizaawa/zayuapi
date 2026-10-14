@@ -2,6 +2,7 @@ package handler
 
 import (
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/service"
@@ -9,16 +10,22 @@ import (
 )
 
 func (h *GatewayHandler) workbenchModels(c *gin.Context, group *service.Group, platform, kind string) {
-	models := h.gatewayService.GetAvailableModels(c.Request.Context(), &group.ID, platform)
-	if platform == service.PlatformComposite {
+	var models []string
+	if kind == "video" {
+		models = h.gatewayService.GetWorkbenchVideoAccountModels(c.Request.Context(), group, platform)
+	} else if platform == service.PlatformComposite {
 		models = h.compositeAvailableModels(c.Request.Context(), &group.ID)
+	} else {
+		models = h.gatewayService.GetAvailableModels(c.Request.Context(), &group.ID, platform)
 	}
 	if len(models) == 0 {
 		models = defaultModelIDsForPlatform(platform)
 	}
 	priced := h.gatewayService.GetWorkbenchPricedModels(c.Request.Context(), group, platform, kind)
 	models = mergeModelIDs(models, priced)
-	if group.CustomModelsListEnabled() {
+	if kind == "video" && group.ModelsListConfig.Enabled && len(group.ModelsListConfig.Models) == 0 {
+		models = nil
+	} else if group.CustomModelsListEnabled() {
 		models = filterModelsByCustomList(models, defaultModelIDsForPlatform(platform), group.ModelsListConfig.Models)
 	}
 	declarations := make(map[string]struct{}, len(priced))
@@ -28,6 +35,9 @@ func (h *GatewayHandler) workbenchModels(c *gin.Context, group *service.Group, p
 	items := make([]gin.H, 0, len(models))
 	created := time.Now().Unix()
 	for _, model := range models {
+		if kind == "video" && strings.ContainsAny(model, "*?") {
+			continue
+		}
 		if kind == "video" && !service.GroupAllowsWorkbenchVideoModel(group, model) {
 			continue
 		}

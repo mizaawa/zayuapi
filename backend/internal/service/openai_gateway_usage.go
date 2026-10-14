@@ -771,6 +771,9 @@ func (s *OpenAIGatewayService) ValidateCustomVideoPricing(
 	if !GroupAllowsWorkbenchVideoModel(apiKey.Group, model) {
 		return fmt.Errorf("%w for model %q", ErrCustomVideoPricingUnavailable, strings.TrimSpace(model))
 	}
+	if ctx != nil && ctx.Value(videoWorkbenchContextKey{}) == true && !s.workbenchVideoModelAllowed(ctx, apiKey.Group, model) {
+		return fmt.Errorf("%w for model %q", ErrCustomVideoPricingUnavailable, strings.TrimSpace(model))
+	}
 	if resolution != "" && apiKeyHasConfiguredVideoPrice(apiKey, resolution) {
 		return nil
 	}

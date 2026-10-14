@@ -1097,7 +1097,7 @@ export default {
       },
       modelsList: {
         title: 'Custom /v1/models Model List',
-        hint: 'Only changes the /v1/models response. Whitelist model calls and account routing are unchanged.',
+        hint: 'Controls the /v1/models response. The video workbench can select and submit only selected models; other model calls and account routing are unchanged.',
         loading: 'Loading model list...',
         empty: 'No displayable models',
         selectedSummary: 'Selected {selected} / {total}',
