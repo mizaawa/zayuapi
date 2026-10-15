@@ -1,7 +1,7 @@
 export default {
   videoWorkbench: {
-    protocol: '图片与视频协议', protocolCompatible: '默认兼容协议', protocolOpenAI: 'OpenAI 视频（/v1/videos）',
-    protocolHint: '按上游文档选择协议。OpenAI 视频使用 JSON duration/resolution 参数；Sora 使用 seconds/size 参数；8yes 的分辨率由模型名称决定。',
+    protocol: '图片与视频协议', protocolCompatible: '默认兼容协议',
+    protocolHint: '按上游文档选择协议。默认兼容协议原样转发请求字段；Sora 使用 seconds/size 参数；8yes 的分辨率由模型名称决定。',
     title: '视频工作台', navLabel: '视频生成', workbench: '工作台', tasks: '任务列表',
     guide: '使用教程', documentation: '对接文档', prompt: '提示词',
     promptPlaceholder: '在此处编辑视频提示词...', apiKey: 'API 密钥', model: '模型',

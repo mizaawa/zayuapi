@@ -365,7 +365,7 @@ func validateCustomAccountCredentials(platform, accountType string, credentials 
 	if raw, exists := credentials["media_protocol"]; exists {
 		protocol, ok := raw.(string)
 		if !ok || !validMediaProtocol(protocol) {
-			return infraerrors.BadRequest("CUSTOM_MEDIA_PROTOCOL_INVALID", "media protocol must be default, openai, sora or 8yes")
+			return infraerrors.BadRequest("CUSTOM_MEDIA_PROTOCOL_INVALID", "media protocol must be default, sora or 8yes")
 		}
 	}
 	return nil

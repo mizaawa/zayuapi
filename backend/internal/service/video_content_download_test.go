@@ -28,8 +28,10 @@ func videoContentDownloadTestResponse(status int, contentType, body string) *htt
 }
 
 func TestCustomVideoContentDownloadsCompletedMetadataURL(t *testing.T) {
-	for _, protocol := range []string{"sora", "openai"} {
-		t.Run(protocol, func(t *testing.T) {
+	// Only sora defines the fallback that turns a failed content lookup into a
+	// task-status metadata URL download.
+	for _, protocol := range []string{"sora"} {
+		t.Run("protocol="+protocol, func(t *testing.T) {
 			account := customVideoTestAccount()
 			account.Credentials["base_url"] = "https://relay.example/v1"
 			account.Credentials["media_protocol"] = protocol
@@ -88,7 +90,7 @@ func TestCustomVideoContentJSONURLAndRedirectDoNotLeakCredentials(t *testing.T) 
 		{StatusCode: http.StatusFound, Header: http.Header{"Location": {"https://cdn.example/first.mp4"}}, Body: io.NopCloser(strings.NewReader(""))},
 	} {
 		account := customVideoTestAccount()
-		account.Credentials["media_protocol"] = "openai"
+		account.Credentials["media_protocol"] = "sora"
 		account.Credentials[credKeyHeaderOverrideEnabled] = true
 		account.Credentials[credKeyHeaderOverrides] = map[string]any{"user-agent": "private-agent", "x-api-key": "private-key"}
 		upstream := &grokMediaContentUpstreamStub{response: firstResponse}

@@ -1196,7 +1196,8 @@ describe('EditAccountModal', () => {
     )
   })
 
-  it.each(['8yes', 'openai'])('preserves the %s video protocol and validates the Base URL for Custom API Key accounts', async (protocol) => {
+  it('preserves the 8yes video protocol and validates the Base URL for Custom API Key accounts', async () => {
+    const protocol = '8yes'
     const account = buildAccount()
     account.platform = 'custom'
     account.name = 'Custom video upstream'
@@ -1220,7 +1221,7 @@ describe('EditAccountModal', () => {
     expect(updateAccountMock).not.toHaveBeenCalled()
 
     await baseUrl.setValue('https://relay.example/v1')
-    expect(wrapper.get('#account-media-protocol').findAll('option').map(option => option.attributes('value'))).toEqual(['', 'openai', 'sora', '8yes'])
+    expect(wrapper.get('#account-media-protocol').findAll('option').map(option => option.attributes('value'))).toEqual(['', 'sora', '8yes'])
     await wrapper.get('#account-media-protocol').setValue(protocol)
     await wrapper.get('form#edit-account-form').trigger('submit.prevent')
 
@@ -1229,6 +1230,29 @@ describe('EditAccountModal', () => {
         base_url: 'https://relay.example/v1',
         media_protocol: protocol
       })
+    }))
+  })
+
+  it('shows the retired OpenAI video protocol as the default one', async () => {
+    const account = buildAccount()
+    account.platform = 'custom'
+    account.credentials = {
+      api_key: 'sk-custom',
+      base_url: 'https://momoapi.xin/v1',
+      media_protocol: 'openai'
+    }
+    updateAccountMock.mockReset().mockResolvedValue(account)
+    checkMixedChannelRiskMock.mockReset().mockResolvedValue({ has_risk: false })
+
+    const wrapper = mountModal(account)
+    // The option no longer exists, so the select must not be left blank: the
+    // account keeps generating through the default passthrough protocol.
+    expect(wrapper.get<HTMLSelectElement>('#account-media-protocol').element.value).toBe('')
+
+    await wrapper.get('form#edit-account-form').trigger('submit.prevent')
+
+    expect(updateAccountMock).toHaveBeenCalledWith(account.id, expect.objectContaining({
+      credentials: expect.objectContaining({ media_protocol: '' })
     }))
   })
 })

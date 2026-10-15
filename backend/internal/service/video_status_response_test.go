@@ -47,7 +47,7 @@ func TestNewAPIVideoStatusRecovery(t *testing.T) {
 func TestCustomVideoStatusRecoversNewAPIPanicBeforeBillingAndForwarding(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	task := `{"id":"task_public","task_id":"task_public","object":"video","status":"completed","progress":100}`
-	for _, protocol := range []string{"", "openai", "sora"} {
+	for _, protocol := range []string{"", "sora"} {
 		t.Run(protocol, func(t *testing.T) {
 			account := customVideoTestAccount()
 			account.Credentials["media_protocol"] = protocol
@@ -71,7 +71,7 @@ func TestCustomVideoStatusRecoversNewAPIPanicBeforeBillingAndForwarding(t *testi
 
 func TestCustomVideoContentFallbackRecoversNewAPITaskStatus(t *testing.T) {
 	account := customVideoTestAccount()
-	account.Credentials["media_protocol"] = "openai"
+	account.Credentials["media_protocol"] = "sora"
 	upstream := &grokMediaContentUpstreamStub{responses: []*http.Response{
 		videoContentDownloadTestResponse(404, "application/json", `{"error":{"message":"not found"}}`),
 		videoContentDownloadTestResponse(500, "application/json", `{"error":{"type":"new_api_panic"}}{"id":"public-id","object":"video","status":"completed","metadata":{"url":"/proxy/v1/videos/internal-id/content"}}`),

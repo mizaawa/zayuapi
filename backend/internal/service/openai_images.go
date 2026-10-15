@@ -600,7 +600,7 @@ func (s *OpenAIGatewayService) ForwardImages(
 		return nil, fmt.Errorf("media account is required")
 	}
 	if !validMediaProtocol(account.MediaProtocol()) {
-		return nil, fmt.Errorf("unsupported media protocol; select default, openai, sora or 8yes in account settings")
+		return nil, fmt.Errorf("%s", mediaProtocolValidationMessage())
 	}
 	switch account.Type {
 	case AccountTypeAPIKey:

@@ -9,7 +9,12 @@ vi.mock('@/api/imageWorkbench', () => ({ downloadWorkbenchImage: downloadImage }
 vi.mock('@/composables/useClipboard', () => ({ useClipboard: () => ({ copyToClipboard: vi.fn() }) }))
 vi.mock('vue-i18n', async () => ({
   ...await vi.importActual<typeof import('vue-i18n')>('vue-i18n'),
-  useI18n: () => ({ locale: ref('en'), t: (key: string) => key }),
+  useI18n: () => ({
+    locale: ref('en'),
+    t: (key: string) => key,
+    // Mirrors the real catalogue: every code the gateway publishes is known.
+    te: (key: string) => /^imageWorkbench\.errors\.(request_rejected|invalid_image_input|content_rejected|unsupported_size|invalid_parameters|model_unavailable|insufficient_balance|rate_limited|timeout|authorization_failed|channel_unavailable|generation_failed)$/.test(key),
+  }),
 }))
 
 const taskId = 'imgtask_' + 'a'.repeat(32)
@@ -79,5 +84,34 @@ describe('local workbench images', () => {
     resolve(new Blob(['image'], { type: 'image/png' }))
     await flushPromises()
     expect(URL.createObjectURL).not.toHaveBeenCalled()
+  })
+})
+
+describe('failed task reasons', () => {
+  const failed = (error: ImageTask['error']): ImageTask => ({
+    ...task, status: 'failed', result: undefined, error,
+  })
+
+  it('translates the classified rejection instead of repeating gateway text', async () => {
+    const row = mountRow()
+    await flushPromises()
+    await row.setProps({ task: failed({ code: 'invalid_image_input', message: 'the channel rejected the prompt or the reference image; retry, change the model, or contact the administrator' }) })
+    expect(row.get('.task-error').text()).toBe('imageWorkbench.errors.invalid_image_input')
+
+    await row.setProps({ task: failed({ code: 'content_rejected', message: 'the prompt or reference image was rejected by the channel\'s content moderation; revise it and retry' }) })
+    expect(row.get('.task-error').text()).toBe('imageWorkbench.errors.content_rejected')
+  })
+
+  it('falls back to the gateway message for an unclassified failure', async () => {
+    const row = mountRow()
+    await flushPromises()
+    await row.setProps({ task: failed({ code: 'unmapped_code', message: 'image generation failed; try again later or contact the administrator' }) })
+    expect(row.get('.task-error').text()).toBe('image generation failed; try again later or contact the administrator')
+
+    await row.setProps({ task: failed('plain failure') })
+    expect(row.get('.task-error').text()).toBe('plain failure')
+
+    await row.setProps({ task: failed(undefined) })
+    expect(row.get('.task-error').text()).toBe('imageWorkbench.failed')
   })
 })

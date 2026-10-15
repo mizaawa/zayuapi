@@ -11,20 +11,36 @@ import (
 
 // MediaProtocol is explicit because retrying a creation on another endpoint can
 // create a second paid task after the first provider has already accepted it.
+//
+// "openai" was retired: it described the same video contract as the default
+// passthrough protocol, so the account picker no longer offers it. Accounts
+// that still store it fall back to the default protocol instead of failing
+// validation on their next edit.
 func (a *Account) MediaProtocol() string {
 	if a == nil {
 		return ""
 	}
-	return strings.ToLower(strings.TrimSpace(a.GetCredential("media_protocol")))
+	protocol := strings.ToLower(strings.TrimSpace(a.GetCredential("media_protocol")))
+	if protocol == legacyOpenAIMediaProtocol {
+		return ""
+	}
+	return protocol
 }
+
+const legacyOpenAIMediaProtocol = "openai"
 
 func validMediaProtocol(protocol string) bool {
 	switch strings.ToLower(strings.TrimSpace(protocol)) {
-	case "", "openai", "sora", "8yes":
+	case "", "sora", "8yes":
 		return true
 	default:
-		return false
+		// Stored legacy values still read back as the default protocol.
+		return strings.EqualFold(strings.TrimSpace(protocol), legacyOpenAIMediaProtocol)
 	}
+}
+
+func mediaProtocolValidationMessage() string {
+	return "unsupported media protocol; select default, sora or 8yes in account settings"
 }
 
 func VideoPrechargeRequestInfo(ctx context.Context, account *Account, body []byte, contentType string) (GrokMediaRequestInfo, error) {
@@ -32,7 +48,7 @@ func VideoPrechargeRequestInfo(ctx context.Context, account *Account, body []byt
 		return GrokMediaRequestInfo{}, err
 	}
 	if !validMediaProtocol(account.MediaProtocol()) {
-		return GrokMediaRequestInfo{}, fmt.Errorf("unsupported media protocol; select default, openai, sora or 8yes in account settings")
+		return GrokMediaRequestInfo{}, fmt.Errorf("%s", mediaProtocolValidationMessage())
 	}
 	if account.MediaProtocol() == "8yes" {
 		adapted, adaptedType, err := normalizeEightYesVideoRequest(body, contentType)
@@ -45,7 +61,7 @@ func VideoPrechargeRequestInfo(ctx context.Context, account *Account, body []byt
 	if err != nil {
 		return GrokMediaRequestInfo{}, err
 	}
-	if protocol := account.MediaProtocol(); account != nil && account.Platform == PlatformCustom && protocol != "sora" && protocol != "openai" {
+	if account.Platform == PlatformCustom && account.MediaProtocol() != "sora" {
 		adapted, contentType, err = normalizeCustomVideoForwardBody(GrokMediaEndpointVideosGenerations, adapted, contentType)
 		if err != nil {
 			return GrokMediaRequestInfo{}, err
@@ -65,11 +81,11 @@ func normalizeSoraVideoRequestInfo(info GrokMediaRequestInfo) GrokMediaRequestIn
 	return info
 }
 
+// Each remaining protocol rewrites the request into the shape its provider
+// documents. The default protocol stays a transparent passthrough, so a relay
+// keeps receiving exactly the fields its documentation describes.
 func normalizeVideoProtocolBody(ctx context.Context, account *Account, body []byte) ([]byte, error) {
 	protocol := account.MediaProtocol()
-	if protocol == "openai" {
-		return normalizeOpenAIVideoJSON(body)
-	}
 	if protocol == "8yes" {
 		return normalizeEightYesVideoJSON(body)
 	}

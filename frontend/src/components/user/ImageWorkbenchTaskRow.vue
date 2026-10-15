@@ -129,7 +129,7 @@ const props = defineProps<{
   downloading: boolean
 }>()
 defineEmits<{ download: []; delete: [] }>()
-const { t, locale } = useI18n()
+const { t, te, locale } = useI18n()
 const { copyToClipboard } = useClipboard()
 const imageFailed = ref(false)
 const actualSize = ref('')
@@ -140,8 +140,16 @@ function onImageLoad(event: Event) {
   }
 }
 const image = computed(() => props.task.result?.data?.[props.imageIndex])
+const errorCode = computed(() =>
+  typeof props.task.error === 'string' ? '' : props.task.error?.code || ''
+)
 const errorMessage = computed(
   () =>
+    // The gateway classifies every rejection into a fixed public code; the
+    // provider's own wording is never forwarded, so translate that code.
+    (errorCode.value && te(`imageWorkbench.errors.${errorCode.value}`)
+      ? t(`imageWorkbench.errors.${errorCode.value}`)
+      : '') ||
     (typeof props.task.error === 'string' ? props.task.error : props.task.error?.message) ||
     t('imageWorkbench.failed')
 )

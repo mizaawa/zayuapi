@@ -13,10 +13,10 @@ func (h *GatewayHandler) workbenchModels(c *gin.Context, group *service.Group, p
 	var models []string
 	if kind == "video" {
 		models = h.gatewayService.GetWorkbenchVideoAccountModels(c.Request.Context(), group, platform)
-	} else if platform == service.PlatformComposite {
-		models = h.compositeAvailableModels(c.Request.Context(), &group.ID)
 	} else {
-		models = h.gatewayService.GetAvailableModels(c.Request.Context(), &group.ID, platform)
+		// Accounts, not the shared /v1/models cache, define the image catalogue:
+		// a scheduling switch must take effect on the next panel refresh.
+		models = h.gatewayService.GetWorkbenchImageAccountModels(c.Request.Context(), group, platform)
 	}
 	if len(models) == 0 {
 		models = defaultModelIDsForPlatform(platform)
@@ -35,7 +35,8 @@ func (h *GatewayHandler) workbenchModels(c *gin.Context, group *service.Group, p
 	items := make([]gin.H, 0, len(models))
 	created := time.Now().Unix()
 	for _, model := range models {
-		if kind == "video" && strings.ContainsAny(model, "*?") {
+		// A pattern is a mapping rule, not a model anyone can request.
+		if strings.ContainsAny(model, "*?") {
 			continue
 		}
 		if kind == "video" && !service.GroupAllowsWorkbenchVideoModel(group, model) {

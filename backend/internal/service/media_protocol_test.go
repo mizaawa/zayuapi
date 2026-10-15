@@ -119,6 +119,19 @@ func TestMediaProtocolEightYesVideo(t *testing.T) {
 	}
 }
 
+func TestRetiredOpenAIMediaProtocolReadsAsDefault(t *testing.T) {
+	// The OpenAI video protocol was retired because it described the same
+	// contract as the default passthrough. Accounts created while it existed
+	// must keep working instead of failing validation on the next request.
+	legacy := &Account{Credentials: map[string]any{"media_protocol": "openai"}, Platform: PlatformCustom, Type: AccountTypeAPIKey}
+	require.Equal(t, "", legacy.MediaProtocol())
+	require.True(t, validMediaProtocol(legacy.MediaProtocol()))
+	body := []byte(`{"model":"relay-video","prompt":"waves","duration":5,"ratio":"16:9","resolution":"auto"}`)
+	_, err := VideoPrechargeRequestInfo(context.Background(), legacy, body, "application/json")
+	require.NoError(t, err)
+	require.False(t, validMediaProtocol("still-unknown"))
+}
+
 func TestMediaProtocolPixelSizeBilling(t *testing.T) {
 	for _, resolution := range []string{"480p", "720p", "1080p", "2k", "4k"} {
 		for _, ratio := range []string{"1:1", "16:9", "9:16"} {

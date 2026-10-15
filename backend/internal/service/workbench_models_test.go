@@ -18,6 +18,68 @@ func (r *workbenchModelsAccountRepo) ListSchedulableByGroupID(_ context.Context,
 	return r.accounts[id], nil
 }
 
+func workbenchCustomAccount(id int64, groups []int64, mapping map[string]string) Account {
+	credentials := map[string]any{"api_key": "test", "base_url": "https://example.invalid"}
+	if len(mapping) > 0 {
+		credentials["model_mapping"] = mapping
+	}
+	return Account{ID: id, GroupIDs: groups, Platform: PlatformCustom, Type: AccountTypeAPIKey, Credentials: credentials}
+}
+
+func TestWorkbenchImageAccountModelsIgnoreUnschedulableAccounts(t *testing.T) {
+	// ListSchedulableByGroupID is the only source: switching scheduling off for
+	// an account must remove its models on the next panel refresh.
+	s := &GatewayService{accountRepo: &workbenchModelsAccountRepo{accounts: map[int64][]Account{
+		// Disabled accounts are absent from the schedulable listing.
+		42: {workbenchCustomAccount(2, []int64{42}, map[string]string{"gpt-image-2-live": "gpt-image-2-live", "gpt-image-*": "gpt-image-2-live"})},
+	}}}
+	// Patterns are mapping rules; the handler drops them from the panel payload
+	// while the service still reports what the account maps.
+	require.Equal(t, []string{"gpt-image-*", "gpt-image-2-live"},
+		s.GetWorkbenchImageAccountModels(context.Background(), &Group{ID: 42, Platform: PlatformCustom}, PlatformCustom))
+	require.Empty(t, s.GetWorkbenchImageAccountModels(context.Background(), &Group{ID: 43, Platform: PlatformCustom}, PlatformCustom))
+	require.Empty(t, s.GetWorkbenchImageAccountModels(context.Background(), nil, PlatformCustom))
+}
+
+func TestWorkbenchPricedImageModelsRespectCustomAccountMappings(t *testing.T) {
+	ctx := context.Background()
+	price := .04
+	channels := []Channel{{ID: 1, Status: StatusActive, GroupIDs: []int64{42},
+		ModelPricing: []ChannelModelPricing{
+			{Platform: PlatformCustom, BillingMode: BillingModeImage, Models: []string{"gpt-image-2", "gpt-image-2-live"}, PerRequestPrice: &price},
+		},
+	}}
+	channelService := NewChannelService(&mockChannelRepository{
+		listAllFn: func(context.Context) ([]Channel, error) { return channels, nil },
+		getGroupPlatformsFn: func(context.Context, []int64) (map[int64]string, error) {
+			return map[int64]string{42: PlatformCustom}, nil
+		},
+	}, nil, nil, nil)
+	// Only "gpt-image-2-live" survives on the schedulable account; the declared
+	// "gpt-image-2" belongs to an account whose scheduling is switched off.
+	repo := &workbenchModelsAccountRepo{accounts: map[int64][]Account{
+		42: {workbenchCustomAccount(1, []int64{42}, map[string]string{"gpt-image-2-live": "gpt-image-2-live"})},
+	}}
+	s := &GatewayService{channelService: channelService, accountRepo: repo}
+	group := &Group{ID: 42, Platform: PlatformCustom}
+	require.Equal(t, []string{"gpt-image-2-live"}, s.GetWorkbenchPricedModels(ctx, group, PlatformCustom, "image"))
+	// A mapping-free Custom account accepts arbitrary names, so the declared
+	// model stays publishable when nothing else claims it.
+	repo.accounts[42] = []Account{workbenchCustomAccount(1, []int64{42}, nil)}
+	require.Equal(t, []string{"gpt-image-2", "gpt-image-2-live"}, s.GetWorkbenchPricedModels(ctx, group, PlatformCustom, "image"))
+	// A channel mapping still counts as ownership: the account maps the routed
+	// upstream name rather than the public one.
+	channels[0].ModelMapping = map[string]map[string]string{PlatformCustom: {"gpt-image-2": "gpt-image-2-live"}}
+	channelService.invalidateCache()
+	repo.accounts[42] = []Account{workbenchCustomAccount(1, []int64{42}, map[string]string{"gpt-image-2-live": "gpt-image-2-live"})}
+	require.Equal(t, []string{"gpt-image-2", "gpt-image-2-live"}, s.GetWorkbenchPricedModels(ctx, group, PlatformCustom, "image"))
+	// Video pricing keeps its own ownership rules.
+	repo.accounts[42] = []Account{workbenchCustomAccount(1, []int64{42}, map[string]string{"other-video": "other-video"})}
+	channels[0].ModelPricing = []ChannelModelPricing{{Platform: PlatformCustom, BillingMode: BillingModeVideo, Models: []string{"declared-video"}, PerRequestPrice: &price}}
+	channelService.invalidateCache()
+	require.Equal(t, []string{"declared-video"}, s.GetWorkbenchPricedModels(ctx, group, PlatformCustom, "video"))
+}
+
 func TestWorkbenchPricedModelsGroupAndAccountIsolation(t *testing.T) {
 	ctx := context.Background()
 	price := .01

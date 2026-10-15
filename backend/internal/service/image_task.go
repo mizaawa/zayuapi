@@ -326,7 +326,9 @@ func (s *ImageTaskService) finish(ctx context.Context, id, status string, status
 		task.QueueDeadline = 0
 		task.QueueLeaseUntil = 0
 		if status == ImageTaskStatusFailed {
-			task.Error = workbenchPublicError(statusCode)
+			// Classify before replacing: the raw payload is the only source that
+			// names why the provider rejected the request.
+			task.Error = workbenchPublicError(statusCode, taskErr)
 		}
 		ttl = s.WorkbenchRuntime(ctx).Retention()
 	}
@@ -352,7 +354,7 @@ func imageTaskToPublic(task *ImageTaskRecord) *ImageTask {
 	if task.Workbench != nil {
 		result = workbenchPublicResult(task.ID, result)
 		if task.Status == ImageTaskStatusFailed || len(taskError) > 0 {
-			taskError = workbenchPublicError(task.HTTPStatus)
+			taskError = workbenchPublicError(task.HTTPStatus, task.Error)
 		}
 	}
 	return &ImageTask{

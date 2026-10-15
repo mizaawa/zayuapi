@@ -13,6 +13,7 @@ import (
 	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
 	"github.com/google/uuid"
+	"github.com/tidwall/gjson"
 	"go.uber.org/zap"
 )
 
@@ -110,19 +111,101 @@ func workbenchPublicResult(taskID string, result json.RawMessage) json.RawMessag
 }
 
 // Use local messages only, including for records created before this policy.
-func workbenchPublicError(status int) json.RawMessage {
+// Provider text is never forwarded: it may embed private hosts, credentials or
+// internal task identifiers. An allowlisted upstream code is classified into
+// one of the fixed public answers below, so a user can tell a rejected prompt
+// from a channel that refuses this request, without learning anything about
+// the upstream account behind it.
+func workbenchPublicError(status int, raw ...json.RawMessage) json.RawMessage {
+	errorType, code, message := workbenchPublicErrorIdentity(status)
+	for _, payload := range raw {
+		if len(payload) == 0 {
+			continue
+		}
+		if publicType, publicCode, publicMessage, ok := classifyWorkbenchImageError(payload); ok {
+			errorType, code, message = publicType, publicCode, publicMessage
+			break
+		}
+	}
+	data, _ := json.Marshal(map[string]string{"type": errorType, "code": code, "message": message})
+	return data
+}
+
+// workbenchPublicErrorIdentity keeps the published status-based answer.
+func workbenchPublicErrorIdentity(status int) (string, string, string) {
 	switch status {
 	case http.StatusBadRequest, http.StatusUnprocessableEntity:
-		return imageTaskErrorJSON("invalid_request_error", "image generation request was rejected; check the prompt and image settings")
+		return "invalid_request_error", "request_rejected", "image generation request was rejected; check the prompt and image settings"
 	case http.StatusTooManyRequests:
-		return imageTaskErrorJSON("rate_limit_error", "image generation is busy; try again later")
+		return "rate_limit_error", "rate_limited", "image generation is busy; try again later"
 	case http.StatusRequestTimeout, http.StatusGatewayTimeout:
-		return imageTaskErrorJSON("timeout_error", "image generation timed out; try again later")
+		return "timeout_error", "timeout", "image generation timed out; try again later"
 	case http.StatusUnauthorized, http.StatusForbidden:
-		return imageTaskErrorJSON("permission_error", "image generation is unavailable for this request; contact the administrator")
+		return "permission_error", "authorization_failed", "image generation is unavailable for this request; contact the administrator"
 	default:
-		return imageTaskErrorJSON("api_error", "image generation failed; try again later or contact the administrator")
+		return "api_error", "generation_failed", "image generation failed; try again later or contact the administrator"
 	}
+}
+
+// classifyWorkbenchImageError maps an allowlisted upstream error code, or a
+// provider message carrying a known cause, onto a fixed public answer. Values
+// outside these lists fall through so callers keep the status-based answer.
+func classifyWorkbenchImageError(payload json.RawMessage) (string, string, string, bool) {
+	for _, path := range []string{"code", "error.code"} {
+		switch strings.ToLower(strings.TrimSpace(gjson.GetBytes(payload, path).String())) {
+		case "invalid_image_input", "invalid_image", "invalid_image_format", "image_too_large", "image_parse_error":
+			return "invalid_request_error", "invalid_image_input", "the channel rejected the prompt or the reference image; retry, change the model, or contact the administrator", true
+		case "moderation_blocked", "content_policy_violation", "content_rejected", "safety_system_rejected":
+			return "invalid_request_error", "content_rejected", "the prompt or reference image was rejected by the channel's content moderation; revise it and retry", true
+		case "invalid_size", "unsupported_size", "invalid_image_size":
+			return "invalid_request_error", "unsupported_size", "the channel does not support this size; change the resolution or aspect ratio and retry", true
+		case "invalid_parameter", "invalid_parameters", "invalid_request_parameter":
+			return "invalid_request_error", "invalid_parameters", "the channel rejected a request parameter; lower the quality or resolution and retry", true
+		case "model_not_found", "model_not_available", "model_not_exist", "unknown_model":
+			return "invalid_request_error", "model_unavailable", "this model is unavailable on the channel serving this group; pick another model or contact the administrator", true
+		case "insufficient_quota", "insufficient_balance", "quota_exceeded", "billing_hard_limit_reached":
+			return "invalid_request_error", "insufficient_balance", "the quota or balance for this request is exhausted; contact the administrator", true
+		case "rate_limit_exceeded", "too_many_requests":
+			return "rate_limit_error", "rate_limited", "image generation is busy; try again later", true
+		}
+	}
+	for _, path := range []string{"type", "error.type"} {
+		switch strings.ToLower(strings.TrimSpace(gjson.GetBytes(payload, path).String())) {
+		case "moderation_blocked", "content_policy_violation":
+			return "invalid_request_error", "content_rejected", "the prompt or reference image was rejected by the channel's content moderation; revise it and retry", true
+		}
+	}
+	for _, path := range []string{"message", "error.message", "error"} {
+		value := gjson.GetBytes(payload, path)
+		if value.Type != gjson.String {
+			continue
+		}
+		lower := strings.ToLower(value.String())
+		for _, rule := range []struct {
+			errorType string
+			code      string
+			message   string
+			phrases   []string
+		}{
+			{"invalid_request_error", "content_rejected", "the prompt or reference image was rejected by the channel's content moderation; revise it and retry",
+				[]string{"content policy", "moderation", "safety system", "内容审核"}},
+			{"invalid_request_error", "model_unavailable", "this model is unavailable on the channel serving this group; pick another model or contact the administrator",
+				[]string{"model not found", "unknown model", "no such model", "模型不存在", "没有该模型"}},
+			{"invalid_request_error", "insufficient_balance", "the quota or balance for this request is exhausted; contact the administrator",
+				[]string{"insufficient balance", "insufficient quota", "余额不足", "额度不足"}},
+			{"invalid_request_error", "invalid_image_input", "the channel rejected the prompt or the reference image; retry, change the model, or contact the administrator",
+				[]string{"invalid_image_input", "invalid image"}},
+			{"invalid_request_error", "unsupported_size", "the channel does not support this size; change the resolution or aspect ratio and retry",
+				[]string{"unsupported size", "invalid size", "分辨率不支持"}},
+		} {
+			for _, phrase := range rule.phrases {
+				if strings.Contains(lower, phrase) {
+					return rule.errorType, rule.code, rule.message, true
+				}
+			}
+		}
+	}
+	return "", "", "", false
 }
 
 func (s *ImageTaskService) cleanupWorkbenchImages(ctx context.Context, task ImageWorkbenchCleanup) (bool, error) {

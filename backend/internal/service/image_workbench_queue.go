@@ -150,7 +150,7 @@ func (s *ImageTaskService) expireWorkbenchQueue(ctx context.Context) error {
 		completedAt := now.Unix()
 		task.Status = ImageTaskStatusFailed
 		task.HTTPStatus = http.StatusGatewayTimeout
-		task.Error = workbenchPublicError(task.HTTPStatus)
+		task.Error = workbenchPublicError(task.HTTPStatus, task.Error)
 		task.CompletedAt = &completedAt
 		task.ExpiresAt = now.Add(ttl).Unix()
 		task.QueueDeadline = 0

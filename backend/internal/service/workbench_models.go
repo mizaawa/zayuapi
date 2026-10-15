@@ -6,6 +6,61 @@ import (
 	"strings"
 )
 
+// Image workbench catalogues are authorization-sensitive too: disabling
+// scheduling on an account must drop its models immediately instead of being
+// served from the generic /v1/models cache, and a Custom account that declares
+// its own model mapping must not inherit every model of its group.
+func (s *GatewayService) GetWorkbenchImageAccountModels(ctx context.Context, group *Group, platform string) []string {
+	if s == nil || s.accountRepo == nil || group == nil {
+		return nil
+	}
+	if platform == PlatformComposite {
+		platform = PlatformCustom
+	}
+	accounts, err := s.accountRepo.ListSchedulableByGroupID(ctx, group.ID)
+	if err != nil {
+		return nil
+	}
+	seen := make(map[string]struct{})
+	for i := range accounts {
+		account := &accounts[i]
+		if platform != "" && account.Platform != platform {
+			continue
+		}
+		for model := range account.GetModelMapping() {
+			model = strings.TrimSpace(model)
+			if model != "" {
+				seen[model] = struct{}{}
+			}
+		}
+	}
+	models := make([]string, 0, len(seen))
+	for model := range seen {
+		models = append(models, model)
+	}
+	sort.Strings(models)
+	return models
+}
+
+// A Custom account is a transparent proxy, but only when it is mapping-free:
+// once it declares its own model mapping that mapping defines the part of the
+// group catalogue the account actually serves.
+func imageWorkbenchAccountServesModel(account *Account, model, mappedModel string) bool {
+	if account == nil || account.Type != AccountTypeAPIKey ||
+		strings.TrimSpace(account.GetOpenAIApiKey()) == "" || strings.TrimSpace(account.GetOpenAIBaseURL()) == "" {
+		return false
+	}
+	// A mapping assigns this account a specific part of the group's catalogue;
+	// only mapping-free Custom accounts accept arbitrary model names.
+	if account.Platform != PlatformCustom || len(account.GetModelMapping()) == 0 {
+		return true
+	}
+	if account.IsModelSupported(model) {
+		return true
+	}
+	return mappedModel != "" && mappedModel != model && account.IsModelSupported(mappedModel)
+}
+
 // Video workbench catalogues are authorization-sensitive and must reflect
 // account mapping edits immediately rather than the generic /v1/models cache.
 func (s *GatewayService) GetWorkbenchVideoAccountModels(ctx context.Context, group *Group, platform string) []string {
@@ -102,7 +157,7 @@ func (s *GatewayService) GetWorkbenchPricedModels(ctx context.Context, group *Gr
 			continue
 		}
 		routingModel := model
-		if s.channelService != nil && platform != PlatformCustom {
+		if s.channelService != nil {
 			mapping, restricted := s.channelService.ResolveChannelMappingAndRestrict(ctx, &group.ID, model)
 			if restricted {
 				continue
@@ -119,6 +174,13 @@ func (s *GatewayService) GetWorkbenchPricedModels(ctx context.Context, group *Gr
 			if platform == PlatformCustom {
 				supported = account.Type == AccountTypeAPIKey &&
 					strings.TrimSpace(account.GetOpenAIApiKey()) != "" && strings.TrimSpace(account.GetOpenAIBaseURL()) != ""
+				if kind == "image" {
+					// Pricing declares the model, but a Custom account with its own
+					// mapping only serves that mapping. Otherwise one schedulable
+					// mapping-free account would re-publish models declared for an
+					// account whose scheduling is switched off.
+					supported = supported && imageWorkbenchAccountServesModel(&account, model, routingModel)
+				}
 				if kind == "video" && channel != nil && len(channel.GroupIDs) > 1 && !GroupHasWorkbenchModelPricing(group, group.Platform, "video") &&
 					!group.ModelsListConfig.Enabled && len(account.GetModelMapping()) > 0 {
 					supported = supported && account.IsModelSupported(model)

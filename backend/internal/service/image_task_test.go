@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	"github.com/tidwall/gjson"
 )
 
 type imageTaskMemoryStore struct {
@@ -37,6 +38,82 @@ func (s *imageTaskMemoryStore) Get(_ context.Context, _ string) (*ImageTaskRecor
 	}
 	copy := *s.task
 	return &copy, nil
+}
+
+func TestWorkbenchTaskErrorsExplainTheRejection(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		status int
+		raw    string
+		code   string
+	}{
+		{
+			name:   "provider rejects image input",
+			status: http.StatusBadRequest,
+			raw:    `{"type":"invalid_request_error","code":"invalid_image_input","message":"The image request is invalid.","param":""}`,
+			code:   "invalid_image_input",
+		},
+		{
+			name:   "provider moderation",
+			status: http.StatusBadRequest,
+			raw:    `{"error":{"code":"moderation_blocked","message":"Your request was rejected by the safety system."}}`,
+			code:   "content_rejected",
+		},
+		{
+			name:   "provider rejects size",
+			status: http.StatusBadRequest,
+			raw:    `{"error":{"code":"invalid_image_size","message":"unsupported size 8192x8192"}}`,
+			code:   "unsupported_size",
+		},
+		{
+			name:   "channel lacks the model",
+			status: http.StatusServiceUnavailable,
+			raw:    `{"error":{"code":"model_not_found","message":"模型不存在"}}`,
+			code:   "model_unavailable",
+		},
+		{
+			name:   "gateway out of quota",
+			status: http.StatusBadRequest,
+			raw:    `{"error":{"code":"insufficient_quota","message":"quota exceeded"}}`,
+			code:   "insufficient_balance",
+		},
+		{
+			name:   "unknown rejection keeps the status answer",
+			status: http.StatusBadRequest,
+			raw:    `{"error":{"message":"The image request is invalid."}}`,
+			code:   "request_rejected",
+		},
+		{
+			name:   "unknown status keeps the generic answer",
+			status: http.StatusBadGateway,
+			raw:    `{"error":{"message":"upstream connection reset"}}`,
+			code:   "generation_failed",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			public := workbenchPublicError(tc.status, json.RawMessage(tc.raw))
+			require.Equal(t, tc.code, gjson.GetBytes(public, "code").String())
+			require.NotEmpty(t, gjson.GetBytes(public, "type").String())
+			require.Equal(t, tc.code, gjson.GetBytes(public, "code").String(),
+				"re-publishing a public error stays stable across task list reads")
+		})
+	}
+}
+
+func TestWorkbenchTaskErrorNeverExposesProviderText(t *testing.T) {
+	raw := json.RawMessage(`{"error":{"code":"internal_route_failure","message":"upstream https://internal.example sk-live-secret of account 42"}}`)
+	public := workbenchPublicError(http.StatusBadGateway, raw)
+	for _, hidden := range []string{"internal.example", "sk-live-secret", "account 42", "internal_route_failure"} {
+		require.NotContains(t, string(public), hidden)
+	}
+	// A record written before this mapping existed still renders safely.
+	legacy := imageTaskToPublic(&ImageTaskRecord{
+		ID: "imgtask_legacy", Status: ImageTaskStatusFailed, HTTPStatus: http.StatusBadRequest,
+		Workbench: &ImageWorkbenchMetadata{}, ExpiresAt: 1,
+		Error: json.RawMessage(`{"message":"sk-live-secret at http://internal.example"}`),
+	})
+	require.Contains(t, string(legacy.Error), `"code":"request_rejected"`)
+	require.NotContains(t, string(legacy.Error), "sk-live-secret")
 }
 
 func TestImageTaskServiceLifecycleAndOwnership(t *testing.T) {
