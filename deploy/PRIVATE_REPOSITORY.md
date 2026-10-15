@@ -2,7 +2,7 @@
 
 代码与 Release：<https://github.com/mizaawa/zayuapi>。镜像：`ghcr.io/mizaawa/zayuapi`。程序、Compose 服务、数据库、数据目录和二进制文件继续使用 `sub2api` 名称，便于迁移已有部署。主页 Home 的 GitHub 开源按钮仍指向 `Wei-Shaw/sub2api`。
 
-`deploy/.env` 随私库部署配置一并签入，GitHub 令牌值保持为空。在仓库克隆的 `deploy` 目录运行 `bash start-private.sh` 前，通过外部 `GHCR_TOKEN` 环境变量提供镜像令牌，脚本会登录 GHCR、拉取镜像并启动 Compose。其他部署路径可设置 `SUB2API_ENV_FILE`、`SUB2API_COMPOSE_FILE`。应用启动后，在「系统设置 → 功能开关 → 拓展功能」填写 GitHub 通行令牌。GoReleaser 发布归档排除该环境文件。
+`deploy/.env` 是本地部署配置，不再签入 Git。克隆后从 `deploy/.env.example` 复制该文件，设置权限为 `600`，填写部署所需的密钥。在仓库克隆的 `deploy` 目录运行 `bash start-private.sh` 前，通过外部 `GHCR_TOKEN` 环境变量提供镜像令牌，脚本会登录 GHCR、拉取镜像并启动 Compose。其他部署路径可设置 `SUB2API_ENV_FILE`、`SUB2API_COMPOSE_FILE`。应用启动后，在「系统设置 → 功能开关 → 拓展功能」填写 GitHub 通行令牌。GoReleaser 发布归档排除该环境文件。
 
 ## Token 配置
 

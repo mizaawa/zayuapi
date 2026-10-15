@@ -34,6 +34,12 @@ jobs:
           ref: ${{ inputs.ref }}
       - name: Check private GitHub deployment workflows
         run: |
+          if git ls-files --error-unmatch deploy/.env >/dev/null 2>&1; then
+            echo 'deploy/.env must not be tracked' >&2
+            exit 1
+          fi
+          git check-ignore -q deploy/.env
+          git ls-files --error-unmatch deploy/.env.example >/dev/null
           bash -n deploy/install.sh
           bash -n deploy/docker-deploy.sh
           bash -n deploy/start-private.sh

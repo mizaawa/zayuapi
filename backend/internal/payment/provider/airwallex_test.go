@@ -291,6 +291,11 @@ func TestAirwallexVerifyNotificationRequiresValidSignatureAndCurrency(t *testing
 	headers["x-signature"] = strings.Repeat("0", 64)
 	_, err = prov.VerifyNotification(context.Background(), raw, headers)
 	require.ErrorContains(t, err, "invalid signature")
+	_, err = prov.VerifyNotification(context.Background(), raw, nil)
+	require.ErrorContains(t, err, "missing x-timestamp or x-signature")
+	validHeaders := signedAirwallexHeaders(raw, timestamp, "whsec")
+	_, err = prov.VerifyNotification(context.Background(), raw+" ", validHeaders)
+	require.ErrorContains(t, err, "invalid signature")
 }
 
 func TestVerifyAirwallexWebhookSignatureRejectsReplay(t *testing.T) {

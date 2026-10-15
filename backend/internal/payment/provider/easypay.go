@@ -329,11 +329,22 @@ func (e *EasyPay) VerifyNotification(_ context.Context, rawBody string, _ map[st
 	}
 	// url.ParseQuery already decodes values — no additional decode needed.
 	params := make(map[string]string)
-	for k := range values {
+	for k, entries := range values {
 		if !easyPayNotifyAllowedParams[k] {
 			return nil, fmt.Errorf("unexpected notify param: %s", k)
 		}
-		params[k] = values.Get(k)
+		if len(entries) != 1 {
+			return nil, fmt.Errorf("duplicate notify param: %s", k)
+		}
+		params[k] = entries[0]
+	}
+	for _, k := range []string{"pid", "trade_no", "out_trade_no", "money", "trade_status"} {
+		if strings.TrimSpace(params[k]) == "" {
+			return nil, fmt.Errorf("missing notify param: %s", k)
+		}
+	}
+	if params["sign_type"] != signTypeMD5 {
+		return nil, fmt.Errorf("unsupported notify sign_type")
 	}
 	sign := params["sign"]
 	if sign == "" {
@@ -341,6 +352,9 @@ func (e *EasyPay) VerifyNotification(_ context.Context, rawBody string, _ map[st
 	}
 	if !easyPayVerifySign(params, e.config["pkey"], sign) {
 		return nil, fmt.Errorf("invalid signature")
+	}
+	if params["pid"] != strings.TrimSpace(e.config["pid"]) {
+		return nil, fmt.Errorf("easypay notification pid mismatch")
 	}
 	status := payment.ProviderStatusFailed
 	if params["trade_status"] == tradeStatusSuccess {

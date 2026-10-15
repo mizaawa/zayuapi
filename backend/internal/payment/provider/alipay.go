@@ -295,6 +295,9 @@ func (a *Alipay) VerifyNotification(ctx context.Context, rawBody string, _ map[s
 	if err != nil {
 		return nil, fmt.Errorf("alipay verify notification: %w", err)
 	}
+	if notification.AppId != strings.TrimSpace(a.config["appId"]) {
+		return nil, fmt.Errorf("alipay notification app_id mismatch")
+	}
 
 	status := payment.ProviderStatusFailed
 	if notification.TradeStatus == alipay.TradeStatusSuccess || notification.TradeStatus == alipay.TradeStatusFinished {

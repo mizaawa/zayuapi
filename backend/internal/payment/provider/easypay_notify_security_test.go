@@ -132,3 +132,49 @@ func TestEasyPayNotifyRejectsUnknownParam(t *testing.T) {
 		}
 	}
 }
+
+func TestEasyPayNotifyRejectsInvalidMerchantAndRequiredFields(t *testing.T) {
+	t.Parallel()
+	e := easyPayPoCProvider()
+	base := map[string]string{
+		"pid":          "1000",
+		"trade_no":     "T1",
+		"out_trade_no": "ORDER123",
+		"money":        "65.00",
+		"trade_status": tradeStatusSuccess,
+		"sign_type":    signTypeMD5,
+	}
+	for _, tc := range []struct {
+		name   string
+		change func(map[string]string)
+	}{
+		{"foreign pid", func(p map[string]string) { p["pid"] = "2000" }},
+		{"missing trade number", func(p map[string]string) { delete(p, "trade_no") }},
+		{"wrong sign type", func(p map[string]string) { p["sign_type"] = "RSA" }},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			params := cloneStringMap(base)
+			tc.change(params)
+			params["sign"] = easyPaySign(params, e.config["pkey"])
+			values := url.Values{}
+			for k, v := range params {
+				values.Set(k, v)
+			}
+			if _, err := e.VerifyNotification(context.Background(), values.Encode(), nil); err == nil {
+				t.Fatal("invalid callback accepted")
+			}
+		})
+	}
+
+	params := cloneStringMap(base)
+	params["sign"] = easyPaySign(params, e.config["pkey"])
+	values := url.Values{}
+	for k, v := range params {
+		values.Set(k, v)
+	}
+	values.Add("out_trade_no", "OTHER_ORDER")
+	if _, err := e.VerifyNotification(context.Background(), values.Encode(), nil); err == nil {
+		t.Fatal("duplicate callback parameter accepted")
+	}
+}

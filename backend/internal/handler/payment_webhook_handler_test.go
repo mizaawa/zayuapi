@@ -3,7 +3,9 @@
 package handler
 
 import (
+	"bytes"
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -11,12 +13,54 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"entgo.io/ent/dialect"
+	entsql "entgo.io/ent/dialect/sql"
+	dbent "github.com/Wei-Shaw/sub2api/ent"
+	"github.com/Wei-Shaw/sub2api/ent/enttest"
 	"github.com/Wei-Shaw/sub2api/internal/payment"
 	"github.com/Wei-Shaw/sub2api/internal/service"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	_ "modernc.org/sqlite"
 )
+
+func TestUnsignedWebhooksRejectWhenProviderCannotBeResolved(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	db, err := sql.Open("sqlite", "file:webhook_missing_provider?mode=memory&cache=shared")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = db.Close() })
+	_, err = db.Exec("PRAGMA foreign_keys = ON")
+	require.NoError(t, err)
+	client := enttest.NewClient(t, enttest.WithOptions(dbent.Driver(entsql.OpenDB(dialect.SQLite, db))))
+	t.Cleanup(func() { _ = client.Close() })
+	h := NewPaymentWebhookHandler(service.NewPaymentService(client, payment.NewRegistry(), nil, nil, nil, nil, nil, nil, nil), nil)
+
+	tests := []struct {
+		name    string
+		method  string
+		path    string
+		body    string
+		handler gin.HandlerFunc
+	}{
+		{"easypay GET", http.MethodGet, "/payment/webhook/easypay?out_trade_no=unknown", "", h.EasyPayNotify},
+		{"easypay POST", http.MethodPost, "/payment/webhook/easypay", "out_trade_no=unknown", h.EasyPayNotify},
+		{"alipay", http.MethodPost, "/payment/webhook/alipay", "out_trade_no=unknown", h.AlipayNotify},
+		{"wxpay", http.MethodPost, "/payment/webhook/wxpay", `{}`, h.WxpayNotify},
+		{"stripe", http.MethodPost, "/payment/webhook/stripe", `{}`, h.StripeWebhook},
+		{"airwallex", http.MethodPost, "/payment/webhook/airwallex", `{}`, h.AirwallexWebhook},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			recorder := httptest.NewRecorder()
+			ctx, _ := gin.CreateTestContext(recorder)
+			ctx.Request = httptest.NewRequest(tt.method, tt.path, bytes.NewBufferString(tt.body))
+			tt.handler(ctx)
+			require.Equal(t, http.StatusBadRequest, recorder.Code)
+			require.Equal(t, "verify failed", recorder.Body.String())
+		})
+	}
+}
 
 func TestWriteSuccessResponse(t *testing.T) {
 	gin.SetMode(gin.TestMode)

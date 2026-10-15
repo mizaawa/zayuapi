@@ -54,11 +54,14 @@ See [APPLE_CONTAINER.md](./APPLE_CONTAINER.md) for configuration, upgrades, pers
 
 Run the deployment helper from the private repository clone:
 
-This repository and its GHCR image are private. The repository's `deploy/.env` contains the configured credentials. See [PRIVATE_REPOSITORY.md](./PRIVATE_REPOSITORY.md) for details.
+This repository and its GHCR image are private. Create a local `deploy/.env` from `.env.example` and keep it outside Git. See [PRIVATE_REPOSITORY.md](./PRIVATE_REPOSITORY.md) for details.
 
 ```bash
 git clone https://github.com/mizaawa/zayuapi.git
 cd zayuapi/deploy
+cp .env.example .env
+chmod 600 .env
+# Configure .env and provide GHCR_TOKEN in the environment.
 bash start-private.sh
 ```
 
