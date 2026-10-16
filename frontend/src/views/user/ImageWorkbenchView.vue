@@ -450,6 +450,7 @@ watch(resolutions, options => {
   if (!options.includes(form.resolution)) form.resolution = options[options.length - 1]!
 })
 const references = ref<ReferenceImage[]>([])
+let nextReferenceId = 0
 const fileInput = ref<HTMLInputElement | null>(null)
 const readingReferences = ref(false)
 const dragging = ref(false)
@@ -709,7 +710,7 @@ async function addReferences(files: File[]) {
           break
         }
         references.value.push({
-          id: crypto.randomUUID(),
+          id: `reference-${++nextReferenceId}`,
           file,
           dataUrl,
           url: URL.createObjectURL(file)

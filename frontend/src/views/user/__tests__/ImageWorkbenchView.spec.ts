@@ -144,6 +144,40 @@ describe('ImageWorkbenchView', () => {
     await flushPromises()
   }
 
+  it.each(['upload', 'paste', 'drop'])('accepts references via %s without secure-context crypto APIs', async (method) => {
+    stubImageReading()
+    vi.stubGlobal('crypto', {})
+    submitTask.mockResolvedValue(task('http-references'))
+    const wrapper = mountWorkbench()
+    await flushPromises()
+    const files = ['image/png', 'image/jpeg', 'image/webp'].map((type, index) =>
+      new File(['image'], `reference-${index}`, { type })
+    )
+    if (method === 'upload') {
+      const input = wrapper.get('input[type="file"]')
+      Object.defineProperty(input.element, 'files', { value: files, configurable: true })
+      await input.trigger('change')
+    } else if (method === 'drop') {
+      await wrapper.get('.reference-strip').trigger('drop', { dataTransfer: { files } })
+    } else {
+      await wrapper.get('.image-workbench').trigger('paste', {
+        clipboardData: { items: files.map(file => ({ kind: 'file', type: file.type, getAsFile: () => file })) },
+      })
+    }
+    await flushPromises()
+    expect(wrapper.findAll('.reference-image')).toHaveLength(3)
+    expect(showError).not.toHaveBeenCalled()
+    await wrapper.findAll('.reference-image button')[1]!.trigger('click')
+    expect(wrapper.findAll('.reference-image img').map(image => image.attributes('alt'))).toEqual([
+      'reference-0', 'reference-2',
+    ])
+    await wrapper.get('#image-prompt').setValue('Edit the uploaded references')
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+    expect(submitTask).toHaveBeenCalledOnce()
+    expect(submitTask.mock.calls[0][2].images).toHaveLength(2)
+  })
+
   it.each([undefined, 0, -1, 1.5])('defaults an absent or invalid reference limit to six: %s', async (limit) => {
     stubImageReading()
     listTasks.mockResolvedValue({ ...tasksResponse(), max_reference_images: limit })
