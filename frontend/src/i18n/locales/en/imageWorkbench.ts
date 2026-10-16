@@ -71,6 +71,7 @@ export default {
     referenceSize: 'Each reference image must be {max} MB or smaller',
     referenceRead: 'Could not read this image. Select it again.',
     invalidRatio: 'Use integers from 1 to 8192 and a ratio between 1:64 and 64:1',
+    invalidGptImage2Ratio: 'Use integers from 1 to 8192 and a ratio between 1:3 and 3:1 for GPT Image 2',
     promptRequired: 'Enter a prompt first',
     selectionRequired: 'Select an API key and a model',
     created: 'Image task created',

@@ -10,8 +10,21 @@ The user console includes `/image-workbench`, directly below API Keys. It uses
 the same asynchronous gateway, accounting, moderation and group permissions.
 Workbench submissions set `X-Sub2API-Image-Workbench: true` together with the
 selected API key and `X-Sub2API-User-Email`. They accept JSON generation or edit
-payloads, up to two reference images, and `n` equal to 1, 3, 5, 10 or 20.
-The selected upstream model still determines which sizes and quantities it supports.
+payloads and the administrator-configured reference image limit (six by default).
+Every submitted task uses `n: 1`; selecting 3, 5, 10 or 20 images creates that
+many independently queued tasks. The browser sends PNG, JPEG or WebP references
+as `images: [{"image_url": "data:image/png;base64,..."}]`.
+
+For OpenAI and Custom API-key accounts, inline edit references are encoded as
+standard multipart `image[]` files before forwarding, with all scalar options
+and the mapped upstream model preserved. Remote/mixed references and structured
+provider extensions retain JSON. OAuth converts references into Responses
+`input_image` items; Grok converts them into its native URL objects.
+
+GPT Image 2 and 2.5 workbench sizes use multiples of 16, at most 3840 pixels per
+edge, 655360 to 8294400 total pixels, and aspect ratios between 1:3 and 3:1.
+The displayed dimensions are the dimensions sent upstream. The 8K option is
+unavailable for these models. Other providers retain their existing size rules.
 
 Group creation and editing expose **Declare group image generation support**
 (`image_workbench_enabled`). It defaults to false for new and existing groups.

@@ -35,9 +35,11 @@ Content-Type: application/json
 
 编辑接口支持 `multipart/form-data`：`model`、`prompt`、`size` 等文本字段，加上 `image` / `image[]` 文件字段。JSON 编辑使用 `images: [{"image_url": "https://..."}]`。
 
-同步成功返回 OpenAI Images 格式 `data: [{"url": "..."}]` 或 `b64_json`；异步接口返回任务 ID，客户端轮询任务接口，完成后读取 `result.data`。工作台选择多张时创建多个独立的单图任务，并按用户并发限制执行，其余排队。
+JSON 图片输入也兼容 `image`、`image_url`、`image_urls`，以及字符串、`{"url":"..."}` 和 `{"image_url":{"url":"..."}}` 引用。OpenAI 与 Custom API Key 通道将纯内联 PNG/JPEG/WebP 编辑请求转换为标准 `image[]` 文件上传，保留模型映射、蒙版及所有标量参数；包含远程 URL、混合引用或结构化扩展字段的请求保留 JSON。Grok 转换为其原生 URL 对象；OAuth 转换为 Responses `input_image`。不会因协议错误自动重复创建付费图片任务。`file_id` 属于特定上游账号，当前网关不跨账号解析文件 ID，请使用 URL 或图片数据。
 
-968 账号可使用 `size: "16:9"`、`resolution: "1k" | "2k" | "4k"` 和 `image_urls`。本站也会将工作台像素尺寸及上传参考图转换为其协议。968 每次仅支持 `n: 1`，最多 8 张参考图，单张不超过 20 MB；本站管理员设置的更小限额仍然生效。
+GPT Image 2 / 2.5 工作台按当前协议生成尺寸：宽高为 16 的倍数，最长边不超过 3840，总像素在 655360 至 8294400 之间，长宽比不超过 3:1。1K 横图会调整到合法尺寸（例如 1088x608），4K 方图为 2880x2880；界面显示值与请求一致，这些模型不提供 8K。GPT Image 2 使用固定高保真图片输入，无需发送 `input_fidelity`。官方协议参考：[Image generation](https://developers.openai.com/api/docs/guides/image-generation) 和 [Images API](https://developers.openai.com/api/reference/resources/images)。
+
+同步成功返回 OpenAI Images 格式 `data: [{"url": "..."}]` 或 `b64_json`；异步接口返回任务 ID，客户端轮询任务接口，完成后读取 `result.data`。工作台选择多张时创建多个独立的单图任务，并按用户并发限制执行，其余排队。
 
 ## 视频
 

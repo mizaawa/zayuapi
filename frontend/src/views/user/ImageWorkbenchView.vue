@@ -209,12 +209,12 @@
               />
             </div>
             <p v-if="!outputSize" class="validation-error">
-              {{ t('imageWorkbench.invalidRatio') }}
+              {{ t(isGptImage2Model(form.model) ? 'imageWorkbench.invalidGptImage2Ratio' : 'imageWorkbench.invalidRatio') }}
             </p>
           </fieldset>
           <fieldset>
             <legend>{{ t('imageWorkbench.resolution') }}</legend>
-            <div class="segmented four">
+            <div class="segmented" :style="{ gridTemplateColumns: `repeat(${resolutions.length}, minmax(0, 1fr))` }">
               <button
                 v-for="resolution in resolutions"
                 :key="resolution"
@@ -404,6 +404,8 @@ import {
 import {
   calculateImageSize,
   createImageFilename as imageFilename,
+  imageResolutionsForModel,
+  isGptImage2Model,
   safeImageUrl,
   type ImageResolution
 } from '@/utils/imageWorkbench'
@@ -430,7 +432,6 @@ const tabs = [
 ] as const
 const qualities: Quality[] = ['auto', 'low', 'medium', 'high']
 const ratios = ['1:1', '4:3', '3:4', '16:9', '9:16']
-const resolutions = ['1K', '2K', '4K', '8K'] as const
 const quantities = [1, 3, 5, 10, 20]
 const statuses = ['all', 'queued', 'processing', 'completed', 'failed'] as const
 const initialForm = {
@@ -444,6 +445,10 @@ const initialForm = {
   quantity: 1
 }
 const form = reactive({ ...initialForm })
+const resolutions = computed(() => imageResolutionsForModel(form.model))
+watch(resolutions, options => {
+  if (!options.includes(form.resolution)) form.resolution = options[options.length - 1]!
+})
 const references = ref<ReferenceImage[]>([])
 const fileInput = ref<HTMLInputElement | null>(null)
 const readingReferences = ref(false)
@@ -514,7 +519,8 @@ const outputSize = computed(() => {
       form.aspectRatio,
       form.resolution,
       form.customWidth,
-      form.customHeight
+      form.customHeight,
+      form.model
     )
   } catch {
     return null
@@ -611,7 +617,7 @@ async function loadModels() {
     models.value = result
     form.model =
       result.find((model) => model.id === previous)?.id ||
-      result.find((model) => /gpt-image-2/i.test(model.id))?.id ||
+      result.find((model) => isGptImage2Model(model.id))?.id ||
       result[0]?.id ||
       ''
   } catch {

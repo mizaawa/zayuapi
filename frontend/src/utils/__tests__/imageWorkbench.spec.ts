@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { calculateImageSize, createImageFilename, safeImageUrl, type ImageResolution } from '@/utils/imageWorkbench'
+import { calculateImageSize, createImageFilename, imageResolutionsForModel, isGptImage2Model, safeImageUrl, type ImageResolution } from '@/utils/imageWorkbench'
 
 describe('image workbench dimensions', () => {
   it.each([
@@ -28,6 +28,53 @@ describe('image workbench dimensions', () => {
 
   it.each(['3K', '', 'toString', '__proto__'])('rejects invalid runtime resolutions instead of returning NaN: %s', resolution => {
     expect(() => calculateImageSize('1:1', resolution as ImageResolution, 1, 1)).toThrow(RangeError)
+  })
+})
+
+describe('GPT Image 2 dimensions', () => {
+  it.each(['gpt-image-2', 'gptimage2', 'GPT-IMAGE2', 'gpt-image-2-2026-04-21', 'gpt-image-2.5'])('recognizes the model and its aliases: %s', model => {
+    expect(isGptImage2Model(model)).toBe(true)
+    expect(imageResolutionsForModel(model)).toEqual(['1K', '2K', '4K'])
+    expect(() => calculateImageSize('1:1', '8K', 1, 1, model)).toThrow(RangeError)
+  })
+
+  it.each(['gpt-image-1.5', 'gpt-image-20', 'grok-imagine', 'banana-2', 'custom-image'])('preserves resolution support for other models: %s', model => {
+    expect(isGptImage2Model(model)).toBe(false)
+    expect(imageResolutionsForModel(model)).toEqual(['1K', '2K', '4K', '8K'])
+    expect(calculateImageSize('16:9', '8K', 1, 1, model).size).toBe('8192x4608')
+  })
+
+  it.each([
+    ['1:1', '1K', '1024x1024'],
+    ['16:9', '1K', '1088x608'],
+    ['9:16', '1K', '608x1088'],
+    ['16:9', '2K', '2048x1152'],
+    ['1:1', '4K', '2880x2880'],
+    ['16:9', '4K', '3840x2160'],
+    ['9:16', '4K', '2160x3840'],
+  ] as const)('fits %s at %s into the supported pixel range', (ratio, resolution, size) => {
+    expect(calculateImageSize(ratio, resolution, 1, 1, 'gpt-image-2').size).toBe(size)
+  })
+
+  it('keeps every preset and custom boundary within the protocol constraints', () => {
+    for (const resolution of imageResolutionsForModel('gpt-image-2')) {
+      for (const [ratio, customWidth, customHeight] of [
+        ['1:1', 1, 1], ['4:3', 1, 1], ['3:4', 1, 1], ['16:9', 1, 1], ['9:16', 1, 1],
+        ['custom', 3, 1], ['custom', 1, 3], ['custom', 7, 5], ['custom', 8192, 8191],
+      ] as const) {
+        const { width, height } = calculateImageSize(ratio, resolution, customWidth, customHeight, 'gptimage2')
+        expect(width % 16).toBe(0)
+        expect(height % 16).toBe(0)
+        expect(Math.max(width, height)).toBeLessThanOrEqual(3840)
+        expect(Math.max(width, height) / Math.min(width, height)).toBeLessThanOrEqual(3)
+        expect(width * height).toBeGreaterThanOrEqual(655360)
+        expect(width * height).toBeLessThanOrEqual(8294400)
+      }
+    }
+  })
+
+  it.each([[4, 1], [1, 4], [8192, 1]])('rejects unsupported custom aspect ratios %s:%s', (width, height) => {
+    expect(() => calculateImageSize('custom', '1K', width, height, 'gptimage2')).toThrow(RangeError)
   })
 })
 

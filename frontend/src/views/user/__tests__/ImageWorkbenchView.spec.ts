@@ -330,6 +330,46 @@ describe('ImageWorkbenchView', () => {
     expect(showError).not.toHaveBeenCalled()
   })
 
+  it('prefers the compact GPT Image 2 alias and submits the displayed legal dimensions with references', async () => {
+    stubImageReading()
+    listModels.mockResolvedValue([{ id: 'grok-imagine' }, { id: 'gptimage2' }])
+    submitTask.mockResolvedValue(task('alias-edit'))
+    const wrapper = mountWorkbench()
+    await flushPromises()
+    expect(wrapper.get<HTMLSelectElement>('#image-model').element.value).toBe('gptimage2')
+    expect(wrapper.findAll('button').some(button => button.text() === '8K')).toBe(false)
+    await addReference(wrapper, 5)
+    await wrapper.get('#image-prompt').setValue('A landscape from this reference')
+    await clickButton(wrapper, '16:9')
+    expect(wrapper.get('.output-summary').text()).toContain('1088x608')
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+    expect(submitTask).toHaveBeenCalledWith('sk-studio', 'owner@example.com', {
+      prompt: 'A landscape from this reference', model: 'gptimage2', quality: 'auto', size: '1088x608', n: 1,
+      images: [{ image_url: 'data:image/png;base64,aW1hZ2U=' }],
+    })
+  })
+
+  it('updates resolution and ratio validation when switching between model families', async () => {
+    listModels.mockResolvedValue([{ id: 'gpt-image-2' }, { id: 'grok-imagine' }])
+    const wrapper = mountWorkbench()
+    await flushPromises()
+    await wrapper.get('#image-prompt').setValue('A wide scene')
+    await wrapper.get('#image-model').setValue('grok-imagine')
+    await clickButton(wrapper, '8K')
+    expect(wrapper.get('.output-summary').text()).toContain('8192x8192')
+    await wrapper.get('#image-model').setValue('gpt-image-2')
+    expect(wrapper.findAll('button').some(button => button.text() === '8K')).toBe(false)
+    expect(wrapper.get('.output-summary').text()).toContain('2880x2880')
+    await clickButton(wrapper, 'imageWorkbench.custom')
+    await wrapper.get('#custom-width').setValue('4')
+    expect(wrapper.get('.validation-error').text()).toBe('imageWorkbench.invalidGptImage2Ratio')
+    expect(wrapper.get<HTMLButtonElement>('.create-task').element.disabled).toBe(true)
+    await wrapper.get('#image-model').setValue('grok-imagine')
+    expect(wrapper.find('.validation-error').exists()).toBe(false)
+    expect(wrapper.get<HTMLButtonElement>('.create-task').element.disabled).toBe(false)
+  })
+
   it('dispatches three independent requests concurrently from one snapshot and retains every accepted task', async () => {
     stubImageReading()
     const pending = Array.from({ length: 3 }, () => deferred<ImageTask>())
@@ -545,7 +585,7 @@ describe('ImageWorkbenchView', () => {
     await clickButton(wrapper, 'imageWorkbench.custom')
     await wrapper.get('#custom-width').setValue('3.5')
     await wrapper.get('#custom-height').setValue('2')
-    expect(wrapper.get('.validation-error').text()).toBe('imageWorkbench.invalidRatio')
+    expect(wrapper.get('.validation-error').text()).toBe('imageWorkbench.invalidGptImage2Ratio')
     expect(wrapper.get<HTMLButtonElement>('.create-task').element.disabled).toBe(true)
     await wrapper.get('form').trigger('submit')
     expect(submitTask).not.toHaveBeenCalled()

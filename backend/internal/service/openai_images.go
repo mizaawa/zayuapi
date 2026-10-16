@@ -249,11 +249,19 @@ func parseOpenAIImagesJSONRequest(body []byte, req *OpenAIImagesRequest) error {
 	}
 	req.Prompt = strings.TrimSpace(gjson.GetBytes(body, "prompt").String())
 	req.Resolution = strings.TrimSpace(gjson.GetBytes(body, "resolution").String())
-	for _, image := range gjson.GetBytes(body, "image_urls").Array() {
-		if image.Type != gjson.String || strings.TrimSpace(image.String()) == "" {
-			return fmt.Errorf("image_urls must contain image URLs")
+	for _, field := range []string{"images", "image", "image_urls", "image_url"} {
+		value := gjson.GetBytes(body, field)
+		if !value.Exists() {
+			continue
 		}
-		req.InputImageURLs = append(req.InputImageURLs, image.String())
+		if (field == "images" || field == "image_urls") && !value.IsArray() {
+			return fmt.Errorf("invalid %s field type", field)
+		}
+		refs, err := parseImageInputReferences(value, field)
+		if err != nil {
+			return err
+		}
+		req.InputImageURLs = append(req.InputImageURLs, refs...)
 	}
 
 	if streamResult := gjson.GetBytes(body, "stream"); streamResult.Exists() {
@@ -300,27 +308,16 @@ func parseOpenAIImagesJSONRequest(body []byte, req *OpenAIImagesRequest) error {
 		req.PartialImages = &v
 	}
 	if req.IsEdits() {
-		images := gjson.GetBytes(body, "images")
-		if images.Exists() {
-			if !images.IsArray() {
-				return fmt.Errorf("invalid images field type")
+		if mask := gjson.GetBytes(body, "mask"); mask.Exists() && mask.Type != gjson.Null {
+			refs, err := parseImageInputReferences(mask, "mask")
+			if err != nil {
+				return err
 			}
-			for _, item := range images.Array() {
-				if imageURL := strings.TrimSpace(item.Get("image_url").String()); imageURL != "" {
-					req.InputImageURLs = append(req.InputImageURLs, imageURL)
-					continue
-				}
-				if item.Get("file_id").Exists() {
-					return fmt.Errorf("images[].file_id is not supported (use images[].image_url instead)")
-				}
+			if mask.IsArray() || len(refs) != 1 {
+				return fmt.Errorf("mask must reference one image")
 			}
-		}
-		if maskImageURL := strings.TrimSpace(gjson.GetBytes(body, "mask.image_url").String()); maskImageURL != "" {
-			req.MaskImageURL = maskImageURL
+			req.MaskImageURL = refs[0]
 			req.HasMask = true
-		}
-		if gjson.GetBytes(body, "mask.file_id").Exists() {
-			return fmt.Errorf("mask.file_id is not supported (use mask.image_url instead)")
 		}
 		if len(req.InputImageURLs) == 0 {
 			return fmt.Errorf("images[].image_url is required")
@@ -357,10 +354,13 @@ func parseOpenAIImagesMultipartRequest(body []byte, contentType string, req *Ope
 			continue
 		}
 
-		data, err := io.ReadAll(io.LimitReader(part, openAIImageMaxUploadPartSize))
+		data, err := io.ReadAll(io.LimitReader(part, openAIImagesMaxInputImageBytes+1))
 		_ = part.Close()
 		if err != nil {
 			return fmt.Errorf("read multipart field %s: %w", name, err)
+		}
+		if int64(len(data)) > openAIImagesMaxInputImageBytes {
+			return fmt.Errorf("multipart field %s exceeds the 50 MiB image limit", name)
 		}
 
 		fileName := strings.TrimSpace(part.FileName())
@@ -498,7 +498,7 @@ func isCompatibleImageGenerationModel(model string) bool {
 // IsGPTImageGenerationModel identifies the GPT native image-generation model family.
 func IsGPTImageGenerationModel(model string) bool {
 	model = strings.ToLower(strings.TrimSpace(model))
-	return strings.HasPrefix(model, "gpt-image-")
+	return strings.HasPrefix(model, "gpt-image-") || model == "gptimage2" || model == "gpt-image2" || model == "gptimage-2"
 }
 
 func isGrokImageGenerationModel(model string) bool {
@@ -621,16 +621,16 @@ func (s *OpenAIGatewayService) forwardOpenAIImagesAPIKey(
 	channelMappedModel string,
 ) (*OpenAIForwardResult, error) {
 	startTime := time.Now()
+	if err := validateOpenAIImagesModel(parsed.Model); err != nil {
+		return nil, err
+	}
 	requestModel := strings.TrimSpace(parsed.Model)
 	if mapped := strings.TrimSpace(channelMappedModel); mapped != "" {
 		requestModel = mapped
 	}
-	if err := validateOpenAIImagesModel(requestModel); err != nil {
-		return nil, err
-	}
 	upstreamModel := account.GetMappedModel(requestModel)
-	if err := validateOpenAIImagesModel(upstreamModel); err != nil {
-		return nil, err
+	if strings.TrimSpace(upstreamModel) == "" {
+		return nil, fmt.Errorf("mapped image model is required")
 	}
 	logger.LegacyPrintf(
 		"service.openai_gateway",
@@ -643,6 +643,12 @@ func (s *OpenAIGatewayService) forwardOpenAIImagesAPIKey(
 	forwardBody, forwardContentType, err := rewriteOpenAIImagesModel(body, parsed.ContentType, upstreamModel)
 	if err != nil {
 		return nil, err
+	}
+	if parsed.IsEdits() && (account.Platform == PlatformOpenAI || account.Platform == PlatformCustom) {
+		forwardBody, forwardContentType, err = normalizeOpenAIImagesAPIKeyEditBody(forwardBody, forwardContentType)
+		if err != nil {
+			return nil, err
+		}
 	}
 	endpoint := parsed.Endpoint
 	upstreamCtx, releaseUpstreamCtx := detachStreamUpstreamContext(ctx, parsed.Stream)

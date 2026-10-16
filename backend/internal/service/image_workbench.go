@@ -171,6 +171,8 @@ func classifyWorkbenchImageError(payload json.RawMessage) (string, string, strin
 	}
 	for _, path := range []string{"type", "error.type"} {
 		switch strings.ToLower(strings.TrimSpace(gjson.GetBytes(payload, path).String())) {
+		case "invalid_image_input":
+			return "invalid_request_error", "invalid_image_input", "the channel rejected the prompt or the reference image; retry, change the model, or contact the administrator", true
 		case "moderation_blocked", "content_policy_violation":
 			return "invalid_request_error", "content_rejected", "the prompt or reference image was rejected by the channel's content moderation; revise it and retry", true
 		}

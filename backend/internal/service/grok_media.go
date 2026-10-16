@@ -264,6 +264,8 @@ func parseGrokMediaJSONRequest(body []byte, info *GrokMediaRequestInfo) {
 	}
 	appendJSONImageURLs(gjson.GetBytes(body, "image"))
 	appendJSONImageURLs(gjson.GetBytes(body, "images"))
+	appendJSONImageURLs(gjson.GetBytes(body, "image_url"))
+	appendJSONImageURLs(gjson.GetBytes(body, "image_urls"))
 	appendJSONImageURLs(gjson.GetBytes(body, "reference_images"))
 	appendJSONImageURLs(gjson.GetBytes(body, "referenceImages"))
 	appendJSONImageURLs(gjson.GetBytes(body, "image_refs"))
@@ -304,10 +306,7 @@ func grokMediaReferenceURL(value gjson.Result) string {
 }
 
 func grokMediaJSONImageURL(value gjson.Result) string {
-	if imageURL := strings.TrimSpace(value.Get("url").String()); imageURL != "" {
-		return imageURL
-	}
-	return strings.TrimSpace(value.Get("image_url").String())
+	return imageInputReferenceURL(value)
 }
 
 func parseGrokMediaMultipartRequest(contentType string, body []byte, info *GrokMediaRequestInfo) {
@@ -1218,13 +1217,50 @@ func prepareGrokMediaForwardBody(endpoint GrokMediaEndpoint, body []byte, conten
 	if endpoint != GrokMediaEndpointImagesEdits || gjson.ValidBytes(body) {
 		return body, contentType, nil
 	}
-	mediaType, _, err := mime.ParseMediaType(strings.TrimSpace(contentType))
+	mediaType, params, err := mime.ParseMediaType(strings.TrimSpace(contentType))
 	if err != nil || !strings.EqualFold(mediaType, "multipart/form-data") {
 		return body, contentType, nil
 	}
 
 	info := ParseGrokMediaRequest(contentType, body)
 	payload := make(map[string]any)
+	reader := multipart.NewReader(bytes.NewReader(body), params["boundary"])
+	for {
+		part, err := reader.NextPart()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return nil, "", fmt.Errorf("read image edit multipart body: %w", err)
+		}
+		name := strings.TrimSpace(part.FormName())
+		if name == "" || part.FileName() != "" || name == "image" || name == "mask" || strings.HasPrefix(name, "image[") {
+			_ = part.Close()
+			continue
+		}
+		data, err := io.ReadAll(part)
+		_ = part.Close()
+		if err != nil {
+			return nil, "", fmt.Errorf("read image edit multipart field: %w", err)
+		}
+		value := strings.TrimSpace(string(data))
+		switch name {
+		case "n", "output_compression", "partial_images":
+			valueInt, err := strconv.Atoi(value)
+			if err != nil {
+				return nil, "", fmt.Errorf("invalid image edit %s", name)
+			}
+			payload[name] = valueInt
+		case "stream":
+			valueBool, err := strconv.ParseBool(value)
+			if err != nil {
+				return nil, "", fmt.Errorf("invalid image edit stream")
+			}
+			payload[name] = valueBool
+		default:
+			payload[name] = value
+		}
+	}
 	if info.Model != "" {
 		payload["model"] = info.Model
 	}
@@ -1413,6 +1449,48 @@ func normalizeGrokMediaForwardBody(endpoint GrokMediaEndpoint, body []byte, cont
 	var imageFields []string
 	switch endpoint {
 	case GrokMediaEndpointImagesEdits:
+		var aliases []string
+		for _, field := range []string{"image_url", "image_urls"} {
+			value := gjson.GetBytes(body, field)
+			if !value.Exists() {
+				continue
+			}
+			refs, err := parseImageInputReferences(value, field)
+			if err != nil {
+				return nil, "", err
+			}
+			aliases = append(aliases, refs...)
+			body, err = sjson.DeleteBytes(body, field)
+			if err != nil {
+				return nil, "", err
+			}
+		}
+		if len(aliases) > 0 {
+			for _, field := range []string{"image", "images"} {
+				value := gjson.GetBytes(body, field)
+				if !value.Exists() {
+					continue
+				}
+				refs, err := parseImageInputReferences(value, field)
+				if err != nil {
+					return nil, "", err
+				}
+				aliases = append(refs, aliases...)
+				body, err = sjson.DeleteBytes(body, field)
+				if err != nil {
+					return nil, "", err
+				}
+			}
+			var err error
+			if len(aliases) == 1 {
+				body, err = sjson.SetBytes(body, "image", aliases[0])
+			} else {
+				body, err = sjson.SetBytes(body, "images", aliases)
+			}
+			if err != nil {
+				return nil, "", err
+			}
+		}
 		imageFields = []string{"image", "images", "mask"}
 	case GrokMediaEndpointVideosGenerations:
 		imageFields = []string{"image", "images", "reference_images"}
@@ -1461,6 +1539,17 @@ func canonicalizeGrokMediaImageURLFields(body []byte, fields ...string) ([]byte,
 }
 
 func canonicalizeGrokMediaImageURLObject(body []byte, path string) ([]byte, error) {
+	value := gjson.GetBytes(body, path)
+	if value.IsObject() && value.Get("file_id").Exists() {
+		return nil, fmt.Errorf("%s.file_id is not supported (use image_url instead)", path)
+	}
+	if value.Type == gjson.String {
+		out, err := sjson.SetBytes(body, path, map[string]string{"url": strings.TrimSpace(value.String())})
+		if err != nil {
+			return nil, fmt.Errorf("normalize grok media image url: %w", err)
+		}
+		return out, nil
+	}
 	legacyPath := path + ".image_url"
 	legacy := gjson.GetBytes(body, legacyPath)
 	if !legacy.Exists() {
@@ -1470,7 +1559,7 @@ func canonicalizeGrokMediaImageURLObject(body []byte, path string) ([]byte, erro
 	out := body
 	if strings.TrimSpace(gjson.GetBytes(out, path+".url").String()) == "" {
 		var err error
-		out, err = sjson.SetBytes(out, path+".url", legacy.Value())
+		out, err = sjson.SetBytes(out, path+".url", imageInputReferenceURL(value))
 		if err != nil {
 			return nil, fmt.Errorf("normalize grok media image url: %w", err)
 		}

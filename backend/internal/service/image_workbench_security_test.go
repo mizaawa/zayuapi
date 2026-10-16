@@ -63,6 +63,28 @@ func TestImageWorkbenchSanitizesProviderDataBeforePersistence(t *testing.T) {
 	}
 }
 
+func TestImageWorkbenchInvalidImageInputUsesSafeDiagnostic(t *testing.T) {
+	store := &imageTaskMemoryStore{task: &ImageTaskRecord{
+		ID: "imgtask_test", UserID: 1, APIKeyID: 2, UserEmail: "owner@example.com",
+		Status: ImageTaskStatusProcessing, Workbench: &ImageWorkbenchMetadata{}, ExpiresAt: time.Now().Add(time.Hour).Unix(),
+	}}
+	svc := NewImageTaskService(store)
+	errBody := json.RawMessage(`{"code":"invalid_image_input","message":"private upstream URL https://internal.example and sk-secret"}`)
+	require.NoError(t, svc.Fail(context.Background(), store.task.ID, http.StatusBadRequest, errBody))
+	require.Contains(t, string(store.task.Error), `"code":"invalid_image_input"`)
+	require.Contains(t, string(store.task.Error), "change the model")
+	require.NotContains(t, string(store.task.Error), "internal.example")
+	require.NotContains(t, string(store.task.Error), "sk-secret")
+
+	public := imageTaskToPublic(store.task)
+	require.Equal(t, store.task.Error, public.Error)
+	legacy := imageTaskToPublic(&ImageTaskRecord{
+		Status: ImageTaskStatusFailed, HTTPStatus: http.StatusBadRequest,
+		Workbench: &ImageWorkbenchMetadata{}, Error: errBody,
+	})
+	require.Equal(t, public.Error, legacy.Error)
+}
+
 func TestImageTaskRejectsExpiredRecordBeforeRedisEviction(t *testing.T) {
 	store := &imageTaskMemoryStore{task: &ImageTaskRecord{UserID: 1, APIKeyID: 2, ExpiresAt: time.Now().Add(-time.Second).Unix()}}
 	svc := NewImageTaskService(store)

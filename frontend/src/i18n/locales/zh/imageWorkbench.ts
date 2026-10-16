@@ -70,6 +70,7 @@ export default {
     referenceSize: '每张参考图不能超过 {max} MB',
     referenceRead: '无法读取此图片，请重新选择',
     invalidRatio: '宽和高须为 1 到 8192 的整数，比例范围为 1:64 至 64:1',
+    invalidGptImage2Ratio: 'GPT Image 2 的宽和高须为 1 到 8192 的整数，比例范围为 1:3 至 3:1',
     promptRequired: '请先填写提示词',
     selectionRequired: '请选择密钥和模型',
     created: '生图任务已创建',

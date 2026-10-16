@@ -69,6 +69,8 @@ describe('image workbench API', () => {
   it('only lists model families executable by the Images gateway, while preserving IDs and labels', async () => {
     fetchMock.mockResolvedValue(jsonResponse({ data: [
       { id: 'gpt-image-2', display_name: 'GPT Image 2' },
+      { id: 'gptimage2', display_name: 'GPT Image 2 Alias' }, { id: 'GPT-IMAGE2' },
+      { id: 'gptimage1' }, { id: 'gptimage20' }, { id: 'gptimage2.5' },
       { id: 'gpt-5.4' }, { id: 'dall-e-3' }, { id: 'gemini-3-pro-image-preview' },
       { id: 'grok-imagine-video' }, { id: 'grok-imagine', displayName: 'Grok Imagine' },
       { id: 'grok-imagine-edit' }, { id: 'grok-imagine-image-quality' },
@@ -76,6 +78,7 @@ describe('image workbench API', () => {
     ] }))
     await expect(listImageModels(apiKey, email)).resolves.toEqual([
       { id: 'gpt-image-2', display_name: 'GPT Image 2' },
+      { id: 'gptimage2', display_name: 'GPT Image 2 Alias' }, { id: 'GPT-IMAGE2' },
       { id: 'grok-imagine', display_name: 'Grok Imagine' },
       { id: 'grok-imagine-edit' }, { id: 'grok-imagine-image-quality' },
     ])
