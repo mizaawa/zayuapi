@@ -119,6 +119,11 @@ func (h *OpenAIGatewayHandler) Images(c *gin.Context) {
 	setOpsEndpointContext(c, "", int16(service.RequestTypeFromLegacy(parsed.Stream, false)))
 
 	channelMapping, _ := h.gatewayService.ResolveChannelMappingAndRestrict(c.Request.Context(), apiKey.GroupID, routingModel)
+	// Admission reserves an account against the channel-mapped model. Dispatch
+	// must use the same name when checking that account's model allowlist.
+	if channelMapping.MappedModel != "" {
+		routingModel = channelMapping.MappedModel
+	}
 
 	if h.errorPassthroughService != nil {
 		service.BindErrorPassthroughService(c, h.errorPassthroughService)
