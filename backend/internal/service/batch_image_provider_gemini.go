@@ -463,7 +463,38 @@ func NewGeminiBatchHTTPClient(baseURL string, client *http.Client) *GeminiBatchH
 	if client == nil {
 		client = batchImageDefaultHTTPClient()
 	}
-	return &GeminiBatchHTTPClient{baseURL: baseURL, client: client}
+	// Do not mutate the shared pool or an injected client's redirect policy.
+	secureClient := *client
+	secureClient.CheckRedirect = func(req *http.Request, via []*http.Request) error {
+		if len(via) >= 10 {
+			return errors.New("too many Gemini batch redirects")
+		}
+		if req == nil || req.URL == nil || req.URL.Scheme != "https" || req.URL.User != nil ||
+			len(via) == 0 || via[0] == nil || !sameGeminiBatchOrigin(req.URL, via[0].URL) {
+			return errors.New("gemini batch redirect to a different or unsafe origin is not allowed")
+		}
+		if client.CheckRedirect != nil {
+			return client.CheckRedirect(req, via)
+		}
+		return nil
+	}
+	return &GeminiBatchHTTPClient{baseURL: baseURL, client: &secureClient}
+}
+
+func sameGeminiBatchOrigin(a, b *url.URL) bool {
+	if a == nil || b == nil || a.User != nil || b.User != nil || a.Opaque != "" || b.Opaque != "" {
+		return false
+	}
+	port := func(u *url.URL) string {
+		if p := u.Port(); p != "" {
+			return p
+		}
+		if strings.EqualFold(u.Scheme, "https") {
+			return "443"
+		}
+		return "80"
+	}
+	return strings.EqualFold(a.Scheme, b.Scheme) && strings.EqualFold(a.Hostname(), b.Hostname()) && port(a) == port(b)
 }
 
 // batchImageDefaultHTTPClient 返回带连接/握手/响应头超时的共享客户端。
@@ -658,6 +689,9 @@ func (c *GeminiBatchHTTPClient) newRequest(ctx context.Context, method, path, ap
 	if err != nil {
 		return nil, err
 	}
+	if req.URL.User != nil {
+		return nil, errors.New("gemini batch URL must not contain userinfo")
+	}
 	req.Header.Set("x-goog-api-key", apiKey)
 	return req, nil
 }
@@ -669,14 +703,14 @@ func validateGeminiDownloadHost(downloadURL, baseURL string) error {
 	if err != nil {
 		return geminiProviderError("GEMINI_INVALID_RESPONSE", "Gemini download uri is invalid", err)
 	}
-	if parsed.Scheme != "https" {
+	if parsed.Scheme != "https" || parsed.User != nil || parsed.Opaque != "" || parsed.Hostname() == "" {
 		return geminiProviderError("GEMINI_INVALID_RESPONSE", "Gemini download uri must use https", nil)
 	}
 	host := strings.ToLower(parsed.Hostname())
 	if host == "googleapis.com" || strings.HasSuffix(host, ".googleapis.com") {
 		return nil
 	}
-	if base, err := url.Parse(baseURL); err == nil && strings.EqualFold(base.Hostname(), host) {
+	if base, err := url.Parse(baseURL); err == nil && sameGeminiBatchOrigin(parsed, base) {
 		return nil
 	}
 	return geminiProviderError("GEMINI_INVALID_RESPONSE", "Gemini download uri host is not allowed", nil)

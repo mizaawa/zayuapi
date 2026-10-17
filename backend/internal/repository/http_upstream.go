@@ -271,7 +271,7 @@ func (s *httpUpstreamService) DoWithTLS(req *http.Request, proxyURL string, acco
 	}
 	proxyInfo := "direct"
 	if proxyURL != "" {
-		proxyInfo = proxyURL
+		proxyInfo = upstreamProxyLogValue(proxyURL)
 	}
 	slog.Debug("tls_fingerprint_enabled", "account_id", accountID, "target", targetHost, "proxy", proxyInfo, "profile", profile.Name)
 
@@ -360,7 +360,7 @@ func httpClientWithGrokAccessDeniedFallback(client *http.Client) *http.Client {
 	if base == nil {
 		base = http.DefaultTransport
 	}
-	clone.Transport = &grokAccessDeniedFallbackTransport{base: base}
+	clone.Transport = &grokAccessDeniedFallbackTransport{base: &upstreamErrorBodyTransport{base: base, timeout: upstreamErrorBodyTimeout}}
 	return &clone
 }
 
@@ -538,7 +538,7 @@ func (s *httpUpstreamService) getClientEntryWithTLS(proxyURL string, accountID i
 			atomic.AddInt64(&entry.inFlight, 1)
 		}
 		s.mu.RUnlock()
-		slog.Debug("tls_fingerprint_reusing_client", "account_id", accountID, "cache_key", cacheKey)
+		slog.Debug("tls_fingerprint_reusing_client", "account_id", accountID)
 		return entry, nil
 	}
 	s.mu.RUnlock()
@@ -552,12 +552,11 @@ func (s *httpUpstreamService) getClientEntryWithTLS(proxyURL string, accountID i
 				atomic.AddInt64(&entry.inFlight, 1)
 			}
 			s.mu.Unlock()
-			slog.Debug("tls_fingerprint_reusing_client", "account_id", accountID, "cache_key", cacheKey)
+			slog.Debug("tls_fingerprint_reusing_client", "account_id", accountID)
 			return entry, nil
 		}
 		slog.Debug("tls_fingerprint_evicting_stale_client",
 			"account_id", accountID,
-			"cache_key", cacheKey,
 			"proxy_changed", entry.proxyKey != proxyKey,
 			"pool_changed", entry.poolKey != poolKey)
 		s.removeClientLocked(cacheKey, entry)
@@ -575,17 +574,14 @@ func (s *httpUpstreamService) getClientEntryWithTLS(proxyURL string, accountID i
 	}
 
 	// 创建带 TLS 指纹的 Transport
-	slog.Debug("tls_fingerprint_creating_new_client", "account_id", accountID, "cache_key", cacheKey, "proxy", proxyKey)
+	slog.Debug("tls_fingerprint_creating_new_client", "account_id", accountID, "proxy", upstreamProxyLogValue(proxyKey))
 	transport, err := buildUpstreamTransportWithTLSFingerprint(settings, parsedProxy, profile)
 	if err != nil {
 		s.mu.Unlock()
 		return nil, fmt.Errorf("build TLS fingerprint transport: %w", err)
 	}
 
-	client := &http.Client{Transport: transport}
-	if s.shouldValidateResolvedIP() {
-		client.CheckRedirect = s.redirectChecker
-	}
+	client := &http.Client{Transport: transport, CheckRedirect: s.redirectChecker}
 
 	entry := &upstreamClientEntry{
 		client:   client,
@@ -635,7 +631,28 @@ func (s *httpUpstreamService) redirectChecker(req *http.Request, via []*http.Req
 	if len(via) >= 10 {
 		return errors.New("stopped after 10 redirects")
 	}
+	// Go forwards custom credential headers and replayable request bodies on
+	// redirects. Keep them within the configured upstream's original origin.
+	if req == nil || req.URL == nil || req.URL.User != nil || len(via) == 0 || via[0].URL == nil ||
+		!sameUpstreamOrigin(req.URL, via[0].URL) {
+		return errors.New("upstream redirect to a different origin is not allowed")
+	}
 	return s.validateRequestHost(req)
+}
+
+func sameUpstreamOrigin(a, b *url.URL) bool {
+	return strings.EqualFold(a.Scheme, b.Scheme) &&
+		strings.EqualFold(a.Hostname(), b.Hostname()) && upstreamURLPort(a) == upstreamURLPort(b)
+}
+
+func upstreamURLPort(u *url.URL) string {
+	if port := u.Port(); port != "" {
+		return port
+	}
+	if strings.EqualFold(u.Scheme, "https") {
+		return "443"
+	}
+	return "80"
 }
 
 // acquireClient 获取或创建客户端，并标记为进行中请求
@@ -734,10 +751,7 @@ func (s *httpUpstreamService) getClientEntry(proxyURL string, accountID int64, a
 		s.mu.Unlock()
 		return nil, fmt.Errorf("build transport: %w", err)
 	}
-	client := &http.Client{Transport: transport}
-	if s.shouldValidateResolvedIP() {
-		client.CheckRedirect = s.redirectChecker
-	}
+	client := &http.Client{Transport: transport, CheckRedirect: s.redirectChecker}
 	entry := &upstreamClientEntry{
 		client:       client,
 		proxyKey:     proxyKey,
@@ -1057,6 +1071,17 @@ func isHTTPProxyKey(proxyKey string) bool {
 	return strings.HasPrefix(proxyKey, "http://") || strings.HasPrefix(proxyKey, "https://")
 }
 
+func upstreamProxyLogValue(raw string) string {
+	if raw == directProxyKey || raw == "" {
+		return directProxyKey
+	}
+	u, err := url.Parse(raw)
+	if err != nil || u.Host == "" {
+		return "[invalid proxy]"
+	}
+	return u.Scheme + "://" + u.Host
+}
+
 func isOpenAIHTTP2CompatibilityError(err error) bool {
 	if err == nil {
 		return false
@@ -1130,7 +1155,7 @@ func (s *httpUpstreamService) recordOpenAIHTTP2Failure(profile service.HTTPUpstr
 	activated, until := state.recordFailure(time.Now(), settings.fallbackErrorThreshold, settings.fallbackWindow, settings.fallbackTTL)
 	if activated {
 		slog.Warn("openai_http2_proxy_fallback_activated",
-			"proxy", proxyKey,
+			"proxy", upstreamProxyLogValue(proxyKey),
 			"fallback_until", until.Format(time.RFC3339))
 	}
 }

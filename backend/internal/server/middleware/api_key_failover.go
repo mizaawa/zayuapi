@@ -274,6 +274,13 @@ func (w *apiKeyFailoverWriter) OpenAICompactKeepaliveStarted() bool {
 	return w.keepaliveStarted.Load()
 }
 
+// Ordinary SSE streams commit when model output begins; compact stays buffered.
+func (w *apiKeyFailoverWriter) CommitOpenAIStreamOutput() {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.commitLocked()
+}
+
 // Compact comments can reach the client while terminal responses stay buffered
 // until the retry decision. Later attempts inherit the committed SSE headers.
 func (w *apiKeyFailoverWriter) WriteOpenAICompactKeepalive(data []byte) (int, error) {

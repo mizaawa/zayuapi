@@ -132,6 +132,7 @@ func (s *OpenAIGatewayService) handleStreamingResponseWithReasoning(ctx context.
 		return int64(bufferedWriter.Buffered())
 	}
 	flushBuffered := func() error {
+		commitOpenAIStreamOutput(w)
 		if firstOutputStage != nil && firstTokenMs == nil && !firstOutputStage.closed {
 			if err := firstOutputStage.CommitTo(w); err != nil {
 				return err
@@ -396,8 +397,9 @@ func (s *OpenAIGatewayService) handleStreamingResponseWithReasoning(ctx context.
 			return resultWithUsage(), scanErr, true
 		}
 		if !openAIStreamClientOutputStarted(c, clientOutputStarted) && !eventShouldFlush {
+			logger.LegacyPrintf("service.openai_gateway", "OpenAI stream read failed before output: account=%d request_id=%s error=%v", account.ID, upstreamRequestID, scanErr)
 			msg := "OpenAI stream disconnected before completion"
-			if errText := strings.TrimSpace(scanErr.Error()); errText != "" {
+			if errText := sanitizeStreamError(scanErr); errText != "" {
 				msg += ": " + errText
 			}
 			return resultWithUsage(), s.newOpenAIStreamFailoverError(c, account, false, upstreamRequestID, nil, msg), true
@@ -456,7 +458,7 @@ func (s *OpenAIGatewayService) handleStreamingResponseWithReasoning(ctx context.
 					})
 				}
 				if !openAIStreamClientOutputStarted(c, clientOutputStarted) {
-					if status, errType, errMsg, matched := applyOpenAIStreamFailedErrorPassthroughRule(c, account.Platform, dataBytes, failedMessage); matched {
+					if status, errType, errMsg, matched := applyOpenAIStreamFailedErrorPassthroughRule(c, account.Platform, dataBytes, failedMessage); matched && !c.Writer.Written() {
 						sawFailedEvent = true
 						// 命中透传规则也要记录 ops 上游错误事件（对齐 CC/Messages 与
 						// antigravity 先例），否则透传命中的 failed 在监控中不可见。
@@ -615,9 +617,14 @@ func (s *OpenAIGatewayService) handleStreamingResponseWithReasoning(ctx context.
 	if streamInterval <= 0 && keepaliveInterval <= 0 && firstOutputTimeout <= 0 {
 		defer putSSEScannerBuf64K(scanBuf)
 		for documentScanner.Scan() {
-			processSSELine(documentScanner.Text(), true)
+			line := documentScanner.Text()
+			processSSELine(line, true)
 			if streamEarlyErr != nil {
 				return resultWithUsage(), streamEarlyErr
+			}
+			if line == "" && sawTerminalEvent {
+				_ = resp.Body.Close()
+				return finalizeStream()
 			}
 		}
 		if result, err, done := handleScanErr(documentScanner.Err()); done {
@@ -676,7 +683,10 @@ func (s *OpenAIGatewayService) handleStreamingResponseWithReasoning(ctx context.
 			_ = sendEvent(scanEvent{err: err})
 		}
 	}(scanBuf)
-	defer close(done)
+	defer func() {
+		close(done)
+		_ = resp.Body.Close()
+	}()
 
 	for {
 		select {
@@ -698,6 +708,9 @@ func (s *OpenAIGatewayService) handleStreamingResponseWithReasoning(ctx context.
 			if streamEarlyErr != nil {
 				return resultWithUsage(), streamEarlyErr
 			}
+			if ev.line == "" && sawTerminalEvent {
+				return finalizeStream()
+			}
 
 		case <-intervalCh:
 			lastRead := time.Unix(0, atomic.LoadInt64(&lastReadAt))
@@ -712,7 +725,9 @@ func (s *OpenAIGatewayService) handleStreamingResponseWithReasoning(ctx context.
 			if s.rateLimitService != nil {
 				s.rateLimitService.HandleStreamTimeout(ctx, account, originalModel)
 			}
-			sendErrorEvent("stream_timeout")
+			if !eventInProgress {
+				sendErrorEvent("stream_timeout")
+			}
 			return resultWithUsage(), fmt.Errorf("stream data interval timeout")
 
 		case <-firstOutputCh:
@@ -742,12 +757,11 @@ func (s *OpenAIGatewayService) handleStreamingResponseWithReasoning(ctx context.
 			if guardFirstOutput {
 				// Bypass attempt-local buffered frames. The stable SSE headers may be
 				// committed here, but account headers remain private until semantic output.
-				if _, err := w.Write([]byte(":\n\n")); err != nil {
+				if err := writeOpenAIStreamKeepalive(c, w); err != nil {
 					clientDisconnected = true
 					logger.LegacyPrintf("service.openai_gateway", "Client disconnected during streaming, continuing to drain upstream for billing")
 					continue
 				}
-				flusher.Flush()
 				lastDownstreamWriteAt = time.Now()
 				continue
 			}

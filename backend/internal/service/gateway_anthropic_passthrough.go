@@ -524,6 +524,7 @@ func (s *GatewayService) handleStreamingResponseAnthropicAPIKeyPassthrough(
 		keepaliveTimer.Reset(keepaliveInterval)
 	}
 	inPartialEvent := false
+	pendingEventName := ""
 
 	for {
 		select {
@@ -569,7 +570,7 @@ func (s *GatewayService) handleStreamingResponseAnthropicAPIKeyPassthrough(
 					rewritten := rewriteAnthropicResponseModel([]byte(data), responseModelOverride)
 					line = line[:len(line)-len(data)] + string(rewritten)
 				}
-				if anthropicStreamEventIsTerminal("", trimmed) {
+				if trimmed != "" && anthropicStreamEventIsTerminal(pendingEventName, trimmed) {
 					sawTerminalEvent = true
 				}
 				if firstTokenMs == nil && trimmed != "" && trimmed != "[DONE]" {
@@ -579,8 +580,8 @@ func (s *GatewayService) handleStreamingResponseAnthropicAPIKeyPassthrough(
 				s.parseSSEUsagePassthrough(data, usage)
 			} else {
 				trimmed := strings.TrimSpace(line)
-				if strings.HasPrefix(trimmed, "event:") && anthropicStreamEventIsTerminal(strings.TrimSpace(strings.TrimPrefix(trimmed, "event:")), "") {
-					sawTerminalEvent = true
+				if strings.HasPrefix(trimmed, "event:") {
+					pendingEventName = strings.TrimSpace(strings.TrimPrefix(trimmed, "event:"))
 				}
 			}
 
@@ -601,6 +602,12 @@ func (s *GatewayService) handleStreamingResponseAnthropicAPIKeyPassthrough(
 				} else {
 					inPartialEvent = true
 				}
+			}
+			if line == "" {
+				if sawTerminalEvent {
+					return &streamingResult{usage: usage, firstTokenMs: firstTokenMs, clientDisconnect: clientDisconnected}, nil
+				}
+				pendingEventName = ""
 			}
 
 		case <-intervalCh:

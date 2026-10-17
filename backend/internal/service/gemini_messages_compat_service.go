@@ -1103,11 +1103,13 @@ func (s *GeminiMessagesCompatService) Forward(ctx context.Context, c *gin.Contex
 
 	var usage *ClaudeUsage
 	var firstTokenMs *int
+	var responseErr error
 	if req.Stream {
 		streamRes, err := s.handleStreamingResponse(c, resp, startTime, responseModel)
-		if err != nil {
+		if err != nil && (streamRes == nil || !streamRes.usage.hasObservedTokens()) {
 			return nil, err
 		}
+		responseErr = err
 		usage = streamRes.usage
 		firstTokenMs = streamRes.firstTokenMs
 	} else {
@@ -1153,7 +1155,7 @@ func (s *GeminiMessagesCompatService) Forward(ctx context.Context, c *gin.Contex
 		ImageCount:                    imageCount,
 		ImageSize:                     imageSize,
 		ImageInputSize:                imageInputSize,
-	}, nil
+	}, responseErr
 }
 
 func isGeminiSignatureRelatedError(respBody []byte) bool {
@@ -2151,11 +2153,18 @@ func (s *GeminiMessagesCompatService) handleStreamingResponse(c *gin.Context, re
 	openToolName := ""
 	seenToolJSON := ""
 
-	reader := bufio.NewReader(resp.Body)
+	reader := newGeminiStreamReader(resp.Body, s.cfg, func() error {
+		_, err := io.WriteString(c.Writer, ":\n\n")
+		if err == nil {
+			flusher.Flush()
+		}
+		return err
+	})
+	defer reader.Close()
 	for {
-		line, err := reader.ReadString('\n')
+		line, err := reader.ReadString()
 		if err != nil && !errors.Is(err, io.EOF) {
-			return nil, fmt.Errorf("stream read error: %w", err)
+			return &geminiStreamResult{usage: &usage, firstTokenMs: firstTokenMs}, fmt.Errorf("stream read error: %w", err)
 		}
 
 		if !strings.HasPrefix(line, "data:") {
@@ -2744,7 +2753,6 @@ func (s *GeminiMessagesCompatService) handleNativeStreamingResponse(c *gin.Conte
 		return nil, errors.New("streaming not supported")
 	}
 
-	reader := bufio.NewReader(resp.Body)
 	usage := &ClaudeUsage{}
 	observer := upstreamResponseModelObserverFromContext(c)
 	if observer == nil {
@@ -2763,8 +2771,20 @@ func (s *GeminiMessagesCompatService) handleNativeStreamingResponse(c *gin.Conte
 		}
 		flusher.Flush()
 	}
+	reader := newGeminiStreamReader(resp.Body, s.cfg, func() error {
+		if clientDisconnected {
+			return io.ErrClosedPipe
+		}
+		if _, err := io.WriteString(c.Writer, ":\n\n"); err != nil {
+			clientDisconnected = true
+			return err
+		}
+		flusher.Flush()
+		return nil
+	})
+	defer reader.Close()
 	for {
-		line, err := reader.ReadString('\n')
+		line, err := reader.ReadString()
 		if len(line) > 0 {
 			trimmed := strings.TrimRight(line, "\r\n")
 			if strings.HasPrefix(trimmed, "data:") {

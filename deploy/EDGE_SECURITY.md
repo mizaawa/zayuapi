@@ -99,6 +99,19 @@ server {
     large_client_header_buffers 4 16k;
     limit_conn sub2api_conn 40;
 
+    # Apply to every proxy location, including embeddings and auth.
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $remote_addr;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection $connection_upgrade;
+    proxy_buffering off;
+    proxy_request_buffering off;
+    proxy_read_timeout 1800s;
+    proxy_send_timeout 1800s;
+
     location ~ ^/(auth|api/auth)/ {
         limit_req zone=sub2api_auth burst=10 nodelay;
         proxy_pass http://127.0.0.1:8080;
@@ -112,17 +125,6 @@ server {
 
     location / {
         limit_req zone=sub2api_api burst=60 nodelay;
-        proxy_http_version 1.1;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $remote_addr;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection $connection_upgrade;
-        proxy_buffering off;
-        proxy_request_buffering off;
-        proxy_read_timeout 1800s;
-        proxy_send_timeout 1800s;
         proxy_pass http://127.0.0.1:8080;
     }
 }
@@ -144,6 +146,26 @@ available for the web UI and static assets.
 
 Do not use an incoming `$http_x_forwarded_for` value unless Nginx real-IP
 processing is restricted to explicit trusted proxy CIDRs.
+
+### Diagnosing intermittent 504 responses
+
+Match the failing route, timestamp and request ID across the edge access/error
+logs and application upstream-error logs. A JSON protocol validation failure
+normally returns a 4xx; a 504 alone does not establish a protocol mismatch.
+An upstream provider's 504, an application stream timeout, and an edge timeout
+before the application sends headers require different fixes.
+
+Keep the proxy timeout directives at `server` scope (or repeat a shared include
+in every proxy location). Sibling regex locations do not inherit settings from
+`location /`; otherwise slow embeddings can hit Nginx's default 60-second read
+timeout even when streaming routes permit 1800 seconds. Reload the running
+proxy after validating its configuration.
+
+Check the CDN's independent response-header and idle limits as well. SSE
+heartbeats keep an established stream active, but cannot extend an upstream or
+CDN deadline before response headers. Use the queued image workbench endpoints
+for long image jobs, and inspect configured first-output/stream timeout values
+before changing them. Increasing timeouts cannot repair an unreachable upstream.
 
 ## Caddy and CDN
 

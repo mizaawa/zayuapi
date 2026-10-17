@@ -14,6 +14,63 @@ import (
 // openAICompactSSEKeepaliveKey 存放 body-signal compact 请求的下游 SSE 心跳器。
 const openAICompactSSEKeepaliveKey = "openai_compact_sse_keepalive"
 
+const openAIStreamKeepaliveBytesKey = "openai_stream_keepalive_bytes"
+
+type openAIStreamOutputCommitter interface {
+	CommitOpenAIStreamOutput()
+}
+
+func commitOpenAIStreamOutput(w gin.ResponseWriter) {
+	if committer, ok := w.(openAIStreamOutputCommitter); ok {
+		committer.CommitOpenAIStreamOutput()
+	}
+}
+
+func writeOpenAIStreamKeepalive(c *gin.Context, w gin.ResponseWriter) error {
+	var n int
+	var err error
+	if retryWriter, ok := w.(openAICompactRetryKeepaliveWriter); ok {
+		n, err = retryWriter.WriteOpenAICompactKeepalive([]byte(":\n\n"))
+	} else {
+		n, err = w.Write([]byte(":\n\n"))
+	}
+	recordOpenAIStreamKeepaliveBytes(c, n)
+	if err == nil {
+		w.Flush()
+	}
+	return err
+}
+
+func recordOpenAIStreamKeepaliveBytes(c *gin.Context, n int) {
+	if c == nil || n <= 0 {
+		return
+	}
+	previous, _ := c.Get(openAIStreamKeepaliveBytesKey)
+	count, _ := previous.(int)
+	c.Set(openAIStreamKeepaliveBytesKey, count+n)
+}
+
+// Ordinary streaming heartbeats share the compact retry and billing size checks.
+func adjustOpenAIStreamKeepaliveWrittenSize(c *gin.Context, size int) int {
+	if size < 0 {
+		return size
+	}
+	value, _ := c.Get(openAIStreamKeepaliveBytesKey)
+	count, _ := value.(int)
+	if real := size - count; real > 0 {
+		return real
+	}
+	if count > 0 {
+		return -1
+	}
+	if size == 0 {
+		if retryWriter, ok := c.Writer.(openAICompactRetryKeepaliveWriter); ok && retryWriter.OpenAICompactKeepaliveStarted() {
+			return -1
+		}
+	}
+	return size
+}
+
 type openAICompactRetryKeepaliveWriter interface {
 	OpenAICompactKeepaliveStarted() bool
 	WriteOpenAICompactKeepalive([]byte) (int, error)
@@ -177,11 +234,11 @@ func OpenAICompactKeepaliveAdjustedWrittenSize(c *gin.Context) int {
 	}
 	value, ok := c.Get(openAICompactSSEKeepaliveKey)
 	if !ok {
-		return c.Writer.Size()
+		return adjustOpenAIStreamKeepaliveWrittenSize(c, c.Writer.Size())
 	}
 	k, ok := value.(*openAICompactSSEKeepalive)
 	if !ok || k == nil {
-		return c.Writer.Size()
+		return adjustOpenAIStreamKeepaliveWrittenSize(c, c.Writer.Size())
 	}
 	k.mu.Lock()
 	defer k.mu.Unlock()
@@ -190,7 +247,7 @@ func OpenAICompactKeepaliveAdjustedWrittenSize(c *gin.Context) int {
 		return size
 	}
 	if real := size - k.bytes; real > 0 {
-		return real
+		return adjustOpenAIStreamKeepaliveWrittenSize(c, real)
 	}
 	return -1
 }

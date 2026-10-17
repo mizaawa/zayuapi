@@ -1,7 +1,6 @@
 package service
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -272,11 +271,13 @@ func (s *GeminiMessagesCompatService) forwardClaudeBodyAsChatCompletions(
 
 	var usage *ClaudeUsage
 	var firstTokenMs *int
+	var responseErr error
 	if clientStream {
 		streamRes, err := s.handleChatCompletionsStreamingResponseFromGemini(c, resp, startTime, responseModel, account.Type == AccountTypeOAuth, includeUsage)
-		if err != nil {
+		if err != nil && (streamRes == nil || !streamRes.usage.hasObservedTokens()) {
 			return nil, err
 		}
+		responseErr = err
 		usage = streamRes.usage
 		firstTokenMs = streamRes.firstTokenMs
 	} else if useUpstreamStream {
@@ -323,7 +324,7 @@ func (s *GeminiMessagesCompatService) forwardClaudeBodyAsChatCompletions(
 		ImageSize:        imageSize,
 		ImageInputSize:   imageInputSize,
 		ClientDisconnect: false,
-	}, nil
+	}, responseErr
 }
 
 func (s *GeminiMessagesCompatService) buildGeminiChatCompletionsUpstreamRequestFunc(
@@ -631,9 +632,16 @@ func (s *GeminiMessagesCompatService) handleChatCompletionsStreamingResponseFrom
 		return disconnected
 	}
 
-	reader := bufio.NewReader(resp.Body)
+	reader := newGeminiStreamReader(resp.Body, s.cfg, func() error {
+		_, err := io.WriteString(c.Writer, ":\n\n")
+		if err == nil {
+			flusher.Flush()
+		}
+		return err
+	})
+	defer reader.Close()
 	for {
-		line, err := reader.ReadString('\n')
+		line, err := reader.ReadString()
 		if len(line) > 0 {
 			trimmed := strings.TrimRight(line, "\r\n")
 			if strings.HasPrefix(trimmed, "data:") {
@@ -772,7 +780,7 @@ func (s *GeminiMessagesCompatService) handleChatCompletionsStreamingResponseFrom
 			break
 		}
 		if err != nil {
-			return nil, fmt.Errorf("stream read error: %w", err)
+			return &geminiStreamResult{usage: &usage, firstTokenMs: firstTokenMs}, fmt.Errorf("stream read error: %w", err)
 		}
 	}
 

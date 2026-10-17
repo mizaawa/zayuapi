@@ -50,6 +50,97 @@ func TestHTTPUpstreamDoCanDisableRedirectsPerRequest(t *testing.T) {
 	require.Zero(t, redirectedCalls.Load())
 }
 
+func TestHTTPUpstreamRedirectsProtectCredentialsAndRequestBody(t *testing.T) {
+	for _, fingerprint := range []bool{false, true} {
+		for _, allowlist := range []bool{false, true} {
+			t.Run(fmt.Sprintf("fingerprint=%t/allowlist=%t", fingerprint, allowlist), func(t *testing.T) {
+				var leakedCalls atomic.Int64
+				target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					leakedCalls.Add(1)
+					w.WriteHeader(http.StatusOK)
+				}))
+				t.Cleanup(target.Close)
+				origin := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					if r.URL.Path == "/cross-origin" {
+						http.Redirect(w, r, target.URL, http.StatusTemporaryRedirect)
+						return
+					}
+					if r.URL.Path == "/same-origin" {
+						http.Redirect(w, r, "/result", http.StatusTemporaryRedirect)
+						return
+					}
+					body, err := io.ReadAll(r.Body)
+					require.NoError(t, err)
+					require.Equal(t, http.MethodPost, r.Method)
+					require.Equal(t, "private prompt", string(body))
+					require.Equal(t, "test-api-key", r.Header.Get("X-Api-Key"))
+					require.Equal(t, "test-google-key", r.Header.Get("X-Goog-Api-Key"))
+					w.WriteHeader(http.StatusNoContent)
+				}))
+				t.Cleanup(origin.Close)
+				cfg := &config.Config{}
+				cfg.Security.URLAllowlist.Enabled = allowlist
+				cfg.Security.URLAllowlist.AllowPrivateHosts = true
+				upstream := NewHTTPUpstream(cfg)
+				for _, path := range []string{"/cross-origin", "/same-origin"} {
+					req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, origin.URL+path, strings.NewReader("private prompt"))
+					require.NoError(t, err)
+					req.Header.Set("X-Api-Key", "test-api-key")
+					req.Header.Set("X-Goog-Api-Key", "test-google-key")
+					var resp *http.Response
+					if fingerprint {
+						upstreamService, ok := upstream.(*httpUpstreamService)
+						require.True(t, ok)
+						entry, acquireErr := upstreamService.getClientEntryWithTLS("", 1, 1, &tlsfingerprint.Profile{Name: "test"}, service.HTTPUpstreamProfileDefault, false, false)
+						require.NoError(t, acquireErr)
+						resp, err = entry.client.Do(req)
+					} else {
+						resp, err = upstream.Do(req, "", 1, 1)
+					}
+					if resp != nil && resp.Body != nil {
+						_ = resp.Body.Close()
+					}
+					if path == "/cross-origin" {
+						require.ErrorContains(t, err, "different origin")
+						require.Zero(t, leakedCalls.Load(), "neither headers nor body may reach another origin")
+					} else {
+						require.NoError(t, err)
+						require.Equal(t, http.StatusNoContent, resp.StatusCode)
+					}
+				}
+			})
+		}
+	}
+}
+
+func TestHTTPUpstreamRedirectPolicy(t *testing.T) {
+	for _, tc := range []struct {
+		name, target string
+		allowed      bool
+	}{
+		{"same origin", "https://API.example:443/result", true},
+		{"another host", "https://other.example/result", false},
+		{"subdomain", "https://sub.api.example/result", false},
+		{"another port", "https://api.example:8443/result", false},
+		{"downgrade", "http://api.example/result", false},
+		{"embedded credentials", "https://user:secret@api.example/result", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			initial, err := http.NewRequest(http.MethodPost, "https://api.example/start", nil)
+			require.NoError(t, err)
+			target, err := http.NewRequest(http.MethodPost, tc.target, nil)
+			require.NoError(t, err)
+			upstream := &httpUpstreamService{}
+			err = upstream.redirectChecker(target, []*http.Request{initial})
+			if tc.allowed {
+				require.NoError(t, err)
+			} else {
+				require.ErrorContains(t, err, "different origin")
+			}
+		})
+	}
+}
+
 func TestHTTPUpstreamDoWithTLSPlainHTTPUsesConfiguredHTTPProxy(t *testing.T) {
 	var upstreamCalls atomic.Int64
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
