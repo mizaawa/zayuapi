@@ -8,15 +8,15 @@
 
 本仓库由 [mizaawa/zayuapi](https://github.com/mizaawa/zayuapi) 维护。部署镜像、安装脚本以及后台的一键更新和版本回退均使用此仓库的 Release。
 
-这是私人仓库。部署 PAT 已写入私有仓库的 `deploy/.env`：
+请把部署凭据放在 Git 之外。使用私有镜像仓库时，通过 `GHCR_TOKEN` 环境变量提供 GHCR 令牌，并在本地从 `deploy/.env.example` 创建 `deploy/.env`；不要提交该文件，也不要把 PAT 放入仓库历史：
 
 ```bash
 git clone https://github.com/mizaawa/zayuapi.git
 cd zayuapi
-bash deploy/start-private.sh
+GHCR_TOKEN=*** bash deploy/start-private.sh
 ```
 
-启动脚本会读取 `.env`，登录 GHCR，拉取镜像并启动 Compose。详细配置及首次发布见 [私人仓库部署](deploy/PRIVATE_REPOSITORY.md)。
+启动脚本会读取本地 `.env`，登录 GHCR，拉取镜像并启动 Compose。详细配置及首次发布见 [私人仓库部署](deploy/PRIVATE_REPOSITORY.md)。
 
 ## Docker Compose 部署
 
@@ -30,7 +30,7 @@ cd zayuapi/deploy
 bash start-private.sh
 ```
 
-脚本读取私库中的 `.env` 和 Compose 文件，登录 GHCR 并启动服务，数据保存在本地 `data`、`postgres_data`、`redis_data` 目录。
+脚本读取本地 `.env` 和 Compose 文件，登录 GHCR 并启动服务，数据保存在本地 `data`、`postgres_data`、`redis_data` 目录。
 
 容器健康后访问 `http://服务器IP:8080`。如果 `.env` 中 `ADMIN_EMAIL` 或 `ADMIN_PASSWORD` 留空，请从应用日志中查看首次生成的管理员邮箱（登录用户名）和密码。
 

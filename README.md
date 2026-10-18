@@ -8,15 +8,15 @@
 
 This repository is maintained at [mizaawa/zayuapi](https://github.com/mizaawa/zayuapi). Deployment images, install scripts, and the in-app version update and rollback feature all use this repository's releases.
 
-This is a private repository. The deployment PAT is stored in the private repository's `deploy/.env`:
+Keep deployment credentials outside Git. For a private image registry, provide the GHCR token through the `GHCR_TOKEN` environment variable and create `deploy/.env` locally from `deploy/.env.example`; never commit that file or place a PAT in repository history:
 
 ```bash
 git clone https://github.com/mizaawa/zayuapi.git
 cd zayuapi
-bash deploy/start-private.sh
+GHCR_TOKEN=*** bash deploy/start-private.sh
 ```
 
-The startup script reads `.env`, authenticates Docker to GHCR, pulls the image and starts Compose. See [private repository deployment](deploy/PRIVATE_REPOSITORY.md) for deployment and release details.
+The startup script reads the local `.env`, authenticates Docker to GHCR, pulls the image and starts Compose. See [private repository deployment](deploy/PRIVATE_REPOSITORY.md) for deployment and release details.
 
 ## Docker Compose
 
@@ -30,7 +30,7 @@ cd zayuapi/deploy
 bash start-private.sh
 ```
 
-The startup script reads the private repository `.env` and Compose files, logs Docker into GHCR and starts the stack. Data stays in the local `data`, `postgres_data`, and `redis_data` directories.
+The startup script reads the local `.env` and Compose files, logs Docker into GHCR and starts the stack. Data stays in the local `data`, `postgres_data`, and `redis_data` directories.
 
 Open `http://SERVER_IP:8080` after the containers become healthy. If `ADMIN_EMAIL` or `ADMIN_PASSWORD` is empty in `.env`, inspect the application log for the generated admin email (login username) and password.
 

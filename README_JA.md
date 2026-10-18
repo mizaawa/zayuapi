@@ -8,15 +8,15 @@
 
 このリポジトリは [mizaawa/zayuapi](https://github.com/mizaawa/zayuapi) で管理されています。デプロイ用イメージ、インストールスクリプト、管理画面のワンクリック更新とロールバックは、すべてこのリポジトリの Release を使用します。
 
-デプロイ用 PAT は非公開リポジトリの `deploy/.env` に設定済みです。
+デプロイ用の認証情報は Git の外で管理してください。非公開のイメージレジストリを使う場合は `GHCR_TOKEN` 環境変数でトークンを渡し、`deploy/.env.example` から `deploy/.env` をローカルで作成します。このファイルをコミットしたり、PAT をリポジトリの履歴に保存したりしないでください。
 
 ```bash
 git clone https://github.com/mizaawa/zayuapi.git
 cd zayuapi
-bash deploy/start-private.sh
+GHCR_TOKEN=*** bash deploy/start-private.sh
 ```
 
-起動スクリプトが `.env` を読み込み、GHCR ログイン、イメージ取得、Compose 起動を行います。詳細は [非公開リポジトリのデプロイ](deploy/PRIVATE_REPOSITORY.md) を参照してください。
+起動スクリプトがローカルの `.env` を読み込み、GHCR ログイン、イメージ取得、Compose 起動を行います。詳細は [非公開リポジトリのデプロイ](deploy/PRIVATE_REPOSITORY.md) を参照してください。
 
 ## Docker Compose デプロイ
 
@@ -30,7 +30,7 @@ cd zayuapi/deploy
 bash start-private.sh
 ```
 
-起動スクリプトは非公開リポジトリの `.env` と Compose ファイルを読み込み、GHCR にログインしてサービスを起動します。データはローカルの `data`、`postgres_data`、`redis_data` に保存されます。
+起動スクリプトはローカルの `.env` と Compose ファイルを読み込み、GHCR にログインしてサービスを起動します。データはローカルの `data`、`postgres_data`、`redis_data` に保存されます。
 
 コンテナが正常になったら `http://SERVER_IP:8080` を開きます。`.env` の `ADMIN_EMAIL` または `ADMIN_PASSWORD` が空の場合は、アプリケーションログで自動生成された管理者メールアドレス（ログインユーザー名）とパスワードを確認してください。
 
