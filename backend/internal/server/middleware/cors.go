@@ -66,13 +66,18 @@ func CORS(cfg config.CORSConfig) gin.HandlerFunc {
 
 	return func(c *gin.Context) {
 		origin := strings.TrimSpace(c.GetHeader("Origin"))
-		originAllowed := allowAll
-		if origin != "" && !allowAll {
+		// Public settings contain deployment-specific feature configuration. A
+		// wildcard CORS policy must not make that endpoint readable by arbitrary
+		// origins, including during preflight. Explicitly configured origins still
+		// work as usual.
+		wildcardAllowedForRequest := allowAll && strings.TrimRight(c.Request.URL.Path, "/") != "/api/v1/settings/public"
+		originAllowed := wildcardAllowedForRequest
+		if origin != "" && !wildcardAllowedForRequest {
 			_, originAllowed = allowedSet[origin]
 		}
 
 		if originAllowed {
-			if allowAll {
+			if wildcardAllowedForRequest {
 				c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
 			} else if origin != "" {
 				c.Writer.Header().Set("Access-Control-Allow-Origin", origin)

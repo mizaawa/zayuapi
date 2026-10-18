@@ -182,3 +182,59 @@ func TestSettingHandler_GetPublicSettings_ExposesWeChatOAuthModeCapabilities(t *
 	require.True(t, resp.Data.WeChatOAuthOpenEnabled)
 	require.True(t, resp.Data.WeChatOAuthMPEnabled)
 }
+
+func TestSettingHandler_GetPublicSettings_HidesCustomEndpointsAndWildcardCORS(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	h := NewSettingHandler(service.NewSettingService(&settingHandlerPublicRepoStub{
+		values: map[string]string{
+			service.SettingKeyCustomEndpoints: `[{"name":"internal","endpoint":"https://private-relay.example"}]`,
+		},
+	}, &config.Config{}), "test-version")
+
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
+	c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
+	c.Request = httptest.NewRequest(http.MethodGet, "/api/v1/settings/public", nil)
+
+	h.GetPublicSettings(c)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+	require.Empty(t, recorder.Header().Get("Access-Control-Allow-Origin"))
+	require.Empty(t, recorder.Header().Get("Access-Control-Allow-Credentials"))
+	require.NotContains(t, recorder.Body.String(), "private-relay.example")
+	require.NotContains(t, recorder.Body.String(), `"custom_endpoints"`)
+}
+
+func TestSettingHandler_GetPublicSettings_DoesNotExposeProviderSecrets(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	h := NewSettingHandler(service.NewSettingService(&settingHandlerPublicRepoStub{
+		values: map[string]string{
+			service.SettingKeyTurnstileSecretKey:           "turnstile-secret-value",
+			service.SettingKeyTencentCaptchaAppSecretKey:   "tencent-app-secret-value",
+			service.SettingKeyTencentCaptchaCloudSecretID:  "tencent-cloud-id-value",
+			service.SettingKeyTencentCaptchaCloudSecretKey: "tencent-cloud-secret-value",
+			service.SettingKeyAliyunCaptchaAccessKeySecret: "aliyun-secret-value",
+			service.SettingKeyGitHubOAuthClientSecret:      "github-oauth-secret-value",
+			service.SettingKeyGoogleOAuthClientSecret:      "google-oauth-secret-value",
+		},
+	}, &config.Config{}), "test-version")
+
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequest(http.MethodGet, "/api/v1/settings/public", nil)
+	h.GetPublicSettings(c)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+	for _, secret := range []string{
+		"turnstile-secret-value",
+		"tencent-app-secret-value",
+		"tencent-cloud-id-value",
+		"tencent-cloud-secret-value",
+		"aliyun-secret-value",
+		"github-oauth-secret-value",
+		"google-oauth-secret-value",
+	} {
+		require.NotContains(t, recorder.Body.String(), secret)
+	}
+}

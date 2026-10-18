@@ -245,7 +245,9 @@ export interface PublicSettings {
   table_page_size_options: number[]
   custom_menu_force_new_tab?: boolean
   custom_menu_items: CustomMenuItem[]
-  custom_endpoints: CustomEndpoint[]
+  // Private relay endpoints are intentionally omitted from the public settings
+  // response. Authenticated/admin surfaces may still provide them separately.
+  custom_endpoints?: CustomEndpoint[]
   linuxdo_oauth_enabled: boolean
   dingtalk_oauth_enabled?: boolean
   wechat_oauth_enabled: boolean

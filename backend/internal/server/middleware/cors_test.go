@@ -175,6 +175,41 @@ func TestCORS_WildcardOrigin_AllowsAny(t *testing.T) {
 		"通配符 origin 应设置 Allow-Methods")
 }
 
+func TestCORS_WildcardOrigin_DoesNotExposePublicSettings(t *testing.T) {
+	cfg := config.CORSConfig{AllowedOrigins: []string{"*"}}
+	middleware := CORS(cfg)
+
+	for _, method := range []string{http.MethodGet, http.MethodOptions} {
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+		c.Request = httptest.NewRequest(method, "/api/v1/settings/public", nil)
+		c.Request.Header.Set("Origin", "https://any-origin.example.com")
+
+		middleware(c)
+
+		assert.Empty(t, w.Header().Get("Access-Control-Allow-Origin"), method)
+		if method == http.MethodOptions {
+			assert.Equal(t, http.StatusForbidden, w.Code, method)
+		}
+	}
+}
+
+func TestCORS_ExplicitOriginStillWorksForPublicSettings(t *testing.T) {
+	cfg := config.CORSConfig{AllowedOrigins: []string{"https://frontend.example.com"}, AllowCredentials: true}
+	middleware := CORS(cfg)
+
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodOptions, "/api/v1/settings/public", nil)
+	c.Request.Header.Set("Origin", "https://frontend.example.com")
+
+	middleware(c)
+
+	assert.Equal(t, http.StatusNoContent, w.Code)
+	assert.Equal(t, "https://frontend.example.com", w.Header().Get("Access-Control-Allow-Origin"))
+	assert.Equal(t, "true", w.Header().Get("Access-Control-Allow-Credentials"))
+}
+
 func TestCORS_AllowCredentials_SetCorrectly(t *testing.T) {
 	cfg := config.CORSConfig{
 		AllowedOrigins:   []string{"https://allowed.example.com"},

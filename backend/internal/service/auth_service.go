@@ -392,13 +392,12 @@ func (s *AuthService) SendVerifyCodeAsync(ctx context.Context, email string, loc
 }
 
 // VerifyCaptchaForRegister 在注册场景下验证当前启用的验证码。
-// 当邮箱验证开启且已提交验证码时，说明验证码发送阶段已完成验证码校验，
-// 此处跳过二次校验，避免一次性 token 在注册提交时重复使用导致误报失败。
+//
+// 邮箱验证码只证明邮箱所有权，不能替代人机验证。最终创建账号时必须
+// 使用当前请求携带的 captcha proof 完成一次独立校验；否则攻击者可以
+// 通过提交任意非空 verify_code 绕过注册接口的人机验证。
 func (s *AuthService) VerifyCaptchaForRegister(ctx context.Context, proof CaptchaProof, remoteIP, verifyCode string) error {
-	if s.IsEmailVerifyEnabled(ctx) && strings.TrimSpace(verifyCode) != "" {
-		logger.LegacyPrintf("service.auth", "%s", "[Auth] Email verify flow detected, skip duplicate captcha check on register")
-		return nil
-	}
+	_ = verifyCode // 保留参数以兼容旧的内部调用方；邮箱验证码不影响 captcha 校验。
 	return s.VerifyCaptcha(ctx, proof, remoteIP)
 }
 

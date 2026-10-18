@@ -37,6 +37,13 @@ func (h *SettingHandler) SetNotificationEmailService(notificationEmailService *s
 // GetPublicSettings 获取公开设置
 // GET /api/v1/settings/public
 func (h *SettingHandler) GetPublicSettings(c *gin.Context) {
+	// Public settings are consumed by the unauthenticated shell, but a global
+	// wildcard CORS policy must not make this configuration endpoint readable by
+	// arbitrary origins. Keep explicitly configured origins intact.
+	if c.Writer.Header().Get("Access-Control-Allow-Origin") == "*" {
+		c.Writer.Header().Del("Access-Control-Allow-Origin")
+		c.Writer.Header().Del("Access-Control-Allow-Credentials")
+	}
 	// Public settings include feature flags that can change at runtime. Do not
 	// let a browser, CDN, or shared proxy retain stale runtime configuration.
 	c.Header("Cache-Control", "no-store")
@@ -87,26 +94,28 @@ func (h *SettingHandler) GetPublicSettings(c *gin.Context) {
 		TablePageSizeOptions:             settings.TablePageSizeOptions,
 		CustomMenuItems:                  dto.ParseUserVisibleMenuItems(settings.CustomMenuItems),
 		CustomMenuForceNewTab:            settings.CustomMenuForceNewTab,
-		CustomEndpoints:                  dto.ParseCustomEndpoints(settings.CustomEndpoints),
-		DingTalkOAuthEnabled:             settings.DingTalkOAuthEnabled,
-		LinuxDoOAuthEnabled:              settings.LinuxDoOAuthEnabled,
-		WeChatOAuthEnabled:               settings.WeChatOAuthEnabled,
-		WeChatOAuthOpenEnabled:           settings.WeChatOAuthOpenEnabled,
-		WeChatOAuthMPEnabled:             settings.WeChatOAuthMPEnabled,
-		WeChatOAuthMobileEnabled:         settings.WeChatOAuthMobileEnabled,
-		OIDCOAuthEnabled:                 settings.OIDCOAuthEnabled,
-		OIDCOAuthProviderName:            settings.OIDCOAuthProviderName,
-		GitHubOAuthEnabled:               settings.GitHubOAuthEnabled,
-		GoogleOAuthEnabled:               settings.GoogleOAuthEnabled,
-		BackendModeEnabled:               settings.BackendModeEnabled,
-		PaymentEnabled:                   settings.PaymentEnabled,
-		Version:                          h.version,
-		ServerTimezone:                   timezone.Name(),
-		ServerUTCOffset:                  timezone.UTCOffset(),
-		BalanceLowNotifyEnabled:          settings.BalanceLowNotifyEnabled,
-		AccountQuotaNotifyEnabled:        settings.AccountQuotaNotifyEnabled,
-		BalanceLowNotifyThreshold:        settings.BalanceLowNotifyThreshold,
-		BalanceLowNotifyRechargeURL:      settings.BalanceLowNotifyRechargeURL,
+		// Custom endpoints may point at private relay infrastructure. They are
+		// available from the authenticated settings surface only.
+		CustomEndpoints:             nil,
+		DingTalkOAuthEnabled:        settings.DingTalkOAuthEnabled,
+		LinuxDoOAuthEnabled:         settings.LinuxDoOAuthEnabled,
+		WeChatOAuthEnabled:          settings.WeChatOAuthEnabled,
+		WeChatOAuthOpenEnabled:      settings.WeChatOAuthOpenEnabled,
+		WeChatOAuthMPEnabled:        settings.WeChatOAuthMPEnabled,
+		WeChatOAuthMobileEnabled:    settings.WeChatOAuthMobileEnabled,
+		OIDCOAuthEnabled:            settings.OIDCOAuthEnabled,
+		OIDCOAuthProviderName:       settings.OIDCOAuthProviderName,
+		GitHubOAuthEnabled:          settings.GitHubOAuthEnabled,
+		GoogleOAuthEnabled:          settings.GoogleOAuthEnabled,
+		BackendModeEnabled:          settings.BackendModeEnabled,
+		PaymentEnabled:              settings.PaymentEnabled,
+		Version:                     h.version,
+		ServerTimezone:              timezone.Name(),
+		ServerUTCOffset:             timezone.UTCOffset(),
+		BalanceLowNotifyEnabled:     settings.BalanceLowNotifyEnabled,
+		AccountQuotaNotifyEnabled:   settings.AccountQuotaNotifyEnabled,
+		BalanceLowNotifyThreshold:   settings.BalanceLowNotifyThreshold,
+		BalanceLowNotifyRechargeURL: settings.BalanceLowNotifyRechargeURL,
 
 		ChannelMonitorEnabled:                settings.ChannelMonitorEnabled,
 		ChannelMonitorDefaultIntervalSeconds: settings.ChannelMonitorDefaultIntervalSeconds,
