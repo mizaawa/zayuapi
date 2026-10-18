@@ -299,6 +299,50 @@ func TestBuildAntigravityAPIKeyModelsRequestRejectsOfficialCloudCodeBase(t *test
 	require.Contains(t, syncErr.SafeMessage(), "compatible gateway")
 }
 
+func TestFetchUpstreamSupportedModelsAntigravityRelayUsesConfiguredEndpoint(t *testing.T) {
+	t.Parallel()
+
+	for _, base := range []string{"https://relay.example.com", "https://relay.example.com/v1"} {
+		t.Run(base, func(t *testing.T) {
+			upstream := &httpUpstreamRecorder{resp: &http.Response{
+				StatusCode: http.StatusOK,
+				Body:       io.NopCloser(strings.NewReader(`{"data":[{"id":"relay-model"}]}`)),
+			}}
+			svc := &AccountTestService{httpUpstream: upstream, cfg: upstreamModelSyncTestConfig()}
+			models, err := svc.FetchUpstreamSupportedModels(context.Background(), &Account{
+				Platform: PlatformAntigravity,
+				Type:     AccountTypeUpstream,
+				Credentials: map[string]any{
+					"base_url": base,
+					"api_key":  "relay-key",
+				},
+			})
+			require.NoError(t, err)
+			require.Equal(t, []string{"relay-model"}, models)
+			require.Equal(t, "https://relay.example.com/v1/models", upstream.lastReq.URL.String())
+			require.Equal(t, "Bearer relay-key", upstream.lastReq.Header.Get("Authorization"))
+			require.Equal(t, "relay-key", upstream.lastReq.Header.Get("x-api-key"))
+		})
+	}
+}
+
+func TestBuildAntigravityRelayModelsRequestValidatesEndpoint(t *testing.T) {
+	t.Parallel()
+
+	svc := &AccountTestService{cfg: upstreamModelSyncTestConfig()}
+	for _, base := range []string{"", "file:///tmp/private"} {
+		_, err := svc.buildUpstreamModelsRequest(context.Background(), &Account{
+			Platform:    PlatformAntigravity,
+			Type:        AccountTypeUpstream,
+			Credentials: map[string]any{"base_url": base, "api_key": "relay-key"},
+		})
+		require.Error(t, err)
+		var syncErr *UpstreamModelSyncError
+		require.ErrorAs(t, err, &syncErr)
+		require.Equal(t, UpstreamModelSyncErrorConfiguration, syncErr.Kind)
+	}
+}
+
 func TestBuildAnthropicUpstreamModelsRequestRejectsBedrock(t *testing.T) {
 	t.Parallel()
 

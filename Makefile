@@ -11,6 +11,8 @@ FRONTEND_CRITICAL_VITEST := \
 	src/components/user/profile/__tests__/ProfileInfoCard.spec.ts \
 	src/components/keys/__tests__/SystemPromptSettings.spec.ts \
 	src/components/keys/__tests__/UseKeyModal.spec.ts \
+	src/components/account/__tests__/ModelWhitelistSelector.spec.ts \
+	src/components/account/__tests__/EditAccountModal.upstreamModels.spec.ts \
 	src/views/user/__tests__/KeysView.spec.ts \
 	src/views/user/__tests__/UsageView.spec.ts \
 	src/views/user/__tests__/ImageWorkbenchView.spec.ts \

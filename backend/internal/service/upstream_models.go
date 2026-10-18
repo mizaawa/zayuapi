@@ -81,7 +81,7 @@ func (s *AccountTestService) FetchUpstreamSupportedModels(ctx context.Context, a
 		return nil, newUpstreamModelSyncConfigError("Account is required", nil)
 	}
 
-	if account.Platform == PlatformAntigravity && account.Type != AccountTypeAPIKey {
+	if account.Platform == PlatformAntigravity && account.Type != AccountTypeAPIKey && account.Type != AccountTypeUpstream {
 		return s.fetchAntigravityOAuthUpstreamModels(ctx, account)
 	}
 
@@ -298,7 +298,7 @@ func (s *AccountTestService) buildAnthropicUpstreamModelsRequest(ctx context.Con
 }
 
 func (s *AccountTestService) buildAntigravityAPIKeyModelsRequest(ctx context.Context, account *Account) (*http.Request, error) {
-	if account.Type != AccountTypeAPIKey {
+	if account.Type != AccountTypeAPIKey && account.Type != AccountTypeUpstream {
 		return nil, newUpstreamModelSyncUnsupportedError(
 			fmt.Sprintf("Unsupported Antigravity account type for upstream model sync: %s", account.Type), nil,
 		)
@@ -312,7 +312,7 @@ func (s *AccountTestService) buildAntigravityAPIKeyModelsRequest(ctx context.Con
 	if baseURL == "" {
 		return nil, newUpstreamModelSyncConfigError("Antigravity API-key base URL is required for upstream model sync", nil)
 	}
-	if !strings.HasSuffix(strings.ToLower(baseURL), "/antigravity") {
+	if account.Type == AccountTypeAPIKey && !strings.HasSuffix(strings.ToLower(baseURL), "/antigravity") {
 		return nil, newUpstreamModelSyncUnsupportedError(
 			"Antigravity API-key upstream model sync requires a compatible gateway base URL ending in /antigravity; use Antigravity OAuth for official Cloud Code upstreams",
 			nil,
@@ -334,6 +334,9 @@ func (s *AccountTestService) buildAntigravityAPIKeyModelsRequest(ctx context.Con
 	req.Header.Set("anthropic-version", "2023-06-01")
 	req.Header.Set("anthropic-beta", claude.APIKeyBetaHeader)
 	req.Header.Set("x-api-key", apiKey)
+	if account.Type == AccountTypeUpstream {
+		req.Header.Set("Authorization", "Bearer "+apiKey)
+	}
 	return req, nil
 }
 
