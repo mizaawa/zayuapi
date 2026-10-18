@@ -569,29 +569,73 @@ func TestAccountHandlerSyncUpstreamModels_ValidatesUnsavedEndpoint(t *testing.T)
 }
 
 func TestAccountHandlerSyncUpstreamModels_PreservesOAuthCredentials(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		body string
+	}{
+		{name: "bodyless"},
+		{name: "ignores overrides", body: `{"base_url":"https://unsaved.example.com/v1","api_key":"unsaved-key"}`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			svc := &availableModelsAdminService{
+				stubAdminService: newStubAdminService(),
+				account: service.Account{
+					ID:       49,
+					Platform: service.PlatformAnthropic,
+					Type:     service.AccountTypeOAuth,
+					Credentials: map[string]any{
+						"access_token": "saved-oauth-token",
+					},
+				},
+			}
+			upstream := &syncUpstreamHTTPUpstream{resp: &http.Response{
+				StatusCode: http.StatusOK,
+				Body:       io.NopCloser(strings.NewReader(`{"data":[{"id":"claude-live"}]}`)),
+			}}
+			router := setupSyncUpstreamModelsRouter(svc, upstream)
+			rec := httptest.NewRecorder()
+			var body io.Reader
+			if tc.body != "" {
+				body = strings.NewReader(tc.body)
+			}
+			req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/accounts/49/models/sync-upstream", body)
+			router.ServeHTTP(rec, req)
+
+			require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+			require.NotNil(t, upstream.req)
+			require.Equal(t, "https://api.anthropic.com/v1/models", upstream.req.URL.String())
+			require.Equal(t, "Bearer saved-oauth-token", upstream.req.Header.Get("Authorization"))
+			require.Empty(t, upstream.req.Header.Get("x-api-key"))
+			require.Equal(t, map[string]any{"access_token": "saved-oauth-token"}, svc.account.Credentials)
+		})
+	}
+}
+
+func TestAccountHandlerSyncUpstreamModels_IgnoresOAuthEndpointBeforeValidation(t *testing.T) {
 	svc := &availableModelsAdminService{
 		stubAdminService: newStubAdminService(),
 		account: service.Account{
-			ID:       49,
-			Platform: service.PlatformAnthropic,
+			ID:       50,
+			Platform: service.PlatformGemini,
 			Type:     service.AccountTypeOAuth,
 			Credentials: map[string]any{
 				"access_token": "saved-oauth-token",
+				"project_id":   "saved-project",
 			},
 		},
 	}
-	upstream := &syncUpstreamHTTPUpstream{resp: &http.Response{
-		StatusCode: http.StatusOK,
-		Body:       io.NopCloser(strings.NewReader(`{"data":[{"id":"claude-live"}]}`)),
-	}}
+	upstream := &syncUpstreamHTTPUpstream{}
 	router := setupSyncUpstreamModelsRouter(svc, upstream)
 	rec := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/accounts/49/models/sync-upstream", nil)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/accounts/50/models/sync-upstream", strings.NewReader(`{"base_url":"file:///tmp/private","api_key":"unsaved-key"}`))
 	router.ServeHTTP(rec, req)
 
-	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
-	require.NotNil(t, upstream.req)
-	require.Equal(t, "https://api.anthropic.com/v1/models", upstream.req.URL.String())
-	require.Equal(t, "Bearer saved-oauth-token", upstream.req.Header.Get("Authorization"))
-	require.Equal(t, map[string]any{"access_token": "saved-oauth-token"}, svc.account.Credentials)
+	require.Equal(t, http.StatusBadRequest, rec.Code, rec.Body.String())
+	require.Contains(t, rec.Body.String(), "Gemini Code Assist model listing is not supported")
+	require.NotContains(t, rec.Body.String(), "Invalid Gemini base URL")
+	require.Nil(t, upstream.req)
+	require.Equal(t, map[string]any{
+		"access_token": "saved-oauth-token",
+		"project_id":   "saved-project",
+	}, svc.account.Credentials)
 }

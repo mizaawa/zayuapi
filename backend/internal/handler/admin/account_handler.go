@@ -2792,12 +2792,14 @@ func (h *AccountHandler) SyncUpstreamModels(c *gin.Context) {
 	// Fetch with unsaved form values without modifying stored or cached credentials.
 	syncAccount := *account
 	syncAccount.Credentials = maps.Clone(account.Credentials)
-	for key, value := range map[string]string{"base_url": req.BaseURL, "api_key": req.APIKey} {
-		if value = strings.TrimSpace(value); value != "" {
-			if syncAccount.Credentials == nil {
-				syncAccount.Credentials = make(map[string]any)
+	if account.Type == service.AccountTypeAPIKey || account.Type == service.AccountTypeUpstream {
+		for key, value := range map[string]string{"base_url": req.BaseURL, "api_key": req.APIKey} {
+			if value = strings.TrimSpace(value); value != "" {
+				if syncAccount.Credentials == nil {
+					syncAccount.Credentials = make(map[string]any)
+				}
+				syncAccount.Credentials[key] = value
 			}
-			syncAccount.Credentials[key] = value
 		}
 	}
 
