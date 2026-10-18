@@ -39,11 +39,19 @@ func setupAvailableModelsRouter(adminSvc service.AdminService) *gin.Engine {
 }
 
 type syncUpstreamHTTPUpstream struct {
-	resp *http.Response
-	err  error
+	resp        *http.Response
+	err         error
+	req         *http.Request
+	proxyURL    string
+	accountID   int64
+	concurrency int
 }
 
 func (u *syncUpstreamHTTPUpstream) Do(req *http.Request, proxyURL string, accountID int64, accountConcurrency int) (*http.Response, error) {
+	u.req = req
+	u.proxyURL = proxyURL
+	u.accountID = accountID
+	u.concurrency = accountConcurrency
 	if u.err != nil {
 		return nil, u.err
 	}
@@ -449,4 +457,141 @@ func TestAccountHandlerSyncUpstreamModels_UpstreamErrorDoesNotExposeBody(t *test
 	require.Equal(t, http.StatusBadGateway, rec.Code)
 	require.Contains(t, rec.Body.String(), "Upstream model list request failed with HTTP 502")
 	require.NotContains(t, rec.Body.String(), "SECRET_TOKEN")
+}
+
+func TestAccountHandlerSyncUpstreamModels_UsesUnsavedCredentialsWithoutMutation(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		body    string
+		wantURL string
+		wantKey string
+	}{
+		{name: "bodyless", wantURL: "https://saved.example.com/v1/models", wantKey: "saved-key"},
+		{name: "empty object", body: `{}`, wantURL: "https://saved.example.com/v1/models", wantKey: "saved-key"},
+		{name: "endpoint only", body: `{"base_url":"https://current.example.com/v1"}`, wantURL: "https://current.example.com/v1/models", wantKey: "saved-key"},
+		{name: "key only", body: `{"api_key":"current-key"}`, wantURL: "https://saved.example.com/v1/models", wantKey: "current-key"},
+		{name: "both trimmed", body: `{"base_url":"  https://current.example.com/v1  ","api_key":"  current-key  "}`, wantURL: "https://current.example.com/v1/models", wantKey: "current-key"},
+		{name: "blank fallback", body: `{"base_url":" \t ","api_key":" \n "}`, wantURL: "https://saved.example.com/v1/models", wantKey: "saved-key"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			proxyID := int64(3)
+			svc := &availableModelsAdminService{
+				stubAdminService: newStubAdminService(),
+				account: service.Account{
+					ID:          46,
+					Platform:    service.PlatformOpenAI,
+					Type:        service.AccountTypeAPIKey,
+					Concurrency: 7,
+					ProxyID:     &proxyID,
+					Proxy:       &service.Proxy{Protocol: "http", Host: "proxy.example.com", Port: 8080},
+					Credentials: map[string]any{
+						"base_url": "https://saved.example.com/v1",
+						"api_key":  "saved-key",
+						"keep":     true,
+					},
+				},
+			}
+			upstream := &syncUpstreamHTTPUpstream{resp: &http.Response{
+				StatusCode: http.StatusOK,
+				Body:       io.NopCloser(strings.NewReader(`{"data":[{"id":"model-live"}]}`)),
+			}}
+			router := setupSyncUpstreamModelsRouter(svc, upstream)
+			rec := httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/accounts/46/models/sync-upstream", strings.NewReader(tc.body))
+			req.Header.Set("Content-Type", "application/json")
+			router.ServeHTTP(rec, req)
+
+			require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+			require.Contains(t, rec.Body.String(), `"models":["model-live"]`)
+			require.NotNil(t, upstream.req)
+			require.Equal(t, tc.wantURL, upstream.req.URL.String())
+			require.Equal(t, "Bearer "+tc.wantKey, upstream.req.Header.Get("Authorization"))
+			require.Equal(t, "http://proxy.example.com:8080", upstream.proxyURL)
+			require.Equal(t, int64(46), upstream.accountID)
+			require.Equal(t, 7, upstream.concurrency)
+			require.Equal(t, map[string]any{
+				"base_url": "https://saved.example.com/v1",
+				"api_key":  "saved-key",
+				"keep":     true,
+			}, svc.account.Credentials)
+		})
+	}
+}
+
+func TestAccountHandlerSyncUpstreamModels_RejectsMalformedOverrides(t *testing.T) {
+	for _, body := range []string{
+		`{"api_key":`,
+		`{"api_key":123}`,
+		`[]`,
+		`{"api_key":"SECRET_TOKEN"} {}`,
+		`{"api_key":"SECRET_TOKEN"} trailing`,
+	} {
+		t.Run(body, func(t *testing.T) {
+			svc := &availableModelsAdminService{stubAdminService: newStubAdminService(), account: service.Account{ID: 47}}
+			upstream := &syncUpstreamHTTPUpstream{}
+			router := setupSyncUpstreamModelsRouter(svc, upstream)
+			rec := httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/accounts/47/models/sync-upstream", strings.NewReader(body))
+			req.Header.Set("Content-Type", "application/json")
+			router.ServeHTTP(rec, req)
+
+			require.Equal(t, http.StatusBadRequest, rec.Code)
+			require.Contains(t, rec.Body.String(), "Invalid request body")
+			require.NotContains(t, rec.Body.String(), "SECRET_TOKEN")
+			require.Nil(t, upstream.req)
+		})
+	}
+}
+
+func TestAccountHandlerSyncUpstreamModels_ValidatesUnsavedEndpoint(t *testing.T) {
+	svc := &availableModelsAdminService{
+		stubAdminService: newStubAdminService(),
+		account: service.Account{
+			ID:       48,
+			Platform: service.PlatformOpenAI,
+			Type:     service.AccountTypeAPIKey,
+			Credentials: map[string]any{
+				"base_url": "https://saved.example.com/v1",
+				"api_key":  "saved-key",
+			},
+		},
+	}
+	upstream := &syncUpstreamHTTPUpstream{}
+	router := setupSyncUpstreamModelsRouter(svc, upstream)
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/accounts/48/models/sync-upstream", strings.NewReader(`{"base_url":"file:///tmp/private"}`))
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusBadRequest, rec.Code)
+	require.Contains(t, rec.Body.String(), "Invalid OpenAI base URL")
+	require.Nil(t, upstream.req)
+	require.Equal(t, "https://saved.example.com/v1", svc.account.Credentials["base_url"])
+}
+
+func TestAccountHandlerSyncUpstreamModels_PreservesOAuthCredentials(t *testing.T) {
+	svc := &availableModelsAdminService{
+		stubAdminService: newStubAdminService(),
+		account: service.Account{
+			ID:       49,
+			Platform: service.PlatformAnthropic,
+			Type:     service.AccountTypeOAuth,
+			Credentials: map[string]any{
+				"access_token": "saved-oauth-token",
+			},
+		},
+	}
+	upstream := &syncUpstreamHTTPUpstream{resp: &http.Response{
+		StatusCode: http.StatusOK,
+		Body:       io.NopCloser(strings.NewReader(`{"data":[{"id":"claude-live"}]}`)),
+	}}
+	router := setupSyncUpstreamModelsRouter(svc, upstream)
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/accounts/49/models/sync-upstream", nil)
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	require.NotNil(t, upstream.req)
+	require.Equal(t, "https://api.anthropic.com/v1/models", upstream.req.URL.String())
+	require.Equal(t, "Bearer saved-oauth-token", upstream.req.Header.Get("Authorization"))
+	require.Equal(t, map[string]any{"access_token": "saved-oauth-token"}, svc.account.Credentials)
 }

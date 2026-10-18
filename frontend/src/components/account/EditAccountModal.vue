@@ -154,7 +154,7 @@
 
             <!-- Whitelist Mode -->
             <div v-if="modelRestrictionMode === 'whitelist'">
-              <ModelWhitelistSelector v-model="allowedModels" :platform="account?.platform || 'anthropic'" :account-id="account?.id" />
+              <ModelWhitelistSelector v-model="allowedModels" :platform="account?.platform || 'anthropic'" :account-id="account?.id" :sync-overrides="syncModelOverrides" />
               <p class="text-xs text-gray-500 dark:text-gray-400">
                 {{ t('admin.accounts.selectedModels', { count: allowedModels.length }) }}
                 <span v-if="allowedModels.length === 0 && modelMappings.length === 0">{{
@@ -2804,6 +2804,13 @@ const submitting = ref(false)
 const editBaseUrl = ref('https://api.anthropic.com')
 const mediaProtocol = ref('')
 const editApiKey = ref('')
+const syncModelOverrides = computed(() => {
+  if (props.account?.type !== 'apikey' && props.account?.type !== 'upstream') return undefined
+  return {
+    base_url: editBaseUrl.value.trim() || undefined,
+    api_key: editApiKey.value.trim() || undefined
+  }
+})
 // Bedrock credentials
 const editBedrockAccessKeyId = ref('')
 const editBedrockSecretAccessKey = ref('')
@@ -3770,7 +3777,7 @@ const syncAntigravityUpstreamModels = async () => {
 
   isSyncingAntigravityUpstream.value = true
   try {
-    const result = await adminAPI.accounts.syncUpstreamModels(props.account.id)
+    const result = await adminAPI.accounts.syncUpstreamModels(props.account.id, syncModelOverrides.value)
     const upstreamModels = result.models.map((model) => model.trim()).filter(Boolean)
     if (upstreamModels.length === 0) {
       appStore.showInfo(t('admin.accounts.syncUpstreamModelsEmpty'))

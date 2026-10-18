@@ -528,13 +528,14 @@ export interface SyncUpstreamModelsResult {
   models: string[]
 }
 
-/**
- * Sync live supported models from the account's upstream model-list endpoint
- * @param id - Account ID
- * @returns List of model IDs returned by the upstream
- */
-export async function syncUpstreamModels(id: number): Promise<SyncUpstreamModelsResult> {
-  const { data } = await apiClient.post<SyncUpstreamModelsResult>(`/admin/accounts/${id}/models/sync-upstream`)
+export interface SyncUpstreamModelsOverrides {
+  base_url?: string
+  api_key?: string
+}
+
+/** Fetch upstream models with nonempty form values overriding saved credentials. */
+export async function syncUpstreamModels(id: number, overrides?: SyncUpstreamModelsOverrides): Promise<SyncUpstreamModelsResult> {
+  const { data } = await apiClient.post<SyncUpstreamModelsResult>(`/admin/accounts/${id}/models/sync-upstream`, overrides)
   return data
 }
 

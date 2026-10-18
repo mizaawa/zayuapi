@@ -8,8 +8,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"log/slog"
+	"maps"
 	"net/http"
 	"sort"
 	"strconv"
@@ -2760,6 +2762,22 @@ func (h *AccountHandler) SyncUpstreamModels(c *gin.Context) {
 		return
 	}
 
+	var req struct {
+		BaseURL string `json:"base_url"`
+		APIKey  string `json:"api_key"`
+	}
+	if c.Request.Body != nil {
+		decoder := json.NewDecoder(c.Request.Body)
+		if err := decoder.Decode(&req); err != nil && !errors.Is(err, io.EOF) {
+			response.BadRequest(c, "Invalid request body")
+			return
+		}
+		if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
+			response.BadRequest(c, "Invalid request body")
+			return
+		}
+	}
+
 	account, err := h.adminService.GetAccount(c.Request.Context(), accountID)
 	if err != nil {
 		response.NotFound(c, "Account not found")
@@ -2771,7 +2789,19 @@ func (h *AccountHandler) SyncUpstreamModels(c *gin.Context) {
 		return
 	}
 
-	models, err := h.accountTestService.FetchUpstreamSupportedModels(c.Request.Context(), account)
+	// Fetch with unsaved form values without modifying stored or cached credentials.
+	syncAccount := *account
+	syncAccount.Credentials = maps.Clone(account.Credentials)
+	for key, value := range map[string]string{"base_url": req.BaseURL, "api_key": req.APIKey} {
+		if value = strings.TrimSpace(value); value != "" {
+			if syncAccount.Credentials == nil {
+				syncAccount.Credentials = make(map[string]any)
+			}
+			syncAccount.Credentials[key] = value
+		}
+	}
+
+	models, err := h.accountTestService.FetchUpstreamSupportedModels(c.Request.Context(), &syncAccount)
 	if err != nil {
 		var syncErr *service.UpstreamModelSyncError
 		if errors.As(err, &syncErr) {

@@ -149,7 +149,7 @@ import { ref, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAppStore } from '@/stores/app'
 import { accountsAPI } from '@/api/admin/accounts'
-import type { SyncUpstreamPreviewParams } from '@/api/admin/accounts'
+import type { SyncUpstreamModelsOverrides, SyncUpstreamPreviewParams } from '@/api/admin/accounts'
 import { useClipboard } from '@/composables/useClipboard'
 import ModelIcon from '@/components/common/ModelIcon.vue'
 import Icon from '@/components/icons/Icon.vue'
@@ -162,6 +162,7 @@ const props = defineProps<{
   platform?: string
   platforms?: string[]
   accountId?: number
+  syncOverrides?: SyncUpstreamModelsOverrides
   syncCredentials?: {
     platform: string
     type: string
@@ -289,7 +290,7 @@ const syncUpstreamModels = async () => {
   try {
     let result
     if (props.accountId) {
-      result = await accountsAPI.syncUpstreamModels(props.accountId)
+      result = await accountsAPI.syncUpstreamModels(props.accountId, props.syncOverrides)
     } else if (props.syncCredentials) {
       result = await accountsAPI.syncUpstreamModelsPreview(props.syncCredentials as SyncUpstreamPreviewParams)
     } else {
