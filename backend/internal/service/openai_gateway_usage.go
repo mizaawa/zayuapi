@@ -73,6 +73,8 @@ type CyberPolicyUsageInput struct {
 	SessionID          string
 	RequestPayloadHash string
 	APIKeyService      APIKeyQuotaUpdater
+	TokenReservation   *TokenBillingReservation
+	PricingAt          time.Time
 	ChannelUsageFields
 }
 
@@ -108,6 +110,8 @@ func (s *OpenAIGatewayService) RecordCyberPolicyUsageLog(ctx context.Context, in
 		SessionID:          in.SessionID,
 		RequestPayloadHash: in.RequestPayloadHash,
 		APIKeyService:      in.APIKeyService,
+		TokenReservation:   in.TokenReservation,
+		PricingAt:          in.PricingAt,
 		ChannelUsageFields: in.ChannelUsageFields,
 		CyberBlocked:       true,
 	}); err != nil {
@@ -252,7 +256,7 @@ func (s *OpenAIGatewayService) RecordUsage(ctx context.Context, input *OpenAIRec
 		account,
 	)
 	if err != nil {
-		if input.MediaQuote != nil || input.TokenQuote != nil || input.TokenReservation != nil || !isUsagePricingUnavailableError(err) {
+		if input.MediaQuote != nil || input.TokenQuote != nil || TokenBillingReservationFromContext(ctx) != nil || !isUsagePricingUnavailableError(err) {
 			return err
 		}
 		logger.L().With(

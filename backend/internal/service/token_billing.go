@@ -16,7 +16,7 @@ import (
 
 var (
 	ErrTokenBillingOutcomePending = errors.New("token billing outcome is pending")
-	ErrTokenBillingInvalidQuote   = errors.New("token billing requires a finite positive maximum quote")
+	ErrTokenBillingInvalidQuote   = errors.New("token billing requires a finite nonnegative maximum quote")
 )
 
 // TokenBillingQuote uses precisely the same price and ledger representation as
@@ -80,7 +80,7 @@ func reserveTokenBilling(ctx context.Context, repo UsageBillingRepository, cache
 		return nil, ErrBillingServiceUnavailable
 	}
 	if key == nil || quote == nil || quote.Command.UserID != key.UserID || quote.Command.APIKeyID != key.ID ||
-		quote.Command.BalanceCost <= 0 || math.IsNaN(quote.Command.BalanceCost) || math.IsInf(quote.Command.BalanceCost, 0) {
+		quote.Command.BalanceCost < 0 || math.IsNaN(quote.Command.BalanceCost) || math.IsInf(quote.Command.BalanceCost, 0) {
 		return nil, ErrTokenBillingInvalidQuote
 	}
 	r := &TokenBillingReservation{ID: "token:" + uuid.NewString(), UserID: key.UserID, APIKeyID: key.ID, Quote: *quote, LeaseUntil: time.Now().Add(TokenBillingReservationLease)}
@@ -88,6 +88,9 @@ func reserveTokenBilling(ctx context.Context, repo UsageBillingRepository, cache
 		r.GroupID = *key.GroupID
 	}
 	r.Quote.Command.RequestID, r.Quote.Usage.RequestID = r.ID, r.ID
+	if err := ValidateTokenBillingQuote(&r.Quote); err != nil {
+		return nil, err
+	}
 	NormalizeTokenBillingQuote(&r.Quote)
 	if err := tokenRepo.ReserveToken(ctx, r); err != nil {
 		return nil, err
@@ -178,7 +181,11 @@ func stageAndSettleTokenBilling(ctx context.Context, repo UsageBillingRepository
 	quote.Command.RequestPayloadHash = r.Quote.Command.RequestPayloadHash
 	// A successful response without usage is not an authorization to refund its
 	// full reservation. Persist the admitted maximum for deterministic recovery.
-	if usage.TotalTokens() <= 0 || cmd.BalanceCost <= 0 {
+	// Observed tokens may legitimately cost zero: an explicit free price, a
+	// zero group multiplier, or rounding below the accounting scale. Pricing
+	// failures are rejected by RecordUsage before this point, never inferred
+	// from the amount. Only absent usage requires the conservative maximum.
+	if usage.TotalTokens() <= 0 {
 		quote = TokenBillingMaximumQuote(r.Quote)
 	}
 	NormalizeTokenBillingQuote(&quote)

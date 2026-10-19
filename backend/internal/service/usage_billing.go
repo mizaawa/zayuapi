@@ -260,7 +260,7 @@ type UsageBillingApplyResult struct {
 	APIKeyQuotaExhausted     bool
 	UserPlatformQuotaApplied bool
 	NewBalance               *float64           // post-deduction balance (nil = no balance deduction)
-	BalanceOverdrafted       bool               // true when the sufficient-balance guard missed and debt was still recorded
+	BalanceOverdrafted       bool               // retained for source compatibility; strict balance debits never set it
 	BalanceReserved          bool               // token reservation already moved the available balance; invalidate cache instead of deducting twice
 	OutstandingBalanceCost   float64            // auditable over-maximum fee, paid before new token admission
 	QuotaState               *AccountQuotaState // post-increment quota state (nil = no quota increment)

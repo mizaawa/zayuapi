@@ -77,9 +77,6 @@ func (r *usageBillingRepository) ReserveToken(ctx context.Context, reservation *
 		return err
 	}
 	service.NormalizeTokenBillingQuote(quote)
-	if quote.Command.BalanceCost <= 0 {
-		return service.ErrTokenBillingInvalidQuote
-	}
 	if reservation.LeaseUntil.IsZero() || reservation.LeaseUntil.After(time.Now().Add(service.TokenBillingReservationLease)) {
 		reservation.LeaseUntil = time.Now().Add(service.TokenBillingReservationLease)
 	}
@@ -124,16 +121,41 @@ func (r *usageBillingRepository) ReserveToken(ctx context.Context, reservation *
 		}
 		return service.ErrInsufficientBalance
 	}
-	var keyOwner, group int64
-	err = tx.QueryRowContext(ctx, `SELECT user_id,COALESCE(group_id,0) FROM api_keys WHERE id=$1 AND deleted_at IS NULL`, reservation.APIKeyID).Scan(&keyOwner, &group)
+	var keyOwner, group, failoverGroup int64
+	var failoverEnabled bool
+	err = tx.QueryRowContext(ctx, `SELECT user_id,COALESCE(group_id,0),failover_enabled,COALESCE(failover_group_id,0)
+		FROM api_keys WHERE id=$1 AND deleted_at IS NULL FOR SHARE`, reservation.APIKeyID).Scan(&keyOwner, &group, &failoverEnabled, &failoverGroup)
 	if errors.Is(err, sql.ErrNoRows) {
 		return service.ErrAPIKeyNotFound
 	}
 	if err != nil {
 		return err
 	}
-	if keyOwner != reservation.UserID || group != reservation.GroupID {
+	if keyOwner != reservation.UserID {
 		return service.ErrUsageBillingRequestConflict
+	}
+	if group != reservation.GroupID {
+		// Effective request keys retain their persisted primary group. Only a
+		// currently configured route may bill another group: key failover can
+		// start before cooldown is recorded, or resume while it is active.
+		// The separate invalid-request fallback also clones the effective key.
+		var allowed bool
+		err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM groups primary_group
+			JOIN groups effective_group ON effective_group.id=$2
+			WHERE primary_group.id=$1 AND primary_group.deleted_at IS NULL AND effective_group.deleted_at IS NULL
+			AND primary_group.status='active' AND effective_group.status='active'
+			AND (($3 AND $4=effective_group.id AND primary_group.platform NOT IN ('custom','composite')
+				AND primary_group.platform=effective_group.platform)
+			OR (primary_group.fallback_group_id_on_invalid_request=effective_group.id
+				AND primary_group.platform IN ('anthropic','antigravity') AND primary_group.subscription_type<>'subscription'
+				AND effective_group.platform='anthropic' AND effective_group.subscription_type<>'subscription'
+				AND effective_group.fallback_group_id_on_invalid_request IS NULL)))`, group, reservation.GroupID, failoverEnabled, failoverGroup).Scan(&allowed)
+		if err != nil {
+			return err
+		}
+		if !allowed {
+			return service.ErrUsageBillingRequestConflict
+		}
 	}
 	var balance float64
 	err = tx.QueryRowContext(ctx, `UPDATE users SET balance=balance-$1,frozen_balance=COALESCE(frozen_balance,0)+$1,updated_at=NOW()

@@ -6,6 +6,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"math"
 	"sync"
 	"sync/atomic"
@@ -318,7 +319,7 @@ func TestTokenBillingStrictLegacyAndUnifiedDebitsUnderConcurrency(t *testing.T) 
 func TestTokenBillingFiniteAmountsAndNumericPrecision(t *testing.T) {
 	ctx := context.Background()
 	f := tokenFixture(t, 1)
-	for _, amount := range []float64{-1, math.NaN(), math.Inf(1), math.Inf(-1), 0, 0.000000001} {
+	for _, amount := range []float64{-1, math.NaN(), math.Inf(1), math.Inf(-1)} {
 		require.Error(t, f.repo.ReserveToken(ctx, f.reservation(amount)))
 	}
 	r := f.reservation(.000078125)
@@ -332,6 +333,181 @@ func TestTokenBillingFiniteAmountsAndNumericPrecision(t *testing.T) {
 	var quota string
 	require.NoError(t, integrationDB.QueryRow(`SELECT quota_used::text FROM api_keys WHERE id=$1`, f.key.ID).Scan(&quota))
 	require.Equal(t, "0.00000002", quota)
+}
+
+func TestTokenBillingZeroHoldAndExactZeroSettlement(t *testing.T) {
+	ctx := context.Background()
+	for _, hold := range []float64{0, .000000001, .3} {
+		t.Run(fmt.Sprintf("hold_%.9f", hold), func(t *testing.T) {
+			f := tokenFixture(t, 1)
+			r := f.reservation(hold)
+			require.NoError(t, f.repo.ReserveToken(ctx, r))
+			require.NoError(t, f.repo.ReserveToken(ctx, r))
+			require.NoError(t, f.repo.DispatchToken(ctx, r.ID, f.user.ID, f.key.ID))
+			actual := tokenActual(r, 0)
+			require.NoError(t, f.repo.StageTokenOutcome(ctx, r.ID, actual))
+			result, err := f.repo.SettleToken(ctx, r.ID)
+			require.NoError(t, err)
+			require.True(t, result.Applied)
+			require.False(t, result.BalanceOverdrafted)
+			require.Zero(t, result.OutstandingBalanceCost)
+			result, err = f.repo.SettleToken(ctx, r.ID)
+			require.NoError(t, err)
+			require.False(t, result.Applied)
+			tokenMoney(t, integrationDB, f.user.ID, "1.00000000", "0.00000000")
+			var amount, keyQuota, keyRate float64
+			var kind string
+			var input, output int
+			require.NoError(t, integrationDB.QueryRow(`SELECT settlement_kind FROM token_billing_reservations WHERE id=$1`, r.ID).Scan(&kind))
+			require.Equal(t, "actual", kind)
+			require.NoError(t, integrationDB.QueryRow(`SELECT actual_cost,input_tokens,output_tokens FROM usage_logs WHERE request_id=$1`, r.ID).Scan(&amount, &input, &output))
+			require.Zero(t, amount)
+			require.Equal(t, 10, input)
+			require.Equal(t, 25, output)
+			require.NoError(t, integrationDB.QueryRow(`SELECT quota_used,usage_5h FROM api_keys WHERE id=$1`, f.key.ID).Scan(&keyQuota, &keyRate))
+			require.Zero(t, keyQuota)
+			require.Zero(t, keyRate)
+		})
+	}
+}
+
+func TestTokenBillingFreeRequestAtZeroBalanceRecoveryAndRefund(t *testing.T) {
+	ctx := context.Background()
+	f := tokenFixture(t, 0)
+	undispatched, dispatched := f.reservation(0), f.reservation(0)
+	for _, r := range []*service.TokenBillingReservation{undispatched, dispatched} {
+		require.NoError(t, f.repo.ReserveToken(ctx, r))
+	}
+	require.NoError(t, f.repo.DispatchToken(ctx, dispatched.ID, f.user.ID, f.key.ID))
+	_, err := integrationDB.Exec(`UPDATE token_billing_reservations SET lease_until=NOW()-INTERVAL '1 minute' WHERE user_id=$1`, f.user.ID)
+	require.NoError(t, err)
+	_, err = f.repo.RecoverToken(ctx, 1000)
+	require.NoError(t, err)
+	tokenMoney(t, integrationDB, f.user.ID, "0.00000000", "0.00000000")
+	var state, kind string
+	require.NoError(t, integrationDB.QueryRow(`SELECT state FROM token_billing_reservations WHERE id=$1`, undispatched.ID).Scan(&state))
+	require.Equal(t, "released", state)
+	require.NoError(t, integrationDB.QueryRow(`SELECT state,settlement_kind FROM token_billing_reservations WHERE id=$1`, dispatched.ID).Scan(&state, &kind))
+	require.Equal(t, "settled", state)
+	require.Equal(t, "maximum", kind)
+	require.NoError(t, f.repo.StageTokenOutcome(ctx, dispatched.ID, tokenActual(dispatched, 0)))
+	result, err := f.repo.SettleToken(ctx, dispatched.ID)
+	require.NoError(t, err)
+	require.True(t, result.Applied)
+	tokenMoney(t, integrationDB, f.user.ID, "0.00000000", "0.00000000")
+	cancelled := f.reservation(0)
+	require.NoError(t, f.repo.ReserveToken(ctx, cancelled))
+	released, err := f.repo.ReleaseToken(ctx, cancelled.ID, true)
+	require.NoError(t, err)
+	require.NotNil(t, released)
+	tokenMoney(t, integrationDB, f.user.ID, "0.00000000", "0.00000000")
+}
+
+func TestTokenBillingConfiguredFailoverUsesEffectiveGroup(t *testing.T) {
+	ctx := context.Background()
+	for _, cooldown := range []string{"before_cooldown", "during_cooldown", "after_cooldown"} {
+		t.Run(cooldown, func(t *testing.T) {
+			f := tokenFixture(t, 1)
+			client := testEntClient(t)
+			primary := mustCreateGroup(t, client, &service.Group{Name: "token-primary-" + uuid.NewString(), Platform: service.PlatformOpenAI, RateMultiplier: 2})
+			fallback := mustCreateGroup(t, client, &service.Group{Name: "token-fallback-" + uuid.NewString(), Platform: service.PlatformOpenAI, RateMultiplier: .5})
+			var until any
+			if cooldown == "during_cooldown" {
+				until = time.Now().Add(time.Hour)
+			} else if cooldown == "after_cooldown" {
+				until = time.Now().Add(-time.Hour)
+			}
+			_, err := integrationDB.Exec(`UPDATE api_keys SET group_id=$2,failover_enabled=TRUE,failover_group_id=$3,failover_cooldown_until=$4 WHERE id=$1`, f.key.ID, primary.ID, fallback.ID, until)
+			require.NoError(t, err)
+			billing := service.NewBillingService(nil, nil)
+			cost, err := billing.CalculateCost("gpt-5.4", service.UsageTokens{InputTokens: 10, OutputTokens: 100}, fallback.RateMultiplier)
+			require.NoError(t, err)
+			primaryCost, err := billing.CalculateCost("gpt-5.4", service.UsageTokens{InputTokens: 10, OutputTokens: 100}, primary.RateMultiplier)
+			require.NoError(t, err)
+			require.Less(t, cost.ActualCost, primaryCost.ActualCost)
+			r := f.reservation(cost.ActualCost)
+			r.GroupID = fallback.ID
+			r.Quote.Usage.GroupID, r.Quote.Usage.RateMultiplier = &fallback.ID, fallback.RateMultiplier
+			require.NoError(t, f.repo.ReserveToken(ctx, r))
+			require.NoError(t, f.repo.DispatchToken(ctx, r.ID, f.user.ID, f.key.ID))
+			actual := r.Quote
+			require.NoError(t, f.repo.StageTokenOutcome(ctx, r.ID, &actual))
+			_, err = f.repo.SettleToken(ctx, r.ID)
+			require.NoError(t, err)
+			var storedPrimary, reservedGroup, usageGroup int64
+			var rate, amount float64
+			require.NoError(t, integrationDB.QueryRow(`SELECT group_id FROM api_keys WHERE id=$1`, f.key.ID).Scan(&storedPrimary))
+			require.NoError(t, integrationDB.QueryRow(`SELECT group_id FROM token_billing_reservations WHERE id=$1`, r.ID).Scan(&reservedGroup))
+			require.NoError(t, integrationDB.QueryRow(`SELECT group_id,rate_multiplier,actual_cost FROM usage_logs WHERE request_id=$1`, r.ID).Scan(&usageGroup, &rate, &amount))
+			require.Equal(t, primary.ID, storedPrimary)
+			require.Equal(t, fallback.ID, reservedGroup)
+			require.Equal(t, fallback.ID, usageGroup)
+			require.Equal(t, fallback.RateMultiplier, rate)
+			require.Equal(t, service.QuantizeUsageBillingAmount(cost.ActualCost), amount)
+			tokenMoney(t, integrationDB, f.user.ID, fmt.Sprintf("%.8f", 1-amount), "0.00000000")
+		})
+	}
+}
+
+func TestTokenBillingRejectsUnconfiguredOrInvalidEffectiveGroup(t *testing.T) {
+	ctx := context.Background()
+	for _, kind := range []string{"unrelated_group", "disabled_failover", "inactive_group", "deleted_group", "different_platform", "changed_configuration"} {
+		t.Run(kind, func(t *testing.T) {
+			f := tokenFixture(t, 1)
+			client := testEntClient(t)
+			primary := mustCreateGroup(t, client, &service.Group{Name: "token-primary-" + uuid.NewString(), Platform: service.PlatformOpenAI})
+			fallback := mustCreateGroup(t, client, &service.Group{Name: "token-fallback-" + uuid.NewString(), Platform: service.PlatformOpenAI})
+			unrelated := mustCreateGroup(t, client, &service.Group{Name: "token-unrelated-" + uuid.NewString(), Platform: service.PlatformOpenAI})
+			_, err := integrationDB.Exec(`UPDATE api_keys SET group_id=$2,failover_enabled=TRUE,failover_group_id=$3 WHERE id=$1`, f.key.ID, primary.ID, fallback.ID)
+			require.NoError(t, err)
+			r := f.reservation(.1)
+			r.GroupID = fallback.ID
+			switch kind {
+			case "unrelated_group":
+				r.GroupID = unrelated.ID
+			case "disabled_failover":
+				_, err = integrationDB.Exec(`UPDATE api_keys SET failover_enabled=FALSE WHERE id=$1`, f.key.ID)
+			case "inactive_group":
+				_, err = integrationDB.Exec(`UPDATE groups SET status='disabled' WHERE id=$1`, fallback.ID)
+			case "deleted_group":
+				_, err = integrationDB.Exec(`UPDATE groups SET deleted_at=NOW() WHERE id=$1`, fallback.ID)
+			case "different_platform":
+				_, err = integrationDB.Exec(`UPDATE groups SET platform='anthropic' WHERE id=$1`, fallback.ID)
+			case "changed_configuration":
+				_, err = integrationDB.Exec(`UPDATE api_keys SET failover_group_id=$2 WHERE id=$1`, f.key.ID, unrelated.ID)
+			}
+			require.NoError(t, err)
+			require.ErrorIs(t, f.repo.ReserveToken(ctx, r), service.ErrUsageBillingRequestConflict)
+			tokenMoney(t, integrationDB, f.user.ID, "1.00000000", "0.00000000")
+		})
+	}
+}
+
+func TestTokenBillingConfiguredInvalidRequestFallbackAndCompositeGroup(t *testing.T) {
+	ctx := context.Background()
+	f := tokenFixture(t, 1)
+	client := testEntClient(t)
+	primary := mustCreateGroup(t, client, &service.Group{Name: "token-antigravity-" + uuid.NewString(), Platform: service.PlatformAntigravity})
+	fallback := mustCreateGroup(t, client, &service.Group{Name: "token-anthropic-" + uuid.NewString(), Platform: service.PlatformAnthropic})
+	_, err := integrationDB.Exec(`UPDATE groups SET fallback_group_id_on_invalid_request=$2 WHERE id=$1`, primary.ID, fallback.ID)
+	require.NoError(t, err)
+	_, err = integrationDB.Exec(`UPDATE api_keys SET group_id=$2 WHERE id=$1`, f.key.ID, primary.ID)
+	require.NoError(t, err)
+	r := f.reservation(.1)
+	r.GroupID = fallback.ID
+	require.NoError(t, f.repo.ReserveToken(ctx, r))
+	_, err = f.repo.ReleaseToken(ctx, r.ID, true)
+	require.NoError(t, err)
+	composite := mustCreateGroup(t, client, &service.Group{Name: "token-composite-" + uuid.NewString(), Platform: service.PlatformComposite})
+	_, err = integrationDB.Exec(`UPDATE api_keys SET group_id=$2 WHERE id=$1`, f.key.ID, composite.ID)
+	require.NoError(t, err)
+	r = f.reservation(.1)
+	r.GroupID = composite.ID
+	r.Quote.Command.Platform = service.PlatformOpenAI // routing/quota platform may differ from the billing group's platform.
+	require.NoError(t, f.repo.ReserveToken(ctx, r))
+	_, err = f.repo.ReleaseToken(ctx, r.ID, true)
+	require.NoError(t, err)
+	tokenMoney(t, integrationDB, f.user.ID, "1.00000000", "0.00000000")
 }
 
 func TestTokenBillingSettlementVersusRefundRace(t *testing.T) {

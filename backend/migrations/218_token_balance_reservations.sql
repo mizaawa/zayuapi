@@ -7,7 +7,7 @@ CREATE TABLE token_billing_reservations (
     api_key_id BIGINT NOT NULL,
     group_id BIGINT NOT NULL DEFAULT 0,
     state TEXT NOT NULL DEFAULT 'reserved' CHECK (state IN ('reserved', 'dispatched', 'settled', 'released')),
-    hold_amount NUMERIC(20,8) NOT NULL CHECK (hold_amount > 0),
+    hold_amount NUMERIC(20,8) NOT NULL CHECK (hold_amount >= 0),
     quote JSONB NOT NULL,
     final_quote JSONB,
     settled_quote JSONB,

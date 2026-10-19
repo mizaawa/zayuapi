@@ -842,7 +842,14 @@ func (s *GatewayService) recordUsageCore(ctx context.Context, input *recordUsage
 	}
 
 	// 计算费用
-	cost := s.calculateRecordUsageCost(ctx, result, apiKey, billingModel, multiplier, imageMultiplier, opts)
+	cost, pricingErr := s.calculateRecordUsageCostChecked(ctx, result, apiKey, billingModel, multiplier, imageMultiplier, opts)
+	if pricingErr != nil {
+		if input.TokenQuote != nil || TokenBillingReservationFromContext(ctx) != nil {
+			return pricingErr
+		}
+		logger.LegacyPrintf("service.gateway", "Calculate cost failed: %v", pricingErr)
+		cost = &CostBreakdown{ActualCost: 0}
+	}
 	makeManagedMonitorUsageFree(apiKey, cost)
 
 	// 判断计费方式：订阅模式 vs 余额模式
@@ -948,12 +955,31 @@ func (s *GatewayService) calculateRecordUsageCost(
 	imageMultiplier float64,
 	opts *recordUsageOpts,
 ) *CostBreakdown {
+	cost, err := s.calculateRecordUsageCostChecked(ctx, result, apiKey, billingModel, multiplier, imageMultiplier, opts)
+	if err != nil {
+		logger.LegacyPrintf("service.gateway", "Calculate cost failed: %v", err)
+		return &CostBreakdown{ActualCost: 0}
+	}
+	return cost
+}
+
+// Preserve pricing errors for reservation admission and exact receipts. A zero
+// amount alone cannot distinguish configured free pricing from an unknown model.
+func (s *GatewayService) calculateRecordUsageCostChecked(
+	ctx context.Context,
+	result *ForwardResult,
+	apiKey *APIKey,
+	billingModel string,
+	multiplier float64,
+	imageMultiplier float64,
+	opts *recordUsageOpts,
+) (*CostBreakdown, error) {
 	// 图片生成：渠道定价为 token 计费时走 token 路径，否则走图片计费
 	if result.ImageCount > 0 {
 		if resolved := s.resolveChannelPricing(ctx, billingModel, apiKey); resolved != nil && resolved.Mode == BillingModeToken {
 			return s.calculateTokenCost(ctx, result, apiKey, billingModel, multiplier, opts)
 		}
-		return s.calculateImageCost(ctx, result, apiKey, billingModel, imageMultiplier)
+		return s.calculateImageCost(ctx, result, apiKey, billingModel, imageMultiplier), nil
 	}
 
 	// Token 计费
@@ -1073,7 +1099,7 @@ func (s *GatewayService) calculateTokenCost(
 	billingModel string,
 	multiplier float64,
 	opts *recordUsageOpts,
-) *CostBreakdown {
+) (*CostBreakdown, error) {
 	tokens := UsageTokens{
 		InputTokens:           result.Usage.InputTokens,
 		OutputTokens:          result.Usage.OutputTokens,
@@ -1106,11 +1132,7 @@ func (s *GatewayService) calculateTokenCost(
 	} else {
 		cost, err = s.billingService.CalculateCost(billingModel, tokens, multiplier)
 	}
-	if err != nil {
-		logger.LegacyPrintf("service.gateway", "Calculate cost failed: %v", err)
-		return &CostBreakdown{ActualCost: 0}
-	}
-	return cost
+	return cost, err
 }
 
 // buildRecordUsageLog 构建使用日志并设置计费模式。
