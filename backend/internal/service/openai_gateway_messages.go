@@ -766,12 +766,6 @@ func (s *OpenAIGatewayService) readOpenAICompatBufferedTerminal(
 						if event.Response != nil && event.Response.Usage != nil {
 							usage = copyOpenAIUsageFromResponsesUsage(event.Response.Usage)
 						}
-						if event.Usage != nil {
-							usage = copyOpenAIUsageFromResponsesUsage(event.Usage)
-						}
-						if event.Response != nil && event.Response.Usage != nil {
-							usage = copyOpenAIUsageFromResponsesUsage(event.Response.Usage)
-						}
 						if isOpenAICompatResponsesTerminalEvent(event.Type) && event.Response != nil {
 							if event.Usage != nil {
 								usage = copyOpenAIUsageFromResponsesUsage(event.Usage)
@@ -818,6 +812,12 @@ func (s *OpenAIGatewayService) readOpenAICompatBufferedTerminal(
 			}
 
 			acc.ProcessEvent(&event)
+			if event.Usage != nil {
+				usage = copyOpenAIUsageFromResponsesUsage(event.Usage)
+			}
+			if event.Response != nil && event.Response.Usage != nil {
+				usage = copyOpenAIUsageFromResponsesUsage(event.Response.Usage)
+			}
 
 			if isOpenAICompatResponsesTerminalEvent(event.Type) && event.Response != nil {
 				if event.Usage != nil {

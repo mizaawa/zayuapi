@@ -33,6 +33,9 @@ func TestTokenAdmissionFiniteBoundsForEveryProtocol(t *testing.T) {
 		t.Run(string(tc.protocol), func(t *testing.T) {
 			input := tokenAdmissionFixture()
 			input.Protocol = tc.protocol
+			if tc.protocol == TokenAdmissionChat {
+				input.Body = []byte(`{"model":"gpt-5.4","messages":[{"role":"user","content":"hello"}]}`)
+			}
 			b, err := buildTokenAdmissionBound(input)
 			require.NoError(t, err)
 			require.Equal(t, int64(4096), gjson.GetBytes(b.body, tc.field).Int())

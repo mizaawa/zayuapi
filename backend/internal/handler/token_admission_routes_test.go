@@ -585,3 +585,15 @@ func TestTokenAdmissionBufferedCompatFailureSettlesReportedUsage(t *testing.T) {
 		})
 	}
 }
+
+func TestTokenAdmissionChatResponsesShapeRetainsEnforcedCap(t *testing.T) {
+	h, _, key, repo, upstream := newTokenRouteFixture(t, service.PlatformOpenAI, 100)
+	upstream.contentType = "text/event-stream"
+	upstream.payload = `data: {"type":"response.completed","response":{"id":"resp_cursor","model":"gpt-5.4","status":"completed","output":[],"usage":{"input_tokens":7,"output_tokens":2}}}` + "\n\n"
+	c, _ := tokenHandlerContext(t, key, "/v1/chat/completions", `{"model":"gpt-5.4","input":"hello","stream":false}`)
+	h.ChatCompletions(c)
+	require.Equal(t, 1, upstream.calls)
+	require.Equal(t, int64(4096), gjson.GetBytes(upstream.bodies[0], "max_output_tokens").Int())
+	require.Len(t, repo.commands, 1)
+	require.InDelta(t, 0, repo.frozen, 1e-8)
+}

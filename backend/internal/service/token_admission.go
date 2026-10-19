@@ -246,6 +246,12 @@ func buildTokenAdmissionBound(input TokenAdmissionInput) (tokenAdmissionBound, e
 		switch input.Protocol {
 		case TokenAdmissionChat:
 			field = "max_completion_tokens"
+			// The Chat endpoint also accepts Cursor's Responses-shaped body.
+			// That branch forwards input directly to /responses, so its cap
+			// must use the Responses field rather than an ignored Chat field.
+			if !gjson.GetBytes(b.body, "messages").Exists() && gjson.GetBytes(b.body, "input").Exists() {
+				field = "max_output_tokens"
+			}
 		case TokenAdmissionMessages:
 			field = "max_tokens"
 		case TokenAdmissionGemini:
