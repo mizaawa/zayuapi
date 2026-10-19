@@ -634,21 +634,29 @@ func TestRefreshIfNeeded_RequestPathDBRereadMissingGrokRefreshCredentialReturnsP
 }
 
 func TestRefreshIfNeeded_LateSuccessAfterDeadlineDoesNotPersist(t *testing.T) {
-	account := &Account{ID: 85, Platform: PlatformGrok, Type: AccountTypeOAuth, Status: StatusActive}
+	account := &Account{
+		ID:          85,
+		Platform:    PlatformGrok,
+		Type:        AccountTypeOAuth,
+		Status:      StatusActive,
+		Credentials: map[string]any{"access_token": "old-token"},
+	}
 	repo := &refreshAPIAccountRepo{account: account}
 	executor := &refreshAPIExecutorStub{
 		needsRefresh: true,
 		credentials:  map[string]any{"access_token": "late-token"},
-		delay:        30 * time.Millisecond,
 	}
 	api := NewOAuthRefreshAPI(repo, nil)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
 	defer cancel()
+	executor.onRefresh = func() { <-ctx.Done() }
 
 	result, err := api.RefreshIfNeeded(ctx, account, executor, time.Hour)
 
 	require.ErrorIs(t, err, context.DeadlineExceeded)
 	require.Nil(t, result)
+	require.Equal(t, 1, executor.refreshCalls)
+	require.Zero(t, repo.successCASCalls, "late credentials must not reach the unified API persistence boundary")
 	require.Zero(t, repo.updateCredentialsCalls, "late credentials must not cross the unified API persistence boundary")
 }
 

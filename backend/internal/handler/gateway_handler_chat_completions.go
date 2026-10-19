@@ -317,7 +317,7 @@ func (h *GatewayHandler) ChatCompletions(c *gin.Context) {
 
 		if err != nil {
 			var failoverErr *service.UpstreamFailoverError
-			if errors.As(err, &failoverErr) && !(tokenReservation != nil && tokenGatewayHasUsage(result)) {
+			if errors.As(err, &failoverErr) && (tokenReservation == nil || !tokenGatewayHasUsage(result)) {
 				if c.Writer.Size() != writerSizeBeforeForward {
 					h.handleCCFailoverExhausted(c, failoverErr, true)
 					return
@@ -345,7 +345,7 @@ func (h *GatewayHandler) ChatCompletions(c *gin.Context) {
 				zap.Bool("upstream_error_response_already_written", upstreamErrorAlreadyCommunicated),
 				zap.Error(err),
 			)
-			if !gatewayCompatibilityHasBillablePartialUsage(c, result, err, writerSizeBeforeForward) && !(tokenReservation != nil && tokenGatewayHasUsage(result)) {
+			if !gatewayCompatibilityHasBillablePartialUsage(c, result, err, writerSizeBeforeForward) && (tokenReservation == nil || !tokenGatewayHasUsage(result)) {
 				return
 			}
 		}

@@ -72,7 +72,7 @@ func TestTokenAdmissionRejectsAmbiguousOrUnboundedInput(t *testing.T) {
 		`{"model":"gpt-5.4","max_tokens":1,"max_tokens":10000000}`,
 		`{"model":"unknown","previous_response_id":"resp_hidden"}`, `{"model":"unknown","input":[{"type":"input_image","image_url":"https://example.invalid/image"}]}`,
 	} {
-		t.Run(fmt.Sprintf("%s", body), func(t *testing.T) {
+		t.Run(body, func(t *testing.T) {
 			input := tokenAdmissionFixture()
 			input.Body = []byte(body)
 			_, err := buildTokenAdmissionBound(input)

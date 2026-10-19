@@ -454,10 +454,6 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 
 			// 转发请求 - 根据账号平台分流
 			var result *service.ForwardResult
-			requestCtx := c.Request.Context()
-			if fs.SwitchCount > 0 {
-				requestCtx = service.WithAccountSwitchCount(requestCtx, fs.SwitchCount, h.metadataBridgeEnabled())
-			}
 			admittedBody, tokenReservation, admissionErr := beginTokenAdmission(c, h.gatewayService, service.TokenAdmissionInput{
 				Body: body, Protocol: service.TokenAdmissionMessages, Model: reqModel,
 				APIKey: apiKey, Account: account, Subscription: subscription, PricingAt: pricingAt,
@@ -475,7 +471,10 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 				_ = h.gatewayService.FinishTokenBilling(c.Request.Context(), reservation)
 			}(tokenReservation)
 			body = admittedBody
-			requestCtx = c.Request.Context()
+			requestCtx := c.Request.Context()
+			if fs.SwitchCount > 0 {
+				requestCtx = service.WithAccountSwitchCount(requestCtx, fs.SwitchCount, h.metadataBridgeEnabled())
+			}
 			// 记录 Forward 前已写入字节数，Forward 后若增加则说明 SSE 内容已发，禁止 failover
 			writerSizeBeforeForward := c.Writer.Size()
 			if account.Platform == service.PlatformAntigravity {
