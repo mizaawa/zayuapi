@@ -10,6 +10,7 @@ import (
 	dbent "github.com/Wei-Shaw/sub2api/ent"
 	dbaccount "github.com/Wei-Shaw/sub2api/ent/account"
 	"github.com/Wei-Shaw/sub2api/internal/service"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 )
 
@@ -18,7 +19,7 @@ func mustCreateUser(t *testing.T, client *dbent.Client, u *service.User) *servic
 	ctx := context.Background()
 
 	if u.Email == "" {
-		u.Email = "user-" + time.Now().Format(time.RFC3339Nano) + "@example.com"
+		u.Email = "user-" + uuid.NewString() + "@example.com"
 	}
 	if u.PasswordHash == "" {
 		u.PasswordHash = "test-password-hash"
