@@ -65,6 +65,15 @@ func (r *mediaRecoveryBillingRepo) FindMediaTask(_ context.Context, taskID strin
 	return r.reservation, nil
 }
 
+func (r *mediaRecoveryBillingRepo) StageMediaOutcome(ctx context.Context, id string, quote *MediaBillingQuote) error {
+	// Match the persistent repository: terminal outcomes cannot be overwritten
+	// by a stale reconciliation attempt after a successful content delivery.
+	if r.state == "settled" || r.state == "refunded" {
+		return nil
+	}
+	return r.mediaOutcomeRepository.StageMediaOutcome(ctx, id, quote)
+}
+
 func (r *mediaRecoveryBillingRepo) SettleMedia(ctx context.Context, id string, cmd *UsageBillingCommand) (*UsageBillingApplyResult, error) {
 	if r.state == "settled" {
 		return &UsageBillingApplyResult{}, nil
@@ -109,6 +118,9 @@ func newMediaRecoveryService(upstream *mediaRecoveryUpstream, repo *mediaRecover
 			Usage:   UsageLog{Model: "grok-imagine-video", ActualCost: .25, TotalCost: .25, BillingMode: &mode, VideoDurationSeconds: &seconds, CreatedAt: createdAt},
 		},
 	}
+	// Persisted admission metadata, also understood as an unknown field by
+	// the baseline overlay used to reproduce the old delivery/refund bug.
+	_ = json.Unmarshal([]byte(`{"content_delivery_guarded":true}`), reservation)
 	repo.reservation = reservation
 	repo.ownerID, repo.keyID = reservation.Quote.Command.UserID, reservation.Quote.Command.APIKeyID
 	svc := &OpenAIGatewayService{
@@ -207,4 +219,65 @@ func TestMediaTaskReconciliationKeepsTaskOwnershipAndTerminalIdempotency(t *test
 	require.Zero(t, repo.refundCalls)
 	require.NotNil(t, repo.staged)
 	require.True(t, json.Valid(body))
+}
+
+func TestMediaReconcileBoundsMissingAccountTimestampAndTaskHolds(t *testing.T) {
+	for _, tc := range []struct {
+		name                        string
+		createdAt                   time.Time
+		missingAccount, missingTask bool
+	}{
+		{name: "deleted account", createdAt: time.Now().Add(-time.Hour), missingAccount: true},
+		{name: "missing quote timestamp"},
+		{name: "lost task binding", createdAt: time.Now().Add(-48 * time.Hour), missingTask: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			upstream := &mediaRecoveryUpstream{responses: []*http.Response{
+				mediaRecoveryResponse(503, "application/json", `{"error":"status unavailable"}`),
+				mediaRecoveryResponse(503, "application/json", `{"error":"content unavailable"}`),
+			}}
+			repo := &mediaRecoveryBillingRepo{mediaOutcomeRepository: &mediaOutcomeRepository{}}
+			svc, r := newMediaRecoveryService(upstream, repo, tc.createdAt)
+			if tc.missingAccount {
+				svc.accountRepo = mediaRecoveryAccountRepo{}
+			}
+			if tc.missingTask {
+				r.TaskID = ""
+			}
+			require.NoError(t, svc.reconcilePendingMedia(context.Background(), r))
+			require.Equal(t, "refunded", repo.state)
+		})
+	}
+}
+
+func TestMediaReconcileStaleNonterminalAndMalformedStatusCannotHoldForever(t *testing.T) {
+	for _, status := range []string{`{"status":"processing"}`, `{"status":"unrecognized"}`, ``} {
+		repo := &mediaRecoveryBillingRepo{mediaOutcomeRepository: &mediaOutcomeRepository{}}
+		upstream := &mediaRecoveryUpstream{responses: []*http.Response{
+			mediaRecoveryResponse(200, "application/json", status),
+			mediaRecoveryResponse(503, "application/json", `{"error":"no content"}`),
+		}}
+		svc, r := newMediaRecoveryService(upstream, repo, time.Now().Add(-48*time.Hour))
+		require.NoError(t, svc.reconcilePendingMedia(context.Background(), r))
+		require.Equal(t, "refunded", repo.state)
+	}
+}
+
+func TestMediaReconcileLegacyDeliveryHistoryCannotBeAssumedUndelivered(t *testing.T) {
+	for _, missingAccount := range []bool{false, true} {
+		upstream := &mediaRecoveryUpstream{responses: []*http.Response{
+			mediaRecoveryResponse(503, "application/json", `{"error":"status unavailable"}`),
+			mediaRecoveryResponse(503, "application/json", `{"error":"content unavailable"}`),
+		}}
+		repo := &mediaRecoveryBillingRepo{mediaOutcomeRepository: &mediaOutcomeRepository{}}
+		svc, r := newMediaRecoveryService(upstream, repo, time.Now().Add(-48*time.Hour))
+		_ = json.Unmarshal([]byte(`{"content_delivery_guarded":false}`), r)
+		if missingAccount {
+			svc.accountRepo = mediaRecoveryAccountRepo{}
+		}
+		require.NoError(t, svc.reconcilePendingMedia(context.Background(), r))
+		require.Equal(t, "settled", repo.state)
+		require.Zero(t, repo.refundCalls)
+		require.InDelta(t, .25, repo.settled.BalanceCost, 1e-8)
+	}
 }

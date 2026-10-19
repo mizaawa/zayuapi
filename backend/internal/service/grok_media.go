@@ -1177,7 +1177,7 @@ func (s *OpenAIGatewayService) forwardGrokMediaVideoContent(
 	if account.Platform == PlatformGrok {
 		s.updateGrokUsageFromResponse(ctx, account, contentResp.Header, contentResp.StatusCode)
 	}
-	if err := writeGrokMediaContentResponse(c, contentResp); err != nil {
+	if err := s.writeMediaTaskContentResponse(ctx, c, contentResp); err != nil {
 		return nil, err
 	}
 	return &OpenAIForwardResult{

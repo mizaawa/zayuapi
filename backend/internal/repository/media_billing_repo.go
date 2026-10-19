@@ -368,8 +368,8 @@ func (r *usageBillingRepository) FindMediaTask(ctx context.Context, task string,
 
 func (r *usageBillingRepository) PendingMedia(ctx context.Context, limit int) ([]*service.MediaBillingReservation, error) {
 	rows, err := r.db.QueryContext(ctx, `UPDATE media_billing_reservations SET next_check_at=NOW()+INTERVAL '2 minutes' WHERE id IN (
-		SELECT id FROM media_billing_reservations WHERE state IN ('pending','reserved') AND next_check_at<=NOW() AND (task_id<>'' OR final_quote IS NOT NULL OR refund_requested OR quote->>'workbench_delivery'='true' OR (workbench_kind<>'' AND dispatch_started_at IS NULL AND queue_lease_until<=NOW())) ORDER BY next_check_at LIMIT $1 FOR UPDATE SKIP LOCKED
-	) RETURNING quote,task_id,endpoint,final_quote,refund_requested,queue_lease_until,dispatch_started_at`, limit)
+		SELECT id FROM media_billing_reservations WHERE state IN ('pending','reserved') AND next_check_at<=NOW() AND (task_id<>'' OR final_quote IS NOT NULL OR refund_requested OR quote->>'workbench_delivery'='true' OR (workbench_kind<>'' AND dispatch_started_at IS NULL AND queue_lease_until<=NOW()) OR created_at<=NOW()-INTERVAL '24 hours') ORDER BY next_check_at LIMIT $1 FOR UPDATE SKIP LOCKED
+	) RETURNING quote,task_id,endpoint,final_quote,refund_requested,queue_lease_until,dispatch_started_at,created_at`, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -380,7 +380,8 @@ func (r *usageBillingRepository) PendingMedia(ctx context.Context, limit int) ([
 		var refund bool
 		var task, endpoint string
 		var lease, dispatched sql.NullTime
-		if err := rows.Scan(&data, &task, &endpoint, &final, &refund, &lease, &dispatched); err != nil {
+		var createdAt time.Time
+		if err := rows.Scan(&data, &task, &endpoint, &final, &refund, &lease, &dispatched, &createdAt); err != nil {
 			return nil, err
 		}
 		var item service.MediaBillingReservation
@@ -388,6 +389,9 @@ func (r *usageBillingRepository) PendingMedia(ctx context.Context, limit int) ([
 			return nil, err
 		}
 		item.TaskID, item.Endpoint = task, service.GrokMediaEndpoint(endpoint)
+		if item.Quote.Usage.CreatedAt.IsZero() {
+			item.Quote.Usage.CreatedAt = createdAt
+		}
 		item.RefundPending = refund
 		item.QueueLeaseUntil, item.Dispatched = lease.Time, dispatched.Valid
 		if len(final) > 0 {

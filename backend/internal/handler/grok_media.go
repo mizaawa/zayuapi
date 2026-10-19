@@ -90,6 +90,9 @@ func (h *OpenAIGatewayHandler) handleGrokMedia(c *gin.Context, endpoint service.
 		h.errorResponse(c, http.StatusInternalServerError, "api_error", "User context not found")
 		return
 	}
+	if endpoint == service.GrokMediaEndpointVideoContent {
+		c.Request = c.Request.WithContext(service.WithMediaTaskContentBilling(c.Request.Context(), requestID, subject.UserID, apiKey.ID, apiKey.GroupID))
+	}
 
 	reqLog := requestLogger(
 		c,
@@ -619,6 +622,8 @@ func (h *OpenAIGatewayHandler) handleGrokMedia(c *gin.Context, endpoint service.
 			}
 			if _, err := h.gatewayService.ReconcileMediaTask(finalizeCtx, result.ResponseID, subject.UserID, apiKey.ID, result.BufferedResponseBody); err != nil {
 				reqLog.Error("media_billing.immediate_settlement_failed", zap.Error(err))
+				h.errorResponse(c, http.StatusBadGateway, "billing_error", "Video settlement is pending; retry the status request")
+				return
 			}
 			h.gatewayService.WriteBufferedGrokMediaResponse(c, result)
 		} else if endpoint == service.SeedanceEndpointCreate {

@@ -29,6 +29,9 @@ type MediaBillingReservation struct {
 	TaskID        string            `json:"task_id"`
 	Endpoint      GrokMediaEndpoint `json:"endpoint"`
 	MediaProtocol string            `json:"media_protocol,omitempty"`
+	// Older reservations predate the content-before-settlement guard and may
+	// already have been downloaded without any durable delivery evidence.
+	ContentDeliveryGuarded bool `json:"content_delivery_guarded,omitempty"`
 	// Resolution quotes retain the price at admission even if an administrator
 	// edits group/channel prices while an asynchronous job is running.
 	VideoPrices   map[string]MediaBillingQuote `json:"video_prices,omitempty"`
@@ -61,7 +64,12 @@ type MediaBillingRepository interface {
 	RefundMediaQueue(context.Context, string, bool) (*MediaBillingReservation, error)
 }
 
-const mediaStatusFailureGracePeriod = 30 * time.Minute
+const (
+	mediaStatusFailureGracePeriod = 30 * time.Minute
+	mediaPendingMaxAge            = 24 * time.Hour
+)
+
+type mediaBillingReconciliationContextKey struct{}
 
 func (s *OpenAIGatewayService) PrechargeMedia(ctx context.Context, input *OpenAIRecordUsageInput) (*MediaBillingReservation, error) {
 	if s.cfg != nil && s.cfg.RunMode == config.RunModeSimple {
@@ -83,6 +91,7 @@ func (s *OpenAIGatewayService) PrechargeMedia(ctx context.Context, input *OpenAI
 		return nil, errors.New("media price is unavailable")
 	}
 	reservation := &MediaBillingReservation{ID: copyInput.BillingRequestID, Quote: *quote, WorkbenchKind: input.WorkbenchKind, MediaProtocol: input.Account.MediaProtocol()}
+	reservation.ContentDeliveryGuarded = true
 	reservation.WorkbenchDelivery = input.WorkbenchKind == "video"
 	if input.APIKey.GroupID != nil {
 		reservation.GroupID = *input.APIKey.GroupID
@@ -529,14 +538,25 @@ func (s *OpenAIGatewayService) reconcilePendingMedia(ctx context.Context, r *Med
 		if r.WorkbenchKind != "" && !r.Dispatched {
 			return s.RefundMediaQueue(ctx, r.ID, true)
 		}
+		if !r.Quote.Usage.CreatedAt.IsZero() && mediaReservationAgeElapsed(r, time.Now(), mediaPendingMaxAge) {
+			return s.RefundMedia(ctx, r.ID)
+		}
 		return fmt.Errorf("media outcome has not been confirmed")
 	}
 	account, err := s.accountRepo.GetByID(ctx, r.Quote.Command.AccountID)
-	if err != nil {
-		// A missing account does not tell us whether the provider completed the
-		// task. Keep retrying until status or content can establish an outcome.
+	if err != nil || account == nil {
+		// Delivered results have a durable FinalQuote and took the settlement
+		// branch above. An unconfirmed task cannot keep a hold indefinitely
+		// after its provider account has disappeared.
+		if mediaStatusFailureGraceElapsed(r, time.Now()) {
+			return s.finishUnconfirmedMedia(ctx, r, errors.Is(err, ErrAccountNotFound))
+		}
+		if err == nil {
+			err = ErrAccountNotFound
+		}
 		return err
 	}
+	ctx = context.WithValue(ctx, mediaBillingReconciliationContextKey{}, true)
 	recorder := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(recorder)
 	c.Set("media_billing_buffer", true)
@@ -557,15 +577,30 @@ func (s *OpenAIGatewayService) reconcilePendingMedia(ctx context.Context, r *Med
 	if len(body) == 0 {
 		body = recorder.Body.Bytes()
 	}
+	if (!gjson.ValidBytes(body) || len(body) == 0) && mediaStatusFailureGraceElapsed(r, time.Now()) {
+		return s.recoverMediaStatusFailure(ctx, r, account, fmt.Errorf("invalid video status"))
+	}
+	if !GrokMediaVideoStatusFailed(body) {
+		if _, complete := mediaVideoStatusQuote(r, body); !complete && mediaReservationAgeElapsed(r, time.Now(), mediaPendingMaxAge) {
+			return s.recoverMediaStatusFailure(ctx, r, account, fmt.Errorf("video task exceeded its reconciliation deadline"))
+		}
+	}
 	return s.settleMediaStatus(ctx, r, body)
 }
 
 func mediaStatusFailureGraceElapsed(r *MediaBillingReservation, now time.Time) bool {
-	if r == nil || r.Quote.Usage.CreatedAt.IsZero() {
+	return mediaReservationAgeElapsed(r, now, mediaStatusFailureGracePeriod)
+}
+
+func mediaReservationAgeElapsed(r *MediaBillingReservation, now time.Time, age time.Duration) bool {
+	if r == nil {
 		return false
 	}
 	createdAt := r.Quote.Usage.CreatedAt
-	return !createdAt.After(now) && now.Sub(createdAt) >= mediaStatusFailureGracePeriod
+	// PendingMedia supplies the database creation time for old/corrupt quotes
+	// without a usage timestamp. A reservation with no timestamp at all must
+	// still go through outcome recovery instead of holding funds forever.
+	return createdAt.IsZero() || !createdAt.After(now) && now.Sub(createdAt) >= age
 }
 
 // Media recovery only needs to know whether the content endpoint returned a
@@ -595,7 +630,7 @@ func (s *OpenAIGatewayService) recoverMediaStatusFailure(ctx context.Context, r 
 	// polling is unavailable; successful retrieval settles only the admission
 	// quote because no authoritative usage metadata could be fetched.
 	if r.Endpoint.IsSeedance() {
-		return s.RefundMedia(ctx, r.ID)
+		return s.finishUnconfirmedMedia(ctx, r, false)
 	}
 	recorder := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(recorder)
@@ -605,8 +640,25 @@ func (s *OpenAIGatewayService) recoverMediaStatusFailure(ctx context.Context, r 
 	c.Request, _ = http.NewRequestWithContext(ctx, http.MethodGet, "/v1/videos/"+r.TaskID+"/content", nil)
 	result, err := s.ForwardGrokMedia(ctx, c, account, GrokMediaEndpointVideoContent, r.TaskID, nil, "")
 	if err != nil || result == nil || !c.GetBool(GrokMediaContentCompleteKey) || recorder.Code < http.StatusOK || recorder.Code >= http.StatusMultipleChoices || discard.written == 0 || isVideoContentJSONResponse(&http.Response{Header: result.ResponseHeaders}) {
-		return s.RefundMedia(ctx, r.ID)
+		return s.finishUnconfirmedMedia(ctx, r, false)
 	}
 	quote := r.Quote
+	return s.settleMediaQuote(ctx, r, &quote)
+}
+
+func (s *OpenAIGatewayService) finishUnconfirmedMedia(ctx context.Context, r *MediaBillingReservation, missingAccount bool) error {
+	if r.ContentDeliveryGuarded {
+		return s.RefundMedia(ctx, r.ID)
+	}
+	// A pre-upgrade task may already have been served through the old content
+	// route, which never saved a delivery marker. An outage cannot prove that
+	// it was undelivered. Close that historical hold at its admission quote;
+	// only guarded reservations can safely use an ambiguous timeout refund.
+	quote := r.Quote
+	if missingAccount {
+		quote.Command.AccountQuotaCost = 0
+		quote.Command.RequestFingerprint = ""
+		quote.Command.Normalize()
+	}
 	return s.settleMediaQuote(ctx, r, &quote)
 }

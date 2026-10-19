@@ -43,7 +43,7 @@ func WithVideoWorkbenchContext(ctx context.Context) context.Context {
 }
 
 func videoMediaUpstreamContext(ctx context.Context) (context.Context, context.CancelFunc) {
-	if ctx != nil && ctx.Value(videoWorkbenchContextKey{}) == true {
+	if ctx != nil && (ctx.Value(videoWorkbenchContextKey{}) == true || ctx.Value(mediaBillingReconciliationContextKey{}) == true) {
 		// A queued task already outlives its client; its execution deadline must
 		// still cancel a stalled upstream request or download.
 		return ctx, func() {}
