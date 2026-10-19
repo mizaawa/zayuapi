@@ -124,14 +124,6 @@ func normalizeBillingServiceTier(serviceTier string) string {
 	return strings.ToLower(strings.TrimSpace(serviceTier))
 }
 
-func usePriorityServiceTierPricing(serviceTier string, pricing *ModelPricing) bool {
-	if pricing == nil || normalizeBillingServiceTier(serviceTier) != "priority" {
-		return false
-	}
-	return pricing.InputPricePerTokenPriority > 0 || pricing.OutputPricePerTokenPriority > 0 ||
-		pricing.CacheCreationPricePerTokenPriority > 0 || pricing.CacheReadPricePerTokenPriority > 0
-}
-
 func serviceTierCostMultiplier(serviceTier string) float64 {
 	switch normalizeBillingServiceTier(serviceTier) {
 	case "priority":
@@ -993,24 +985,21 @@ func (s *BillingService) GetModelPricingWithChannel(model string, channelPricing
 	// 防止修改 fallbackPrices 中的共享指针
 	cloned := *pricing
 	pricing = &cloned
+	clearChannelOverriddenPriorityPrices(channelPricing, pricing)
 	if channelPricing.InputPrice != nil {
 		pricing.InputPricePerToken = *channelPricing.InputPrice
-		pricing.InputPricePerTokenPriority = *channelPricing.InputPrice
 	}
 	if channelPricing.OutputPrice != nil {
 		pricing.OutputPricePerToken = *channelPricing.OutputPrice
-		pricing.OutputPricePerTokenPriority = *channelPricing.OutputPrice
 	}
 	if channelPricing.CacheWritePrice != nil {
 		pricing.CacheCreationPricePerToken = *channelPricing.CacheWritePrice
-		pricing.CacheCreationPricePerTokenPriority = *channelPricing.CacheWritePrice
 		pricing.CacheCreationPriceExplicit = true
 		pricing.CacheCreation5mPrice = *channelPricing.CacheWritePrice
 		pricing.CacheCreation1hPrice = *channelPricing.CacheWritePrice
 	}
 	if channelPricing.CacheReadPrice != nil {
 		pricing.CacheReadPricePerToken = *channelPricing.CacheReadPrice
-		pricing.CacheReadPricePerTokenPriority = *channelPricing.CacheReadPrice
 	}
 	if channelPricing.ImageOutputPrice != nil {
 		pricing.ImageOutputPricePerToken = *channelPricing.ImageOutputPrice
@@ -1144,23 +1133,27 @@ func (s *BillingService) computeTokenBreakdown(
 	cacheReadPrice := pricing.CacheReadPricePerToken
 	cacheCreationPrice := pricing.CacheCreationPricePerToken
 	cacheCreationMultiplier := 1.0
-	tierMultiplier := 1.0
-
-	if usePriorityServiceTierPricing(serviceTier, pricing) {
+	inputTierMultiplier := serviceTierCostMultiplier(serviceTier)
+	outputTierMultiplier := inputTierMultiplier
+	cacheReadTierMultiplier := inputTierMultiplier
+	cacheCreationTierMultiplier := inputTierMultiplier
+	if normalizeBillingServiceTier(serviceTier) == "priority" {
 		if pricing.InputPricePerTokenPriority > 0 {
 			inputPrice = pricing.InputPricePerTokenPriority
+			inputTierMultiplier = 1
 		}
 		if pricing.OutputPricePerTokenPriority > 0 {
 			outputPrice = pricing.OutputPricePerTokenPriority
+			outputTierMultiplier = 1
 		}
 		if pricing.CacheReadPricePerTokenPriority > 0 {
 			cacheReadPrice = pricing.CacheReadPricePerTokenPriority
+			cacheReadTierMultiplier = 1
 		}
 		if pricing.CacheCreationPricePerTokenPriority > 0 {
 			cacheCreationPrice = pricing.CacheCreationPricePerTokenPriority
+			cacheCreationTierMultiplier = 1
 		}
-	} else {
-		tierMultiplier = serviceTierCostMultiplier(serviceTier)
 	}
 
 	longContextPricingEligible := applyLongCtx && s.shouldApplySessionLongContextPricing(tokens, pricing)
@@ -1190,12 +1183,16 @@ func (s *BillingService) computeTokenBreakdown(
 			imageInputTokens = tokens.InputTokens
 		}
 		imageInputPrice := pricing.ImageInputPricePerToken
+		imageInputTierMultiplier := inputTierMultiplier
 		if imageInputPrice == 0 {
 			// 未配置图片输入档时回退到文本 input 价（已含 priority / 长上下文调整）
 			imageInputPrice = inputPrice
+		} else if normalizeBillingServiceTier(serviceTier) == "priority" {
+			// 图片输入没有独立 priority 价，专属图片输入价仍需应用档位倍率。
+			imageInputTierMultiplier = serviceTierCostMultiplier(serviceTier)
 		}
 		bd.InputCost = float64(textInputTokens) * inputPrice
-		bd.ImageInputCost = float64(imageInputTokens) * imageInputPrice
+		bd.ImageInputCost = float64(imageInputTokens) * imageInputPrice * imageInputTierMultiplier
 	} else {
 		bd.InputCost = float64(tokens.InputTokens) * inputPrice
 	}
@@ -1210,10 +1207,12 @@ func (s *BillingService) computeTokenBreakdown(
 	// 图片输出 token 费用（独立费率）
 	if tokens.ImageOutputTokens > 0 {
 		imgPrice := pricing.ImageOutputPricePerToken
+		imageOutputTierMultiplier := serviceTierCostMultiplier(serviceTier)
 		if imgPrice == 0 && !pricing.ImageOutputPriceExplicit {
 			imgPrice = outputPrice
+			imageOutputTierMultiplier = outputTierMultiplier
 		}
-		bd.ImageOutputCost = float64(tokens.ImageOutputTokens) * imgPrice
+		bd.ImageOutputCost = float64(tokens.ImageOutputTokens) * imgPrice * imageOutputTierMultiplier
 	}
 
 	// 缓存创建费用
@@ -1221,14 +1220,10 @@ func (s *BillingService) computeTokenBreakdown(
 
 	bd.CacheReadCost = float64(tokens.CacheReadTokens) * cacheReadPrice
 
-	if tierMultiplier != 1.0 {
-		bd.InputCost *= tierMultiplier
-		bd.ImageInputCost *= tierMultiplier
-		bd.OutputCost *= tierMultiplier
-		bd.ImageOutputCost *= tierMultiplier
-		bd.CacheCreationCost *= tierMultiplier
-		bd.CacheReadCost *= tierMultiplier
-	}
+	bd.InputCost *= inputTierMultiplier
+	bd.OutputCost *= outputTierMultiplier
+	bd.CacheCreationCost *= cacheCreationTierMultiplier
+	bd.CacheReadCost *= cacheReadTierMultiplier
 
 	bd.TotalCost = bd.InputCost + bd.ImageInputCost + bd.OutputCost + bd.ImageOutputCost +
 		bd.CacheCreationCost + bd.CacheReadCost

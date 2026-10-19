@@ -871,8 +871,8 @@ func TestComputeTokenBreakdown_GptImage2ImageEditIssue4386(t *testing.T) {
 
 	cost := svc.computeTokenBreakdown(pricing, tokens, 1.0, "", false)
 
-	wantTextInput := float64(19) * 5e-6    // 0.000095
-	wantImageInput := float64(352) * 8e-6  // 0.002816
+	wantTextInput := float64(19) * 5e-6     // 0.000095
+	wantImageInput := float64(352) * 8e-6   // 0.002816
 	wantImageOutput := float64(439) * 30e-6 // 0.013170
 	require.InDelta(t, wantTextInput, cost.InputCost, 1e-15, "InputCost 仅含文本输入")
 	require.InDelta(t, wantImageInput, cost.ImageInputCost, 1e-15, "图片输入按 $8/1M 独立计费")
@@ -1512,9 +1512,9 @@ func TestGetModelPricingWithChannel_OverrideInputPriceOnly(t *testing.T) {
 	pricing, err := svc.GetModelPricingWithChannel("claude-sonnet-4", chPricing)
 	require.NoError(t, err)
 
-	// InputPrice overridden (both normal and priority)
+	// InputPrice overridden; channel schema has no explicit priority price.
 	require.InDelta(t, 99e-6, pricing.InputPricePerToken, 1e-12)
-	require.InDelta(t, 99e-6, pricing.InputPricePerTokenPriority, 1e-12)
+	require.Zero(t, pricing.InputPricePerTokenPriority)
 
 	// OutputPrice unchanged (claude-sonnet-4 fallback = 15e-6)
 	require.InDelta(t, 15e-6, pricing.OutputPricePerToken, 1e-12)
@@ -1531,7 +1531,7 @@ func TestGetModelPricingWithChannel_OverrideOutputPriceOnly(t *testing.T) {
 
 	// OutputPrice overridden
 	require.InDelta(t, 88e-6, pricing.OutputPricePerToken, 1e-12)
-	require.InDelta(t, 88e-6, pricing.OutputPricePerTokenPriority, 1e-12)
+	require.Zero(t, pricing.OutputPricePerTokenPriority)
 
 	// InputPrice unchanged (claude-sonnet-4 fallback = 3e-6)
 	require.InDelta(t, 3e-6, pricing.InputPricePerToken, 1e-12)
@@ -1551,14 +1551,14 @@ func TestGetModelPricingWithChannel_OverrideAllFields(t *testing.T) {
 	require.NoError(t, err)
 
 	require.InDelta(t, 10e-6, pricing.InputPricePerToken, 1e-12)
-	require.InDelta(t, 10e-6, pricing.InputPricePerTokenPriority, 1e-12)
+	require.Zero(t, pricing.InputPricePerTokenPriority)
 	require.InDelta(t, 20e-6, pricing.OutputPricePerToken, 1e-12)
-	require.InDelta(t, 20e-6, pricing.OutputPricePerTokenPriority, 1e-12)
+	require.Zero(t, pricing.OutputPricePerTokenPriority)
 	require.InDelta(t, 5e-6, pricing.CacheCreationPricePerToken, 1e-12)
 	require.InDelta(t, 5e-6, pricing.CacheCreation5mPrice, 1e-12)
 	require.InDelta(t, 5e-6, pricing.CacheCreation1hPrice, 1e-12)
 	require.InDelta(t, 1e-6, pricing.CacheReadPricePerToken, 1e-12)
-	require.InDelta(t, 1e-6, pricing.CacheReadPricePerTokenPriority, 1e-12)
+	require.Zero(t, pricing.CacheReadPricePerTokenPriority)
 	require.InDelta(t, 50e-6, pricing.ImageOutputPricePerToken, 1e-12)
 }
 
@@ -1577,7 +1577,7 @@ func TestGetModelPricingWithChannel_CacheWritePriceAffects5mAnd1h(t *testing.T) 
 	require.InDelta(t, 7e-6, pricing.CacheCreation1hPrice, 1e-12)
 }
 
-func TestGetModelPricingWithChannel_CacheReadPriceAffectsPriority(t *testing.T) {
+func TestGetModelPricingWithChannel_CacheReadPriceDoesNotCreatePriorityPrice(t *testing.T) {
 	svc := newTestBillingService()
 
 	chPricing := &ChannelModelPricing{
@@ -1586,9 +1586,30 @@ func TestGetModelPricingWithChannel_CacheReadPriceAffectsPriority(t *testing.T) 
 	pricing, err := svc.GetModelPricingWithChannel("claude-sonnet-4", chPricing)
 	require.NoError(t, err)
 
-	// CacheReadPrice should set both normal and priority
+	// CacheReadPrice has no matching channel priority field.
 	require.InDelta(t, 2e-6, pricing.CacheReadPricePerToken, 1e-12)
-	require.InDelta(t, 2e-6, pricing.CacheReadPricePerTokenPriority, 1e-12)
+	require.Zero(t, pricing.CacheReadPricePerTokenPriority)
+}
+
+func TestCalculateCostInternal_ChannelOverrideUsesPriorityMultiplier(t *testing.T) {
+	svc := newTestBillingService()
+	channelPricing := &ChannelModelPricing{
+		InputPrice:      testPtrFloat64(10e-6),
+		OutputPrice:     testPtrFloat64(20e-6),
+		CacheWritePrice: testPtrFloat64(5e-6),
+		CacheReadPrice:  testPtrFloat64(1e-6),
+	}
+	tokens := UsageTokens{InputTokens: 100, OutputTokens: 40, CacheCreationTokens: 20, CacheReadTokens: 10}
+	base, err := svc.calculateCostInternal("gpt-6-sol", tokens, 1, "", channelPricing)
+	require.NoError(t, err)
+	priority, err := svc.calculateCostInternal("gpt-6-sol", tokens, 1, "priority", channelPricing)
+	require.NoError(t, err)
+
+	require.InDelta(t, base.InputCost*2, priority.InputCost, 1e-12)
+	require.InDelta(t, base.OutputCost*2, priority.OutputCost, 1e-12)
+	require.InDelta(t, base.CacheCreationCost*2, priority.CacheCreationCost, 1e-12)
+	require.InDelta(t, base.CacheReadCost*2, priority.CacheReadCost, 1e-12)
+	require.InDelta(t, base.TotalCost*2, priority.TotalCost, 1e-12)
 }
 
 func TestGetModelPricingWithChannel_UnknownModelReturnsError(t *testing.T) {

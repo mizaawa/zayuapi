@@ -152,6 +152,29 @@ func (p *ResolvedPricing) hasCustomPricing() bool {
 	return p != nil && (p.Source == PricingSourceGroup || p.Source == PricingSourceChannel)
 }
 
+// clearChannelOverriddenPriorityPrices clears only priority prices whose base
+// price was replaced by channel/group configuration. ChannelModelPricing has
+// no tier-specific fields, so the billing path applies the tier multiplier to
+// those overridden components while retaining source-defined priority prices
+// for components the channel did not override.
+func clearChannelOverriddenPriorityPrices(chPricing *ChannelModelPricing, pricing *ModelPricing) {
+	if chPricing == nil || pricing == nil {
+		return
+	}
+	if chPricing.InputPrice != nil {
+		pricing.InputPricePerTokenPriority = 0
+	}
+	if chPricing.OutputPrice != nil {
+		pricing.OutputPricePerTokenPriority = 0
+	}
+	if chPricing.CacheWritePrice != nil {
+		pricing.CacheCreationPricePerTokenPriority = 0
+	}
+	if chPricing.CacheReadPrice != nil {
+		pricing.CacheReadPricePerTokenPriority = 0
+	}
+}
+
 // resolveBasePricing 从 LiteLLM 或 Fallback 获取基础定价
 func (r *ModelPricingResolver) resolveBasePricing(model string) (*ModelPricing, string) {
 	pricing, err := r.billingService.GetModelPricing(model)
@@ -197,25 +220,22 @@ func (r *ModelPricingResolver) applyTokenOverrides(chPricing *ChannelModelPricin
 		cloned := *resolved.BasePricing
 		resolved.BasePricing = &cloned
 	}
+	clearChannelOverriddenPriorityPrices(chPricing, resolved.BasePricing)
 
 	if chPricing.InputPrice != nil {
 		resolved.BasePricing.InputPricePerToken = *chPricing.InputPrice
-		resolved.BasePricing.InputPricePerTokenPriority = *chPricing.InputPrice
 	}
 	if chPricing.OutputPrice != nil {
 		resolved.BasePricing.OutputPricePerToken = *chPricing.OutputPrice
-		resolved.BasePricing.OutputPricePerTokenPriority = *chPricing.OutputPrice
 	}
 	if chPricing.CacheWritePrice != nil {
 		resolved.BasePricing.CacheCreationPricePerToken = *chPricing.CacheWritePrice
-		resolved.BasePricing.CacheCreationPricePerTokenPriority = *chPricing.CacheWritePrice
 		resolved.BasePricing.CacheCreationPriceExplicit = true
 		resolved.BasePricing.CacheCreation5mPrice = *chPricing.CacheWritePrice
 		resolved.BasePricing.CacheCreation1hPrice = *chPricing.CacheWritePrice
 	}
 	if chPricing.CacheReadPrice != nil {
 		resolved.BasePricing.CacheReadPricePerToken = *chPricing.CacheReadPrice
-		resolved.BasePricing.CacheReadPricePerTokenPriority = *chPricing.CacheReadPrice
 	}
 	// 渠道定价覆盖一切：显式配置则用配置值，未配置则归零（不回退到 LiteLLM）
 	if chPricing.ImageOutputPrice != nil {
@@ -284,22 +304,18 @@ func intervalToModelPricing(iv *PricingInterval, supportsCacheBreakdown bool, ch
 	}
 	if iv.InputPrice != nil {
 		pricing.InputPricePerToken = *iv.InputPrice
-		pricing.InputPricePerTokenPriority = *iv.InputPrice
 	}
 	if iv.OutputPrice != nil {
 		pricing.OutputPricePerToken = *iv.OutputPrice
-		pricing.OutputPricePerTokenPriority = *iv.OutputPrice
 	}
 	if iv.CacheWritePrice != nil {
 		pricing.CacheCreationPricePerToken = *iv.CacheWritePrice
-		pricing.CacheCreationPricePerTokenPriority = *iv.CacheWritePrice
 		pricing.CacheCreationPriceExplicit = true
 		pricing.CacheCreation5mPrice = *iv.CacheWritePrice
 		pricing.CacheCreation1hPrice = *iv.CacheWritePrice
 	}
 	if iv.CacheReadPrice != nil {
 		pricing.CacheReadPricePerToken = *iv.CacheReadPrice
-		pricing.CacheReadPricePerTokenPriority = *iv.CacheReadPrice
 	}
 	// 渠道定价存在时，ImageOutputPrice 显式覆盖；图片输入价用渠道级配置
 	// （区间不携带图片输入价，与 image_output 一致）。

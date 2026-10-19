@@ -261,9 +261,9 @@ func TestResolve_WithChannelOverride_TokenFlat(t *testing.T) {
 	require.Equal(t, "channel", resolved.Source)
 	require.NotNil(t, resolved.BasePricing)
 	require.InDelta(t, 10e-6, resolved.BasePricing.InputPricePerToken, 1e-12)
-	require.InDelta(t, 10e-6, resolved.BasePricing.InputPricePerTokenPriority, 1e-12)
+	require.Zero(t, resolved.BasePricing.InputPricePerTokenPriority)
 	require.InDelta(t, 50e-6, resolved.BasePricing.OutputPricePerToken, 1e-12)
-	require.InDelta(t, 50e-6, resolved.BasePricing.OutputPricePerTokenPriority, 1e-12)
+	require.Zero(t, resolved.BasePricing.OutputPricePerTokenPriority)
 }
 
 func TestResolve_WithChannelOverride_TokenPartialOverride(t *testing.T) {
@@ -315,11 +315,105 @@ func TestResolve_WithChannelOverride_TokenWithIntervals(t *testing.T) {
 	require.NotNil(t, iv)
 	require.InDelta(t, 2e-6, iv.InputPricePerToken, 1e-12)
 	require.InDelta(t, 8e-6, iv.OutputPricePerToken, 1e-12)
+	require.Zero(t, iv.InputPricePerTokenPriority)
+	require.Zero(t, iv.OutputPricePerTokenPriority)
 
 	iv2 := r.GetIntervalPricing(resolved, 200000)
 	require.NotNil(t, iv2)
 	require.InDelta(t, 4e-6, iv2.InputPricePerToken, 1e-12)
 	require.InDelta(t, 16e-6, iv2.OutputPricePerToken, 1e-12)
+}
+
+func TestResolve_ChannelFlatPriceUsesPriorityMultiplier(t *testing.T) {
+	r := newResolverWithChannel(t, []ChannelModelPricing{{
+		Platform:    "anthropic",
+		Models:      []string{"claude-sonnet-4"},
+		BillingMode: BillingModeToken,
+		InputPrice:  testPtrFloat64(10e-6),
+		OutputPrice: testPtrFloat64(50e-6),
+	}})
+	input := CostInput{
+		Ctx: context.Background(), Model: "claude-sonnet-4", GroupID: groupIDPtr(),
+		Tokens: UsageTokens{InputTokens: 100, OutputTokens: 20}, RateMultiplier: 1,
+		Resolver: r,
+	}
+	base, err := r.billingService.CalculateCostUnified(input)
+	require.NoError(t, err)
+	input.ServiceTier = "priority"
+	priority, err := r.billingService.CalculateCostUnified(input)
+	require.NoError(t, err)
+	require.InDelta(t, base.InputCost*2, priority.InputCost, 1e-12)
+	require.InDelta(t, base.OutputCost*2, priority.OutputCost, 1e-12)
+	require.InDelta(t, base.TotalCost*2, priority.TotalCost, 1e-12)
+}
+
+func TestResolve_ChannelIntervalPriceUsesPriorityMultiplier(t *testing.T) {
+	r := newResolverWithChannel(t, []ChannelModelPricing{{
+		Platform:    "anthropic",
+		Models:      []string{"claude-sonnet-4"},
+		BillingMode: BillingModeToken,
+		Intervals: []PricingInterval{{
+			MinTokens: 0, MaxTokens: testPtrInt(128000),
+			InputPrice: testPtrFloat64(2e-6), OutputPrice: testPtrFloat64(8e-6),
+		}},
+	}})
+	input := CostInput{
+		Ctx: context.Background(), Model: "claude-sonnet-4", GroupID: groupIDPtr(),
+		Tokens: UsageTokens{InputTokens: 100, OutputTokens: 20}, RateMultiplier: 1,
+		Resolver: r,
+	}
+	base, err := r.billingService.CalculateCostUnified(input)
+	require.NoError(t, err)
+	input.ServiceTier = "priority"
+	priority, err := r.billingService.CalculateCostUnified(input)
+	require.NoError(t, err)
+	require.InDelta(t, base.InputCost*2, priority.InputCost, 1e-12)
+	require.InDelta(t, base.OutputCost*2, priority.OutputCost, 1e-12)
+	require.InDelta(t, base.TotalCost*2, priority.TotalCost, 1e-12)
+}
+
+func TestResolve_ChannelBaseOverridePreservesUnchangedExplicitPriorityPrice(t *testing.T) {
+	r := newResolverWithChannel(t, []ChannelModelPricing{{
+		Platform: "anthropic", Models: []string{"claude-sonnet-4"}, BillingMode: BillingModeToken,
+		InputPrice: testPtrFloat64(10e-6),
+	}})
+	base := r.billingService.fallbackPrices["claude-sonnet-4"]
+	base.OutputPricePerTokenPriority = 30e-6
+	input := CostInput{
+		Ctx: context.Background(), Model: "claude-sonnet-4", GroupID: groupIDPtr(),
+		Tokens: UsageTokens{InputTokens: 100, OutputTokens: 20}, RateMultiplier: 1,
+		Resolver: r,
+	}
+	plain, err := r.billingService.CalculateCostUnified(input)
+	require.NoError(t, err)
+	input.ServiceTier = "priority"
+	priority, err := r.billingService.CalculateCostUnified(input)
+	require.NoError(t, err)
+	require.InDelta(t, plain.InputCost*2, priority.InputCost, 1e-12)
+	require.InDelta(t, 20*30e-6, priority.OutputCost, 1e-12,
+		"priority for a non-overridden component should retain its explicit source price")
+}
+
+func TestResolve_ChannelOverrideFallbackKeepsPrioritySourcePrice(t *testing.T) {
+	r := newResolverWithChannel(t, nil)
+	r.billingService.fallbackPrices["gpt-6-sol"] = &ModelPricing{
+		InputPricePerToken: 2e-6, InputPricePerTokenPriority: 7e-6,
+		OutputPricePerToken: 3e-6, OutputPricePerTokenPriority: 11e-6,
+	}
+	input := CostInput{
+		Ctx: context.Background(), Model: "gpt-6-sol", GroupID: nil,
+		Tokens: UsageTokens{InputTokens: 100, OutputTokens: 20}, RateMultiplier: 1,
+		Resolver: r,
+	}
+	base, err := r.billingService.CalculateCostUnified(input)
+	require.NoError(t, err)
+	require.InDelta(t, 2e-6, base.InputCost/100, 1e-12)
+	input.ServiceTier = "priority"
+	priority, err := r.billingService.CalculateCostUnified(input)
+	require.NoError(t, err)
+	require.InDelta(t, 7e-6, priority.InputCost/100, 1e-12)
+	require.InDelta(t, 11e-6, priority.OutputCost/20, 1e-12)
+	require.InDelta(t, 7e-6*100+11e-6*20, priority.TotalCost, 1e-12)
 }
 
 func TestResolve_WithChannelOverride_TokenNilBasePricing(t *testing.T) {
