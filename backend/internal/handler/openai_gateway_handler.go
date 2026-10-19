@@ -154,6 +154,7 @@ func usageRecordContext(parent context.Context, base context.Context) context.Co
 	if requestID, _ := parent.Value(ctxkey.RequestID).(string); strings.TrimSpace(requestID) != "" {
 		base = context.WithValue(base, ctxkey.RequestID, strings.TrimSpace(requestID))
 	}
+	base = service.WithTokenBillingReservation(base, service.TokenBillingReservationFromContext(parent))
 	return base
 }
 
@@ -666,6 +667,23 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 		// 从不可变的 canonical forwardBody 派生本次尝试 body 并整块剔除上游私有的加密
 		// reasoning item（含耦合的 id/summary），避免非透传上游 400 拒绝 Kiro reasoning 形态。
 		attemptBody := h.deriveOpenAIForwardAttemptBody(reqLog, forwardBody, account, &passthroughFailoverState)
+		admittedBody, tokenReservation, admissionErr := beginTokenAdmission(c, h.gatewayService, service.TokenAdmissionInput{
+			Body: attemptBody, Protocol: service.TokenAdmissionResponses, Model: reqModel,
+			APIKey: apiKey, Account: account, Subscription: subscription, PricingAt: pricingAt,
+			ChannelUsageFields: clientRequestedUsageFields(c, channelMapping, reqModel, ""),
+		})
+		if admissionErr != nil {
+			if accountReleaseFunc != nil {
+				accountReleaseFunc()
+			}
+			status, code, message := tokenAdmissionErrorDetails(admissionErr)
+			h.handleStreamingAwareError(c, status, code, message, streamStarted)
+			return
+		}
+		defer func(reservation *service.TokenBillingReservation) {
+			_ = h.gatewayService.FinishTokenBilling(c.Request.Context(), reservation)
+		}(tokenReservation)
+		attemptBody = admittedBody
 		result, err := func() (*service.OpenAIForwardResult, error) {
 			defer func() {
 				if accountReleaseFunc != nil {
@@ -674,6 +692,7 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 			}()
 			return h.gatewayService.Forward(c.Request.Context(), c, account, attemptBody)
 		}()
+		finishOpenAITokenAttempt(c, h.gatewayService, tokenReservation, result, err)
 		cyberBlockKeyHTTP := ""
 		if service.GetOpsCyberPolicy(c) != nil {
 			cyberBlockKeyHTTP = service.CyberSessionBlockKey(apiKey.ID, c, sessionHashBody)
@@ -690,7 +709,7 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 			service.SetOpsLatencyMs(c, service.OpsTimeToFirstTokenMsKey, int64(*result.FirstTokenMs))
 		}
 		if err != nil {
-			if result != nil && (result.ImageCount > 0 || openAIForwardHasBillablePartialUsage(c, result, err, writerSizeBeforeForward)) {
+			if result != nil && (result.ImageCount > 0 || openAIForwardHasBillablePartialUsage(c, result, err, writerSizeBeforeForward) || (tokenReservation != nil && result.Usage.HasTokens() && service.GetOpsCyberPolicy(c) == nil)) {
 				service.RecordAPIKeyFailoverUpstreamFailure(c.Request.Context(), http.StatusBadGateway, []byte(err.Error()))
 				if !openAIForwardErrorAlreadyCommunicated(c, writerSizeBeforeForward, err) {
 					h.ensureForwardErrorResponse(c, streamStarted)
@@ -825,6 +844,7 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 		h.submitOpenAIUsageRecordTask(c.Request.Context(), result, func(ctx context.Context) {
 			if err := h.gatewayService.RecordUsage(ctx, &service.OpenAIRecordUsageInput{
 				Result:             result,
+				TokenReservation:   tokenReservation,
 				APIKey:             apiKey,
 				User:               apiKey.User,
 				Account:            account,
@@ -1238,6 +1258,24 @@ func (h *OpenAIGatewayHandler) Messages(c *gin.Context) {
 		// channel mapping still rewrites the public alias for the upstream.
 		forwardBody := mappedBodyForMessages(channelMappingMsg.Mapped, channelMappingMsg.MappedModel)
 		writerSizeBeforeForward := c.Writer.Size()
+		admittedBody, tokenReservation, admissionErr := beginTokenAdmission(c, h.gatewayService, service.TokenAdmissionInput{
+			Body: forwardBody, Protocol: service.TokenAdmissionMessages, Model: reqModel,
+			APIKey: apiKey, Account: account, Subscription: subscription, PricingAt: pricingAt,
+			ChannelUsageFields: clientRequestedUsageFields(c, channelMappingMsg, reqModel, ""),
+			MappedModel:        defaultMappedModel,
+		})
+		if admissionErr != nil {
+			if accountReleaseFunc != nil {
+				accountReleaseFunc()
+			}
+			status, code, message := tokenAdmissionErrorDetails(admissionErr)
+			h.anthropicStreamingAwareError(c, status, code, message, streamStarted)
+			return
+		}
+		defer func(reservation *service.TokenBillingReservation) {
+			_ = h.gatewayService.FinishTokenBilling(c.Request.Context(), reservation)
+		}(tokenReservation)
+		forwardBody = admittedBody
 		result, err := func() (*service.OpenAIForwardResult, error) {
 			defer func() {
 				if accountReleaseFunc != nil {
@@ -1246,6 +1284,7 @@ func (h *OpenAIGatewayHandler) Messages(c *gin.Context) {
 			}()
 			return h.gatewayService.ForwardAsAnthropic(c.Request.Context(), c, account, forwardBody, promptCacheKey, defaultMappedModel)
 		}()
+		finishOpenAITokenAttempt(c, h.gatewayService, tokenReservation, result, err)
 		cyberBlockKeyMsg := ""
 		if service.GetOpsCyberPolicy(c) != nil {
 			cyberBlockKeyMsg = service.CyberSessionBlockKey(apiKey.ID, c, body)
@@ -1264,7 +1303,7 @@ func (h *OpenAIGatewayHandler) Messages(c *gin.Context) {
 		if err != nil && result != nil && result.ClientDisconnect {
 			reqLog.Info("openai_messages.client_disconnected", zap.Int64("account_id", account.ID), zap.Error(err))
 		} else if err != nil {
-			if result != nil && (result.ImageCount > 0 || openAIForwardHasBillablePartialUsage(c, result, err, writerSizeBeforeForward)) {
+			if result != nil && (result.ImageCount > 0 || openAIForwardHasBillablePartialUsage(c, result, err, writerSizeBeforeForward) || (tokenReservation != nil && result.Usage.HasTokens() && service.GetOpsCyberPolicy(c) == nil)) {
 				service.RecordAPIKeyFailoverUpstreamFailure(c.Request.Context(), http.StatusBadGateway, []byte(err.Error()))
 				if !openAIForwardErrorAlreadyCommunicated(c, writerSizeBeforeForward, err) {
 					h.ensureAnthropicErrorResponse(c, streamStarted)
@@ -1365,6 +1404,7 @@ func (h *OpenAIGatewayHandler) Messages(c *gin.Context) {
 		h.submitOpenAIUsageRecordTask(c.Request.Context(), result, func(ctx context.Context) {
 			if err := h.gatewayService.RecordUsage(ctx, &service.OpenAIRecordUsageInput{
 				Result:             result,
+				TokenReservation:   tokenReservation,
 				APIKey:             apiKey,
 				User:               apiKey.User,
 				Account:            account,
@@ -2727,6 +2767,8 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 		// openAIWSTurnPricing 的注释——绝不能用建连时刻初始化。
 		var turnPricing openAIWSTurnPricing
 		var turnBillingAPIKeys openAIWSTurnBillingAPIKeys
+		var turnAdmissions tokenWSTurnAdmissions
+		defer turnAdmissions.finishAll(ctx, h.gatewayService)
 		hooks := &service.OpenAIWSIngressHooks{
 			ClientLifecycleContext:  clientLifecycleCtx,
 			InitialRequestModel:     reqModel,
@@ -2839,7 +2881,35 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 				currentAccountRelease = wrapReleaseOnDone(ctx, accountReleaseFunc)
 				return nil
 			},
+			AdmitRequest: func(turn int, payload []byte, originalModel string) ([]byte, error) {
+				turnKey := turnBillingAPIKeys.forTurn(turn, apiKey)
+				turnBillingCtx := withOpenAIWSTurnBillingGroup(ctx, turnKey)
+				if turnPricing.current().IsZero() {
+					_, turnAt := h.gatewayService.WithOpenAITurnPricingContext(turnBillingCtx, apiKey.GroupID)
+					turnPricing.freeze(turnAt)
+				}
+				model := strings.TrimSpace(originalModel)
+				if model == "" {
+					model = reqModel
+				}
+				mapping, _ := h.gatewayService.ResolveChannelMappingAndRestrict(turnBillingCtx, turnKey.GroupID, model)
+				body, admissionErr := turnAdmissions.admit(turnBillingCtx, h.gatewayService, turn, service.TokenAdmissionInput{
+					Body: payload, Protocol: service.TokenAdmissionResponses, Model: model,
+					APIKey: turnKey, Account: account, Subscription: subscription,
+					PricingAt: turnPricing.current(), ChannelUsageFields: mapping.ToUsageFields(model, ""),
+					ServerHistory: true,
+				})
+				if admissionErr != nil {
+					return nil, service.NewOpenAIWSClientCloseError(coderws.StatusPolicyViolation, "token billing admission failed", admissionErr)
+				}
+				return body, nil
+			},
 			AfterTurn: func(turn int, result *service.OpenAIForwardResult, turnErr error) {
+				turnReservation := turnAdmissions.forTurn(turn)
+				turnRecordPricingAt := turnPricing.current()
+				turnBillingAPIKey := turnBillingAPIKeys.forTurn(turn, apiKey)
+				defer turnAdmissions.finish(ctx, h.gatewayService, turn)
+
 				// F1: cyber 标记按 turn 生命周期清理——defer 保证任意早返回路径都执行；
 				// CyberBlocked 必须在 submit 前同步预捕获（task 闭包由 worker 池异步执行，
 				// 届时 defer 已清除标记）。
@@ -2865,12 +2935,15 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 					turnUpstreamModel = turnRequestedModel
 				}
 				turnUsageFields := turnMapping.ToUsageFields(turnRequestedModel, turnUpstreamModel)
-				h.recordCyberPolicyIfMarked(c, apiKey, account, subscription, turnRequestedModel, turnErr != nil, cyberBlockKey, turnUsageFields, requestPayloadHash)
+				h.recordCyberPolicyIfMarked(c, turnBillingAPIKey, account, subscription, turnRequestedModel, turnErr != nil, cyberBlockKey, turnUsageFields, requestPayloadHash, cyberPolicyBillingSnapshot{reservation: turnReservation, pricingAt: turnRecordPricingAt})
 				if service.GetOpsCyberPolicy(c) != nil {
 					cyberBlockedThisConn = true
 				}
 				if turnErr != nil {
-					if result == nil || result.ImageCount <= 0 {
+					if result == nil || (result.ImageCount <= 0 && result.Usage.InputTokens <= 0 && result.Usage.OutputTokens <= 0 && result.Usage.CacheCreationInputTokens <= 0 && result.Usage.CacheReadInputTokens <= 0) {
+						if tokenAttemptConfirmedUncharged(turnErr, false) {
+							_ = h.gatewayService.CancelTokenBilling(ctx, turnReservation)
+						}
 						return
 					}
 					// cyber 命中时该 turn 的用量已由 recordCyberPolicyIfMarked(forwardErrored=true)
@@ -2907,12 +2980,11 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 				upstreamEndpoint := resolveOpenAIUpstreamEndpoint(c, account, result)
 				quotaPlatform := service.QuotaPlatform(c.Request.Context(), apiKey)
 				sessionID := service.ExtractClientSessionID(c)
-				turnRecordPricingAt := turnPricing.current()
-				turnBillingAPIKey := turnBillingAPIKeys.forTurn(turn, apiKey)
 				cyberBlocked := service.GetOpsCyberPolicy(c) != nil
 				h.submitOpenAIUsageRecordTask(ctx, result, func(taskCtx context.Context) {
 					if err := h.gatewayService.RecordUsage(taskCtx, &service.OpenAIRecordUsageInput{
 						Result:             result,
+						TokenReservation:   turnReservation,
 						APIKey:             turnBillingAPIKey,
 						User:               apiKey.User,
 						Account:            account,
@@ -3925,11 +3997,16 @@ func (h *OpenAIGatewayHandler) enqueueCyberSessionBlockedOpsEntry(c *gin.Context
 	enqueueOpsErrorLog(h.opsService, buildCyberSessionBlockedOpsEntry(meta))
 }
 
+type cyberPolicyBillingSnapshot struct {
+	reservation *service.TokenBillingReservation
+	pricingAt   time.Time
+}
+
 // recordCyberPolicyIfMarked 在 gateway forward 返回后检查 cyber 标记，异步写风控日志/邮件，
 // 并在 forward 返回错误时写一条 tokens=0 用量行。标记由 gateway 服务层在透传 cyber 后设置；
 // 当前请求已发给用户，本方法只做事后记录，不影响响应。forwardErrored 为 true 时才写用量行，
 // 避免与正常 RecordUsage(forward 成功路径)重复。每请求至多记录一次。
-func (h *OpenAIGatewayHandler) recordCyberPolicyIfMarked(c *gin.Context, apiKey *service.APIKey, account *service.Account, subscription *service.UserSubscription, model string, forwardErrored bool, cyberBlockKey string, channelFields service.ChannelUsageFields, requestPayloadHash string) {
+func (h *OpenAIGatewayHandler) recordCyberPolicyIfMarked(c *gin.Context, apiKey *service.APIKey, account *service.Account, subscription *service.UserSubscription, model string, forwardErrored bool, cyberBlockKey string, channelFields service.ChannelUsageFields, requestPayloadHash string, billingSnapshots ...cyberPolicyBillingSnapshot) {
 	mark := service.GetOpsCyberPolicy(c)
 	if mark == nil {
 		return
@@ -4011,8 +4088,14 @@ func (h *OpenAIGatewayHandler) recordCyberPolicyIfMarked(c *gin.Context, apiKey 
 		ClientIP:        clientIPStr,
 		CreatedAt:       time.Now(),
 	}
+	tokenReservation := service.TokenBillingReservationFromContext(requestCtx)
+	pricingAt := service.OpenAIPricingAtFromContext(requestCtx)
+	if len(billingSnapshots) > 0 {
+		tokenReservation = billingSnapshots[0].reservation
+		pricingAt = billingSnapshots[0].pricingAt
+	}
 	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		ctx, cancel := context.WithTimeout(service.WithTokenBillingReservation(context.Background(), tokenReservation), 30*time.Second)
 		defer cancel()
 		if cmSvc != nil {
 			cmSvc.RecordCyberPolicyEvent(ctx, service.CyberPolicyRecordInput{
@@ -4035,6 +4118,8 @@ func (h *OpenAIGatewayHandler) recordCyberPolicyIfMarked(c *gin.Context, apiKey 
 		if forwardErrored && gwSvc != nil {
 			gwSvc.RecordCyberPolicyUsageLog(ctx, service.CyberPolicyUsageInput{
 				APIKey:             apiKey,
+				TokenReservation:   tokenReservation,
+				PricingAt:          pricingAt,
 				Account:            account,
 				Subscription:       subscription,
 				RequestID:          requestID,

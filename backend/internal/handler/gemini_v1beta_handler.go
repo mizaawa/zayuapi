@@ -503,6 +503,25 @@ func (h *GatewayHandler) GeminiV1BetaModels(c *gin.Context) {
 		if fs.SwitchCount > 0 {
 			requestCtx = service.WithAccountSwitchCount(requestCtx, fs.SwitchCount, h.metadataBridgeEnabled())
 		}
+		admittedBody, tokenReservation, admissionErr := beginTokenAdmission(c, h.gatewayService, service.TokenAdmissionInput{
+			Body: body, Protocol: service.TokenAdmissionGemini, Model: reqModel,
+			APIKey: apiKey, Account: account, Subscription: subscription, PricingAt: pricingAt,
+			ChannelUsageFields:   clientRequestedUsageFields(c, channelMapping, reqModel, ""),
+			LongContextThreshold: 200000, LongContextMultiplier: 2,
+		})
+		if admissionErr != nil {
+			if accountReleaseFunc != nil {
+				accountReleaseFunc()
+			}
+			status, _, message := tokenAdmissionErrorDetails(admissionErr)
+			googleError(c, status, message)
+			return
+		}
+		defer func(reservation *service.TokenBillingReservation) {
+			_ = h.gatewayService.FinishTokenBilling(c.Request.Context(), reservation)
+		}(tokenReservation)
+		body = admittedBody
+		requestCtx = service.WithTokenBillingReservation(requestCtx, tokenReservation)
 		sessionGroupID := derefGroupID(apiKey.GroupID)
 		if account.Platform == service.PlatformAntigravity && account.Type != service.AccountTypeAPIKey {
 			result, err = h.antigravityGatewayService.ForwardGemini(
@@ -519,6 +538,7 @@ func (h *GatewayHandler) GeminiV1BetaModels(c *gin.Context) {
 		} else {
 			result, err = h.geminiCompatService.ForwardNative(requestCtx, c, account, modelName, action, stream, body)
 		}
+		finishGatewayTokenAttempt(c, h.gatewayService, tokenReservation, result, err)
 		if accountReleaseFunc != nil {
 			accountReleaseFunc()
 		}
@@ -574,6 +594,7 @@ func (h *GatewayHandler) GeminiV1BetaModels(c *gin.Context) {
 		h.submitUsageRecordTask(c.Request.Context(), func(ctx context.Context) {
 			if err := h.gatewayService.RecordUsageWithLongContext(ctx, &service.RecordUsageLongContextInput{
 				Result:                result,
+				TokenReservation:      tokenReservation,
 				QuotaPlatform:         quotaPlatform,
 				APIKey:                apiKey,
 				User:                  apiKey.User,

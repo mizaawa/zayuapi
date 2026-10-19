@@ -55,7 +55,7 @@ func (s *openAIResponsesRejectedFieldRetryState) remember(body []byte) {
 	s.seenBodyHashes[sha256.Sum256(body)] = struct{}{}
 }
 
-func normalizeOpenAIResponsesRejectedFieldRetryBody(statusCode int, body, responseBody []byte) ([]byte, string, bool, error) {
+func normalizeOpenAIResponsesRejectedFieldRetryBody(statusCode int, body, responseBody []byte, preserveOutputLimit ...bool) ([]byte, string, bool, error) {
 	if statusCode != http.StatusBadRequest || len(body) == 0 || len(responseBody) == 0 {
 		return nil, "", false, nil
 	}
@@ -74,6 +74,11 @@ func normalizeOpenAIResponsesRejectedFieldRetryBody(statusCode int, body, respon
 		return removeOpenAIResponsesRejectedNamespaceAtIndex(body, index)
 	}
 	if param == "max_output_tokens" && gjson.GetBytes(body, "max_output_tokens").Exists() {
+		if len(preserveOutputLimit) > 0 && preserveOutputLimit[0] {
+			// The reservation was priced against this bound. Keep the provider's
+			// rejection instead of retrying an unbounded inference.
+			return nil, "", false, nil
+		}
 		retryBody, err := sjson.DeleteBytes(body, "max_output_tokens")
 		if err != nil {
 			return nil, "", false, fmt.Errorf("delete rejected max_output_tokens: %w", err)

@@ -458,6 +458,24 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 			if fs.SwitchCount > 0 {
 				requestCtx = service.WithAccountSwitchCount(requestCtx, fs.SwitchCount, h.metadataBridgeEnabled())
 			}
+			admittedBody, tokenReservation, admissionErr := beginTokenAdmission(c, h.gatewayService, service.TokenAdmissionInput{
+				Body: body, Protocol: service.TokenAdmissionMessages, Model: reqModel,
+				APIKey: apiKey, Account: account, Subscription: subscription, PricingAt: pricingAt,
+				ChannelUsageFields: clientRequestedUsageFields(c, channelMapping, reqModel, ""),
+			})
+			if admissionErr != nil {
+				if accountReleaseFunc != nil {
+					accountReleaseFunc()
+				}
+				status, code, message := tokenAdmissionErrorDetails(admissionErr)
+				h.handleStreamingAwareError(c, status, code, message, streamStarted)
+				return
+			}
+			defer func(reservation *service.TokenBillingReservation) {
+				_ = h.gatewayService.FinishTokenBilling(c.Request.Context(), reservation)
+			}(tokenReservation)
+			body = admittedBody
+			requestCtx = c.Request.Context()
 			// 记录 Forward 前已写入字节数，Forward 后若增加则说明 SSE 内容已发，禁止 failover
 			writerSizeBeforeForward := c.Writer.Size()
 			if account.Platform == service.PlatformAntigravity {
@@ -475,6 +493,7 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 			} else {
 				result, err = h.geminiCompatService.Forward(requestCtx, c, account, body)
 			}
+			finishGatewayTokenAttempt(c, h.gatewayService, tokenReservation, result, err)
 			if accountReleaseFunc != nil {
 				accountReleaseFunc()
 			}
@@ -522,7 +541,9 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 					forwardFailedFields = append(forwardFailedFields, zap.Int64p("proxy_id", account.ProxyID))
 				}
 				reqLog.Error("gateway.forward_failed", forwardFailedFields...)
-				return
+				if tokenReservation == nil || !tokenGatewayHasUsage(result) {
+					return
+				}
 			}
 
 			// RPM 计数递增（Forward 成功后）
@@ -563,6 +584,7 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 			h.submitUsageRecordTask(c.Request.Context(), func(ctx context.Context) {
 				if err := h.gatewayService.RecordUsage(ctx, &service.RecordUsageInput{
 					Result:             result,
+					TokenReservation:   tokenReservation,
 					QuotaPlatform:      quotaPlatform,
 					APIKey:             apiKey,
 					User:               apiKey.User,
@@ -852,6 +874,27 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 			if fs.ForceCacheBilling {
 				requestCtx = service.WithForceCacheBilling(requestCtx)
 			}
+			admittedBody, tokenReservation, admissionErr := beginTokenAdmission(c, h.gatewayService, service.TokenAdmissionInput{
+				Body: attemptBody, Protocol: service.TokenAdmissionMessages, Model: reqModel,
+				APIKey: currentAPIKey, Account: account, Subscription: currentSubscription, PricingAt: pricingAt,
+				ChannelUsageFields: clientRequestedUsageFields(c, channelMapping, reqModel, ""),
+			})
+			if admissionErr != nil {
+				if accountReleaseFunc != nil {
+					accountReleaseFunc()
+				}
+				status, code, message := tokenAdmissionErrorDetails(admissionErr)
+				h.handleStreamingAwareError(c, status, code, message, streamStarted)
+				return
+			}
+			defer func(reservation *service.TokenBillingReservation) {
+				_ = h.gatewayService.FinishTokenBilling(c.Request.Context(), reservation)
+			}(tokenReservation)
+			attemptBody = admittedBody
+			if parseErr := attemptParsedReq.ReplaceBody(attemptBody); parseErr != nil {
+				return
+			}
+			requestCtx = service.WithTokenBillingReservation(requestCtx, tokenReservation)
 			// 记录 Forward 前已写入字节数，Forward 后若增加则说明 SSE 内容已发，禁止 failover
 			writerSizeBeforeForward := c.Writer.Size()
 			if account.Platform == service.PlatformAntigravity && account.Type != service.AccountTypeAPIKey {
@@ -859,6 +902,8 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 			} else {
 				result, err = h.gatewayService.Forward(requestCtx, c, account, attemptParsedReq)
 			}
+
+			finishGatewayTokenAttempt(c, h.gatewayService, tokenReservation, result, err)
 
 			// 兜底释放串行锁（正常情况已通过回调提前释放）
 			if queueRelease != nil {
@@ -902,6 +947,7 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 				h.submitUsageRecordTask(c.Request.Context(), func(ctx context.Context) {
 					if err := h.gatewayService.RecordUsage(ctx, &service.RecordUsageInput{
 						Result:             result,
+						TokenReservation:   tokenReservation,
 						QuotaPlatform:      quotaPlatform,
 						APIKey:             currentAPIKey,
 						User:               currentAPIKey.User,

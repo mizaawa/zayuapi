@@ -1062,6 +1062,13 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 			//     extractOpenAIServiceTierFromBody 返回 nil；这里有意
 			//     覆盖（Store(nil)），因为 OpenAI 上游对该帧实际不传
 			//     service_tier 时清除上一轮请求元数据；计费独立使用上游回显。
+			if policyErr == nil && blocked == nil && isResponseCreate && hooks != nil && hooks.AdmitRequest != nil {
+				admitted, admissionErr := hooks.AdmitRequest(turnNo, out, requestModelForThisFrame)
+				if admissionErr != nil {
+					return out, nil, admissionErr
+				}
+				out = admitted
+			}
 			if policyErr == nil && blocked == nil && isResponseCreate {
 				usageMeta.updateFromResponseCreate(out, model, requestModelForThisFrame)
 				acceptedTurn = true
@@ -1083,6 +1090,13 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 		},
 	}
 	upstreamFirstMessageSent := false
+	if hooks != nil && hooks.AdmitRequest != nil {
+		admitted, admissionErr := hooks.AdmitRequest(1, firstClientMessage, initialRequestModel)
+		if admissionErr != nil {
+			return admissionErr
+		}
+		firstClientMessage = admitted
+	}
 	firstWriteCtx, cancelFirstWrite := context.WithTimeout(ctx, s.openAIWSWriteTimeout())
 	firstWriteErr := relayUpstreamFrameConn.WriteFrame(firstWriteCtx, coderws.MessageText, firstClientMessage)
 	cancelFirstWrite()

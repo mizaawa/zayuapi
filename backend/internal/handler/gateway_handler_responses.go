@@ -259,6 +259,29 @@ func (h *GatewayHandler) Responses(c *gin.Context) {
 		if channelMapping.Mapped {
 			forwardBody = h.gatewayService.ReplaceModelInBody(body, channelMapping.MappedModel)
 		}
+		admittedBody, tokenReservation, admissionErr := beginTokenAdmission(c, h.gatewayService, service.TokenAdmissionInput{
+			Body: forwardBody, Protocol: service.TokenAdmissionResponses, Model: reqModel,
+			APIKey: apiKey, Account: account, Subscription: subscription, PricingAt: pricingAt,
+			ChannelUsageFields: clientRequestedUsageFields(c, channelMapping, reqModel, ""),
+		})
+		if admissionErr != nil {
+			if accountReleaseFunc != nil {
+				accountReleaseFunc()
+			}
+			status, code, message := tokenAdmissionErrorDetails(admissionErr)
+			h.responsesErrorResponse(c, status, code, message)
+			return
+		}
+		defer func(reservation *service.TokenBillingReservation) {
+			_ = h.gatewayService.FinishTokenBilling(c.Request.Context(), reservation)
+		}(tokenReservation)
+		forwardBody = admittedBody
+		requestCtx = c.Request.Context()
+		if parsedReq != nil {
+			if parseErr := parsedReq.ReplaceBody(forwardBody); parseErr != nil {
+				return
+			}
+		}
 		var result *service.ForwardResult
 		setActualUpstreamEndpoint(c, "")
 		if shouldUseAntigravityCompat(account) {
@@ -275,13 +298,14 @@ func (h *GatewayHandler) Responses(c *gin.Context) {
 			result, err = h.gatewayService.ForwardAsResponses(requestCtx, c, account, forwardBody, parsedReq)
 		}
 
+		finishGatewayTokenAttempt(c, h.gatewayService, tokenReservation, result, err)
 		if accountReleaseFunc != nil {
 			accountReleaseFunc()
 		}
 
 		if err != nil {
 			var failoverErr *service.UpstreamFailoverError
-			if errors.As(err, &failoverErr) {
+			if errors.As(err, &failoverErr) && !(tokenReservation != nil && tokenGatewayHasUsage(result)) {
 				// Can't failover if streaming content already sent
 				if c.Writer.Size() != writerSizeBeforeForward {
 					h.handleResponsesFailoverExhausted(c, failoverErr, true)
@@ -310,7 +334,7 @@ func (h *GatewayHandler) Responses(c *gin.Context) {
 				zap.Bool("upstream_error_response_already_written", upstreamErrorAlreadyCommunicated),
 				zap.Error(err),
 			)
-			if !gatewayCompatibilityHasBillablePartialUsage(c, result, err, writerSizeBeforeForward) {
+			if !gatewayCompatibilityHasBillablePartialUsage(c, result, err, writerSizeBeforeForward) && !(tokenReservation != nil && tokenGatewayHasUsage(result)) {
 				return
 			}
 		}
@@ -327,6 +351,7 @@ func (h *GatewayHandler) Responses(c *gin.Context) {
 		h.submitUsageRecordTask(c.Request.Context(), func(ctx context.Context) {
 			if err := h.gatewayService.RecordUsage(ctx, &service.RecordUsageInput{
 				Result:             result,
+				TokenReservation:   tokenReservation,
 				QuotaPlatform:      quotaPlatform,
 				APIKey:             apiKey,
 				User:               apiKey.User,

@@ -83,7 +83,7 @@ func TestGatewayCompatHandlersBillOnlyCommittedPartialUsage(t *testing.T) {
 					h := NewGatewayHandler(gateway, nil, nil, nil, nil, service.NewConcurrencyService(nil), billingCache, nil,
 						service.NewAPIKeyService(nil, nil, nil, nil, nil, nil, cfg), pool, nil, nil, nil, cfg, nil)
 					groupID := int64(2)
-					key := &service.APIKey{ID: 99, GroupID: &groupID, Group: group, FailoverActive: true,
+					key := &service.APIKey{ID: 99, UserID: 100, GroupID: &groupID, Group: group, FailoverActive: true,
 						User: &service.User{ID: 100, Status: service.StatusActive, Balance: 100}}
 					path, body := "/v1/responses", `{"model":"claude-sonnet-4.5","stream":STREAM,"input":"hello"}`
 					if protocol == "chat" {
@@ -104,7 +104,7 @@ func TestGatewayCompatHandlersBillOnlyCommittedPartialUsage(t *testing.T) {
 					require.Equal(t, 1, upstream.calls, recorder.Body.String())
 					require.True(t, service.APIKeyFailoverAttemptFailed(ctx))
 					require.NotContains(t, recorder.Body.String(), "response.completed")
-					if !stream || !partial {
+					if !partial {
 						require.Empty(t, billingRepo.commands)
 						require.Empty(t, usageRepo.created)
 						require.Equal(t, "application/json; charset=utf-8", recorder.Header().Get("Content-Type"))
@@ -112,8 +112,8 @@ func TestGatewayCompatHandlersBillOnlyCommittedPartialUsage(t *testing.T) {
 					}
 					require.Len(t, billingRepo.commands, 1)
 					cmd := billingRepo.commands[0]
-					require.Equal(t, "client:compat-partial-request", cmd.RequestID)
-					require.Equal(t, service.HashUsageRequestPayload([]byte(body)), cmd.RequestPayloadHash)
+					require.Equal(t, billingRepo.tokenBilling.reserved[0].ID, cmd.RequestID)
+					require.Equal(t, billingRepo.tokenBilling.reserved[0].Quote.Command.RequestPayloadHash, cmd.RequestPayloadHash)
 					require.Positive(t, cmd.BalanceCost)
 					select {
 					case usage := <-usageRepo.created:
@@ -126,7 +126,9 @@ func TestGatewayCompatHandlersBillOnlyCommittedPartialUsage(t *testing.T) {
 					default:
 						t.Fatal("missing partial usage log")
 					}
-					if protocol == "responses" {
+					if !stream {
+						require.Equal(t, "application/json; charset=utf-8", recorder.Header().Get("Content-Type"))
+					} else if protocol == "responses" {
 						require.Equal(t, 1, strings.Count(recorder.Body.String(), "event: response.failed"))
 					} else {
 						require.Equal(t, 1, strings.Count(recorder.Body.String(), `"error":`))

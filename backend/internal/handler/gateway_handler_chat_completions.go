@@ -263,6 +263,28 @@ func (h *GatewayHandler) ChatCompletions(c *gin.Context) {
 		if channelMapping.Mapped {
 			forwardBody = h.gatewayService.ReplaceModelInBody(body, channelMapping.MappedModel)
 		}
+		admittedBody, tokenReservation, admissionErr := beginTokenAdmission(c, h.gatewayService, service.TokenAdmissionInput{
+			Body: forwardBody, Protocol: service.TokenAdmissionChat, Model: reqModel,
+			APIKey: apiKey, Account: account, Subscription: subscription, PricingAt: pricingAt,
+			ChannelUsageFields: clientRequestedUsageFields(c, channelMapping, reqModel, ""),
+		})
+		if admissionErr != nil {
+			if accountReleaseFunc != nil {
+				accountReleaseFunc()
+			}
+			status, code, message := tokenAdmissionErrorDetails(admissionErr)
+			h.chatCompletionsErrorResponse(c, status, code, message)
+			return
+		}
+		defer func(reservation *service.TokenBillingReservation) {
+			_ = h.gatewayService.FinishTokenBilling(c.Request.Context(), reservation)
+		}(tokenReservation)
+		forwardBody = admittedBody
+		if parsedReq != nil {
+			if parseErr := parsedReq.ReplaceBody(forwardBody); parseErr != nil {
+				return
+			}
+		}
 		var result *service.ForwardResult
 		setActualUpstreamEndpoint(c, "")
 		if account.Platform == service.PlatformGemini {
@@ -288,13 +310,14 @@ func (h *GatewayHandler) ChatCompletions(c *gin.Context) {
 			result, err = h.gatewayService.ForwardAsChatCompletions(c.Request.Context(), c, account, forwardBody, parsedReq)
 		}
 
+		finishGatewayTokenAttempt(c, h.gatewayService, tokenReservation, result, err)
 		if accountReleaseFunc != nil {
 			accountReleaseFunc()
 		}
 
 		if err != nil {
 			var failoverErr *service.UpstreamFailoverError
-			if errors.As(err, &failoverErr) {
+			if errors.As(err, &failoverErr) && !(tokenReservation != nil && tokenGatewayHasUsage(result)) {
 				if c.Writer.Size() != writerSizeBeforeForward {
 					h.handleCCFailoverExhausted(c, failoverErr, true)
 					return
@@ -322,7 +345,7 @@ func (h *GatewayHandler) ChatCompletions(c *gin.Context) {
 				zap.Bool("upstream_error_response_already_written", upstreamErrorAlreadyCommunicated),
 				zap.Error(err),
 			)
-			if !gatewayCompatibilityHasBillablePartialUsage(c, result, err, writerSizeBeforeForward) {
+			if !gatewayCompatibilityHasBillablePartialUsage(c, result, err, writerSizeBeforeForward) && !(tokenReservation != nil && tokenGatewayHasUsage(result)) {
 				return
 			}
 		}
@@ -339,6 +362,7 @@ func (h *GatewayHandler) ChatCompletions(c *gin.Context) {
 		h.submitUsageRecordTask(c.Request.Context(), func(ctx context.Context) {
 			if err := h.gatewayService.RecordUsage(ctx, &service.RecordUsageInput{
 				Result:             result,
+				TokenReservation:   tokenReservation,
 				QuotaPlatform:      quotaPlatform,
 				APIKey:             apiKey,
 				User:               apiKey.User,

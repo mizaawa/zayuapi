@@ -569,6 +569,13 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 					return fmt.Errorf("resolve Grok websocket cache identity: %w", err)
 				}
 			}
+			if hooks != nil && hooks.AdmitRequest != nil {
+				admitted, admissionErr := hooks.AdmitRequest(turn, bridgePayloadRaw, currentBridgePayload.originalModel)
+				if admissionErr != nil {
+					return admissionErr
+				}
+				bridgePayloadRaw, bridgePayloadBytes = admitted, len(admitted)
+			}
 			result, bridgeErr := s.proxyOpenAIWSHTTPBridgeTurn(
 				ctx,
 				c,
@@ -1576,6 +1583,13 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 			)
 		}
 
+		if hooks != nil && hooks.AdmitRequest != nil {
+			admitted, admissionErr := hooks.AdmitRequest(turn, currentPayload, currentOriginalModel)
+			if admissionErr != nil {
+				return admissionErr
+			}
+			currentPayload, currentPayloadBytes = admitted, len(admitted)
+		}
 		result, relayErr := sendAndRelay(turn, sessionLease, currentPayload, currentPayloadBytes, currentOriginalModel, currentImageBillingModel, currentImageSizeTier, currentImageInputSize)
 		if relayErr != nil {
 			lastTurnClean = false

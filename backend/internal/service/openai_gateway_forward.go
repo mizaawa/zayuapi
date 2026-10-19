@@ -917,7 +917,7 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 				}
 				logger.LegacyPrintf("service.openai_gateway", "[OpenAI] Skip non-WSv2 invalid_encrypted_content retry because encrypted reasoning items are missing (account: %s)", account.Name)
 			}
-			if retryBody, reason, changed, retryErr := normalizeOpenAIResponsesRejectedFieldRetryBody(resp.StatusCode, body, respBody); retryErr != nil && !APIKeyFailoverAttemptEnabled(ctx) {
+			if retryBody, reason, changed, retryErr := normalizeOpenAIResponsesRejectedFieldRetryBody(resp.StatusCode, body, respBody, TokenBillingReservationFromContext(ctx) != nil && account.Type != AccountTypeOAuth); retryErr != nil && !APIKeyFailoverAttemptEnabled(ctx) {
 				return nil, fmt.Errorf("normalize rejected Responses field retry body: %w", retryErr)
 			} else if !APIKeyFailoverAttemptEnabled(ctx) && changed && rejectedFieldRetryState.Allow(retryBody) {
 				body = retryBody
@@ -1036,6 +1036,11 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 
 // Failed streams that cannot be replayed must retain reported usage for billing.
 func preserveOpenAIStreamingUsage(c *gin.Context, writerSizeBeforeStream int, usage *OpenAIUsage, err error) bool {
+	if tokenAdmissionRetainsOpenAIUsage(c, usage) {
+		// An admitted request must settle every reported provider receipt, even
+		// when the buffered error prevented delivery to the client.
+		return true
+	}
 	var failoverErr *UpstreamFailoverError
 	return c != nil && c.Writer != nil && c.Writer.Status() < 400 &&
 		OpenAICompactKeepaliveAdjustedWrittenSize(c) > writerSizeBeforeStream && GetOpsCyberPolicy(c) == nil &&

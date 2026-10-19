@@ -236,6 +236,13 @@ func (s *GatewayService) handleCCBufferedFromAnthropic(
 
 	var finalResp *apicompat.AnthropicResponse
 	var usage ClaudeUsage
+	resultForFailure := func() *ForwardResult {
+		if TokenBillingReservationFromContext(ginRequestContext(c)) == nil ||
+			(usage.InputTokens == 0 && usage.OutputTokens == 0 && usage.CacheCreationInputTokens == 0 && usage.CacheReadInputTokens == 0) {
+			return nil
+		}
+		return &ForwardResult{RequestID: requestID, Usage: usage, Model: originalModel, UpstreamModel: mappedModel, ReasoningEffort: reasoningEffort, Stream: false, Duration: time.Since(startTime)}
+	}
 	sawTerminalEvent := false
 
 	for scanner.Scan() {
@@ -258,9 +265,9 @@ func (s *GatewayService) handleCCBufferedFromAnthropic(
 			failure, message := s.anthropicCompatibilityStreamFailure(c, resp, []byte(payload), nil)
 			if !failure.ShouldRetryNextAccount() && !APIKeyFailoverAttemptEnabled(ginRequestContext(c)) {
 				writeGatewayCCError(c, mapUpstreamStatusCode(failure.StatusCode), "upstream_error", message)
-				return nil, fmt.Errorf("upstream response failed: %s", message)
+				return resultForFailure(), fmt.Errorf("upstream response failed: %s", message)
 			}
-			return nil, failure
+			return resultForFailure(), failure
 		}
 
 		var event apicompat.AnthropicStreamEvent
@@ -304,7 +311,7 @@ func (s *GatewayService) handleCCBufferedFromAnthropic(
 
 	if finalResp == nil || !sawTerminalEvent {
 		failure, _ := s.anthropicCompatibilityStreamFailure(c, resp, nil, scanner.Err())
-		return nil, failure
+		return resultForFailure(), failure
 	}
 
 	// Update usage from accumulated delta

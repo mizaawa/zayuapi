@@ -242,6 +242,23 @@ func (h *OpenAIGatewayHandler) ChatCompletions(c *gin.Context) {
 			forwardBody = h.gatewayService.ReplaceModelInBody(body, channelMapping.MappedModel)
 		}
 		writerSizeBeforeForward := c.Writer.Size()
+		admittedBody, tokenReservation, admissionErr := beginTokenAdmission(c, h.gatewayService, service.TokenAdmissionInput{
+			Body: forwardBody, Protocol: service.TokenAdmissionChat, Model: reqModel,
+			APIKey: apiKey, Account: account, Subscription: subscription, PricingAt: pricingAt,
+			ChannelUsageFields: clientRequestedUsageFields(c, channelMapping, reqModel, ""),
+		})
+		if admissionErr != nil {
+			if accountReleaseFunc != nil {
+				accountReleaseFunc()
+			}
+			status, code, message := tokenAdmissionErrorDetails(admissionErr)
+			h.handleStreamingAwareError(c, status, code, message, streamStarted)
+			return
+		}
+		defer func(reservation *service.TokenBillingReservation) {
+			_ = h.gatewayService.FinishTokenBilling(c.Request.Context(), reservation)
+		}(tokenReservation)
+		forwardBody = admittedBody
 		result, err := func() (*service.OpenAIForwardResult, error) {
 			defer func() {
 				if accountReleaseFunc != nil {
@@ -250,6 +267,7 @@ func (h *OpenAIGatewayHandler) ChatCompletions(c *gin.Context) {
 			}()
 			return h.gatewayService.ForwardAsChatCompletions(c.Request.Context(), c, account, forwardBody, promptCacheKey, "")
 		}()
+		finishOpenAITokenAttempt(c, h.gatewayService, tokenReservation, result, err)
 		cyberBlockKeyChat := ""
 		if service.GetOpsCyberPolicy(c) != nil {
 			cyberBlockKeyChat = service.CyberSessionBlockKey(apiKey.ID, c, body)
@@ -267,7 +285,7 @@ func (h *OpenAIGatewayHandler) ChatCompletions(c *gin.Context) {
 			service.SetOpsLatencyMs(c, service.OpsTimeToFirstTokenMsKey, int64(*result.FirstTokenMs))
 		}
 		if err != nil {
-			if result != nil && (result.ImageCount > 0 || openAIForwardHasBillablePartialUsage(c, result, err, writerSizeBeforeForward)) {
+			if result != nil && (result.ImageCount > 0 || openAIForwardHasBillablePartialUsage(c, result, err, writerSizeBeforeForward) || (tokenReservation != nil && result.Usage.HasTokens() && service.GetOpsCyberPolicy(c) == nil)) {
 				service.RecordAPIKeyFailoverUpstreamFailure(c.Request.Context(), http.StatusBadGateway, []byte(err.Error()))
 				if !openAIForwardErrorAlreadyCommunicated(c, writerSizeBeforeForward, err) {
 					if !h.ensureOpenAIStreamReadErrorResponse(c, err, streamStarted) {
@@ -378,6 +396,7 @@ func (h *OpenAIGatewayHandler) ChatCompletions(c *gin.Context) {
 		h.submitOpenAIUsageRecordTask(c.Request.Context(), result, func(ctx context.Context) {
 			if err := h.gatewayService.RecordUsage(ctx, &service.OpenAIRecordUsageInput{
 				Result:             result,
+				TokenReservation:   tokenReservation,
 				APIKey:             apiKey,
 				User:               apiKey.User,
 				Account:            account,

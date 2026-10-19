@@ -281,7 +281,8 @@ func (s *AntigravityGatewayService) Forward(ctx context.Context, c *gin.Context,
 		// Budget 整流：检测 budget_tokens 约束错误并自动修正重试
 		if resp.StatusCode == http.StatusBadRequest && respBody != nil && !isSignatureRelatedError(respBody) {
 			errMsg := strings.TrimSpace(extractAntigravityErrorMessage(respBody))
-			if isThinkingBudgetConstraintError(errMsg) && s.settingService.IsBudgetRectifierEnabled(ctx) {
+			// A retry must not raise the financially admitted output cap.
+			if TokenBillingReservationFromContext(ctx) == nil && isThinkingBudgetConstraintError(errMsg) && s.settingService.IsBudgetRectifierEnabled(ctx) {
 				appendOpsUpstreamError(c, OpsUpstreamErrorEvent{
 					Platform:           account.Platform,
 					AccountID:          account.ID,

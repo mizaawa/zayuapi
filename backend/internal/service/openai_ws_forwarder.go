@@ -223,7 +223,11 @@ type OpenAIWSIngressHooks struct {
 	// MapRequestModel resolves the current turn's client model to the model
 	// that must be written into the upstream response.create frame.
 	MapRequestModel func(turn int, originalModel string) (string, error)
-	AfterTurn       func(turn int, result *OpenAIForwardResult, turnErr error)
+	// AdmitRequest runs on the final outbound body before each response.create.
+	// It may enforce output bounds and must finish billing admission before
+	// returning. Repeated calls for an internal retry use the same turn number.
+	AdmitRequest func(turn int, payload []byte, originalModel string) ([]byte, error)
+	AfterTurn    func(turn int, result *OpenAIForwardResult, turnErr error)
 }
 
 func (s *OpenAIGatewayService) getOpenAIWSConnPool() *openAIWSConnPool {

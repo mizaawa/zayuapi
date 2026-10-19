@@ -43,6 +43,7 @@ type partialUsageBillingRepo struct {
 	reservations map[string]*service.MediaBillingReservation
 	refunded     int
 	bindMediaErr error
+	tokenBilling tokenHandlerBillingRepo
 }
 
 func (r *partialUsageBillingRepo) Apply(_ context.Context, cmd *service.UsageBillingCommand) (*service.UsageBillingApplyResult, error) {
@@ -104,7 +105,7 @@ func TestOpenAIHandlersBillCommittedPartialUsage(t *testing.T) {
 				h := NewOpenAIGatewayHandler(gateway, service.NewConcurrencyService(nil), billingCache,
 					service.NewAPIKeyService(nil, nil, nil, nil, nil, nil, cfg), pool, nil, nil, nil, cfg)
 				groupID := int64(2)
-				key := &service.APIKey{ID: 99, GroupID: &groupID, FailoverActive: true,
+				key := &service.APIKey{ID: 99, UserID: 100, GroupID: &groupID, FailoverActive: true,
 					Group: &service.Group{ID: 2, Platform: service.PlatformOpenAI, RateMultiplier: 4, AllowMessagesDispatch: true},
 					User:  &service.User{ID: 100, Status: service.StatusActive, Balance: 100},
 				}
@@ -137,16 +138,13 @@ func TestOpenAIHandlersBillCommittedPartialUsage(t *testing.T) {
 					h.Responses(c)
 				}
 				require.Equal(t, 1, upstream.calls, recorder.Body.String())
-				if beforeOutput {
-					require.Empty(t, billingRepo.commands)
-					require.Empty(t, usageRepo.created)
-					return
+				if !beforeOutput {
+					require.Contains(t, recorder.Body.String(), "partial")
 				}
-				require.Contains(t, recorder.Body.String(), "partial")
 				require.Len(t, billingRepo.commands, 1)
 				cmd := billingRepo.commands[0]
-				require.Equal(t, "client:partial-request", cmd.RequestID)
-				require.Equal(t, service.HashUsageRequestPayload([]byte(body)), cmd.RequestPayloadHash)
+				require.Equal(t, billingRepo.tokenBilling.reserved[0].ID, cmd.RequestID)
+				require.Equal(t, billingRepo.tokenBilling.reserved[0].Quote.Command.RequestPayloadHash, cmd.RequestPayloadHash)
 				require.Positive(t, cmd.BalanceCost)
 				select {
 				case usage := <-usageRepo.created:
