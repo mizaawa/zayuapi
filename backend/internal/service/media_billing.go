@@ -61,6 +61,8 @@ type MediaBillingRepository interface {
 	RefundMediaQueue(context.Context, string, bool) (*MediaBillingReservation, error)
 }
 
+const mediaStatusFailureGracePeriod = 30 * time.Minute
+
 func (s *OpenAIGatewayService) PrechargeMedia(ctx context.Context, input *OpenAIRecordUsageInput) (*MediaBillingReservation, error) {
 	if s.cfg != nil && s.cfg.RunMode == config.RunModeSimple {
 		return nil, nil
@@ -531,6 +533,8 @@ func (s *OpenAIGatewayService) reconcilePendingMedia(ctx context.Context, r *Med
 	}
 	account, err := s.accountRepo.GetByID(ctx, r.Quote.Command.AccountID)
 	if err != nil {
+		// A missing account does not tell us whether the provider completed the
+		// task. Keep retrying until status or content can establish an outcome.
 		return err
 	}
 	recorder := httptest.NewRecorder()
@@ -544,14 +548,45 @@ func (s *OpenAIGatewayService) reconcilePendingMedia(ctx context.Context, r *Med
 		result, err = s.ForwardGrokMedia(ctx, c, account, GrokMediaEndpointVideoStatus, r.TaskID, nil, "")
 	}
 	if err != nil {
-		return err
+		return s.recoverMediaStatusFailure(ctx, r, account, err)
 	}
 	if result == nil {
-		return fmt.Errorf("empty video status")
+		return s.recoverMediaStatusFailure(ctx, r, account, fmt.Errorf("empty video status"))
 	}
 	body := result.BufferedResponseBody
 	if len(body) == 0 {
 		body = recorder.Body.Bytes()
 	}
 	return s.settleMediaStatus(ctx, r, body)
+}
+
+func mediaStatusFailureGraceElapsed(r *MediaBillingReservation, now time.Time) bool {
+	if r == nil || r.Quote.Usage.CreatedAt.IsZero() {
+		return false
+	}
+	createdAt := r.Quote.Usage.CreatedAt
+	return !createdAt.After(now) && now.Sub(createdAt) >= mediaStatusFailureGracePeriod
+}
+
+func (s *OpenAIGatewayService) recoverMediaStatusFailure(ctx context.Context, r *MediaBillingReservation, account *Account, statusErr error) error {
+	if !mediaStatusFailureGraceElapsed(r, time.Now()) {
+		return statusErr
+	}
+	// Seedance has no separate content endpoint. For compatible video APIs,
+	// the content route can still confirm a completed task even while status
+	// polling is unavailable; successful retrieval settles only the admission
+	// quote because no authoritative usage metadata could be fetched.
+	if r.Endpoint.IsSeedance() {
+		return s.RefundMedia(ctx, r.ID)
+	}
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Set("media_billing_buffer", true)
+	c.Request, _ = http.NewRequestWithContext(ctx, http.MethodGet, "/v1/videos/"+r.TaskID+"/content", nil)
+	result, err := s.ForwardGrokMedia(ctx, c, account, GrokMediaEndpointVideoContent, r.TaskID, nil, "")
+	if err != nil || result == nil || !c.GetBool(GrokMediaContentCompleteKey) || recorder.Code < http.StatusOK || recorder.Code >= http.StatusMultipleChoices || recorder.Body.Len() == 0 || isVideoContentJSONResponse(&http.Response{Header: result.ResponseHeaders}) {
+		return s.RefundMedia(ctx, r.ID)
+	}
+	quote := r.Quote
+	return s.settleMediaQuote(ctx, r, &quote)
 }
