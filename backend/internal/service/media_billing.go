@@ -568,6 +568,24 @@ func mediaStatusFailureGraceElapsed(r *MediaBillingReservation, now time.Time) b
 	return !createdAt.After(now) && now.Sub(createdAt) >= mediaStatusFailureGracePeriod
 }
 
+// Media recovery only needs to know whether the content endpoint returned a
+// complete non-empty file. Discard bytes so a large video is never buffered in
+// memory by the background reconciler.
+type mediaRecoveryDiscardWriter struct {
+	gin.ResponseWriter
+	written int64
+}
+
+func (w *mediaRecoveryDiscardWriter) Write(p []byte) (int, error) {
+	w.written += int64(len(p))
+	return len(p), nil
+}
+
+func (w *mediaRecoveryDiscardWriter) WriteString(p string) (int, error) {
+	w.written += int64(len(p))
+	return len(p), nil
+}
+
 func (s *OpenAIGatewayService) recoverMediaStatusFailure(ctx context.Context, r *MediaBillingReservation, account *Account, statusErr error) error {
 	if !mediaStatusFailureGraceElapsed(r, time.Now()) {
 		return statusErr
@@ -581,10 +599,12 @@ func (s *OpenAIGatewayService) recoverMediaStatusFailure(ctx context.Context, r 
 	}
 	recorder := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(recorder)
+	discard := &mediaRecoveryDiscardWriter{ResponseWriter: c.Writer}
+	c.Writer = discard
 	c.Set("media_billing_buffer", true)
 	c.Request, _ = http.NewRequestWithContext(ctx, http.MethodGet, "/v1/videos/"+r.TaskID+"/content", nil)
 	result, err := s.ForwardGrokMedia(ctx, c, account, GrokMediaEndpointVideoContent, r.TaskID, nil, "")
-	if err != nil || result == nil || !c.GetBool(GrokMediaContentCompleteKey) || recorder.Code < http.StatusOK || recorder.Code >= http.StatusMultipleChoices || recorder.Body.Len() == 0 || isVideoContentJSONResponse(&http.Response{Header: result.ResponseHeaders}) {
+	if err != nil || result == nil || !c.GetBool(GrokMediaContentCompleteKey) || recorder.Code < http.StatusOK || recorder.Code >= http.StatusMultipleChoices || discard.written == 0 || isVideoContentJSONResponse(&http.Response{Header: result.ResponseHeaders}) {
 		return s.RefundMedia(ctx, r.ID)
 	}
 	quote := r.Quote
