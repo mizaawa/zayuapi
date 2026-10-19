@@ -266,7 +266,7 @@ func (r *usageBillingRepository) SettleToken(ctx context.Context, id string) (*s
 	if row.state == "settled" && (row.kind == "actual" || row.final == nil || row.final.Maximum) {
 		return result, nil
 	}
-	if row.state != "dispatched" && !(row.state == "settled" && row.kind == "maximum" && row.final != nil) {
+	if row.state != "dispatched" && (row.state != "settled" || row.kind != "maximum" || row.final == nil) {
 		return nil, service.ErrUsageBillingRequestConflict
 	}
 	quote := row.final
