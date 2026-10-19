@@ -46,7 +46,11 @@ func NewTurnstileService(settingService *SettingService, verifier TurnstileVerif
 // VerifyToken 验证 Turnstile token
 func (s *TurnstileService) VerifyToken(ctx context.Context, token string, remoteIP string) error {
 	// 检查是否启用 Turnstile
-	if !s.settingService.IsTurnstileEnabled(ctx) {
+	enabled, err := s.IsEnabled(ctx)
+	if err != nil {
+		return err
+	}
+	if !enabled {
 		logger.LegacyPrintf("service.turnstile", "%s", "[Turnstile] Disabled, skipping verification")
 		return nil
 	}
@@ -87,8 +91,12 @@ func (s *TurnstileService) VerifyTokenWithSecret(ctx context.Context, secretKey,
 	return nil
 }
 
-// IsEnabled 检查 Turnstile 是否启用
-func (s *TurnstileService) IsEnabled(ctx context.Context) bool {
+// IsEnabled reports whether Turnstile is enabled and surfaces configuration
+// read errors instead of treating them as a disabled security control.
+func (s *TurnstileService) IsEnabled(ctx context.Context) (bool, error) {
+	if s == nil || s.settingService == nil {
+		return false, infraerrors.ServiceUnavailable("CAPTCHA_SETTINGS_UNAVAILABLE", "captcha settings unavailable")
+	}
 	return s.settingService.IsTurnstileEnabled(ctx)
 }
 

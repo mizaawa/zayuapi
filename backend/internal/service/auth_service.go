@@ -504,10 +504,10 @@ func (s *AuthService) VerifyTurnstile(ctx context.Context, token string, remoteI
 	return s.VerifyCaptcha(ctx, CaptchaProof{TurnstileToken: token}, remoteIP)
 }
 
-// IsTurnstileEnabled 检查是否启用Turnstile验证
-func (s *AuthService) IsTurnstileEnabled(ctx context.Context) bool {
+// IsTurnstileEnabled reports the Turnstile switch and propagates read errors.
+func (s *AuthService) IsTurnstileEnabled(ctx context.Context) (bool, error) {
 	if s.turnstileService == nil {
-		return false
+		return false, infraerrors.ServiceUnavailable("CAPTCHA_SETTINGS_UNAVAILABLE", "captcha settings unavailable")
 	}
 	return s.turnstileService.IsEnabled(ctx)
 }

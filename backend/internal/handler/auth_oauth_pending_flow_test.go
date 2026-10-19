@@ -2288,6 +2288,95 @@ func TestBindOIDCOAuthLoginReturns2FAChallengeWhenUserHasTotp(t *testing.T) {
 	require.Nil(t, storedSession.ConsumedAt)
 }
 
+func TestBindOIDCOAuthLoginFailsClosedWhenTotpSettingCannotBeRead(t *testing.T) {
+	handler, client := newOAuthPendingFlowTestHandlerWithDependencies(t, oauthPendingFlowTestHandlerOptions{
+		totpSettingErr: errors.New("settings database unavailable"),
+	})
+	ctx := context.Background()
+
+	passwordHash, err := handler.authService.HashPassword("secret-123")
+	require.NoError(t, err)
+	user, err := client.User.Create().
+		SetEmail("owner@example.com").
+		SetUsername("owner-user").
+		SetPasswordHash(passwordHash).
+		SetRole(service.RoleUser).
+		SetStatus(service.StatusActive).
+		SetTotpEnabled(true).
+		SetTotpSecretEncrypted("encrypted-totp-secret").
+		Save(ctx)
+	require.NoError(t, err)
+
+	sessionToken := "bind-login-settings-error-session"
+	browserSessionKey := "bind-login-settings-error-browser"
+	session, err := client.PendingAuthSession.Create().
+		SetSessionToken(sessionToken).
+		SetIntent("adopt_existing_user_by_email").
+		SetProviderType("oidc").
+		SetProviderKey("https://issuer.example").
+		SetProviderSubject("oidc-settings-error").
+		SetTargetUserID(user.ID).
+		SetResolvedEmail(user.Email).
+		SetBrowserSessionKey(browserSessionKey).
+		SetUpstreamIdentityClaims(map[string]any{"suggested_display_name": "Owner"}).
+		SetExpiresAt(time.Now().UTC().Add(10 * time.Minute)).
+		Save(ctx)
+	require.NoError(t, err)
+
+	body := bytes.NewBufferString(`{"email":"owner@example.com","password":"secret-123","adopt_display_name":false,"adopt_avatar":false}`)
+	recorder := httptest.NewRecorder()
+	ginCtx, _ := gin.CreateTestContext(recorder)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/oauth/oidc/bind-login", body)
+	req.Header.Set("Content-Type", "application/json")
+	req.AddCookie(&http.Cookie{Name: oauthPendingSessionCookieName, Value: encodeCookieValue(sessionToken)})
+	req.AddCookie(&http.Cookie{Name: oauthPendingBrowserCookieName, Value: encodeCookieValue(browserSessionKey)})
+	ginCtx.Request = req
+
+	handler.BindOIDCOAuthLogin(ginCtx)
+
+	require.Equal(t, http.StatusServiceUnavailable, recorder.Code)
+	stored, err := client.PendingAuthSession.Get(ctx, session.ID)
+	require.NoError(t, err)
+	require.Nil(t, stored.ConsumedAt, "settings read failure must not complete or consume the pending login")
+	require.Empty(t, recorder.Header().Get("Authorization"))
+}
+
+func TestPasswordLoginFailsClosedWhenTotpSettingCannotBeRead(t *testing.T) {
+	handler, client := newOAuthPendingFlowTestHandlerWithDependencies(t, oauthPendingFlowTestHandlerOptions{
+		totpSettingErr: errors.New("settings database unavailable"),
+		totpCache:      &oauthPendingFlowTotpCacheStub{},
+		totpEncryptor:  oauthPendingFlowTotpEncryptorStub{},
+	})
+	ctx := context.Background()
+
+	passwordHash, err := handler.authService.HashPassword("secret-123")
+	require.NoError(t, err)
+	_, err = client.User.Create().
+		SetEmail("totp-owner@example.com").
+		SetUsername("totp-owner").
+		SetPasswordHash(passwordHash).
+		SetRole(service.RoleUser).
+		SetStatus(service.StatusActive).
+		SetTotpEnabled(true).
+		SetTotpSecretEncrypted("encrypted-totp-secret").
+		Save(ctx)
+	require.NoError(t, err)
+
+	recorder := httptest.NewRecorder()
+	ginCtx, _ := gin.CreateTestContext(recorder)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", strings.NewReader(`{"email":"totp-owner@example.com","password":"secret-123"}`))
+	req.Header.Set("Content-Type", "application/json")
+	ginCtx.Request = req
+
+	handler.Login(ginCtx)
+
+	require.Equal(t, http.StatusServiceUnavailable, recorder.Code)
+	var payload map[string]any
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &payload))
+	require.NotContains(t, payload, "data", "login must not issue a token when the TOTP security switch is unreadable")
+	require.Empty(t, recorder.Header().Get("Authorization"))
+}
+
 func TestLogin2FACompletesPendingOAuthBindAndConsumesSession(t *testing.T) {
 	totpCache := &oauthPendingFlowTotpCacheStub{}
 	defaultSubAssigner := &oauthPendingFlowDefaultSubAssignerStub{}
@@ -2454,6 +2543,7 @@ type oauthPendingFlowTestHandlerOptions struct {
 	emailVerifyEnabled bool
 	emailCache         service.EmailCache
 	settingValues      map[string]string
+	totpSettingErr     error
 	promoRepo          service.PromoCodeRepository
 	defaultSubAssigner service.DefaultSubscriptionAssigner
 	affiliateService   *service.AffiliateService
@@ -2537,7 +2627,7 @@ CREATE TABLE IF NOT EXISTS user_affiliates (
 	for key, value := range options.settingValues {
 		settingValues[key] = value
 	}
-	settingSvc := service.NewSettingService(&oauthPendingFlowSettingRepoStub{values: settingValues}, cfg)
+	settingSvc := service.NewSettingService(&oauthPendingFlowSettingRepoStub{values: settingValues, totpSettingErr: options.totpSettingErr}, cfg)
 	affiliateService := options.affiliateService
 	if affiliateService == nil && options.affiliateFactory != nil {
 		affiliateService = options.affiliateFactory(client, settingSvc)
@@ -2609,7 +2699,8 @@ func boolPtr(v bool) *bool {
 }
 
 type oauthPendingFlowSettingRepoStub struct {
-	values map[string]string
+	values         map[string]string
+	totpSettingErr error
 }
 
 type oauthPendingFlowPromoRepoStub struct {
@@ -2695,6 +2786,9 @@ func (s *oauthPendingFlowSettingRepoStub) Get(context.Context, string) (*service
 }
 
 func (s *oauthPendingFlowSettingRepoStub) GetValue(_ context.Context, key string) (string, error) {
+	if key == service.SettingKeyTotpEnabled && s.totpSettingErr != nil {
+		return "", s.totpSettingErr
+	}
 	value, ok := s.values[key]
 	if !ok {
 		return "", service.ErrSettingNotFound

@@ -127,7 +127,10 @@ func NewTotpService(
 
 // GetStatus returns the TOTP status for a user
 func (s *TotpService) GetStatus(ctx context.Context, userID int64) (*TotpStatus, error) {
-	featureEnabled := s.settingService.IsTotpEnabled(ctx)
+	featureEnabled, err := s.settingService.IsTotpEnabled(ctx)
+	if err != nil {
+		return nil, err
+	}
 
 	user, err := s.userRepo.GetByID(ctx, userID)
 	if err != nil {
@@ -170,7 +173,11 @@ func (s *TotpService) verifyIdentity(ctx context.Context, user *User, emailCode,
 // If email verification is enabled, emailCode is required; otherwise password is required
 func (s *TotpService) InitiateSetup(ctx context.Context, userID int64, emailCode, password string) (*TotpSetupResponse, error) {
 	// Check if TOTP feature is enabled globally
-	if !s.settingService.IsTotpEnabled(ctx) {
+	featureEnabled, err := s.settingService.IsTotpEnabled(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if !featureEnabled {
 		return nil, ErrTotpNotEnabled
 	}
 
@@ -225,7 +232,11 @@ func (s *TotpService) InitiateSetup(ctx context.Context, userID int64, emailCode
 // CompleteSetup completes the TOTP setup by verifying the code
 func (s *TotpService) CompleteSetup(ctx context.Context, userID int64, totpCode, setupToken string) error {
 	// Check if TOTP feature is enabled globally
-	if !s.settingService.IsTotpEnabled(ctx) {
+	featureEnabled, err := s.settingService.IsTotpEnabled(ctx)
+	if err != nil {
+		return err
+	}
+	if !featureEnabled {
 		return ErrTotpNotEnabled
 	}
 

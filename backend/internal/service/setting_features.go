@@ -11,6 +11,8 @@ import (
 	"math"
 	"strconv"
 	"strings"
+
+	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
 )
 
 func (s *SettingService) IsRedeemCodeCreationLimitDisabled(ctx context.Context) bool {
@@ -201,13 +203,21 @@ func (s *SettingService) IsPasswordResetEnabled(ctx context.Context) bool {
 	return value == "true"
 }
 
-// IsTotpEnabled 检查是否启用 TOTP 双因素认证功能
-func (s *SettingService) IsTotpEnabled(ctx context.Context) bool {
-	value, err := s.settingRepo.GetValue(ctx, SettingKeyTotpEnabled)
-	if err != nil {
-		return false // 默认关闭
+// IsTotpEnabled reports whether TOTP is enabled. A missing setting preserves
+// the default-off behavior, but operational read failures must not disable a
+// second-factor challenge.
+func (s *SettingService) IsTotpEnabled(ctx context.Context) (bool, error) {
+	if s == nil || s.settingRepo == nil {
+		return false, infraerrors.ServiceUnavailable("TOTP_SETTINGS_UNAVAILABLE", "totp settings unavailable")
 	}
-	return value == "true"
+	value, err := s.settingRepo.GetValue(ctx, SettingKeyTotpEnabled)
+	if errors.Is(err, ErrSettingNotFound) {
+		return false, nil
+	}
+	if err != nil {
+		return false, infraerrors.ServiceUnavailable("TOTP_SETTINGS_UNAVAILABLE", "totp settings unavailable").WithCause(err)
+	}
+	return value == "true", nil
 }
 
 // PasskeyEnabled reports the effective runtime switch. WebAuthn deployment
@@ -475,13 +485,20 @@ func (s *SettingService) UpdateAuthSourceDefaultSettings(ctx context.Context, se
 	return nil
 }
 
-// IsTurnstileEnabled 检查是否启用 Turnstile 验证
-func (s *SettingService) IsTurnstileEnabled(ctx context.Context) bool {
-	value, err := s.settingRepo.GetValue(ctx, SettingKeyTurnstileEnabled)
-	if err != nil {
-		return false
+// IsTurnstileEnabled distinguishes an unset switch from a settings read
+// failure so callers never interpret an outage as permission to skip CAPTCHA.
+func (s *SettingService) IsTurnstileEnabled(ctx context.Context) (bool, error) {
+	if s == nil || s.settingRepo == nil {
+		return false, infraerrors.ServiceUnavailable("CAPTCHA_SETTINGS_UNAVAILABLE", "captcha settings unavailable")
 	}
-	return value == "true"
+	value, err := s.settingRepo.GetValue(ctx, SettingKeyTurnstileEnabled)
+	if errors.Is(err, ErrSettingNotFound) {
+		return false, nil
+	}
+	if err != nil {
+		return false, infraerrors.ServiceUnavailable("CAPTCHA_SETTINGS_UNAVAILABLE", "captcha settings unavailable").WithCause(err)
+	}
+	return value == "true", nil
 }
 
 // GetTurnstileSecretKey 获取 Turnstile Secret Key

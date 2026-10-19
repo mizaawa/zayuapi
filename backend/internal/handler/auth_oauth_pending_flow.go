@@ -1656,24 +1656,35 @@ func (h *AuthHandler) bindPendingOAuthLogin(c *gin.Context, provider string) {
 		response.ErrorFrom(c, err)
 		return
 	}
-	if h.totpService != nil && h.settingSvc.IsTotpEnabled(c.Request.Context()) && user.TotpEnabled {
-		tempToken, err := h.totpService.CreatePendingOAuthBindLoginSession(
-			c.Request.Context(),
-			user.ID,
-			user.Email,
-			session.SessionToken,
-			session.BrowserSessionKey,
-		)
+	if user.TotpEnabled {
+		totpEnabled, err := h.settingSvc.IsTotpEnabled(c.Request.Context())
 		if err != nil {
-			response.InternalError(c, "Failed to create 2FA session")
+			response.ErrorFrom(c, err)
 			return
 		}
-		response.Success(c, TotpLoginResponse{
-			Requires2FA:     true,
-			TempToken:       tempToken,
-			UserEmailMasked: service.MaskEmail(user.Email),
-		})
-		return
+		if totpEnabled && h.totpService == nil {
+			response.ErrorFrom(c, infraerrors.ServiceUnavailable("TOTP_SERVICE_UNAVAILABLE", "totp service unavailable"))
+			return
+		}
+		if totpEnabled {
+			tempToken, err := h.totpService.CreatePendingOAuthBindLoginSession(
+				c.Request.Context(),
+				user.ID,
+				user.Email,
+				session.SessionToken,
+				session.BrowserSessionKey,
+			)
+			if err != nil {
+				response.InternalError(c, "Failed to create 2FA session")
+				return
+			}
+			response.Success(c, TotpLoginResponse{
+				Requires2FA:     true,
+				TempToken:       tempToken,
+				UserEmailMasked: service.MaskEmail(user.Email),
+			})
+			return
+		}
 	}
 	if err := applyPendingOAuthBinding(c.Request.Context(), h.entClient(), h.authService, h.userService, session, decision, &user.ID, true, true); err != nil {
 		respondPendingOAuthBindingApplyError(c, err)
