@@ -40,6 +40,8 @@ type OpenAIRecordUsageInput struct {
 	BillingReceipt     **UsageBillingCommand
 	MediaQuote         **MediaBillingQuote
 	MediaReservationID string
+	TokenQuote         **TokenBillingQuote
+	TokenReservation   *TokenBillingReservation
 	WorkbenchKind      string
 	// PricingAt 是请求级定价时刻（请求开始捕获，与利润门的 D 同源）：高峰因子
 	// 按该时刻计算，保证同一请求从准入到扣费不中途变价。零值回退记录时刻
@@ -138,6 +140,9 @@ func openAIUsagePricingAt(input *OpenAIRecordUsageInput) time.Time {
 func (s *OpenAIGatewayService) RecordUsage(ctx context.Context, input *OpenAIRecordUsageInput) error {
 	if input == nil {
 		return errors.New("openai usage input is nil")
+	}
+	if input.TokenReservation != nil {
+		ctx = WithTokenBillingReservation(ctx, input.TokenReservation)
 	}
 	result := input.Result
 	if result == nil {
@@ -247,7 +252,7 @@ func (s *OpenAIGatewayService) RecordUsage(ctx context.Context, input *OpenAIRec
 		account,
 	)
 	if err != nil {
-		if input.MediaQuote != nil || !isUsagePricingUnavailableError(err) {
+		if input.MediaQuote != nil || input.TokenQuote != nil || input.TokenReservation != nil || !isUsagePricingUnavailableError(err) {
 			return err
 		}
 		logger.L().With(
@@ -417,7 +422,7 @@ func (s *OpenAIGatewayService) RecordUsage(ctx context.Context, input *OpenAIRec
 		)
 	}
 
-	if s.cfg != nil && s.cfg.RunMode == config.RunModeSimple {
+	if s.cfg != nil && s.cfg.RunMode == config.RunModeSimple && input.TokenQuote == nil {
 		writeUsageLogBestEffort(ctx, s.usageLogRepo, usageLog, "service.openai_gateway")
 		logger.LegacyPrintf("service.openai_gateway", "[SIMPLE MODE] Usage recorded (not billed): user=%d, tokens=%d", usageLog.UserID, usageLog.TotalTokens())
 		s.deferredService.ScheduleLastUsedUpdate(account.ID)
@@ -443,6 +448,14 @@ func (s *OpenAIGatewayService) RecordUsage(ctx context.Context, input *OpenAIRec
 		APIKeyService:         input.APIKeyService,
 		Platform:              quotaPlatform,
 		MediaReservationID:    input.MediaReservationID,
+		TokenReservation:      input.TokenReservation,
+	}
+	if input.TokenQuote != nil {
+		if !isSubscriptionBilling && quotaPlatform != "" && s.billingCacheService != nil {
+			params.TrackUserPlatformQuota = s.billingCacheService.HasUserPlatformQuotaLimit(ctx, user.ID, quotaPlatform)
+		}
+		*input.TokenQuote = &TokenBillingQuote{Command: *buildUsageBillingCommand(requestID, usageLog, params), Usage: *usageLog}
+		return nil
 	}
 	if input.MediaQuote != nil {
 		if !isSubscriptionBilling && quotaPlatform != "" && s.billingCacheService != nil {

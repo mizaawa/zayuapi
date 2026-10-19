@@ -601,6 +601,9 @@ func incrementUsageBillingSubscription(ctx context.Context, tx *sql.Tx, subscrip
 }
 
 func deductUsageBillingBalance(ctx context.Context, tx *sql.Tx, userID int64, amount float64) (float64, bool, error) {
+	if amount < 0 || math.IsNaN(amount) || math.IsInf(amount, 0) {
+		return 0, false, errors.New("deduction amount must be finite and nonnegative")
+	}
 	var newBalance float64
 	err := tx.QueryRowContext(ctx, `
 		UPDATE users
@@ -616,20 +619,14 @@ func deductUsageBillingBalance(ctx context.Context, tx *sql.Tx, userID int64, am
 		return 0, false, err
 	}
 
-	err = tx.QueryRowContext(ctx, `
-		UPDATE users
-		SET balance = balance - $1,
-			updated_at = NOW()
-		WHERE id = $2 AND deleted_at IS NULL
-		RETURNING balance
-	`, amount, userID).Scan(&newBalance)
-	if errors.Is(err, sql.ErrNoRows) {
-		return 0, false, service.ErrUserNotFound
-	}
+	exists, err := userExistsForBilling(ctx, tx, userID)
 	if err != nil {
 		return 0, false, err
 	}
-	return newBalance, false, nil
+	if !exists {
+		return 0, false, service.ErrUserNotFound
+	}
+	return 0, false, service.ErrInsufficientBalance
 }
 
 func reserveUsageBillingBatchImageBalance(ctx context.Context, tx *sql.Tx, cmd *service.BatchImageBalanceHoldCommand) (*service.BatchImageBalanceHoldResult, error) {

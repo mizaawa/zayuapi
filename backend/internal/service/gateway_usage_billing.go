@@ -42,17 +42,19 @@ type RecordUsageInput struct {
 	APIKey             *APIKey
 	User               *User
 	Account            *Account
-	Subscription       *UserSubscription  // 可选：订阅信息
-	PricingAt          time.Time          // token 售价固定时刻；零值保持既有的记录时刻语义
-	InboundEndpoint    string             // 入站端点（客户端请求路径）
-	UpstreamEndpoint   string             // 上游端点（标准化后的上游路径）
-	UserAgent          string             // 请求的 User-Agent
-	IPAddress          string             // 请求的客户端 IP 地址
-	SessionID          string             // 客户端显式会话标识（session_id / X-Session-Id 等请求头），仅用于用量行会话关联
-	RequestPayloadHash string             // 请求体语义哈希，用于降低 request_id 误复用时的静默误去重风险
-	ForceCacheBilling  bool               // 强制缓存计费：将 input_tokens 转为 cache_read 计费（用于粘性会话切换）
-	APIKeyService      APIKeyQuotaUpdater // 可选：用于更新API Key配额
-	QuotaPlatform      string             // user×platform 配额计量平台：handler 在请求 ctx 内经 QuotaPlatform() 算定后传入（后扣运行在 worker 池 background ctx 上，取不到 ForcePlatform）
+	Subscription       *UserSubscription        // 可选：订阅信息
+	PricingAt          time.Time                // token 售价固定时刻；零值保持既有的记录时刻语义
+	InboundEndpoint    string                   // 入站端点（客户端请求路径）
+	UpstreamEndpoint   string                   // 上游端点（标准化后的上游路径）
+	UserAgent          string                   // 请求的 User-Agent
+	IPAddress          string                   // 请求的客户端 IP 地址
+	SessionID          string                   // 客户端显式会话标识（session_id / X-Session-Id 等请求头），仅用于用量行会话关联
+	RequestPayloadHash string                   // 请求体语义哈希，用于降低 request_id 误复用时的静默误去重风险
+	ForceCacheBilling  bool                     // 强制缓存计费：将 input_tokens 转为 cache_read 计费（用于粘性会话切换）
+	APIKeyService      APIKeyQuotaUpdater       // 可选：用于更新API Key配额
+	QuotaPlatform      string                   // user×platform 配额计量平台：handler 在请求 ctx 内经 QuotaPlatform() 算定后传入（后扣运行在 worker 池 background ctx 上，取不到 ForcePlatform）
+	TokenQuote         **TokenBillingQuote      // price a conservative bound without recording or charging
+	TokenReservation   *TokenBillingReservation // explicit capability for detached asynchronous usage
 
 	ChannelUsageFields // 渠道映射信息（由 handler 在 Forward 前解析）
 }
@@ -79,6 +81,7 @@ type postUsageBillingParams struct {
 	Account                *Account
 	Subscription           *UserSubscription
 	RequestPayloadHash     string
+	TokenReservation       *TokenBillingReservation
 	IsSubscriptionBill     bool
 	AccountRateMultiplier  float64
 	APIKeyService          APIKeyQuotaUpdater
@@ -217,6 +220,9 @@ func postUsageBilling(ctx context.Context, p *postUsageBillingParams, deps *bill
 }
 
 func resolveUsageBillingRequestID(ctx context.Context, upstreamRequestID string) string {
+	if reservation := TokenBillingReservationFromContext(ctx); reservation != nil {
+		return reservation.ID
+	}
 	// RequestID is caller-controlled tracing metadata, never a billing identity.
 	if ctx != nil {
 		if clientRequestID, _ := ctx.Value(ctxkey.ClientRequestID).(string); strings.TrimSpace(clientRequestID) != "" {
@@ -315,10 +321,17 @@ func applyUsageBilling(ctx context.Context, requestID string, usageLog *UsageLog
 		p.TrackUserPlatformQuota = deps.billingCacheService.HasUserPlatformQuotaLimit(ctx, p.User.ID, p.Platform)
 	}
 	cmd := buildUsageBillingCommand(requestID, usageLog, p)
+	reservation := p.TokenReservation
+	if reservation == nil {
+		reservation = TokenBillingReservationFromContext(ctx)
+	}
 	normalizedParams := *p
 	normalizedCost := *p.Cost
 	normalizedCost.NormalizeMonetaryFields()
 	normalizedParams.Cost = &normalizedCost
+	if reservation != nil && (cmd == nil || repo == nil) {
+		return false, cmd, ErrBillingServiceUnavailable
+	}
 	if cmd == nil || cmd.RequestID == "" || repo == nil {
 		postUsageBilling(ctx, &normalizedParams, deps)
 		return true, nil, nil
@@ -333,7 +346,9 @@ func applyUsageBilling(ctx context.Context, requestID string, usageLog *UsageLog
 
 	var result *UsageBillingApplyResult
 	var err error
-	if p.MediaReservationID != "" {
+	if reservation != nil {
+		result, err = stageAndSettleTokenBilling(billingCtx, repo, reservation, cmd, usageLog)
+	} else if p.MediaReservationID != "" {
 		if invalidator, ok := p.APIKeyService.(apiKeyAuthCacheInvalidator); ok {
 			invalidator.InvalidateAuthCacheByKey(billingCtx, p.APIKey.Key)
 		}
@@ -360,7 +375,7 @@ func applyUsageBilling(ctx context.Context, requestID string, usageLog *UsageLog
 		}
 	}
 
-	if p.MediaReservationID != "" {
+	if p.MediaReservationID != "" || reservation != nil {
 		// Reserve already consumed the estimate. Invalidate caches after the
 		// atomic replacement instead of deducting the final amount a second time.
 		if deps.billingCacheService != nil {
@@ -444,6 +459,10 @@ func finalizePostUsageBilling(ctx context.Context, p *postUsageBillingParams, de
 
 func syncBalanceCacheAfterDeduction(ctx context.Context, p *postUsageBillingParams, deps *billingDeps, result *UsageBillingApplyResult) {
 	if p == nil || p.Cost == nil || p.User == nil || deps == nil || deps.billingCacheService == nil {
+		return
+	}
+	if result != nil && result.BalanceReserved {
+		invalidateTokenBalance(ctx, deps.billingCacheService, p.User.ID)
 		return
 	}
 	if result != nil && result.NewBalance != nil && deps.billingCacheService.balanceBelowEligibilityThreshold(*result.NewBalance) {
@@ -627,6 +646,9 @@ type recordUsageOpts struct {
 
 // RecordUsage 记录使用量并扣费（或更新订阅用量）
 func (s *GatewayService) RecordUsage(ctx context.Context, input *RecordUsageInput) error {
+	if input != nil && input.TokenReservation != nil {
+		ctx = WithTokenBillingReservation(ctx, input.TokenReservation)
+	}
 	return s.recordUsageCore(ctx, &recordUsageCoreInput{
 		Result:             input.Result,
 		APIKey:             input.APIKey,
@@ -643,6 +665,8 @@ func (s *GatewayService) RecordUsage(ctx context.Context, input *RecordUsageInpu
 		ForceCacheBilling:  input.ForceCacheBilling,
 		APIKeyService:      input.APIKeyService,
 		QuotaPlatform:      input.QuotaPlatform,
+		TokenQuote:         input.TokenQuote,
+		TokenReservation:   input.TokenReservation,
 		ChannelUsageFields: input.ChannelUsageFields,
 	}, &recordUsageOpts{})
 }
@@ -666,12 +690,17 @@ type RecordUsageLongContextInput struct {
 	ForceCacheBilling     bool               // 强制缓存计费：将 input_tokens 转为 cache_read 计费（用于粘性会话切换）
 	APIKeyService         APIKeyQuotaUpdater // API Key 配额服务（可选）
 	QuotaPlatform         string             // user×platform 配额计量平台：handler 在请求 ctx 内经 QuotaPlatform() 算定后传入（后扣运行在 worker 池 background ctx 上，取不到 ForcePlatform）
+	TokenQuote            **TokenBillingQuote
+	TokenReservation      *TokenBillingReservation
 
 	ChannelUsageFields // 渠道映射信息（由 handler 在 Forward 前解析）
 }
 
 // RecordUsageWithLongContext 记录使用量并扣费，支持长上下文双倍计费（用于 Gemini）
 func (s *GatewayService) RecordUsageWithLongContext(ctx context.Context, input *RecordUsageLongContextInput) error {
+	if input != nil && input.TokenReservation != nil {
+		ctx = WithTokenBillingReservation(ctx, input.TokenReservation)
+	}
 	return s.recordUsageCore(ctx, &recordUsageCoreInput{
 		Result:             input.Result,
 		APIKey:             input.APIKey,
@@ -688,6 +717,8 @@ func (s *GatewayService) RecordUsageWithLongContext(ctx context.Context, input *
 		ForceCacheBilling:  input.ForceCacheBilling,
 		APIKeyService:      input.APIKeyService,
 		QuotaPlatform:      input.QuotaPlatform,
+		TokenQuote:         input.TokenQuote,
+		TokenReservation:   input.TokenReservation,
 		ChannelUsageFields: input.ChannelUsageFields,
 	}, &recordUsageOpts{
 		LongContextThreshold:  input.LongContextThreshold,
@@ -712,6 +743,8 @@ type recordUsageCoreInput struct {
 	ForceCacheBilling  bool
 	APIKeyService      APIKeyQuotaUpdater
 	QuotaPlatform      string
+	TokenQuote         **TokenBillingQuote
+	TokenReservation   *TokenBillingReservation
 	ChannelUsageFields
 }
 
@@ -841,7 +874,7 @@ func (s *GatewayService) recordUsageCore(ctx context.Context, input *recordUsage
 		)
 	}
 
-	if s.cfg != nil && s.cfg.RunMode == config.RunModeSimple {
+	if s.cfg != nil && s.cfg.RunMode == config.RunModeSimple && input.TokenQuote == nil {
 		writeUsageLogBestEffort(ctx, s.usageLogRepo, usageLog, "service.gateway")
 		logger.LegacyPrintf("service.gateway", "[SIMPLE MODE] Usage recorded (not billed): user=%d, tokens=%d", usageLog.UserID, usageLog.TotalTokens())
 		s.deferredService.ScheduleLastUsedUpdate(account.ID)
@@ -859,6 +892,19 @@ func (s *GatewayService) recordUsageCore(ctx context.Context, input *recordUsage
 		}
 	}
 	requestID := usageLog.RequestID
+	if input.TokenQuote != nil {
+		params := &postUsageBillingParams{
+			Cost: cost, User: user, APIKey: apiKey, Account: account, Subscription: subscription,
+			RequestPayloadHash: resolveUsageBillingPayloadFingerprint(ctx, input.RequestPayloadHash),
+			IsSubscriptionBill: isSubscriptionBilling, AccountRateMultiplier: accountRateMultiplier,
+			APIKeyService: input.APIKeyService, Platform: quotaPlatform,
+		}
+		if !isSubscriptionBilling && quotaPlatform != "" && s.billingCacheService != nil {
+			params.TrackUserPlatformQuota = s.billingCacheService.HasUserPlatformQuotaLimit(ctx, user.ID, quotaPlatform)
+		}
+		*input.TokenQuote = &TokenBillingQuote{Command: *buildUsageBillingCommand(requestID, usageLog, params), Usage: *usageLog}
+		return nil
+	}
 	_, _, billingErr := applyUsageBilling(ctx, requestID, usageLog, &postUsageBillingParams{
 		Cost:                  cost,
 		User:                  user,
@@ -866,6 +912,7 @@ func (s *GatewayService) recordUsageCore(ctx context.Context, input *recordUsage
 		Account:               account,
 		Subscription:          subscription,
 		RequestPayloadHash:    resolveUsageBillingPayloadFingerprint(ctx, input.RequestPayloadHash),
+		TokenReservation:      input.TokenReservation,
 		IsSubscriptionBill:    isSubscriptionBilling,
 		AccountRateMultiplier: accountRateMultiplier,
 		APIKeyService:         input.APIKeyService,

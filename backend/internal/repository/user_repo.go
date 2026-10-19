@@ -927,8 +927,7 @@ func (r *userRepository) ApplyRedeemBalanceAdjustment(ctx context.Context, id in
 }
 
 // DeductBalance 扣除用户余额
-// 透支策略：允许余额变为负数，确保当前请求能够完成
-// 中间件会阻止余额 <= 0 的用户发起后续请求
+// 条件更新是最终财务约束；并发调用不能透支其他请求预留的资金。
 func (r *userRepository) DeductBalance(ctx context.Context, id int64, amount float64) error {
 	if amount < 0 || math.IsNaN(amount) || math.IsInf(amount, 0) {
 		return fmt.Errorf("deduction amount must be finite and nonnegative")
@@ -945,17 +944,14 @@ func (r *userRepository) DeductBalance(ctx context.Context, id int64, amount flo
 		return nil
 	}
 
-	n, err = client.User.Update().
-		Where(dbuser.IDEQ(id)).
-		AddBalance(-amount).
-		Save(ctx)
+	exists, err := client.User.Query().Where(dbuser.IDEQ(id)).Exist(ctx)
 	if err != nil {
 		return err
 	}
-	if n == 0 {
+	if !exists {
 		return service.ErrUserNotFound
 	}
-	return nil
+	return service.ErrInsufficientBalance
 }
 
 // DeductAvailableBalance atomically deducts min(amount, max(balance, 0)).
