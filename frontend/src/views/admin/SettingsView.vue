@@ -6830,6 +6830,27 @@
               />
             </div>
 
+            <div class="border-t border-gray-100 pt-5 dark:border-dark-700">
+              <label for="frozen-balance-release-hours" class="input-label">
+                {{ t('admin.settings.features.frozenBalance.releaseHours') }}
+              </label>
+              <input
+                id="frozen-balance-release-hours"
+                v-model.number="form.frozen_balance_release_hours"
+                type="number"
+                min="1"
+                max="720"
+                step="1"
+                required
+                class="input max-w-xs"
+                aria-describedby="frozen-balance-release-hours-hint"
+                data-testid="frozen-balance-release-hours"
+              />
+              <p id="frozen-balance-release-hours-hint" class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                {{ t('admin.settings.features.frozenBalance.releaseHoursHint') }}
+              </p>
+            </div>
+
             <div class="flex items-center justify-between border-t border-gray-100 pt-5 dark:border-dark-700">
               <div>
                 <label class="text-sm font-medium text-gray-700 dark:text-gray-300">
@@ -9862,6 +9883,7 @@ const form = reactive<SettingsForm>({
   response_model_audit_bypass_enabled: false,
   disable_temp_unschedulable: false,
   disable_redeem_code_creation_limit: false,
+  frozen_balance_release_hours: 1,
   resource_library_enabled: false,
   // Affiliate (邀请返利) feature switch
   affiliate_enabled: false,
@@ -11064,6 +11086,11 @@ function findDuplicateDefaultSubscription(
 }
 
 async function saveSettings() {
+  const frozenBalanceReleaseHours = Number(form.frozen_balance_release_hours);
+  if (!Number.isInteger(frozenBalanceReleaseHours) || frozenBalanceReleaseHours < 1 || frozenBalanceReleaseHours > 720) {
+    appStore.showError(t('admin.settings.features.frozenBalance.releaseHoursInvalid'));
+    return;
+  }
   saving.value = true;
   try {
     const videoLimits = [form.video_workbench_max_concurrent, form.video_workbench_max_reference_images, form.video_workbench_max_reference_videos, form.video_workbench_max_reference_audios];
@@ -11554,6 +11581,7 @@ async function saveSettings() {
       response_model_audit_bypass_enabled: form.response_model_audit_bypass_enabled,
       disable_temp_unschedulable: form.disable_temp_unschedulable,
       disable_redeem_code_creation_limit: form.disable_redeem_code_creation_limit,
+      frozen_balance_release_hours: frozenBalanceReleaseHours,
       resource_library_enabled: form.resource_library_enabled,
       // Affiliate (邀请返利) feature switch
       affiliate_enabled: form.affiliate_enabled,

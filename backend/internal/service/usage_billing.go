@@ -320,3 +320,9 @@ type UsageBillingRepository interface {
 	CaptureBatchImageBalance(ctx context.Context, cmd *BatchImageBalanceHoldCommand) (*BatchImageBalanceHoldResult, error)
 	ReleaseBatchImageBalance(ctx context.Context, cmd *BatchImageBalanceHoldCommand) (*BatchImageBalanceHoldResult, error)
 }
+
+// ExpiredBalanceHoldRecovery is implemented by the SQL repository. It is
+// optional so lightweight deployments and existing test doubles remain valid.
+type ExpiredBalanceHoldRecovery interface {
+	RecoverExpiredBalanceHolds(context.Context, time.Time, int) ([]int64, error)
+}

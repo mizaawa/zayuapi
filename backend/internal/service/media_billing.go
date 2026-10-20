@@ -359,6 +359,11 @@ func (s *OpenAIGatewayService) invalidateMediaBilling(ctx context.Context, r *Me
 
 func (s *OpenAIGatewayService) SetMediaBillingAPIKeyService(keys *APIKeyService) {
 	s.mediaBillingAPIKeys.Store(keys)
+	// Refunds must invalidate the auth cache as well as the balance cache.
+	// Start only after the handler has supplied this dependency.
+	if keys != nil {
+		s.frozenBalanceStartOnce.Do(s.startFrozenBalanceRecovery)
+	}
 }
 
 func (s *OpenAIGatewayService) ReconcileMediaTask(ctx context.Context, taskID string, userID, keyID int64, body []byte) (bool, error) {

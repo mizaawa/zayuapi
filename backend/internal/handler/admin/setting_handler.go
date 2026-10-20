@@ -376,6 +376,7 @@ func (h *SettingHandler) GetSettings(c *gin.Context) {
 
 		DisableRedeemCodeCreationLimit: settings.DisableRedeemCodeCreationLimit,
 		ResourceLibraryEnabled:         settings.ResourceLibraryEnabled,
+		FrozenBalanceReleaseHours:      settings.FrozenBalanceReleaseHours,
 
 		ChannelMonitorEnabled:                settings.ChannelMonitorEnabled,
 		ChannelMonitorHideUsageLogs:          settings.ChannelMonitorHideUsageLogs,

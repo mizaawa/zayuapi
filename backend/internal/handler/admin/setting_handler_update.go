@@ -335,6 +335,7 @@ type UpdateSettingsRequest struct {
 
 	DisableRedeemCodeCreationLimit *bool `json:"disable_redeem_code_creation_limit"`
 	ResourceLibraryEnabled         *bool `json:"resource_library_enabled"`
+	FrozenBalanceReleaseHours      *int  `json:"frozen_balance_release_hours"`
 
 	// Channel Monitor feature switch
 	ChannelMonitorEnabled                *bool   `json:"channel_monitor_enabled"`
@@ -603,6 +604,14 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 	}
 
 	// 验证参数
+	frozenBalanceReleaseHours := previousSettings.FrozenBalanceReleaseHours
+	if req.FrozenBalanceReleaseHours != nil {
+		frozenBalanceReleaseHours = *req.FrozenBalanceReleaseHours
+		if frozenBalanceReleaseHours < 1 || frozenBalanceReleaseHours > service.FrozenBalanceReleaseHoursMax {
+			response.BadRequest(c, "frozen_balance_release_hours must be an integer between 1 and 720")
+			return
+		}
+	}
 	if req.DefaultConcurrency < 1 {
 		req.DefaultConcurrency = 1
 	}
@@ -1935,6 +1944,7 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 			}
 			return previousSettings.ResourceLibraryEnabled
 		}(),
+		FrozenBalanceReleaseHours: frozenBalanceReleaseHours,
 
 		ChannelMonitorEnabled: func() bool {
 			if req.ChannelMonitorEnabled != nil {
@@ -2517,6 +2527,7 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 
 		DisableRedeemCodeCreationLimit: updatedSettings.DisableRedeemCodeCreationLimit,
 		ResourceLibraryEnabled:         updatedSettings.ResourceLibraryEnabled,
+		FrozenBalanceReleaseHours:      updatedSettings.FrozenBalanceReleaseHours,
 
 		ChannelMonitorEnabled:                updatedSettings.ChannelMonitorEnabled,
 		ChannelMonitorHideUsageLogs:          updatedSettings.ChannelMonitorHideUsageLogs,

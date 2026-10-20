@@ -674,6 +674,9 @@ export interface SystemSettings {
 
   disable_redeem_code_creation_limit: boolean;
 
+  // Frozen balance timeout in hours (1..720), defaults to 1.
+  frozen_balance_release_hours: number;
+
   // 资源库（工作台生成内容监管与存档）
   resource_library_enabled: boolean;
 
@@ -1000,6 +1003,8 @@ export interface UpdateSettingsRequest {
   account_quota_notify_emails?: NotifyEmailEntry[];
 
   disable_redeem_code_creation_limit?: boolean;
+
+  frozen_balance_release_hours?: number;
 
   // 资源库（工作台生成内容监管与存档）
   resource_library_enabled?: boolean;

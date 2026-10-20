@@ -14,6 +14,11 @@ export default {
         payment: '支付设置',
       },
       features: {
+        frozenBalance: {
+          releaseHours: '冻结金额释放时间（小时）',
+          releaseHoursHint: '冻结金额超过设定时间后自动返还可用余额，默认 1 小时，可设置 1–720 小时。保存后对已有冻结金额也生效；任务晚到仍会按实际费用结算。',
+          releaseHoursInvalid: '冻结金额释放时间必须是 1–720 之间的整数',
+        },
         registrationAnnouncement: {
           enabled: '注册页面公告',
           enabledHint: '开启后在注册页面表单上方显示公告。',

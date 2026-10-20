@@ -478,6 +478,9 @@ type OpenAIGatewayService struct {
 	openaiCompatAnthropicDigestSessions sync.Map
 	grokMediaVideoBillingRecords        sync.Map
 	mediaBillingCancel                  context.CancelFunc
+	frozenBalanceCancel                 context.CancelFunc
+	frozenBalanceDone                   chan struct{}
+	frozenBalanceStartOnce              sync.Once
 	mediaBillingAPIKeys                 atomic.Pointer[APIKeyService]
 	mediaBillingVideoWorkbench          atomic.Pointer[VideoWorkbenchService]
 }
@@ -680,6 +683,10 @@ func (s *OpenAIGatewayService) billingDeps() *billingDeps {
 // CloseOpenAIWSPool 关闭 OpenAI WebSocket 连接池的后台 worker 和空闲连接。
 // 应在应用优雅关闭时调用。
 func (s *OpenAIGatewayService) CloseOpenAIWSPool() {
+	if s != nil && s.frozenBalanceCancel != nil {
+		s.frozenBalanceCancel()
+		<-s.frozenBalanceDone
+	}
 	if s != nil && s.mediaBillingCancel != nil {
 		s.mediaBillingCancel()
 	}

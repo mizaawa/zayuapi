@@ -14,6 +14,11 @@ export default {
         payment: 'Payment',
       },
       features: {
+        frozenBalance: {
+          releaseHours: 'Frozen balance release time (hours)',
+          releaseHoursHint: 'Automatically return frozen funds to the available balance after this time. Defaults to 1 hour; accepts 1–720 hours. Changes also apply to existing holds; late task results are still settled at actual cost.',
+          releaseHoursInvalid: 'Frozen balance release time must be an integer from 1 to 720',
+        },
         registrationAnnouncement: {
           enabled: 'Registration page announcement',
           enabledHint: 'Show an announcement above the registration form when enabled.',

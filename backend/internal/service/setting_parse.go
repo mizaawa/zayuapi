@@ -189,6 +189,7 @@ func (s *SettingService) InitializeDefaultSettings(ctx context.Context) error {
 
 		SettingKeyDisableRedeemCodeCreationLimit: "false",
 		SettingKeyResourceLibraryEnabled:         "false",
+		SettingKeyFrozenBalanceReleaseHours:      strconv.Itoa(FrozenBalanceReleaseHoursDefault),
 
 		// Channel monitor defaults (enabled, 60s)
 		SettingKeyChannelMonitorEnabled:                "true",
@@ -818,6 +819,7 @@ func (s *SettingService) parseSettings(settings map[string]string) *SystemSettin
 
 	result.DisableRedeemCodeCreationLimit = settings[SettingKeyDisableRedeemCodeCreationLimit] == "true"
 	result.ResourceLibraryEnabled = settings[SettingKeyResourceLibraryEnabled] == "true"
+	result.FrozenBalanceReleaseHours = parseFrozenBalanceReleaseHours(settings[SettingKeyFrozenBalanceReleaseHours])
 
 	// Channel monitor feature (default: enabled, 60s)
 	result.ChannelMonitorEnabled = !isFalseSettingValue(settings[SettingKeyChannelMonitorEnabled])

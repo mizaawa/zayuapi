@@ -410,6 +410,24 @@ func (r *usageBillingRepository) applyBatchImageBalanceHold(
 	if !allowed {
 		return &service.BatchImageBalanceHoldResult{}, nil
 	}
+	expired, err := batchImageHoldExpired(ctx, tx, cmd)
+	if err != nil {
+		return nil, err
+	}
+	if expired {
+		switch operation {
+		case "reserve":
+			return nil, service.ErrUsageBillingRequestConflict
+		case "capture":
+			apply = captureExpiredBatchImageBalance
+		case "release":
+			// Preserve the terminal release claim, but the timed refund already
+			// returned these funds; never take another job's frozen balance.
+			apply = func(context.Context, *sql.Tx, *service.BatchImageBalanceHoldCommand) (*service.BatchImageBalanceHoldResult, error) {
+				return &service.BatchImageBalanceHoldResult{}, nil
+			}
+		}
+	}
 
 	applied, err := r.claimUsageBillingRequest(ctx, tx, cmd.RequestID, cmd.APIKeyID, cmd.RequestFingerprint)
 	if err != nil {

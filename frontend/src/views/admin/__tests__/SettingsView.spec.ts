@@ -772,6 +772,56 @@ describe("admin SettingsView payment visible method controls", () => {
     wrapper.unmount();
   });
 
+  it("defaults the frozen balance release timeout to one hour and saves it", async () => {
+    const wrapper = mountView();
+    await flushPromises();
+    await openFeaturesTab(wrapper);
+    const input = wrapper.get('[data-testid="frozen-balance-release-hours"]');
+    expect((input.element as HTMLInputElement).value).toBe("1");
+    await wrapper.find("form").trigger("submit.prevent");
+    await flushPromises();
+    expect(updateSettings).toHaveBeenCalledWith(
+      expect.objectContaining({ frozen_balance_release_hours: 1 }),
+    );
+    wrapper.unmount();
+  });
+
+  it("loads and saves the frozen balance release timeout", async () => {
+    getSettings.mockResolvedValueOnce({
+      ...baseSettingsResponse,
+      frozen_balance_release_hours: 6,
+    });
+    const wrapper = mountView();
+    await flushPromises();
+    await openFeaturesTab(wrapper);
+    const input = wrapper.get('[data-testid="frozen-balance-release-hours"]');
+    expect((input.element as HTMLInputElement).value).toBe("6");
+    await input.setValue("12");
+    await wrapper.find("form").trigger("submit.prevent");
+    await flushPromises();
+    expect(updateSettings).toHaveBeenCalledWith(
+      expect.objectContaining({ frozen_balance_release_hours: 12 }),
+    );
+    wrapper.unmount();
+  });
+
+  it.each(["0", "-1", "1.5", "721", ""])(
+    "rejects an invalid frozen balance release timeout: %s",
+    async (value) => {
+      const wrapper = mountView();
+      await flushPromises();
+      await openFeaturesTab(wrapper);
+      await wrapper.get('[data-testid="frozen-balance-release-hours"]').setValue(value);
+      await wrapper.find("form").trigger("submit.prevent");
+      await flushPromises();
+      expect(updateSettings).not.toHaveBeenCalled();
+      expect(showError).toHaveBeenCalledWith(
+        "admin.settings.features.frozenBalance.releaseHoursInvalid",
+      );
+      wrapper.unmount();
+    },
+  );
+
   it("saves a GitHub token from extended features and clears the password input after saving", async () => {
     updateSettings.mockResolvedValue({
       ...baseSettingsResponse,

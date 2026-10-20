@@ -582,6 +582,9 @@ func diffSettings(before *service.SystemSettings, after *service.SystemSettings,
 	if before.ResourceLibraryEnabled != after.ResourceLibraryEnabled {
 		changed = append(changed, "resource_library_enabled")
 	}
+	if before.FrozenBalanceReleaseHours != after.FrozenBalanceReleaseHours {
+		changed = append(changed, "frozen_balance_release_hours")
+	}
 	if before.ChannelMonitorEnabled != after.ChannelMonitorEnabled {
 		changed = append(changed, "channel_monitor_enabled")
 	}

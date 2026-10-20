@@ -415,6 +415,8 @@ func (s *SettingService) buildSystemSettingsUpdates(ctx context.Context, setting
 
 	updates[SettingKeyDisableRedeemCodeCreationLimit] = strconv.FormatBool(settings.DisableRedeemCodeCreationLimit)
 	updates[SettingKeyResourceLibraryEnabled] = strconv.FormatBool(settings.ResourceLibraryEnabled)
+	settings.FrozenBalanceReleaseHours = normalizeFrozenBalanceReleaseHours(settings.FrozenBalanceReleaseHours)
+	updates[SettingKeyFrozenBalanceReleaseHours] = strconv.Itoa(settings.FrozenBalanceReleaseHours)
 
 	// Channel monitor feature switch
 	updates[SettingKeyChannelMonitorEnabled] = strconv.FormatBool(settings.ChannelMonitorEnabled)

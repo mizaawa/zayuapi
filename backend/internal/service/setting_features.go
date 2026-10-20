@@ -31,6 +31,37 @@ func (s *SettingService) IsResourceLibraryEnabled(ctx context.Context) bool {
 	return err == nil && value == "true"
 }
 
+// GetFrozenBalanceReleaseHours returns the automatic balance hold timeout in hours.
+// Missing or unreadable settings use one hour so existing installations release holds.
+func (s *SettingService) GetFrozenBalanceReleaseHours(ctx context.Context) int {
+	if s == nil || s.settingRepo == nil {
+		return FrozenBalanceReleaseHoursDefault
+	}
+	raw, err := s.settingRepo.GetValue(ctx, SettingKeyFrozenBalanceReleaseHours)
+	if err != nil {
+		return FrozenBalanceReleaseHoursDefault
+	}
+	return parseFrozenBalanceReleaseHours(raw)
+}
+
+func parseFrozenBalanceReleaseHours(raw string) int {
+	hours, err := strconv.Atoi(strings.TrimSpace(raw))
+	if err != nil {
+		return FrozenBalanceReleaseHoursDefault
+	}
+	return normalizeFrozenBalanceReleaseHours(hours)
+}
+
+func normalizeFrozenBalanceReleaseHours(hours int) int {
+	if hours < 1 {
+		return FrozenBalanceReleaseHoursDefault
+	}
+	if hours > FrozenBalanceReleaseHoursMax {
+		return FrozenBalanceReleaseHoursMax
+	}
+	return hours
+}
+
 func (s *SettingService) IsChannelMonitorUsageLogsHidden(ctx context.Context) bool {
 	if s == nil {
 		return false

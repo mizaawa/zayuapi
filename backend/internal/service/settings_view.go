@@ -205,6 +205,7 @@ type SystemSettings struct {
 
 	DisableRedeemCodeCreationLimit bool `json:"disable_redeem_code_creation_limit"`
 	ResourceLibraryEnabled         bool `json:"resource_library_enabled"`
+	FrozenBalanceReleaseHours      int  `json:"frozen_balance_release_hours"`
 
 	// Channel Monitor feature
 	ChannelMonitorEnabled                bool   `json:"channel_monitor_enabled"`
