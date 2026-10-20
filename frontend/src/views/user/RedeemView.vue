@@ -454,35 +454,37 @@ const handleRedeem = async () => {
   redeemResult.value = null
 
   try {
-    const result = await redeemAPI.redeem(redeemCode.value.trim())
+    let result: Awaited<ReturnType<typeof redeemAPI.redeem>>
+    try {
+      result = await redeemAPI.redeem(redeemCode.value.trim())
+    } catch (error: any) {
+      errorMessage.value = error.response?.data?.detail || t('redeem.failedToRedeem')
+      appStore.showError(t('redeem.redeemFailed'))
+      return
+    }
 
+    // The redeem request is the transaction boundary. Report success before
+    // refreshing related page data so a refresh failure cannot misreport it.
     redeemResult.value = result
+    redeemCode.value = ''
+    appStore.showSuccess(t('redeem.codeRedeemSuccess'))
 
-    // Refresh user data to get updated balance/concurrency
-    await authStore.refreshUser()
+    try {
+      await authStore.refreshUser()
+    } catch (error) {
+      console.error('Failed to refresh user after redeem:', error)
+    }
 
-    // If subscription type, immediately refresh subscription status
     if (result.type === 'subscription') {
       try {
-        await subscriptionStore.fetchActiveSubscriptions(true) // force refresh
+        await subscriptionStore.fetchActiveSubscriptions(true)
       } catch (error) {
         console.error('Failed to refresh subscriptions after redeem:', error)
         appStore.showWarning(t('redeem.subscriptionRefreshFailed'))
       }
     }
 
-    // Clear the input
-    redeemCode.value = ''
-
-    // Refresh history
     await fetchHistory()
-
-    // Show success toast
-    appStore.showSuccess(t('redeem.codeRedeemSuccess'))
-  } catch (error: any) {
-    errorMessage.value = error.response?.data?.detail || t('redeem.failedToRedeem')
-
-    appStore.showError(t('redeem.redeemFailed'))
   } finally {
     submitting.value = false
   }
