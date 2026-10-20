@@ -36,11 +36,13 @@ type OpenAIRecordUsageInput struct {
 	// BillingRequestID overrides request-context/upstream identifiers for
 	// durable asynchronous task billing. BillingReceipt receives the exact
 	// normalized command after the unified ledger applies it.
-	BillingRequestID   string
-	BillingReceipt     **UsageBillingCommand
-	MediaQuote         **MediaBillingQuote
-	MediaReservationID string
-	WorkbenchKind      string
+	BillingRequestID    string
+	BillingReceipt      **UsageBillingCommand
+	MediaQuote          **MediaBillingQuote
+	MediaReservationID  string
+	MediaReservation    *MediaBillingReservation
+	captureImagePricing **MediaImagePricing
+	WorkbenchKind       string
 	// PricingAt 是请求级定价时刻（请求开始捕获，与利润门的 D 同源）：高峰因子
 	// 按该时刻计算，保证同一请求从准入到扣费不中途变价。零值回退记录时刻
 	//（既有行为），供未装配的路径（图片/异步/cyber 等）沿用。
@@ -139,6 +141,11 @@ func (s *OpenAIGatewayService) RecordUsage(ctx context.Context, input *OpenAIRec
 	if input == nil {
 		return errors.New("openai usage input is nil")
 	}
+	if capture, ok := ctx.Value(mediaImageQuoteCaptureKey{}).(**MediaBillingQuote); ok {
+		copyInput := *input
+		copyInput.MediaQuote = capture
+		input = &copyInput
+	}
 	result := input.Result
 	if result == nil {
 		return errors.New("openai usage result is nil")
@@ -232,20 +239,37 @@ func (s *OpenAIGatewayService) RecordUsage(ctx context.Context, input *OpenAIRec
 		serviceTier = *billedServiceTier
 	}
 	longContextBillingEnabled := billingAccount.IsOpenAILongContextBillingEnabled()
-	cost, err = s.calculateOpenAIRecordUsageCost(
-		ctx,
-		result,
-		apiKey,
-		billingModels,
-		multiplier,
-		imageMultiplier,
-		videoMultiplier,
-		baseMultiplier,
-		tokens,
-		serviceTier,
-		longContextBillingEnabled,
-		account,
-	)
+	imageReservation, reservationErr := mediaImagePricingReservation(ctx, input)
+	if reservationErr != nil {
+		return reservationErr
+	}
+	if imageReservation != nil && !isVideoUsageResult(result) {
+		pricing := imageReservation.ImagePricing
+		multiplier, imageMultiplier = pricing.TokenMultiplier, pricing.ImageMultiplier
+		cost, err = pricing.calculate(s.billingService, result, tokens)
+	} else if input.captureImagePricing != nil && result.ImageCount > 0 && !isVideoUsageResult(result) {
+		pricing, captureErr := s.captureMediaImagePricing(ctx, apiKey, result, billingModels, multiplier, imageMultiplier, serviceTier, longContextBillingEnabled)
+		if captureErr != nil {
+			return captureErr
+		}
+		*input.captureImagePricing = pricing
+		cost, err = pricing.calculate(s.billingService, result, tokens)
+	} else {
+		cost, err = s.calculateOpenAIRecordUsageCost(
+			ctx,
+			result,
+			apiKey,
+			billingModels,
+			multiplier,
+			imageMultiplier,
+			videoMultiplier,
+			baseMultiplier,
+			tokens,
+			serviceTier,
+			longContextBillingEnabled,
+			account,
+		)
+	}
 	if err != nil {
 		if input.MediaQuote != nil || !isUsagePricingUnavailableError(err) {
 			return err

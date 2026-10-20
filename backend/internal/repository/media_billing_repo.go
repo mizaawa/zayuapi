@@ -24,14 +24,17 @@ func (r *usageBillingRepository) BindMediaWorkbenchTask(ctx context.Context, id,
 }
 
 func (r *usageBillingRepository) StageMediaWorkbenchVideoOutcome(ctx context.Context, id string, quote *service.MediaBillingQuote) error {
+	if quote == nil || quote.Command.RequestID != id {
+		return service.ErrUsageBillingRequestConflict
+	}
 	data, err := json.Marshal(quote)
 	if err != nil {
 		return err
 	}
 	_, err = r.db.ExecContext(ctx, `UPDATE media_billing_reservations SET quote=jsonb_set(quote,'{video_outcome}',$2::jsonb),updated_at=NOW()
-		WHERE id=$1 AND workbench_kind='video' AND state IN ('reserved','pending')
+		WHERE id=$1 AND user_id=$3 AND api_key_id=$4 AND workbench_kind='video' AND state IN ('reserved','pending')
 		AND quote->>'workbench_delivery'='true'
-		AND NOT refund_requested AND final_quote IS NULL AND NOT (quote ? 'video_outcome')`, id, data)
+		AND NOT refund_requested AND final_quote IS NULL AND NOT (quote ? 'video_outcome')`, id, data, quote.Command.UserID, quote.Command.APIKeyID)
 	return err
 }
 
@@ -46,7 +49,12 @@ func (r *usageBillingRepository) StageMediaOutcome(ctx context.Context, id strin
 		}
 		data = encoded
 	}
-	_, err := r.db.ExecContext(ctx, `UPDATE media_billing_reservations SET final_quote=COALESCE(final_quote,$2),refund_requested=$3,updated_at=NOW(),next_check_at=NOW()
+	// A recovery worker may hold a snapshot from before the provider outcome
+	// was staged. Prefer that persisted actual quote under this row's lock.
+	_, err := r.db.ExecContext(ctx, `UPDATE media_billing_reservations SET final_quote=COALESCE(final_quote,
+		CASE WHEN NOT $3 AND workbench_kind='video' AND quote->>'workbench_delivery'='true' THEN COALESCE(quote->'video_outcome',$2::jsonb)
+		     WHEN NOT $3 AND workbench_kind='image' AND COALESCE(quote->>'image_task_id','')<>'' THEN COALESCE(quote->'image_outcome',$2::jsonb)
+		     ELSE $2::jsonb END),refund_requested=$3,updated_at=NOW(),next_check_at=NOW()
 		WHERE id=$1 AND state IN ('reserved','pending') AND NOT refund_requested AND (final_quote IS NULL OR NOT $3)`, id, data, quote == nil)
 	return err
 }
@@ -182,7 +190,7 @@ func (r *usageBillingRepository) SettleMedia(ctx context.Context, id string, cmd
 	if reservation.RefundPending {
 		return nil, service.ErrUsageBillingRequestConflict
 	}
-	if reservation.WorkbenchDelivery && reservation.FinalQuote == nil {
+	if (reservation.WorkbenchDelivery || reservation.ImageTaskID != "") && reservation.FinalQuote == nil {
 		return nil, service.ErrUsageBillingRequestConflict
 	}
 	if reservation.FinalQuote != nil {
@@ -368,7 +376,7 @@ func (r *usageBillingRepository) FindMediaTask(ctx context.Context, task string,
 
 func (r *usageBillingRepository) PendingMedia(ctx context.Context, limit int) ([]*service.MediaBillingReservation, error) {
 	rows, err := r.db.QueryContext(ctx, `UPDATE media_billing_reservations SET next_check_at=NOW()+INTERVAL '2 minutes' WHERE id IN (
-		SELECT id FROM media_billing_reservations WHERE state IN ('pending','reserved') AND next_check_at<=NOW() AND (task_id<>'' OR final_quote IS NOT NULL OR refund_requested OR quote->>'workbench_delivery'='true' OR (workbench_kind<>'' AND dispatch_started_at IS NULL AND queue_lease_until<=NOW())) ORDER BY next_check_at LIMIT $1 FOR UPDATE SKIP LOCKED
+		SELECT id FROM media_billing_reservations WHERE state IN ('pending','reserved') AND next_check_at<=NOW() AND (task_id<>'' OR final_quote IS NOT NULL OR refund_requested OR quote->>'workbench_delivery'='true' OR (workbench_kind='image' AND COALESCE(quote->>'image_task_id','')<>'') OR (workbench_kind<>'' AND dispatch_started_at IS NULL AND queue_lease_until<=NOW())) ORDER BY next_check_at LIMIT $1 FOR UPDATE SKIP LOCKED
 	) RETURNING quote,task_id,endpoint,final_quote,refund_requested,queue_lease_until,dispatch_started_at`, limit)
 	if err != nil {
 		return nil, err

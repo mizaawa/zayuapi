@@ -483,6 +483,7 @@ type OpenAIGatewayService struct {
 	frozenBalanceStartOnce              sync.Once
 	mediaBillingAPIKeys                 atomic.Pointer[APIKeyService]
 	mediaBillingVideoWorkbench          atomic.Pointer[VideoWorkbenchService]
+	mediaBillingImageTasks              atomic.Pointer[ImageTaskService]
 }
 
 // NewOpenAIGatewayService creates a new OpenAIGatewayService

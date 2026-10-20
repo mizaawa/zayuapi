@@ -14,6 +14,7 @@ import type {
   SendVerifyCodeRequest,
   SendVerifyCodeResponse,
   PublicSettings,
+  CustomEndpoint,
   ActionCaptchaRequestProof,
   TotpLoginResponse,
   TotpLogin2FARequest
@@ -352,6 +353,16 @@ export function isAuthenticated(): boolean {
  */
 export async function getPublicSettings(): Promise<PublicSettings> {
   const { data } = await apiClient.get<PublicSettings>('/settings/public')
+  return data
+}
+
+export interface UserEndpointSettings {
+  custom_endpoints: CustomEndpoint[]
+}
+
+/** Endpoints are available to signed-in users and are never cached as public config. */
+export async function getUserEndpointSettings(): Promise<UserEndpointSettings> {
+  const { data } = await apiClient.get<UserEndpointSettings>('/settings/endpoints')
   return data
 }
 
@@ -694,6 +705,7 @@ export const authAPI = {
   getTokenExpiresAt,
   clearAuthToken,
   getPublicSettings,
+  getUserEndpointSettings,
   sendVerifyCode,
   sendPendingOAuthVerifyCode,
   validatePromoCode,

@@ -33,6 +33,11 @@ const (
 )
 
 func (s *GatewayService) shouldRetryUpstreamError(account *Account, statusCode int) bool {
+	// Explicit pool retries are owned by the handler's configured budget, not
+	// the additional five-attempt transport loop below.
+	if explicitlyConfiguredPoolHTTPRetry(account, statusCode) {
+		return false
+	}
 	// OAuth/Setup Token 账号：仅 403 重试
 	if account.IsOAuth() {
 		return statusCode == 403

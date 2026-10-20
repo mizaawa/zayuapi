@@ -421,6 +421,7 @@ func (h *OpenAIGatewayHandler) Images(c *gin.Context) {
 		sessionID := service.ExtractClientSessionID(c)
 		billingRequestID := imageWorkbenchBillingRequestID(c)
 		reservationID := mediaReservationID(c)
+		pricingReservation := mediaPrecharge(c)
 		result = workbenchBilling.settledByNormalPath(result)
 		recordUsage := func(ctx context.Context) {
 			if err := h.gatewayService.RecordUsage(ctx, &service.OpenAIRecordUsageInput{
@@ -439,6 +440,7 @@ func (h *OpenAIGatewayHandler) Images(c *gin.Context) {
 				SessionID:          sessionID,
 				BillingRequestID:   billingRequestID,
 				MediaReservationID: reservationID,
+				MediaReservation:   pricingReservation,
 				ChannelUsageFields: clientRequestedUsageFields(c, channelMapping, requestModel, upstreamModel),
 			}); err != nil {
 				logger.L().With(

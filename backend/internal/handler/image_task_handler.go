@@ -45,6 +45,9 @@ func NewAsyncImageHandler(tasks *service.ImageTaskService, openAI *OpenAIGateway
 	h.execute = h.executeWithGateway
 	if openAI != nil {
 		h.precharge = openAI.prechargeWorkbench
+		if openAI.gatewayService != nil {
+			openAI.gatewayService.SetMediaBillingImageTasks(tasks)
+		}
 	}
 	return h
 }
@@ -216,6 +219,15 @@ func (h *AsyncImageHandler) Submit(c *gin.Context) {
 		return
 	}
 
+	if reservation := mediaPrecharge(c); reservation != nil {
+		if err := h.openAI.gatewayService.BindMediaImageTask(c.Request.Context(), reservation, task.ID); err != nil {
+			cancel()
+			releasePayload()
+			h.failTask(task.ID, http.StatusServiceUnavailable, imageTaskErrorPayload("api_error", "task payment could not be bound"))
+			imageTaskError(c, err)
+			return
+		}
+	}
 	pollURL := imageTaskPollURL(c.Request.URL.Path, task.ID)
 	c.Header("Cache-Control", "no-store")
 	c.Header("Location", pollURL)
@@ -563,8 +575,13 @@ func (h *AsyncImageHandler) executeWithGateway(platform string, c *gin.Context) 
 
 func (h *AsyncImageHandler) run(taskID, platform string, taskCtx *gin.Context, recorder *httptest.ResponseRecorder, cancel context.CancelFunc) {
 	delivered := false
+	deliveryUncertain := false
 	// Runs last, after panic recovery: bill a stored result or refund the task.
-	defer func() { h.settleAsyncImageUsage(taskCtx, delivered) }()
+	defer func() {
+		if !deliveryUncertain {
+			h.settleAsyncImageUsage(taskCtx, delivered)
+		}
+	}()
 	defer cancel()
 	defer func() {
 		if recovered := recover(); recovered != nil {
@@ -597,11 +614,20 @@ func (h *AsyncImageHandler) run(taskID, platform string, taskCtx *gin.Context, r
 				return
 			}
 		}
+		if err := h.prepareAsyncImageDelivery(taskCtx); err != nil {
+			logger.L().Error("image_task.prepare_payment_failed", zap.String("task_id", taskID), zap.Error(err))
+			h.failTask(taskID, http.StatusServiceUnavailable, imageTaskErrorPayload("api_error", "image delivery payment could not be prepared"))
+			return
+		}
 		stored, err := h.tasks.Deliver(context.Background(), taskID, statusCode, json.RawMessage(body))
 		if err != nil {
-			// The completed record may exist; keep the provider charge rather
-			// than making a possibly delivered image free.
 			logger.L().Error("image_task.complete_store_failed", zap.String("task_id", taskID), zap.Error(err))
+			if reservation := mediaPrecharge(taskCtx); reservation != nil && reservation.ImageTaskID != "" {
+				// Recovery checks the durable task/receipt before settling or
+				// refunding an ambiguous Redis response.
+				deliveryUncertain = true
+				return
+			}
 			stored = true
 		}
 		delivered = stored

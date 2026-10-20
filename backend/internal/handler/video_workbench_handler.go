@@ -446,12 +446,15 @@ func videoWorkbenchResponseID(body []byte) string {
 }
 
 func videoWorkbenchResponseState(body []byte) string {
+	// Use the same terminal failure rule as billing, including whitespace and
+	// conflicting nested envelopes, so a failed task never starts delivery.
+	if service.GrokMediaVideoStatusFailed(body) {
+		return "failed"
+	}
 	for _, path := range []string{"status", "data.status", "video.status", "state", "data.state"} {
-		switch strings.ToLower(gjson.GetBytes(body, path).String()) {
+		switch strings.ToLower(strings.TrimSpace(gjson.GetBytes(body, path).String())) {
 		case "completed", "succeeded", "success", "done":
 			return "completed"
-		case "failed", "failure", "fail", "error", "cancelled", "canceled", "expired":
-			return "failed"
 		}
 	}
 	return "processing"

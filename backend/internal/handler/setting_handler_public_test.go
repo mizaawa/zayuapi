@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
+	"github.com/Wei-Shaw/sub2api/internal/server/middleware"
 	"github.com/Wei-Shaw/sub2api/internal/service"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
@@ -17,6 +18,42 @@ import (
 
 type settingHandlerPublicRepoStub struct {
 	values map[string]string
+}
+
+func TestSettingHandler_GetUserEndpointSettings_RequiresAuthenticationAndOnlyReturnsEndpoints(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	repo := &settingHandlerPublicRepoStub{values: map[string]string{
+		service.SettingKeyCustomEndpoints: `[{"name":"Relay","endpoint":"https://relay.example.test/v1","description":"For signed-in users"}]`,
+		service.SettingKeySiteName:        "Private site settings",
+		"smtp_password":                   "must-not-leak",
+	}}
+	h := NewSettingHandler(service.NewSettingService(repo, &config.Config{}), "test-version")
+	for _, authenticated := range []bool{false, true} {
+		t.Run(map[bool]string{false: "anonymous", true: "signed_in"}[authenticated], func(t *testing.T) {
+			recorder := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(recorder)
+			c.Request = httptest.NewRequest(http.MethodGet, "/api/v1/settings/endpoints", nil)
+			if authenticated {
+				c.Set(string(middleware.ContextKeyUser), middleware.AuthSubject{UserID: 7})
+			}
+			h.GetUserEndpointSettings(c)
+			require.Equal(t, "private, no-store", recorder.Header().Get("Cache-Control"))
+			require.NotContains(t, recorder.Body.String(), "must-not-leak")
+			require.NotContains(t, recorder.Body.String(), "site_name")
+			if !authenticated {
+				require.Equal(t, http.StatusUnauthorized, recorder.Code)
+				require.NotContains(t, recorder.Body.String(), "relay.example.test")
+				return
+			}
+			require.Equal(t, http.StatusOK, recorder.Code)
+			var body struct {
+				Data map[string]json.RawMessage `json:"data"`
+			}
+			require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &body))
+			require.Len(t, body.Data, 1)
+			require.JSONEq(t, repo.values[service.SettingKeyCustomEndpoints], string(body.Data["custom_endpoints"]))
+		})
+	}
 }
 
 func (s *settingHandlerPublicRepoStub) Get(ctx context.Context, key string) (*service.Setting, error) {

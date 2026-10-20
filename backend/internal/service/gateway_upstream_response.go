@@ -358,6 +358,11 @@ func (s *GatewayService) handleErrorResponse(ctx context.Context, resp *http.Res
 	// Upstream returned a non-success HTTP status; count Ollama Cloud activity.
 	scheduleOllamaCloudUsageActivity(s.deferredService, account)
 	body, readErr := s.readUpstreamErrorBody(resp)
+	if readErr == nil {
+		if failoverErr := configuredPoolHTTPFailover(c, account, resp, body, s.cfg, false); failoverErr != nil {
+			return nil, failoverErr
+		}
+	}
 	if readErr != nil {
 		// 读取失败时 body 可能被截断，错误分类会基于不完整数据；记录日志以便排查，
 		// 避免静默吞掉导致误判。

@@ -89,6 +89,13 @@ type ImageTaskFinishStore interface {
 	Finish(ctx context.Context, task *ImageTaskRecord, ttl time.Duration) error
 }
 
+// ImageTaskFinishResultStore returns whether the requested terminal state won
+// atomically, including an already matching state. A successful write must not
+// require a later read: its owner can immediately download and delete it.
+type ImageTaskFinishResultStore interface {
+	FinishWithResult(ctx context.Context, task *ImageTaskRecord, ttl time.Duration) (bool, error)
+}
+
 // ImageStorageResolver reports the currently effective object-storage binding.
 // It exists so the async image feature can be switched on and off from the admin
 // UI without a restart: the wiring below is fixed at startup, but the answer to
@@ -186,6 +193,8 @@ func (s *ImageTaskService) Create(ctx context.Context, owner ImageTaskOwner) (*I
 		Status:    ImageTaskStatusProcessing,
 		CreatedAt: now.Unix(),
 		ExpiresAt: now.Add(s.ttl).Unix(),
+		GroupID:   owner.GroupID,
+		BillingID: owner.BillingID,
 	}
 	if err := s.store.Save(ctx, task, s.ttl); err != nil {
 		return nil, ErrImageTaskUnavailable.WithCause(err)
@@ -217,7 +226,7 @@ func (s *ImageTaskService) Get(ctx context.Context, owner ImageTaskOwner, id str
 }
 
 func (s *ImageTaskService) Complete(ctx context.Context, id string, statusCode int, result json.RawMessage) error {
-	_, err := s.complete(ctx, id, statusCode, result)
+	_, _, err := s.complete(ctx, id, statusCode, result)
 	return err
 }
 
@@ -226,7 +235,7 @@ func (s *ImageTaskService) Complete(ctx context.Context, id string, statusCode i
 // failed upload or task write leaves the owner without an image. A non-nil
 // error means the stored state could not be determined.
 func (s *ImageTaskService) Deliver(ctx context.Context, id string, statusCode int, result json.RawMessage) (bool, error) {
-	attempted, err := s.complete(ctx, id, statusCode, result)
+	attempted, expectedDelivery, err := s.complete(ctx, id, statusCode, result)
 	if !attempted {
 		if err != nil {
 			logger.L().Warn("image_task.delivery_not_stored", zap.String("task_id", id), zap.Error(err))
@@ -239,6 +248,18 @@ func (s *ImageTaskService) Deliver(ctx context.Context, id string, statusCode in
 	// The completed record may have been written before its response was lost.
 	checkCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 	defer cancel()
+	if store, ok := s.store.(MediaWorkbenchDeliveryStore); ok && expectedDelivery != nil && expectedDelivery.BillingID != "" {
+		receipt, receiptErr := store.GetMediaDelivery(checkCtx, id)
+		if receiptErr != nil {
+			return false, err
+		}
+		if receipt != nil {
+			if *receipt != *expectedDelivery {
+				return false, ErrUsageBillingRequestConflict
+			}
+			return true, nil
+		}
+	}
 	task, getErr := s.store.Get(checkCtx, id)
 	switch {
 	case getErr == nil:
@@ -250,21 +271,22 @@ func (s *ImageTaskService) Deliver(ctx context.Context, id string, statusCode in
 	}
 }
 
-// complete reports attempted=true once the result was uploaded and a completed
-// record write was issued, or the task was already completed.
-func (s *ImageTaskService) complete(ctx context.Context, id string, statusCode int, result json.RawMessage) (bool, error) {
+// complete reports true for a confirmed completion or an ambiguous terminal
+// write, and preserves the original payment identity for delivery recovery.
+func (s *ImageTaskService) complete(ctx context.Context, id string, statusCode int, result json.RawMessage) (bool, *MediaWorkbenchDeliveryReceipt, error) {
 	if s == nil || s.store == nil {
-		return false, ErrImageTaskUnavailable
+		return false, nil, ErrImageTaskUnavailable
 	}
 	if !json.Valid(result) {
-		return false, s.Fail(ctx, id, http.StatusBadGateway, imageTaskErrorJSON("api_error", "upstream returned a non-JSON image response"))
+		return false, nil, s.Fail(ctx, id, http.StatusBadGateway, imageTaskErrorJSON("api_error", "upstream returned a non-JSON image response"))
 	}
 	task, err := s.store.Get(ctx, id)
 	if err != nil {
-		return false, err
+		return false, nil, err
 	}
+	expectedDelivery := &MediaWorkbenchDeliveryReceipt{TaskID: task.ID, UserID: task.UserID, APIKeyID: task.APIKeyID, BillingID: task.BillingID}
 	if task.Status == ImageTaskStatusCompleted || task.Status == ImageTaskStatusFailed {
-		return task.Status == ImageTaskStatusCompleted, nil
+		return task.Status == ImageTaskStatusCompleted, expectedDelivery, nil
 	}
 	uploader, enabled := s.current()
 	if task.WorkbenchStorage == ImageWorkbenchStorageLocal {
@@ -273,11 +295,11 @@ func (s *ImageTaskService) complete(ctx context.Context, id string, statusCode i
 	if s.resolve != nil && (!enabled || uploader == nil) {
 		// Do not fall back to persisting provider base64 in Redis when storage is
 		// disabled or incompletely resolved while an accepted task is still running.
-		return false, s.Fail(ctx, id, http.StatusServiceUnavailable, imageTaskErrorJSON("api_error", "image storage is no longer available"))
+		return false, expectedDelivery, s.Fail(ctx, id, http.StatusServiceUnavailable, imageTaskErrorJSON("api_error", "image storage is no longer available"))
 	}
 	if uploader != nil {
 		if NormalizeImageOwnerEmail(task.UserEmail) == "" {
-			return false, s.Fail(ctx, id, http.StatusForbidden, imageTaskErrorJSON("permission_error", "image task owner email is missing"))
+			return false, expectedDelivery, s.Fail(ctx, id, http.StatusForbidden, imageTaskErrorJSON("permission_error", "image task owner email is missing"))
 		}
 		if task.Workbench != nil {
 			uploader = uploader.forWorkbench()
@@ -286,33 +308,35 @@ func (s *ImageTaskService) complete(ctx context.Context, id string, statusCode i
 		if err != nil {
 			// 转存失败不回退存 base64，避免大 blob 撑爆 Redis：直接把任务标记为失败。
 			logger.L().Error("image_task.offload_failed", zap.String("task_id", id), zap.Error(err))
-			return false, s.Fail(ctx, id, http.StatusBadGateway, imageTaskErrorJSON("api_error", "failed to store generated image"))
+			return false, expectedDelivery, s.Fail(ctx, id, http.StatusBadGateway, imageTaskErrorJSON("api_error", "failed to store generated image"))
 		}
 		result = rewritten
 	}
-	return true, s.finish(ctx, id, ImageTaskStatusCompleted, statusCode, result, nil)
+	stored, err := s.finish(ctx, id, ImageTaskStatusCompleted, statusCode, result, nil)
+	return stored, expectedDelivery, err
 }
 
 func (s *ImageTaskService) Fail(ctx context.Context, id string, statusCode int, taskErr json.RawMessage) error {
 	if !json.Valid(taskErr) {
 		taskErr = imageTaskErrorJSON("api_error", "image generation failed")
 	}
-	return s.finish(ctx, id, ImageTaskStatusFailed, statusCode, nil, taskErr)
+	_, err := s.finish(ctx, id, ImageTaskStatusFailed, statusCode, nil, taskErr)
+	return err
 }
 
-func (s *ImageTaskService) finish(ctx context.Context, id, status string, statusCode int, result, taskErr json.RawMessage) error {
+func (s *ImageTaskService) finish(ctx context.Context, id, status string, statusCode int, result, taskErr json.RawMessage) (bool, error) {
 	if s == nil || s.store == nil {
-		return ErrImageTaskUnavailable
+		return false, ErrImageTaskUnavailable
 	}
 	task, err := s.store.Get(ctx, id)
 	if err != nil {
 		if errors.Is(err, ErrImageTaskNotFound) {
-			return ErrImageTaskNotFound
+			return false, ErrImageTaskNotFound
 		}
-		return ErrImageTaskUnavailable.WithCause(err)
+		return false, ErrImageTaskUnavailable.WithCause(err)
 	}
 	if task.Status == ImageTaskStatusCompleted || task.Status == ImageTaskStatusFailed {
-		return nil
+		return task.Status == status, nil
 	}
 	now := time.Now().UTC()
 	completedAt := now.Unix()
@@ -334,15 +358,20 @@ func (s *ImageTaskService) finish(ctx context.Context, id, status string, status
 	}
 	task.ExpiresAt = now.Add(ttl).Unix()
 	var saveErr error
-	if store, ok := s.store.(ImageTaskFinishStore); ok {
+	stored := true
+	if store, ok := s.store.(ImageTaskFinishResultStore); ok {
+		stored, saveErr = store.FinishWithResult(ctx, task, ttl)
+	} else if store, ok := s.store.(ImageTaskFinishStore); ok {
 		saveErr = store.Finish(ctx, task, ttl)
 	} else {
 		saveErr = s.store.Save(ctx, task, ttl)
 	}
 	if saveErr != nil {
-		return ErrImageTaskUnavailable.WithCause(saveErr)
+		// A transport failure can hide a successful terminal write. Deliver
+		// resolves the uncertain state instead of assuming it was rejected.
+		return true, ErrImageTaskUnavailable.WithCause(saveErr)
 	}
-	return nil
+	return stored, nil
 }
 
 func imageTaskToPublic(task *ImageTaskRecord) *ImageTask {

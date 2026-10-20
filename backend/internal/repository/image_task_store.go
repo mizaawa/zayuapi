@@ -33,41 +33,68 @@ func (s *imageTaskStore) Save(ctx context.Context, task *service.ImageTaskRecord
 }
 
 var finishImageTaskScript = redis.NewScript(`
+local function rememberDelivery(task)
+  if task.status == 'completed' and type(task.billing_id) == 'string' and task.billing_id ~= '' then
+    redis.call('SET', KEYS[2], cjson.encode({task_id=task.id,user_id=task.user_id,api_key_id=task.api_key_id,billing_id=task.billing_id}))
+  end
+end
 local raw = redis.call('GET', KEYS[1])
 if not raw then return -1 end
 local current = cjson.decode(raw)
 if current.user_id ~= tonumber(ARGV[3]) or current.api_key_id ~= tonumber(ARGV[4]) then return -1 end
-if current.status ~= 'processing' and current.status ~= 'queued' then return 0 end
+if current.status ~= 'processing' and current.status ~= 'queued' then
+  if current.status == cjson.decode(ARGV[1]).status then
+    return 2
+  end
+  return 0
+end
 redis.call('SET', KEYS[1], ARGV[1], 'PX', ARGV[2])
+rememberDelivery(cjson.decode(ARGV[1]))
 return 1
 `)
 
 func (s *imageTaskStore) Finish(ctx context.Context, task *service.ImageTaskRecord, ttl time.Duration) error {
-	if task.Workbench != nil {
-		return s.saveWorkbench(ctx, task, ttl, 0, true)
-	}
-	data, err := json.Marshal(task)
-	if err != nil {
-		return err
-	}
-	result, err := finishImageTaskScript.Run(ctx, s.rdb, []string{imageTaskKey(task.ID)}, data, ttl.Milliseconds(), task.UserID, task.APIKeyID).Int()
-	if err == nil && result < 0 {
-		return service.ErrImageTaskNotFound
-	}
+	_, err := s.FinishWithResult(ctx, task, ttl)
 	return err
 }
 
+func (s *imageTaskStore) FinishWithResult(ctx context.Context, task *service.ImageTaskRecord, ttl time.Duration) (bool, error) {
+	if task.Workbench != nil {
+		return s.saveWorkbenchWithResult(ctx, task, ttl, 0, true)
+	}
+	data, err := json.Marshal(task)
+	if err != nil {
+		return false, err
+	}
+	result, err := finishImageTaskScript.Run(ctx, s.rdb, []string{imageTaskKey(task.ID), imageTaskDeliveryKey(task.ID)}, data, ttl.Milliseconds(), task.UserID, task.APIKeyID).Int()
+	if err == nil && result < 0 {
+		return false, service.ErrImageTaskNotFound
+	}
+	return result > 0, err
+}
+
 var saveWorkbenchScript = redis.NewScript(`
+local function rememberDelivery(task)
+  if task.status == 'completed' and type(task.billing_id) == 'string' and task.billing_id ~= '' then
+    redis.call('SET', KEYS[7], cjson.encode({task_id=task.id,user_id=task.user_id,api_key_id=task.api_key_id,billing_id=task.billing_id}))
+  end
+end
 local raw = redis.call('GET', KEYS[1])
 if not raw then return -1 end
 local current = cjson.decode(raw)
 if current.user_id ~= tonumber(ARGV[9]) or current.api_key_id ~= tonumber(ARGV[10]) then return -1 end
-if ARGV[8] == '1' and current.status ~= 'processing' and current.status ~= 'queued' then return 0 end
+if ARGV[8] == '1' and current.status ~= 'processing' and current.status ~= 'queued' then
+  if current.status == ARGV[5] then
+    return 2
+  end
+  return 0
+end
 if tonumber(ARGV[7]) > 0 and (current.status ~= 'queued' or
   (tonumber(current.queue_lease_until or 0) > tonumber(ARGV[7]) and tonumber(current.queue_deadline or 0) > tonumber(ARGV[7]))) then
   return 0
 end
 redis.call('SET', KEYS[1], ARGV[1], 'PX', ARGV[2])
+rememberDelivery(cjson.decode(ARGV[1]))
 redis.call('ZADD', KEYS[2], ARGV[3], ARGV[4])
 redis.call('PEXPIRE', KEYS[2], math.max(86400000, tonumber(ARGV[2])))
 if ARGV[5] ~= 'processing' then redis.call('ZREM', KEYS[3], ARGV[4]) end
@@ -80,21 +107,26 @@ return 1
 `)
 
 func (s *imageTaskStore) saveWorkbench(ctx context.Context, task *service.ImageTaskRecord, ttl time.Duration, expiredBefore int64, terminalOnly bool) error {
+	_, err := s.saveWorkbenchWithResult(ctx, task, ttl, expiredBefore, terminalOnly)
+	return err
+}
+
+func (s *imageTaskStore) saveWorkbenchWithResult(ctx context.Context, task *service.ImageTaskRecord, ttl time.Duration, expiredBefore int64, terminalOnly bool) (bool, error) {
 	data, err := json.Marshal(task)
 	if err != nil {
-		return err
+		return false, err
 	}
 	cleanup, err := json.Marshal(service.ImageWorkbenchCleanup{ID: task.ID, UserEmail: task.UserEmail, Storage: task.WorkbenchStorage})
 	if err != nil {
-		return err
+		return false, err
 	}
 	result, err := saveWorkbenchScript.Run(ctx, s.rdb,
-		[]string{imageTaskKey(task.ID), workbenchTaskIndex(task.UserID), workbenchActiveIndex(task.UserID), workbenchCleanupIndex, workbenchQueueIndex(task.UserID), workbenchQueueLeases},
+		[]string{imageTaskKey(task.ID), workbenchTaskIndex(task.UserID), workbenchActiveIndex(task.UserID), workbenchCleanupIndex, workbenchQueueIndex(task.UserID), workbenchQueueLeases, imageTaskDeliveryKey(task.ID)},
 		data, ttl.Milliseconds(), task.ExpiresAt, task.ID, task.Status, string(cleanup), expiredBefore, terminalOnly, task.UserID, task.APIKeyID).Int()
 	if err == nil && result == -1 {
-		return service.ErrImageTaskNotFound
+		return false, service.ErrImageTaskNotFound
 	}
-	return err
+	return result > 0, err
 }
 
 const workbenchCleanupIndex = "image_workbench:cleanup"
@@ -260,4 +292,35 @@ func (s *imageTaskStore) Get(ctx context.Context, id string) (*service.ImageTask
 
 func imageTaskKey(id string) string {
 	return imageTaskKeyPrefix + strings.TrimSpace(id)
+}
+
+func imageTaskDeliveryKey(id string) string {
+	return "media_workbench_delivery:image:" + strings.TrimSpace(id)
+}
+
+func (s *imageTaskStore) GetMediaDelivery(ctx context.Context, id string) (*service.MediaWorkbenchDeliveryReceipt, error) {
+	data, err := s.rdb.Get(ctx, imageTaskDeliveryKey(id)).Bytes()
+	if err == redis.Nil {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	var receipt service.MediaWorkbenchDeliveryReceipt
+	if err := json.Unmarshal(data, &receipt); err != nil {
+		return nil, err
+	}
+	return &receipt, nil
+}
+
+var deleteImageDeliveryScript = redis.NewScript(`
+local raw = redis.call('GET', KEYS[1])
+if not raw then return 0 end
+local receipt = cjson.decode(raw)
+if receipt.billing_id ~= ARGV[1] then return 0 end
+return redis.call('DEL', KEYS[1])
+`)
+
+func (s *imageTaskStore) DeleteMediaDelivery(ctx context.Context, id, billingID string) error {
+	return deleteImageDeliveryScript.Run(ctx, s.rdb, []string{imageTaskDeliveryKey(id)}, billingID).Err()
 }

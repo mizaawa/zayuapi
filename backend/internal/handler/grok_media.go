@@ -824,6 +824,7 @@ func recordGrokMediaUsage(
 	channelUsageFields := channelMapping.ToUsageFields(clientRequestedModel(c, requestModel), result.UpstreamModel)
 	billingRequestID := imageWorkbenchBillingRequestID(c)
 	reservationID := mediaReservationID(c)
+	pricingReservation := mediaPrecharge(c)
 	recordUsage := func(ctx context.Context) {
 		if err := h.gatewayService.RecordUsage(ctx, &service.OpenAIRecordUsageInput{
 			Result:             result,
@@ -842,6 +843,7 @@ func recordGrokMediaUsage(
 			ChannelUsageFields: channelUsageFields,
 			BillingRequestID:   billingRequestID,
 			MediaReservationID: reservationID,
+			MediaReservation:   pricingReservation,
 		}); err != nil {
 			logger.L().With(
 				zap.String("component", "handler.openai_gateway.grok_media"),

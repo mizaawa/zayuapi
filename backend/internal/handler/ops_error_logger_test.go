@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -9,6 +10,7 @@ import (
 	"testing"
 	"unicode/utf8"
 
+	"github.com/Wei-Shaw/sub2api/internal/pkg/ctxkey"
 	middleware2 "github.com/Wei-Shaw/sub2api/internal/server/middleware"
 	"github.com/Wei-Shaw/sub2api/internal/service"
 	"github.com/gin-gonic/gin"
@@ -249,6 +251,105 @@ func setupOpsErrorLogTestQueue(t *testing.T, size int) {
 	opsErrorLogMu.Lock()
 	opsErrorLogQueue = make(chan opsErrorLogJob, size)
 	opsErrorLogMu.Unlock()
+}
+
+func TestOpsErrorLoggerMiddleware_PreservesGatewayRequestIDAcrossResponsePaths(t *testing.T) {
+	for _, tc := range []struct {
+		name           string
+		status         int
+		upstreamEvents bool
+	}{
+		{name: "mapped_http_error", status: 456, upstreamEvents: true},
+		{name: "recovered_upstream_error", status: http.StatusOK, upstreamEvents: true},
+		{name: "in_band_stream_error", status: http.StatusOK},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			setupOpsErrorLogTestQueue(t, 4)
+			t.Cleanup(func() { resetOpsErrorLoggerStateForTest(t) })
+			gin.SetMode(gin.TestMode)
+			ops := service.NewOpsService(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+			router := gin.New()
+			router.Use(middleware2.RequestLogger(), OpsErrorLoggerMiddleware(ops))
+			router.POST("/v1/messages", func(c *gin.Context) {
+				// Forwarding may replace the response header with an upstream ID.
+				c.Header("X-Request-ID", "upstream-response-id")
+				if tc.upstreamEvents {
+					c.Set(service.OpsUpstreamErrorsKey, []*service.OpsUpstreamErrorEvent{{
+						Platform:           "anthropic",
+						AccountID:          7,
+						UpstreamStatusCode: http.StatusTooManyRequests,
+						UpstreamRequestID:  "upstream-attempt-id",
+						Kind:               "http_error",
+						Message:            "Upstream rate limit exceeded",
+					}})
+				} else {
+					service.MarkOpsStreamError(c, "rate_limit_error", "Concurrency limit exceeded", http.StatusTooManyRequests)
+				}
+				c.JSON(tc.status, gin.H{"error": gin.H{"type": "upstream_error", "message": "Request failed"}})
+			})
+
+			req := httptest.NewRequest(http.MethodPost, "/v1/messages", nil)
+			req.Header.Set("X-Request-ID", "gateway-request-id")
+			w := httptest.NewRecorder()
+			router.ServeHTTP(w, req)
+
+			require.Equal(t, tc.status, w.Code)
+			require.Equal(t, "upstream-response-id", w.Header().Get("X-Request-ID"), "logging must not rewrite response headers")
+			require.JSONEq(t, `{"error":{"type":"upstream_error","message":"Request failed"}}`, w.Body.String())
+			require.Equal(t, 1, len(opsErrorLogQueue))
+			job := <-opsErrorLogQueue
+			require.Equal(t, "gateway-request-id", job.entry.RequestID)
+			if tc.upstreamEvents {
+				// Queue sanitization serializes attempts and releases the original slice.
+				require.NotNil(t, job.entry.UpstreamErrorsJSON)
+				var events []service.OpsUpstreamErrorEvent
+				require.NoError(t, json.Unmarshal([]byte(*job.entry.UpstreamErrorsJSON), &events))
+				require.Len(t, events, 1)
+				require.Equal(t, "upstream-attempt-id", events[0].UpstreamRequestID)
+				require.Equal(t, http.StatusTooManyRequests, events[0].UpstreamStatusCode)
+				require.Equal(t, int64(7), events[0].AccountID)
+				require.NotNil(t, job.entry.UpstreamStatusCode)
+				require.Equal(t, http.StatusTooManyRequests, *job.entry.UpstreamStatusCode)
+				require.Equal(t, "upstream_http", job.entry.ErrorSource)
+			}
+		})
+	}
+}
+
+func TestOpsErrorLoggerMiddleware_RequestIDFallsBackToResponseHeader(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		contextID any
+	}{
+		{name: "missing"},
+		{name: "empty", contextID: ""},
+		{name: "whitespace", contextID: "  "},
+		{name: "wrong_type", contextID: 123},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			setupOpsErrorLogTestQueue(t, 4)
+			t.Cleanup(func() { resetOpsErrorLoggerStateForTest(t) })
+			gin.SetMode(gin.TestMode)
+			ops := service.NewOpsService(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+			router := gin.New()
+			router.Use(OpsErrorLoggerMiddleware(ops))
+			router.POST("/v1/messages", func(c *gin.Context) {
+				c.Header("X-Request-ID", "response-fallback-id")
+				c.JSON(456, gin.H{"error": gin.H{"type": "upstream_error", "message": "Request failed"}})
+			})
+			req := httptest.NewRequest(http.MethodPost, "/v1/messages", nil)
+			if tc.contextID != nil {
+				req = req.WithContext(context.WithValue(req.Context(), ctxkey.RequestID, tc.contextID))
+			}
+			w := httptest.NewRecorder()
+			router.ServeHTTP(w, req)
+			require.Equal(t, 456, w.Code)
+			require.Equal(t, "response-fallback-id", w.Header().Get("X-Request-ID"))
+			require.Equal(t, 1, len(opsErrorLogQueue))
+			job := <-opsErrorLogQueue
+			require.Equal(t, "response-fallback-id", job.entry.RequestID)
+		})
+	}
 }
 
 func TestOpsErrorLoggerMiddleware_HardSkipsIngressRejection(t *testing.T) {

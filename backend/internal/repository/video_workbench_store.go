@@ -16,6 +16,7 @@ type videoWorkbenchStore struct{ rdb *redis.Client }
 const videoTaskPrefix = "video_workbench:task:"
 const videoLeases = "video_workbench:leases"
 const videoCleanup = "video_workbench:cleanup"
+const videoDeliveryPrefix = "media_workbench_delivery:video:"
 
 func NewVideoWorkbenchStore(rdb *redis.Client) service.VideoWorkbenchStore {
 	return &videoWorkbenchStore{rdb: rdb}
@@ -70,6 +71,41 @@ func (s *videoWorkbenchStore) Get(ctx context.Context, id string) (*service.Vide
 		return nil, service.ErrVideoTaskUnavailable.WithCause(err)
 	}
 	return &task, nil
+}
+
+// Delivery survives removal of the public task until its billing is finalized.
+// Keeping this receipt separate also covers expiry during a ledger outage.
+func (s *videoWorkbenchStore) GetMediaDelivery(ctx context.Context, id string) (*service.MediaWorkbenchDeliveryReceipt, error) {
+	if !service.ValidVideoWorkbenchTaskID(id) {
+		return nil, service.ErrVideoTaskNotFound
+	}
+	body, err := s.rdb.Get(ctx, videoDeliveryPrefix+id).Bytes()
+	if errors.Is(err, redis.Nil) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, service.ErrVideoTaskUnavailable.WithCause(err)
+	}
+	var receipt service.MediaWorkbenchDeliveryReceipt
+	if err := json.Unmarshal(body, &receipt); err != nil {
+		return nil, service.ErrVideoTaskUnavailable.WithCause(err)
+	}
+	return &receipt, nil
+}
+
+var videoDeleteDeliveryScript = redis.NewScript(`
+local raw = redis.call('GET', KEYS[1])
+if not raw then return 0 end
+local receipt = cjson.decode(raw)
+if receipt.billing_id ~= ARGV[1] then return 0 end
+return redis.call('DEL', KEYS[1])
+`)
+
+func (s *videoWorkbenchStore) DeleteMediaDelivery(ctx context.Context, id, billingID string) error {
+	if !service.ValidVideoWorkbenchTaskID(id) || billingID == "" {
+		return service.ErrVideoTaskNotFound
+	}
+	return videoDeleteDeliveryScript.Run(ctx, s.rdb, []string{videoDeliveryPrefix + id}, billingID).Err()
 }
 
 func (s *videoWorkbenchStore) records(ctx context.Context, ids []string) ([]*service.VideoWorkbenchRecord, error) {
@@ -184,6 +220,11 @@ local current = cjson.decode(raw)
 if current.user_id ~= tonumber(ARGV[6]) or current.workbench.api_key_id ~= tonumber(ARGV[7]) then return -1 end
 if current.status ~= 'processing' and current.status ~= 'queued' then return 0 end
 if tonumber(ARGV[5]) > 0 and current.lease_until > tonumber(ARGV[5]) and current.deadline > tonumber(ARGV[5]) then return 0 end
+local finished = cjson.decode(ARGV[2])
+if finished.billing_id ~= current.billing_id then return -1 end
+if finished.status == 'completed' and current.billing_id and current.billing_id ~= '' then
+  redis.call('SET', KEYS[7], cjson.encode({task_id=ARGV[1],user_id=current.user_id,api_key_id=current.workbench.api_key_id,billing_id=current.billing_id}))
+end
 redis.call('SET', KEYS[1], ARGV[2], 'PX', ARGV[3])
 redis.call('ZADD', KEYS[2], ARGV[4], ARGV[1])
 redis.call('PEXPIRE', KEYS[2], math.max(86400000, tonumber(ARGV[3])))
@@ -199,7 +240,8 @@ func (s *videoWorkbenchStore) Finish(ctx context.Context, task *service.VideoWor
 	if err != nil {
 		return false, err
 	}
-	n, err := videoFinishScript.Run(ctx, s.rdb, videoKeys(task), task.ID, body, ttl.Milliseconds(), task.ExpiresAt, expiredBefore, task.UserID, task.Workbench.APIKeyID).Int()
+	keys := append(videoKeys(task), videoDeliveryPrefix+task.ID)
+	n, err := videoFinishScript.Run(ctx, s.rdb, keys, task.ID, body, ttl.Milliseconds(), task.ExpiresAt, expiredBefore, task.UserID, task.Workbench.APIKeyID).Int()
 	if err == nil && n < 0 {
 		err = service.ErrVideoTaskNotFound
 	}

@@ -676,6 +676,25 @@ func (w *opsCaptureWriter) shouldCapture() bool {
 	return !rejected
 }
 
+// opsRequestID keeps the gateway correlation ID stable when a forwarded
+// response header contains the upstream request ID instead.
+func opsRequestID(c *gin.Context) string {
+	if c == nil {
+		return ""
+	}
+	if c.Request != nil {
+		if requestID, ok := c.Request.Context().Value(ctxkey.RequestID).(string); ok {
+			if requestID = strings.TrimSpace(requestID); requestID != "" {
+				return requestID
+			}
+		}
+	}
+	if c.Writer != nil {
+		return strings.TrimSpace(c.Writer.Header().Get("X-Request-ID"))
+	}
+	return ""
+}
+
 // OpsErrorLoggerMiddleware records error responses (status >= 400) into ops_error_logs.
 //
 // Notes:
@@ -790,10 +809,7 @@ func OpsErrorLoggerMiddleware(ops *service.OpsService) gin.HandlerFunc {
 			fallbackPlatform := guessPlatformFromPath(c.Request.URL.Path)
 			platform := resolveOpsPlatform(c.Request.Context(), apiKey, fallbackPlatform)
 
-			requestID := c.Writer.Header().Get("X-Request-Id")
-			if requestID == "" {
-				requestID = c.Writer.Header().Get("x-request-id")
-			}
+			requestID := opsRequestID(c)
 
 			// Best-effort backfill single upstream fields from the last event (if present).
 			var upstreamStatusCode *int
@@ -1011,10 +1027,7 @@ func OpsErrorLoggerMiddleware(ops *service.OpsService) gin.HandlerFunc {
 		fallbackPlatform := guessPlatformFromPath(c.Request.URL.Path)
 		platform := resolveOpsPlatform(c.Request.Context(), apiKey, fallbackPlatform)
 
-		requestID := c.Writer.Header().Get("X-Request-Id")
-		if requestID == "" {
-			requestID = c.Writer.Header().Get("x-request-id")
-		}
+		requestID := opsRequestID(c)
 
 		normalizedType := normalizeOpsErrorType(parsed.ErrorType, parsed.Code)
 
@@ -1166,10 +1179,7 @@ func logOpsStreamError(c *gin.Context, ops *service.OpsService, wireStatus int) 
 	fallbackPlatform := guessPlatformFromPath(c.Request.URL.Path)
 	platform := resolveOpsPlatform(c.Request.Context(), apiKey, fallbackPlatform)
 
-	requestID := c.Writer.Header().Get("X-Request-Id")
-	if requestID == "" {
-		requestID = c.Writer.Header().Get("x-request-id")
-	}
+	requestID := opsRequestID(c)
 
 	entry := &service.OpsInsertErrorLogInput{
 		RequestID:       requestID,

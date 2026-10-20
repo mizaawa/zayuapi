@@ -8,6 +8,7 @@ import KeysView from '../KeysView.vue'
 const {
   listKeys,
   getPublicSettings,
+  getUserEndpointSettings,
   getDashboardApiKeysUsage,
   getAvailableGroups,
   getUserGroupRates,
@@ -21,6 +22,7 @@ const {
 } = vi.hoisted(() => ({
   listKeys: vi.fn(),
   getPublicSettings: vi.fn(),
+  getUserEndpointSettings: vi.fn(),
   getDashboardApiKeysUsage: vi.fn(),
   getAvailableGroups: vi.fn(),
   getUserGroupRates: vi.fn(),
@@ -73,6 +75,7 @@ vi.mock('@/api', () => ({
   },
   authAPI: {
     getPublicSettings,
+    getUserEndpointSettings,
   },
   usageAPI: {
     getDashboardApiKeysUsage,
@@ -291,6 +294,7 @@ describe('user KeysView column settings', () => {
 
     listKeys.mockReset()
     getPublicSettings.mockReset()
+    getUserEndpointSettings.mockReset()
     getDashboardApiKeysUsage.mockReset()
     getAvailableGroups.mockReset()
     getUserGroupRates.mockReset()
@@ -310,6 +314,7 @@ describe('user KeysView column settings', () => {
       pages: 1,
     })
     getPublicSettings.mockResolvedValue({})
+    getUserEndpointSettings.mockResolvedValue({ custom_endpoints: [] })
     getDashboardApiKeysUsage.mockResolvedValue({ stats: {} })
     getAvailableGroups.mockResolvedValue([])
     getUserGroupRates.mockResolvedValue({})
@@ -321,6 +326,17 @@ describe('user KeysView column settings', () => {
   afterEach(() => {
     wrappers.splice(0).forEach((wrapper) => wrapper.unmount())
     vi.useRealTimers()
+  })
+
+  it('shows authenticated custom endpoints when the public settings omit them', async () => {
+    const customEndpoints = [{ name: 'Relay', endpoint: 'https://relay.example.test/v1', description: 'For signed-in users' }]
+    getUserEndpointSettings.mockResolvedValue({ custom_endpoints: customEndpoints })
+    const wrapper = await mountView()
+
+    expect(getUserEndpointSettings).toHaveBeenCalledTimes(1)
+    const endpoints = wrapper.getComponent({ name: 'EndpointPopover' })
+    expect(endpoints.props('customEndpoints')).toEqual(customEndpoints)
+    expect(endpoints.props('apiBaseUrl')).toBe('')
   })
 
   it('locks the delete confirmation while the request is in flight', async () => {

@@ -675,8 +675,11 @@ func (s *OpenAIGatewayService) handleErrorResponsePassthrough(
 	requestBody []byte,
 	responseBody []byte,
 ) error {
-	MarkResponseCommitted(c)
 	body := s.redactAgentIdentitySensitiveBody(ctx, account, responseBody)
+	if failoverErr := configuredPoolHTTPFailover(c, account, resp, body, s.cfg, true, requestBody); failoverErr != nil {
+		return failoverErr
+	}
+	MarkResponseCommitted(c)
 
 	// cyber_policy 仍按原始 body 打内部标记，供 handler 事后写风控/邮件；面向客户端的
 	// 错误体在下方统一重建。cyber 是上游网络安全策略拦截，不冷却账号，

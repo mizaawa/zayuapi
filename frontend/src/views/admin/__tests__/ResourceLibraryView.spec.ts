@@ -14,6 +14,7 @@ const {
   saveItem,
   showSuccess,
   showError,
+  copyToClipboard,
 } = vi.hoisted(() => ({
   t: vi.fn((key: string) => key),
   listItems: vi.fn(),
@@ -25,6 +26,7 @@ const {
   saveItem: vi.fn(),
   showSuccess: vi.fn(),
   showError: vi.fn(),
+  copyToClipboard: vi.fn().mockResolvedValue(true),
 }))
 
 vi.mock('@/api/admin', () => ({
@@ -46,7 +48,7 @@ vi.mock('@/stores/app', () => ({
 }))
 
 vi.mock('@/composables/useClipboard', () => ({
-  useClipboard: () => ({ copyToClipboard: vi.fn().mockResolvedValue(true) }),
+  useClipboard: () => ({ copyToClipboard }),
 }))
 
 vi.mock('vue-i18n', async () => ({
@@ -179,6 +181,35 @@ describe('ResourceLibraryView', () => {
     // One card per generated result; the empty saved tab adds none.
     expect(wrapper.findAll('article')).toHaveLength(1)
     expect(listItems).toHaveBeenCalledTimes(1)
+  })
+
+  it.each(['live', 'saved'] as const)('keeps the full %s prompt for copying and preview outside the padded clamp', async (tab) => {
+    const prompt = '完整提示词：清晰的场景描述，包含构图、光线和细节。'.repeat(24) + '\nEND_OF_ORIGINAL_PROMPT'
+    if (tab === 'live') {
+      listItems.mockResolvedValue({ items: [liveItem({ prompt })], total: 1 })
+    } else {
+      listSaved.mockResolvedValue({ items: [savedItem({ prompt })], total: 1 })
+    }
+    const wrapper = mountView()
+    await flushPromises()
+    if (tab === 'saved') {
+      await wrapper.findAll('button').find(button => button.text().includes('admin.resourceLibrary.tabs.saved'))!.trigger('click')
+      await flushPromises()
+    }
+
+    const card = wrapper.findAll('article').find(article => article.find('.resource-prompt').text() === prompt)!
+    const promptPreview = card.get('.resource-prompt')
+    expect(promptPreview.text()).toBe(prompt)
+    // Padding on the clamped element exposes part of a fourth line in Chromium.
+    expect(promptPreview.classes()).not.toContain('p-2')
+    expect(promptPreview.element.parentElement?.classList.contains('p-2')).toBe(true)
+
+    await card.findAll('button').find(button => button.text().includes('admin.resourceLibrary.actions.copyPrompt'))!.trigger('click')
+    expect(copyToClipboard).toHaveBeenCalledWith(prompt, 'admin.resourceLibrary.promptCopied')
+    await card.findAll('button').find(button => button.text().includes('admin.resourceLibrary.actions.preview'))!.trigger('click')
+    await flushPromises()
+    expect(wrapper.get('pre').text()).toBe(prompt)
+    wrapper.unmount()
   })
 
   it('saves a live result and marks the card as archived', async () => {

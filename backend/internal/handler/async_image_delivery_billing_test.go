@@ -45,8 +45,9 @@ func runAsyncImageTaskForTest(t *testing.T, h *AsyncImageHandler, key *service.A
 	require.NoError(t, h.precharge(c, body, service.PlatformOpenAI, "image"))
 	require.NotNil(t, mediaPrecharge(c))
 	c.Request = c.Request.WithContext(service.WithMediaWorkbenchPrepayment(c.Request.Context(), mediaPrecharge(c)))
-	task, err := h.tasks.Create(context.Background(), service.ImageTaskOwner{UserID: key.UserID, APIKeyID: key.ID, UserEmail: key.User.Email})
+	task, err := h.tasks.Create(context.Background(), service.ImageTaskOwner{UserID: key.UserID, APIKeyID: key.ID, UserEmail: key.User.Email, BillingID: mediaReservationID(c)})
 	require.NoError(t, err)
+	require.NoError(t, h.openAI.gatewayService.BindMediaImageTask(context.Background(), mediaPrecharge(c), task.ID))
 	taskCtx, recorder, cancel := newAsyncImageTaskContext(c, body, time.Minute)
 	h.run(task.ID, service.PlatformOpenAI, taskCtx, recorder, cancel)
 	return task.ID

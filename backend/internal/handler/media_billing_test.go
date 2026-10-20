@@ -61,6 +61,23 @@ func (r *partialUsageBillingRepo) StageMediaWorkbenchVideoOutcome(_ context.Cont
 	return nil
 }
 
+func (r *partialUsageBillingRepo) BindMediaImageTask(_ context.Context, id, taskID string, userID, keyID int64) error {
+	rsv := r.reservations[id]
+	if rsv == nil || rsv.Quote.Command.UserID != userID || rsv.Quote.Command.APIKeyID != keyID {
+		return service.ErrUsageBillingRequestConflict
+	}
+	rsv.ImageTaskID = taskID
+	return nil
+}
+
+func (r *partialUsageBillingRepo) StageMediaImageOutcome(_ context.Context, id string, quote *service.MediaBillingQuote) error {
+	if rsv := r.reservations[id]; rsv != nil {
+		rsv.ImageOutcome = quote
+		return nil
+	}
+	return service.ErrUsageBillingRequestConflict
+}
+
 var _ service.MediaBillingRepository = (*partialUsageBillingRepo)(nil)
 
 func (r *partialUsageBillingRepo) RenewMediaQueue(_ context.Context, id string, userID, keyID int64) error {

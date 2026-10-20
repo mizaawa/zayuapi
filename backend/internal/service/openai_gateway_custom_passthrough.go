@@ -200,6 +200,9 @@ func (s *OpenAIGatewayService) handleCustomRawErrorResponse(
 	account *Account,
 	requestBody, responseBody []byte,
 ) error {
+	if failoverErr := configuredPoolHTTPFailover(c, account, resp, responseBody, s.cfg, true, requestBody); failoverErr != nil {
+		return failoverErr
+	}
 	upstreamMsg := sanitizeUpstreamErrorMessage(strings.TrimSpace(extractUpstreamErrorMessage(responseBody)))
 	upstreamDetail := ""
 	if s.cfg != nil && s.cfg.Gateway.LogUpstreamErrorBody {

@@ -32,6 +32,7 @@ type MediaBillingReservation struct {
 	// Resolution quotes retain the price at admission even if an administrator
 	// edits group/channel prices while an asynchronous job is running.
 	VideoPrices   map[string]MediaBillingQuote `json:"video_prices,omitempty"`
+	ImagePricing  *MediaImagePricing           `json:"image_pricing,omitempty"`
 	FinalQuote    *MediaBillingQuote           `json:"-"`
 	RefundPending bool                         `json:"-"`
 	WorkbenchKind string                       `json:"workbench_kind,omitempty"`
@@ -39,6 +40,8 @@ type MediaBillingReservation struct {
 	WorkbenchDelivery bool               `json:"workbench_delivery,omitempty"`
 	WorkbenchTaskID   string             `json:"workbench_task_id,omitempty"`
 	VideoOutcome      *MediaBillingQuote `json:"video_outcome,omitempty"`
+	ImageTaskID       string             `json:"image_task_id,omitempty"`
+	ImageOutcome      *MediaBillingQuote `json:"image_outcome,omitempty"`
 	QueueLeaseUntil   time.Time          `json:"-"`
 	Dispatched        bool               `json:"-"`
 }
@@ -73,7 +76,11 @@ func (s *OpenAIGatewayService) PrechargeMedia(ctx context.Context, input *OpenAI
 	copyInput.BillingRequestID = "media:" + uuid.NewString()
 	copyInput.PricingAt = time.Now()
 	var quote *MediaBillingQuote
+	var imagePricing *MediaImagePricing
 	copyInput.MediaQuote = &quote
+	if input.Result != nil && input.Result.ImageCount > 0 && input.Result.VideoCount == 0 {
+		copyInput.captureImagePricing = &imagePricing
+	}
 	if err := s.RecordUsage(ctx, &copyInput); err != nil {
 		return nil, err
 	}
@@ -81,6 +88,7 @@ func (s *OpenAIGatewayService) PrechargeMedia(ctx context.Context, input *OpenAI
 		return nil, errors.New("media price is unavailable")
 	}
 	reservation := &MediaBillingReservation{ID: copyInput.BillingRequestID, Quote: *quote, WorkbenchKind: input.WorkbenchKind, MediaProtocol: input.Account.MediaProtocol()}
+	reservation.ImagePricing = imagePricing
 	reservation.WorkbenchDelivery = input.WorkbenchKind == "video"
 	if input.APIKey.GroupID != nil {
 		reservation.GroupID = *input.APIKey.GroupID
@@ -309,6 +317,22 @@ func (s *OpenAIGatewayService) reconcileMediaWorkbenchVideo(ctx context.Context,
 	}
 	task, err := tasks.store.Get(ctx, r.WorkbenchTaskID)
 	if errors.Is(err, ErrVideoTaskNotFound) {
+		if receipts, ok := tasks.store.(MediaWorkbenchDeliveryStore); ok {
+			receipt, receiptErr := receipts.GetMediaDelivery(ctx, r.WorkbenchTaskID)
+			if receiptErr != nil {
+				return receiptErr
+			}
+			if receipt != nil {
+				if !mediaDeliveryMatches(receipt, r, r.WorkbenchTaskID) {
+					return ErrUsageBillingRequestConflict
+				}
+				quote := r.Quote
+				if r.VideoOutcome != nil {
+					quote = *r.VideoOutcome
+				}
+				return s.settleMediaQuote(ctx, r, &quote)
+			}
+		}
 		if r.QueueLeaseUntil.After(time.Now()) {
 			return nil
 		}
@@ -457,6 +481,7 @@ func (s *OpenAIGatewayService) settleMediaQuote(ctx context.Context, r *MediaBil
 	if err != nil {
 		return err
 	}
+	s.clearMediaDeliveryReceipt(ctx, r)
 	if result == nil || !result.Applied {
 		return nil
 	}
@@ -523,7 +548,13 @@ func (s *OpenAIGatewayService) reconcilePendingMedia(ctx context.Context, r *Med
 		if err == nil && result != nil && result.Applied {
 			s.invalidateMediaBilling(ctx, r)
 		}
+		if err == nil {
+			s.clearMediaDeliveryReceipt(ctx, r)
+		}
 		return err
+	}
+	if r.ImageTaskID != "" {
+		return s.reconcileMediaImage(ctx, r)
 	}
 	if r.WorkbenchDelivery {
 		return s.reconcileMediaWorkbenchVideo(ctx, r)

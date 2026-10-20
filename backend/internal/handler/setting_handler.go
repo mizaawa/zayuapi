@@ -8,6 +8,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/handler/dto"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/response"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/timezone"
+	"github.com/Wei-Shaw/sub2api/internal/server/middleware"
 	"github.com/Wei-Shaw/sub2api/internal/service"
 
 	"github.com/gin-gonic/gin"
@@ -151,6 +152,26 @@ func (h *SettingHandler) GetPublicSettings(c *gin.Context) {
 
 		AllowUserViewErrorRequests: settings.AllowUserViewErrorRequests,
 	})
+}
+
+// GetUserEndpointSettings supplies the API key page without adding private
+// relay endpoints to the anonymous settings response or injected app config.
+// GET /api/v1/settings/endpoints
+func (h *SettingHandler) GetUserEndpointSettings(c *gin.Context) {
+	c.Header("Cache-Control", "private, no-store")
+	subject, ok := middleware.GetAuthSubjectFromContext(c)
+	if !ok || subject.UserID <= 0 {
+		response.Unauthorized(c, "User not authenticated")
+		return
+	}
+	settings, err := h.settingService.GetPublicSettings(c.Request.Context())
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, struct {
+		CustomEndpoints []dto.CustomEndpoint `json:"custom_endpoints"`
+	}{CustomEndpoints: dto.ParseCustomEndpoints(settings.CustomEndpoints)})
 }
 
 // UnsubscribeNotificationEmail handles optional notification email opt-outs.

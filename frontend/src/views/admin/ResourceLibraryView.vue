@@ -167,9 +167,9 @@
               </div>
             </dl>
 
-            <p class="resource-prompt rounded-lg bg-gray-50 p-2 text-xs leading-relaxed text-gray-600 dark:bg-dark-900 dark:text-gray-300">
-              {{ item.prompt || '—' }}
-            </p>
+            <div class="min-w-0 rounded-lg bg-gray-50 p-2 text-xs leading-relaxed text-gray-600 dark:bg-dark-900 dark:text-gray-300">
+              <p class="resource-prompt">{{ item.prompt || '—' }}</p>
+            </div>
 
             <div class="mt-auto flex flex-wrap gap-2 pt-1">
               <button type="button" class="card-action btn btn-secondary" @click="openPreview(item)">
@@ -263,9 +263,9 @@
               </div>
             </dl>
 
-            <p class="resource-prompt rounded-lg bg-gray-50 p-2 text-xs leading-relaxed text-gray-600 dark:bg-dark-900 dark:text-gray-300">
-              {{ item.prompt || '—' }}
-            </p>
+            <div class="min-w-0 rounded-lg bg-gray-50 p-2 text-xs leading-relaxed text-gray-600 dark:bg-dark-900 dark:text-gray-300">
+              <p class="resource-prompt">{{ item.prompt || '—' }}</p>
+            </div>
 
             <div class="mt-auto flex flex-wrap gap-2 pt-1">
               <button type="button" class="card-action btn btn-secondary" @click="openSavedPreview(item)">
@@ -867,13 +867,14 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
-/* Tailwind 3.4 here does not register the line-clamp plugin, so the prompt
-   preview is bounded explicitly instead of with `line-clamp-*`. */
+/* Keep padding on the wrapper: padding on a line-clamped box can expose part
+   of a fourth line. Clamp only the text so each visible line stays complete. */
 .resource-prompt {
   display: -webkit-box;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 3;
   overflow: hidden;
+  overflow-wrap: anywhere;
 }
 
 /* Card actions wrap to two columns on phones and stay compact on desktop. */
