@@ -152,9 +152,11 @@ func TestExpiredLegacyTokenHoldRefundAndActualSettlement(t *testing.T) {
 			mock.ExpectQuery(`(?s)SELECT hold_amount,final_quote FROM token_billing_reservations`).WithArgs(item.id, item.userID, item.keyID, cutoff).WillReturnRows(sqlmock.NewRows([]string{"hold_amount", "final_quote"}).AddRow(1.0, final))
 			mock.ExpectExec(`(?s)UPDATE users SET balance=balance\+\$1,frozen_balance=COALESCE\(frozen_balance,0\)-\$1`).WithArgs(1.0, item.userID).WillReturnResult(sqlmock.NewResult(0, 1))
 			if hasActual {
+				mock.ExpectExec(`SAVEPOINT legacy_token_usage_claim`).WillReturnResult(sqlmock.NewResult(0, 0))
 				mock.ExpectQuery(`(?s)INSERT INTO usage_billing_dedup .*RETURNING id`).WithArgs(item.id, item.keyID, quote.Command.RequestFingerprint).WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(1))
 				mock.ExpectQuery(`(?s)SELECT request_fingerprint\s+FROM usage_billing_dedup_archive`).WithArgs(item.id, item.keyID).WillReturnError(sql.ErrNoRows)
 				mock.ExpectQuery(`(?s)UPDATE users\s+SET balance = balance - \$1,\s+updated_at = NOW\(\)\s+WHERE id = \$2 AND deleted_at IS NULL AND balance >= \$1\s+RETURNING balance`).WithArgs(.25, item.userID).WillReturnRows(sqlmock.NewRows([]string{"balance"}).AddRow(9.75))
+				mock.ExpectExec(`RELEASE SAVEPOINT legacy_token_usage_claim`).WillReturnResult(sqlmock.NewResult(0, 0))
 				mock.ExpectExec(`UPDATE token_billing_reservations SET state='settled'`).WithArgs(item.id, sqlmock.AnyArg()).WillReturnResult(sqlmock.NewResult(0, 1))
 			} else {
 				mock.ExpectExec(`UPDATE token_billing_reservations SET state='released'`).WithArgs(item.id).WillReturnResult(sqlmock.NewResult(0, 1))
@@ -165,6 +167,57 @@ func TestExpiredLegacyTokenHoldRefundAndActualSettlement(t *testing.T) {
 			require.NoError(t, err)
 			require.True(t, applied)
 			require.NoError(t, mock.ExpectationsWereMet())
+		})
+	}
+}
+
+func TestLegacyTokenRecoveryAlreadyBilledStillRefunds(t *testing.T) {
+	for _, location := range []string{"live", "archive", "conflict"} {
+		t.Run(location, func(t *testing.T) {
+			db, mock, err := sqlmock.New()
+			require.NoError(t, err)
+			t.Cleanup(func() { _ = db.Close() })
+			item := expiredBalanceHold{id: "token:already-billed", userID: 7, keyID: 9}
+			cutoff := time.Date(2026, 10, 20, 1, 0, 0, 0, time.UTC)
+			quote := legacyTokenFinalQuote{Command: service.UsageBillingCommand{RequestID: item.id, UserID: item.userID, APIKeyID: item.keyID, BalanceCost: .25}}
+			quote.Command.Normalize()
+			final, err := json.Marshal(quote)
+			require.NoError(t, err)
+			mock.ExpectBegin()
+			mock.ExpectQuery(`SELECT id FROM users WHERE id=\$1 FOR UPDATE`).WithArgs(item.userID).WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(item.userID))
+			mock.ExpectQuery(`(?s)SELECT hold_amount,final_quote FROM token_billing_reservations`).WithArgs(item.id, item.userID, item.keyID, cutoff).WillReturnRows(sqlmock.NewRows([]string{"hold_amount", "final_quote"}).AddRow(1.0, final))
+			mock.ExpectExec(`(?s)UPDATE users SET balance=balance\+\$1,frozen_balance=COALESCE\(frozen_balance,0\)-\$1`).WithArgs(1.0, item.userID).WillReturnResult(sqlmock.NewResult(0, 1))
+			mock.ExpectExec(`SAVEPOINT legacy_token_usage_claim`).WillReturnResult(sqlmock.NewResult(0, 0))
+			claim := mock.ExpectQuery(`(?s)INSERT INTO usage_billing_dedup .*RETURNING id`).WithArgs(item.id, item.keyID, quote.Command.RequestFingerprint)
+			if location == "archive" {
+				claim.WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(1))
+				mock.ExpectQuery(`(?s)SELECT request_fingerprint\s+FROM usage_billing_dedup_archive`).WithArgs(item.id, item.keyID).WillReturnRows(sqlmock.NewRows([]string{"request_fingerprint"}).AddRow(quote.Command.RequestFingerprint))
+			} else {
+				claim.WillReturnError(sql.ErrNoRows)
+				fingerprint := quote.Command.RequestFingerprint
+				if location == "conflict" {
+					fingerprint = "different-charge"
+				}
+				mock.ExpectQuery(`(?s)SELECT request_fingerprint\s+FROM usage_billing_dedup\s+WHERE`).WithArgs(item.id, item.keyID).WillReturnRows(sqlmock.NewRows([]string{"request_fingerprint"}).AddRow(fingerprint))
+			}
+			if location == "conflict" {
+				mock.ExpectRollback()
+			} else {
+				mock.ExpectExec(`ROLLBACK TO SAVEPOINT legacy_token_usage_claim`).WillReturnResult(sqlmock.NewResult(0, 0))
+				mock.ExpectExec(`RELEASE SAVEPOINT legacy_token_usage_claim`).WillReturnResult(sqlmock.NewResult(0, 0))
+				mock.ExpectExec(`UPDATE token_billing_reservations SET state='settled'`).WithArgs(item.id, sqlmock.AnyArg()).WillReturnResult(sqlmock.NewResult(0, 1))
+				mock.ExpectExec(`INSERT INTO balance_hold_releases`).WithArgs("legacy_token", item.id, item.keyID, item.userID, 1.0).WillReturnResult(sqlmock.NewResult(0, 1))
+				mock.ExpectCommit()
+			}
+			applied, err := (&usageBillingRepository{db: db}).releaseExpiredLegacyTokenHold(context.Background(), item, cutoff)
+			if location == "conflict" {
+				require.ErrorIs(t, err, service.ErrUsageBillingRequestConflict)
+				require.False(t, applied)
+			} else {
+				require.NoError(t, err)
+				require.True(t, applied, "already billed usage must not block refunding the old hold")
+			}
+			require.NoError(t, mock.ExpectationsWereMet(), "matching prior usage must never be billed or logged again")
 		})
 	}
 }

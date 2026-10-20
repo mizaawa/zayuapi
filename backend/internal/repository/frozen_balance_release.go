@@ -247,18 +247,30 @@ func (r *usageBillingRepository) releaseExpiredLegacyTokenHold(ctx context.Conte
 	if quote != nil {
 		// Only observed usage may consume the old hold. Never turn a missing
 		// outcome or a conservative maximum estimate into a new user charge.
+		// A matching charge may already exist in either dedup table. Isolate
+		// the claim so an archived receipt cannot leave a duplicate live key
+		// behind, and finish refunding without charging/logging usage twice.
+		if _, err := tx.ExecContext(ctx, "SAVEPOINT legacy_token_usage_claim"); err != nil {
+			return false, err
+		}
 		claimed, err := r.claimUsageBillingKey(ctx, tx, &quote.Command)
 		if err != nil {
 			return false, err
 		}
 		if !claimed {
-			return false, service.ErrUsageBillingRequestConflict
+			if _, err := tx.ExecContext(ctx, "ROLLBACK TO SAVEPOINT legacy_token_usage_claim"); err != nil {
+				return false, err
+			}
+		} else {
+			if err := r.applyUsageBillingEffects(ctx, tx, &quote.Command, &service.UsageBillingApplyResult{}); err != nil {
+				return false, err
+			}
+			quote.Usage.RequestID, quote.Usage.UserID, quote.Usage.APIKeyID = item.id, item.userID, item.keyID
+			if err := writeMediaUsageLog(ctx, tx, &quote.Usage); err != nil {
+				return false, err
+			}
 		}
-		if err := r.applyUsageBillingEffects(ctx, tx, &quote.Command, &service.UsageBillingApplyResult{}); err != nil {
-			return false, err
-		}
-		quote.Usage.RequestID, quote.Usage.UserID, quote.Usage.APIKeyID = item.id, item.userID, item.keyID
-		if err := writeMediaUsageLog(ctx, tx, &quote.Usage); err != nil {
+		if _, err := tx.ExecContext(ctx, "RELEASE SAVEPOINT legacy_token_usage_claim"); err != nil {
 			return false, err
 		}
 		data, err := json.Marshal(quote)

@@ -387,6 +387,20 @@ func (r *usageBillingRepository) applyBatchImageBalanceHold(
 	if cmd.RequestID == "" {
 		return nil, service.ErrUsageBillingRequestIDRequired
 	}
+	// Frozen funds belong exclusively to one batch-image lifecycle. Reject
+	// foreign request namespaces and aliases before starting a transaction.
+	var expectedRequestID string
+	switch operation {
+	case "reserve":
+		expectedRequestID = service.BatchImageHoldRequestID(cmd.BatchID)
+	case "capture":
+		expectedRequestID = service.BatchImageCaptureRequestID(cmd.BatchID)
+	case "release":
+		expectedRequestID = service.BatchImageReleaseRequestID(cmd.BatchID)
+	}
+	if expectedRequestID == "" || cmd.RequestID != expectedRequestID {
+		return nil, service.ErrUsageBillingRequestConflict
+	}
 
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -402,6 +416,21 @@ func (r *usageBillingRepository) applyBatchImageBalanceHold(
 	// Serialize the entire lifecycle before checking either terminal operation.
 	if _, err := tx.ExecContext(ctx, "SELECT pg_advisory_xact_lock($1)", advisoryLockHash("batch_image_billing:"+cmd.BatchID)); err != nil {
 		return nil, err
+	}
+	if operation == "reserve" {
+		// A canonical ID alone is insufficient: only a durable batch owned by
+		// this user/key may reserve its immutable, accounting-scale budget.
+		var matchingJob bool
+		if err := tx.QueryRowContext(ctx, `SELECT EXISTS (
+			SELECT 1 FROM batch_image_jobs
+			WHERE batch_id=$1 AND user_id=$2 AND api_key_id=$3
+			AND ROUND(COALESCE(hold_amount,estimated_cost),8)=$4
+		)`, cmd.BatchID, cmd.UserID, cmd.APIKeyID, cmd.HoldAmount).Scan(&matchingJob); err != nil {
+			return nil, err
+		}
+		if !matchingJob {
+			return nil, service.ErrUsageBillingRequestConflict
+		}
 	}
 	allowed, err := batchImageHoldOperationAllowed(ctx, tx, cmd, operation)
 	if err != nil {
