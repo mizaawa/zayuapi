@@ -3,6 +3,11 @@
 FRONTEND_CRITICAL_VITEST := \
 	src/api/__tests__/client.spec.ts \
 	src/api/__tests__/tokenRefresh.spec.ts \
+	src/stores/__tests__/paymentAccess.spec.ts \
+	src/router/__tests__/feature-access.spec.ts \
+	src/components/layout/__tests__/AppSidebar.customMenu.spec.ts \
+	src/components/admin/payment/__tests__/PaymentPermissionsPanel.spec.ts \
+	src/components/admin/user/__tests__/UserEditModal.paymentPermissions.spec.ts \
 	src/api/__tests__/imageWorkbench.spec.ts \
 	src/views/auth/__tests__/LinuxDoCallbackView.spec.ts \
 	src/views/auth/__tests__/WechatCallbackView.spec.ts \

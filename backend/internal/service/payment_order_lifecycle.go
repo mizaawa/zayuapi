@@ -348,6 +348,9 @@ func (s *PaymentService) VerifyOrderPublic(ctx context.Context, outTradeNo strin
 	if err != nil {
 		return nil, infraerrors.NotFound("NOT_FOUND", "order not found")
 	}
+	if err := s.RequirePaymentAccess(ctx, o.UserID); err != nil {
+		return nil, err
+	}
 	return o, nil
 }
 

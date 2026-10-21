@@ -10,15 +10,16 @@ import (
 )
 
 type User struct {
-	ID            int64   `json:"id"`
-	Email         string  `json:"email"`
-	Username      string  `json:"username"`
-	Role          string  `json:"role"`
-	Balance       float64 `json:"balance"`
-	FrozenBalance float64 `json:"frozen_balance"`
-	Concurrency   int     `json:"concurrency"`
-	Status        string  `json:"status"`
-	AllowedGroups []int64 `json:"allowed_groups"`
+	ExclusiveRechargeEnabled bool    `json:"exclusive_recharge_enabled"`
+	ID                       int64   `json:"id"`
+	Email                    string  `json:"email"`
+	Username                 string  `json:"username"`
+	Role                     string  `json:"role"`
+	Balance                  float64 `json:"balance"`
+	FrozenBalance            float64 `json:"frozen_balance"`
+	Concurrency              int     `json:"concurrency"`
+	Status                   string  `json:"status"`
+	AllowedGroups            []int64 `json:"allowed_groups"`
 	// BlockedGroups contains public group IDs denied for this user. It is
 	// returned to administrators and to the authenticated profile so clients
 	// can label an existing key that was later blocked.

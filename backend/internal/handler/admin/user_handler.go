@@ -74,17 +74,18 @@ type CreateUserRequest struct {
 // UpdateUserRequest represents admin update user request
 // 使用指针类型来区分"未提供"和"设置为0"
 type UpdateUserRequest struct {
-	Email         string   `json:"email" binding:"omitempty,email"`
-	Password      string   `json:"password" binding:"omitempty,min=6"`
-	Username      *string  `json:"username"`
-	Notes         *string  `json:"notes"`
-	Role          string   `json:"role" binding:"omitempty,oneof=admin user"`
-	Balance       *float64 `json:"balance"`
-	Concurrency   *int     `json:"concurrency"`
-	RPMLimit      *int     `json:"rpm_limit"`
-	Status        string   `json:"status" binding:"omitempty,oneof=active disabled"`
-	AllowedGroups *[]int64 `json:"allowed_groups"`
-	BlockedGroups *[]int64 `json:"blocked_groups"`
+	ExclusiveRechargeEnabled *bool    `json:"exclusive_recharge_enabled"`
+	Email                    string   `json:"email" binding:"omitempty,email"`
+	Password                 string   `json:"password" binding:"omitempty,min=6"`
+	Username                 *string  `json:"username"`
+	Notes                    *string  `json:"notes"`
+	Role                     string   `json:"role" binding:"omitempty,oneof=admin user"`
+	Balance                  *float64 `json:"balance"`
+	Concurrency              *int     `json:"concurrency"`
+	RPMLimit                 *int     `json:"rpm_limit"`
+	Status                   string   `json:"status" binding:"omitempty,oneof=active disabled"`
+	AllowedGroups            *[]int64 `json:"allowed_groups"`
+	BlockedGroups            *[]int64 `json:"blocked_groups"`
 	// GroupRates 用户专属分组倍率配置
 	// map[groupID]*rate，nil 表示删除该分组的专属倍率
 	GroupRates map[int64]*float64 `json:"group_rates"`
@@ -133,11 +134,20 @@ func (h *UserHandler) List(c *gin.Context) {
 	}
 
 	filters := service.UserListFilters{
+		Email:      strings.TrimSpace(c.Query("email")),
 		Status:     c.Query("status"),
 		Role:       c.Query("role"),
 		Search:     search,
 		GroupName:  strings.TrimSpace(c.Query("group_name")),
 		Attributes: parseAttributeFilters(c),
+	}
+	if raw, present := c.GetQuery("exclusive_recharge_enabled"); present {
+		value, err := strconv.ParseBool(raw)
+		if err != nil {
+			response.BadRequest(c, "Invalid exclusive_recharge_enabled filter")
+			return
+		}
+		filters.ExclusiveRechargeEnabled = &value
 	}
 	if raw := strings.TrimSpace(c.Query("api_key_group_id")); raw != "" {
 		if id, parseErr := strconv.ParseInt(raw, 10, 64); parseErr == nil && id > 0 {
@@ -345,19 +355,20 @@ func (h *UserHandler) Update(c *gin.Context) {
 
 	// 使用指针类型直接传递，nil 表示未提供该字段
 	user, err := h.adminService.UpdateUser(c.Request.Context(), userID, &service.UpdateUserInput{
-		Email:         req.Email,
-		Password:      req.Password,
-		Username:      req.Username,
-		Notes:         req.Notes,
-		Role:          req.Role,
-		Balance:       req.Balance,
-		Concurrency:   req.Concurrency,
-		RPMLimit:      req.RPMLimit,
-		Status:        req.Status,
-		AllowedGroups: req.AllowedGroups,
-		BlockedGroups: req.BlockedGroups,
-		GroupRates:    req.GroupRates,
-		ActorAdminID:  getAdminIDFromContext(c),
+		ExclusiveRechargeEnabled: req.ExclusiveRechargeEnabled,
+		Email:                    req.Email,
+		Password:                 req.Password,
+		Username:                 req.Username,
+		Notes:                    req.Notes,
+		Role:                     req.Role,
+		Balance:                  req.Balance,
+		Concurrency:              req.Concurrency,
+		RPMLimit:                 req.RPMLimit,
+		Status:                   req.Status,
+		AllowedGroups:            req.AllowedGroups,
+		BlockedGroups:            req.BlockedGroups,
+		GroupRates:               req.GroupRates,
+		ActorAdminID:             getAdminIDFromContext(c),
 	})
 	if err != nil {
 		response.ErrorFrom(c, err)

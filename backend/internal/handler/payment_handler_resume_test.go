@@ -15,6 +15,7 @@ import (
 	dbent "github.com/Wei-Shaw/sub2api/ent"
 	"github.com/Wei-Shaw/sub2api/ent/enttest"
 	"github.com/Wei-Shaw/sub2api/internal/payment"
+	"github.com/Wei-Shaw/sub2api/internal/repository"
 	"github.com/Wei-Shaw/sub2api/internal/service"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
@@ -118,7 +119,8 @@ func TestVerifyOrderPublicReturnsLegacyOrderState(t *testing.T) {
 		Save(context.Background())
 	require.NoError(t, err)
 
-	paymentSvc := service.NewPaymentService(client, payment.NewRegistry(), nil, nil, nil, nil, nil, nil, nil)
+	configSvc := service.NewPaymentConfigService(client, repository.NewSettingRepository(client), nil)
+	paymentSvc := service.NewPaymentService(client, payment.NewRegistry(), nil, nil, nil, configSvc, nil, nil, nil)
 	h := NewPaymentHandler(paymentSvc, nil)
 
 	recorder := httptest.NewRecorder()
@@ -217,7 +219,7 @@ func TestResolveOrderPublicByResumeTokenReturnsFrontendContractFields(t *testing
 	})
 	require.NoError(t, err)
 
-	configSvc := service.NewPaymentConfigService(client, nil, []byte("0123456789abcdef0123456789abcdef"))
+	configSvc := service.NewPaymentConfigService(client, repository.NewSettingRepository(client), []byte("0123456789abcdef0123456789abcdef"))
 	paymentSvc := service.NewPaymentService(client, payment.NewRegistry(), nil, nil, nil, configSvc, nil, nil, nil)
 	h := NewPaymentHandler(paymentSvc, nil)
 
@@ -305,7 +307,7 @@ func TestResolveOrderPublicByResumeTokenReturnsBadRequestForMismatchedToken(t *t
 	})
 	require.NoError(t, err)
 
-	configSvc := service.NewPaymentConfigService(client, nil, []byte("0123456789abcdef0123456789abcdef"))
+	configSvc := service.NewPaymentConfigService(client, repository.NewSettingRepository(client), []byte("0123456789abcdef0123456789abcdef"))
 	paymentSvc := service.NewPaymentService(client, payment.NewRegistry(), nil, nil, nil, configSvc, nil, nil, nil)
 	h := NewPaymentHandler(paymentSvc, nil)
 

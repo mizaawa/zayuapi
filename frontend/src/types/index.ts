@@ -87,6 +87,7 @@ export interface User {
   role: 'admin' | 'user' // User role for authorization
   balance: number // User balance for API usage
   frozen_balance?: number // Balance currently held by async batch jobs
+  exclusive_recharge_enabled?: boolean
   concurrency: number // Allowed concurrent requests
   rpm_limit?: number // User-level RPM cap (0 = unlimited); effective as fallback when group has no rpm_limit
   status: 'active' | 'disabled' // Account status
@@ -240,6 +241,7 @@ export interface PublicSettings {
   compact_home_enabled: boolean
   hide_ccs_import_button: boolean
   payment_enabled: boolean
+  payment_exclusive_enabled?: boolean
   risk_control_enabled: boolean
   table_default_page_size: number
   table_page_size_options: number[]
@@ -1999,6 +2001,7 @@ export interface UpdateUserRequest {
   password?: string
   username?: string
   notes?: string
+  exclusive_recharge_enabled?: boolean
   role?: 'admin' | 'user'
   balance?: number
   concurrency?: number

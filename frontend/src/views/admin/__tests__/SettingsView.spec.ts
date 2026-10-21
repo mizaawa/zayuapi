@@ -546,6 +546,7 @@ function mountView() {
         Icon: true,
         ConfirmDialog: true,
         PaymentProviderList: true,
+        PaymentPermissionsPanel: true,
         PaymentProviderDialog: true,
         GroupBadge: true,
         GroupOptionItem: true,
@@ -699,6 +700,20 @@ describe("admin SettingsView payment visible method controls", () => {
     });
     fetchPublicSettings.mockResolvedValue(undefined);
     adminSettingsFetch.mockResolvedValue(undefined);
+  });
+
+  it("places permission management between payment settings and providers", async () => {
+    getSettings.mockResolvedValue({ ...baseSettingsResponse, payment_enabled: true });
+    const wrapper = mountView();
+    await flushPromises();
+    await openPaymentTab(wrapper);
+    const permissions = wrapper.get("payment-permissions-panel-stub");
+    expect(permissions.attributes("active")).toBe("true");
+    expect(permissions.element.previousElementSibling?.querySelector("h2")?.textContent)
+      .toContain("admin.settings.payment.title");
+    expect(permissions.element.nextElementSibling?.tagName.toLowerCase())
+      .toBe("payment-provider-list-stub");
+    wrapper.unmount();
   });
 
   it("submits the compact home page toggle", async () => {
@@ -1594,6 +1609,7 @@ describe("admin SettingsView payment visible method controls", () => {
           Icon: true,
           ConfirmDialog: true,
           PaymentProviderList: PaymentProviderListStub,
+          PaymentPermissionsPanel: true,
           PaymentProviderDialog: true,
           GroupBadge: true,
           GroupOptionItem: true,
@@ -1804,6 +1820,7 @@ describe("admin SettingsView payment visible method controls", () => {
           Icon: true,
           ConfirmDialog: true,
           PaymentProviderList: PaymentProviderListCapture,
+          PaymentPermissionsPanel: true,
           PaymentProviderDialog: true,
           GroupBadge: true,
           GroupOptionItem: true,

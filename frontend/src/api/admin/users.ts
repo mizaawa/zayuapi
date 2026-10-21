@@ -70,6 +70,8 @@ export async function list(
     status?: 'active' | 'disabled'
     role?: 'admin' | 'user'
     search?: string
+    email?: string
+    exclusive_recharge_enabled?: boolean
     group_name?: string         // fuzzy filter by allowed group name
     api_key_group_id?: number   // filter users by the group their API keys are bound to
     attributes?: Record<number, string>  // attributeId -> value
@@ -88,6 +90,8 @@ export async function list(
     status: filters?.status,
     role: filters?.role,
     search: filters?.search,
+    email: filters?.email,
+    exclusive_recharge_enabled: filters?.exclusive_recharge_enabled,
     group_name: filters?.group_name,
     api_key_group_id: filters?.api_key_group_id,
     include_subscriptions: filters?.include_subscriptions,

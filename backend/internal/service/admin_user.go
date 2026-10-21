@@ -217,6 +217,7 @@ func (s *adminServiceImpl) UpdateUser(ctx context.Context, id int64, input *Upda
 	oldStatus := user.Status
 	oldRole := user.Role
 	oldRPMLimit := user.RPMLimit
+	oldExclusiveRechargeEnabled := user.ExclusiveRechargeEnabled
 	oldAllowedGroups := append([]int64(nil), user.AllowedGroups...)
 	oldBlockedGroups := append([]int64(nil), user.BlockedGroups...)
 
@@ -242,6 +243,10 @@ func (s *adminServiceImpl) UpdateUser(ctx context.Context, id int64, input *Upda
 	if input.Notes != nil {
 		user.Notes = *input.Notes
 		fields.Notes = true
+	}
+	if input.ExclusiveRechargeEnabled != nil {
+		user.ExclusiveRechargeEnabled = *input.ExclusiveRechargeEnabled
+		fields.ExclusiveRechargeEnabled = true
 	}
 
 	if input.Status != "" {
@@ -288,6 +293,9 @@ func (s *adminServiceImpl) UpdateUser(ctx context.Context, id int64, input *Upda
 	if err := s.userRepo.Update(ctx, user, fields); err != nil {
 		return nil, err
 	}
+	if user.ExclusiveRechargeEnabled != oldExclusiveRechargeEnabled {
+		PaymentAccessChanged()
+	}
 
 	// 角色变更属权限敏感操作，落审计日志（含操作者），便于事后追溯。
 	if user.Role != oldRole {
@@ -305,7 +313,7 @@ func (s *adminServiceImpl) UpdateUser(ctx context.Context, id int64, input *Upda
 	if s.authCacheInvalidator != nil {
 		// RPMLimit 直接参与 billing_cache_service.checkRPM 的三级级联，
 		// allowed_groups 参与 API Key 专属分组授权判断；不失效缓存会让修改在一个 L2 TTL 内失去效果。
-		if user.Concurrency != oldConcurrency || user.Status != oldStatus || user.Role != oldRole || user.RPMLimit != oldRPMLimit || !sameInt64Set(user.AllowedGroups, oldAllowedGroups) || !sameInt64Set(user.BlockedGroups, oldBlockedGroups) {
+		if user.ExclusiveRechargeEnabled != oldExclusiveRechargeEnabled || user.Concurrency != oldConcurrency || user.Status != oldStatus || user.Role != oldRole || user.RPMLimit != oldRPMLimit || !sameInt64Set(user.AllowedGroups, oldAllowedGroups) || !sameInt64Set(user.BlockedGroups, oldBlockedGroups) {
 			s.authCacheInvalidator.InvalidateAuthCacheByUserID(ctx, user.ID)
 		}
 	}

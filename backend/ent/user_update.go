@@ -192,6 +192,20 @@ func (_u *UserUpdate) AddConcurrency(v int) *UserUpdate {
 	return _u
 }
 
+// SetExclusiveRechargeEnabled sets the "exclusive_recharge_enabled" field.
+func (_u *UserUpdate) SetExclusiveRechargeEnabled(v bool) *UserUpdate {
+	_u.mutation.SetExclusiveRechargeEnabled(v)
+	return _u
+}
+
+// SetNillableExclusiveRechargeEnabled sets the "exclusive_recharge_enabled" field if the given value is not nil.
+func (_u *UserUpdate) SetNillableExclusiveRechargeEnabled(v *bool) *UserUpdate {
+	if v != nil {
+		_u.SetExclusiveRechargeEnabled(*v)
+	}
+	return _u
+}
+
 // SetStatus sets the "status" field.
 func (_u *UserUpdate) SetStatus(v string) *UserUpdate {
 	_u.mutation.SetStatus(v)
@@ -1057,6 +1071,9 @@ func (_u *UserUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	if value, ok := _u.mutation.AddedConcurrency(); ok {
 		_spec.AddField(user.FieldConcurrency, field.TypeInt, value)
 	}
+	if value, ok := _u.mutation.ExclusiveRechargeEnabled(); ok {
+		_spec.SetField(user.FieldExclusiveRechargeEnabled, field.TypeBool, value)
+	}
 	if value, ok := _u.mutation.Status(); ok {
 		_spec.SetField(user.FieldStatus, field.TypeString, value)
 	}
@@ -1892,6 +1909,20 @@ func (_u *UserUpdateOne) SetNillableConcurrency(v *int) *UserUpdateOne {
 // AddConcurrency adds value to the "concurrency" field.
 func (_u *UserUpdateOne) AddConcurrency(v int) *UserUpdateOne {
 	_u.mutation.AddConcurrency(v)
+	return _u
+}
+
+// SetExclusiveRechargeEnabled sets the "exclusive_recharge_enabled" field.
+func (_u *UserUpdateOne) SetExclusiveRechargeEnabled(v bool) *UserUpdateOne {
+	_u.mutation.SetExclusiveRechargeEnabled(v)
+	return _u
+}
+
+// SetNillableExclusiveRechargeEnabled sets the "exclusive_recharge_enabled" field if the given value is not nil.
+func (_u *UserUpdateOne) SetNillableExclusiveRechargeEnabled(v *bool) *UserUpdateOne {
+	if v != nil {
+		_u.SetExclusiveRechargeEnabled(*v)
+	}
 	return _u
 }
 
@@ -2789,6 +2820,9 @@ func (_u *UserUpdateOne) sqlSave(ctx context.Context) (_node *User, err error) {
 	}
 	if value, ok := _u.mutation.AddedConcurrency(); ok {
 		_spec.AddField(user.FieldConcurrency, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.ExclusiveRechargeEnabled(); ok {
+		_spec.SetField(user.FieldExclusiveRechargeEnabled, field.TypeBool, value)
 	}
 	if value, ok := _u.mutation.Status(); ok {
 		_spec.SetField(user.FieldStatus, field.TypeString, value)

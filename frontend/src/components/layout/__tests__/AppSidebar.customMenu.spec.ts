@@ -11,6 +11,7 @@ const stores = vi.hoisted(() => ({
   auth: {} as Record<string, unknown>,
   admin: {} as Record<string, unknown>,
   onboarding: { isCurrentStep: () => false },
+  payment: { allowed: false },
 }))
 
 vi.mock('@/stores', () => ({
@@ -20,6 +21,7 @@ vi.mock('@/stores', () => ({
   useOnboardingStore: () => stores.onboarding,
 }))
 vi.mock('@/stores/app', () => ({ useAppStore: () => stores.app }))
+vi.mock('@/stores/paymentAccess', () => ({ usePaymentAccessStore: () => stores.payment }))
 vi.mock('@/composables/useBatchImageAccess', () => ({
   useBatchImageAccess: () => ({ canUseBatchImage: { value: false }, refreshBatchImageAccess: vi.fn() }),
 }))
@@ -66,6 +68,7 @@ function menuLink(label: string) {
 }
 
 beforeEach(() => {
+  stores.payment = reactive({ allowed: false })
   localStorage.setItem('sub2api-admin-panel-expanded', 'true')
   document.documentElement.classList.remove('dark')
 })
@@ -77,6 +80,16 @@ afterEach(() => {
 })
 
 describe('AppSidebar custom menu navigation', () => {
+  it('reactively hides both payment entries when authorization is revoked', async () => {
+    stores.payment.allowed = true
+    await renderSidebar()
+    expect(wrapper.text()).toContain('nav.buySubscription')
+    expect(wrapper.text()).toContain('nav.myOrders')
+    stores.payment.allowed = false
+    await flushPromises()
+    expect(wrapper.text()).not.toContain('nav.buySubscription')
+    expect(wrapper.text()).not.toContain('nav.myOrders')
+  })
   it.each([undefined, false])('keeps embedded navigation when the flag is %s', async enabled => {
     await renderSidebar(enabled)
     const link = menuLink(userMenu.label)

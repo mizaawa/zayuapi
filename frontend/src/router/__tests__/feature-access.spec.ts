@@ -19,6 +19,12 @@ const authStore = vi.hoisted(() => ({
   hasPendingAuthSession: false,
 }))
 
+const paymentAccess = vi.hoisted(() => ({ refresh: vi.fn() }))
+vi.mock('@/stores/paymentAccess', async (importOriginal) => ({
+  ...await importOriginal<typeof import('@/stores/paymentAccess')>(),
+  usePaymentAccessStore: () => paymentAccess,
+}))
+
 const appStore = vi.hoisted(() => ({
   siteName: 'Sub2API',
   backendModeEnabled: false,
@@ -121,6 +127,7 @@ describe('feature route guard', () => {
     appStore.publicSettingsLoaded = false
     appStore.cachedPublicSettings = null
     appStore.fetchPublicSettings.mockReset()
+    paymentAccess.refresh.mockReset().mockResolvedValue({ enabled: true, allowed: true, exclusive_enabled: false })
   })
 
   it('keeps a direct administrator route for the feature-management tab', () => {
@@ -153,6 +160,38 @@ describe('feature route guard', () => {
     deferred.resolve({ payment_enabled: true })
     await navigation
     expect(next).toHaveBeenCalledOnce()
+    expect(next).toHaveBeenCalledWith()
+  })
+
+  it.each(['/purchase', '/purchase/', '/Purchase', '/orders', '/ORDERS', '/orders/', '/payment/qrcode', '/payment/stripe', '/Payment/stripe', '/payment/airwallex', '/payment/result', '/payment/stripe-popup', '/auth/wechat/payment/callback', '/AUTH/wechat/payment/callback/'])(
+    'rejects a revoked user on %s, including public payment continuations', async path => {
+      paymentAccess.refresh.mockResolvedValue({ enabled: true, allowed: false, exclusive_enabled: true })
+      const { navigation, next } = runGuard({ requiresAuth: false }, path)
+      await navigation
+      expect(next).toHaveBeenCalledWith('/dashboard')
+    }
+  )
+
+  it('fails closed when payment permission cannot be refreshed', async () => {
+    paymentAccess.refresh.mockResolvedValue(null)
+    const { navigation, next } = runGuard({ requiresPayment: true }, '/purchase')
+    await navigation
+    expect(next).toHaveBeenCalledWith('/dashboard')
+  })
+
+  it('requires login for an exclusive anonymous payment continuation', async () => {
+    authStore.isAuthenticated = false
+    appStore.fetchPublicSettings.mockResolvedValue({ payment_exclusive_enabled: true })
+    const { navigation, next } = runGuard({ requiresAuth: false }, '/payment/result')
+    await navigation
+    expect(next).toHaveBeenCalledWith({ path: '/login', query: { redirect: '/payment/result' } })
+  })
+
+  it('preserves anonymous payment continuations when exclusive mode is off', async () => {
+    authStore.isAuthenticated = false
+    appStore.fetchPublicSettings.mockResolvedValue({ payment_exclusive_enabled: false })
+    const { navigation, next } = runGuard({ requiresAuth: false }, '/payment/result')
+    await navigation
     expect(next).toHaveBeenCalledWith()
   })
 

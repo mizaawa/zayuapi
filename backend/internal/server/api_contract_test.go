@@ -56,6 +56,7 @@ func TestAPIContracts(t *testing.T) {
 						"balance": 12.5,
 						"frozen_balance": 0,
 						"concurrency": 5,
+					"exclusive_recharge_enabled": false,
 					"rpm_limit": 0,
 					"status": "active",
 					"allowed_groups": null,
@@ -975,6 +976,7 @@ func TestAPIContracts(t *testing.T) {
 					"custom_menu_force_new_tab": false,
 					"custom_endpoints": [],
 					"payment_enabled": false,
+					"payment_exclusive_enabled": false,
 					"payment_min_amount": 0,
 					"payment_max_amount": 0,
 					"payment_daily_limit": 0,
@@ -1308,6 +1310,7 @@ func TestAPIContracts(t *testing.T) {
 						"rules": []
 					},
 					"payment_enabled": false,
+					"payment_exclusive_enabled": false,
 					"payment_min_amount": 0,
 					"payment_max_amount": 0,
 					"payment_daily_limit": 0,

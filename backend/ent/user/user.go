@@ -35,6 +35,8 @@ const (
 	FieldFrozenBalance = "frozen_balance"
 	// FieldConcurrency holds the string denoting the concurrency field in the database.
 	FieldConcurrency = "concurrency"
+	// FieldExclusiveRechargeEnabled holds the string denoting the exclusive_recharge_enabled field in the database.
+	FieldExclusiveRechargeEnabled = "exclusive_recharge_enabled"
 	// FieldStatus holds the string denoting the status field in the database.
 	FieldStatus = "status"
 	// FieldUsername holds the string denoting the username field in the database.
@@ -206,6 +208,7 @@ var Columns = []string{
 	FieldBalance,
 	FieldFrozenBalance,
 	FieldConcurrency,
+	FieldExclusiveRechargeEnabled,
 	FieldStatus,
 	FieldUsername,
 	FieldNotes,
@@ -269,6 +272,8 @@ var (
 	DefaultFrozenBalance float64
 	// DefaultConcurrency holds the default value on creation for the "concurrency" field.
 	DefaultConcurrency int
+	// DefaultExclusiveRechargeEnabled holds the default value on creation for the "exclusive_recharge_enabled" field.
+	DefaultExclusiveRechargeEnabled bool
 	// DefaultStatus holds the default value on creation for the "status" field.
 	DefaultStatus string
 	// StatusValidator is a validator for the "status" field. It is called by the builders before save.
@@ -353,6 +358,11 @@ func ByFrozenBalance(opts ...sql.OrderTermOption) OrderOption {
 // ByConcurrency orders the results by the concurrency field.
 func ByConcurrency(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldConcurrency, opts...).ToFunc()
+}
+
+// ByExclusiveRechargeEnabled orders the results by the exclusive_recharge_enabled field.
+func ByExclusiveRechargeEnabled(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldExclusiveRechargeEnabled, opts...).ToFunc()
 }
 
 // ByStatus orders the results by the status field.

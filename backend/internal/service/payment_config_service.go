@@ -15,16 +15,17 @@ import (
 )
 
 const (
-	SettingPaymentEnabled      = "payment_enabled"
-	SettingMinRechargeAmount   = "MIN_RECHARGE_AMOUNT"
-	SettingMaxRechargeAmount   = "MAX_RECHARGE_AMOUNT"
-	SettingDailyRechargeLimit  = "DAILY_RECHARGE_LIMIT"
-	SettingOrderTimeoutMinutes = "ORDER_TIMEOUT_MINUTES"
-	SettingMaxPendingOrders    = "MAX_PENDING_ORDERS"
-	SettingEnabledPaymentTypes = "ENABLED_PAYMENT_TYPES"
-	SettingLoadBalanceStrategy = "LOAD_BALANCE_STRATEGY"
-	SettingBalancePayDisabled  = "BALANCE_PAYMENT_DISABLED"
-	SettingBalanceRechargeMult = "BALANCE_RECHARGE_MULTIPLIER"
+	SettingPaymentEnabled          = "payment_enabled"
+	SettingPaymentExclusiveEnabled = "payment_exclusive_enabled"
+	SettingMinRechargeAmount       = "MIN_RECHARGE_AMOUNT"
+	SettingMaxRechargeAmount       = "MAX_RECHARGE_AMOUNT"
+	SettingDailyRechargeLimit      = "DAILY_RECHARGE_LIMIT"
+	SettingOrderTimeoutMinutes     = "ORDER_TIMEOUT_MINUTES"
+	SettingMaxPendingOrders        = "MAX_PENDING_ORDERS"
+	SettingEnabledPaymentTypes     = "ENABLED_PAYMENT_TYPES"
+	SettingLoadBalanceStrategy     = "LOAD_BALANCE_STRATEGY"
+	SettingBalancePayDisabled      = "BALANCE_PAYMENT_DISABLED"
+	SettingBalanceRechargeMult     = "BALANCE_RECHARGE_MULTIPLIER"
 	// SettingSubscriptionUSDToCNYRate 是订阅 CNY 换算汇率（1 USD = X CNY）。
 	// 0/未配置 = 关闭换算（订阅按 price 数值直付），显式配置后 CNY 通道订阅按 price × rate 收款。
 	SettingSubscriptionUSDToCNYRate      = "SUBSCRIPTION_USD_TO_CNY_RATE"
@@ -50,6 +51,7 @@ const (
 
 // PaymentConfig holds the payment system configuration.
 type PaymentConfig struct {
+	PaymentExclusiveEnabled   bool     `json:"payment_exclusive_enabled"`
 	Enabled                   bool     `json:"enabled"`
 	MinAmount                 float64  `json:"min_amount"`
 	MaxAmount                 float64  `json:"max_amount"`
@@ -84,6 +86,7 @@ type PaymentConfig struct {
 
 // UpdatePaymentConfigRequest contains fields to update payment configuration.
 type UpdatePaymentConfigRequest struct {
+	PaymentExclusiveEnabled   *bool    `json:"payment_exclusive_enabled"`
 	Enabled                   *bool    `json:"enabled"`
 	MinAmount                 *float64 `json:"min_amount"`
 	MaxAmount                 *float64 `json:"max_amount"`
@@ -217,6 +220,7 @@ func (s *PaymentConfigService) IsPaymentEnabled(ctx context.Context) bool {
 // GetPaymentConfig returns the full payment configuration.
 func (s *PaymentConfigService) GetPaymentConfig(ctx context.Context) (*PaymentConfig, error) {
 	keys := []string{
+		SettingPaymentExclusiveEnabled,
 		SettingPaymentEnabled, SettingMinRechargeAmount, SettingMaxRechargeAmount,
 		SettingDailyRechargeLimit, SettingOrderTimeoutMinutes, SettingMaxPendingOrders,
 		SettingEnabledPaymentTypes, SettingBalancePayDisabled, SettingBalanceRechargeMult, SettingSubscriptionUSDToCNYRate, SettingRechargeFeeRate, SettingLoadBalanceStrategy,
@@ -240,6 +244,7 @@ func (s *PaymentConfigService) GetPaymentConfig(ctx context.Context) (*PaymentCo
 
 func (s *PaymentConfigService) parsePaymentConfig(vals map[string]string) *PaymentConfig {
 	cfg := &PaymentConfig{
+		PaymentExclusiveEnabled:   vals[SettingPaymentExclusiveEnabled] == "true",
 		Enabled:                   vals[SettingPaymentEnabled] == "true",
 		MinAmount:                 pcParseFloat(vals[SettingMinRechargeAmount], 1),
 		MaxAmount:                 pcParseFloat(vals[SettingMaxRechargeAmount], 0),
@@ -344,6 +349,9 @@ func (s *PaymentConfigService) UpdatePaymentConfig(ctx context.Context, req Upda
 		}
 	}
 	m := make(map[string]string)
+	if req.PaymentExclusiveEnabled != nil {
+		m[SettingPaymentExclusiveEnabled] = formatBoolOrEmpty(req.PaymentExclusiveEnabled)
+	}
 	if req.Enabled != nil {
 		m[SettingPaymentEnabled] = formatBoolOrEmpty(req.Enabled)
 	}
@@ -425,7 +433,13 @@ func (s *PaymentConfigService) UpdatePaymentConfig(ctx context.Context, req Upda
 	if req.VisibleMethodWxpayEnabled != nil {
 		m[SettingPaymentVisibleMethodWxpayEnabled] = formatBoolOrEmpty(req.VisibleMethodWxpayEnabled)
 	}
-	return s.settingRepo.SetMultiple(ctx, m)
+	if err := s.settingRepo.SetMultiple(ctx, m); err != nil {
+		return err
+	}
+	if req.PaymentExclusiveEnabled != nil || req.Enabled != nil {
+		PaymentAccessChanged()
+	}
+	return nil
 }
 
 func formatBoolOrEmpty(v *bool) string {

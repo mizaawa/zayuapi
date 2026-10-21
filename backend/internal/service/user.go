@@ -7,22 +7,23 @@ import (
 )
 
 type User struct {
-	ID             int64
-	Email          string
-	Username       string
-	Notes          string
-	AvatarURL      string
-	AvatarSource   string
-	AvatarMIME     string
-	AvatarByteSize int
-	AvatarSHA256   string
-	PasswordHash   string
-	Role           string
-	Balance        float64
-	FrozenBalance  float64
-	Concurrency    int
-	Status         string
-	AllowedGroups  []int64
+	ID                       int64
+	Email                    string
+	Username                 string
+	Notes                    string
+	AvatarURL                string
+	AvatarSource             string
+	AvatarMIME               string
+	AvatarByteSize           int
+	AvatarSHA256             string
+	PasswordHash             string
+	Role                     string
+	Balance                  float64
+	FrozenBalance            float64
+	Concurrency              int
+	ExclusiveRechargeEnabled bool
+	Status                   string
+	AllowedGroups            []int64
 	// BlockedGroups contains public group IDs explicitly denied to this user.
 	// It is intentionally separate from AllowedGroups, which grants exclusive
 	// group access and preserves its legacy null/empty semantics.

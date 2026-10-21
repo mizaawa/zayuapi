@@ -158,6 +158,20 @@ func (_c *UserCreate) SetNillableConcurrency(v *int) *UserCreate {
 	return _c
 }
 
+// SetExclusiveRechargeEnabled sets the "exclusive_recharge_enabled" field.
+func (_c *UserCreate) SetExclusiveRechargeEnabled(v bool) *UserCreate {
+	_c.mutation.SetExclusiveRechargeEnabled(v)
+	return _c
+}
+
+// SetNillableExclusiveRechargeEnabled sets the "exclusive_recharge_enabled" field if the given value is not nil.
+func (_c *UserCreate) SetNillableExclusiveRechargeEnabled(v *bool) *UserCreate {
+	if v != nil {
+		_c.SetExclusiveRechargeEnabled(*v)
+	}
+	return _c
+}
+
 // SetStatus sets the "status" field.
 func (_c *UserCreate) SetStatus(v string) *UserCreate {
 	_c.mutation.SetStatus(v)
@@ -634,6 +648,10 @@ func (_c *UserCreate) defaults() error {
 		v := user.DefaultConcurrency
 		_c.mutation.SetConcurrency(v)
 	}
+	if _, ok := _c.mutation.ExclusiveRechargeEnabled(); !ok {
+		v := user.DefaultExclusiveRechargeEnabled
+		_c.mutation.SetExclusiveRechargeEnabled(v)
+	}
 	if _, ok := _c.mutation.Status(); !ok {
 		v := user.DefaultStatus
 		_c.mutation.SetStatus(v)
@@ -720,6 +738,9 @@ func (_c *UserCreate) check() error {
 	}
 	if _, ok := _c.mutation.Concurrency(); !ok {
 		return &ValidationError{Name: "concurrency", err: errors.New(`ent: missing required field "User.concurrency"`)}
+	}
+	if _, ok := _c.mutation.ExclusiveRechargeEnabled(); !ok {
+		return &ValidationError{Name: "exclusive_recharge_enabled", err: errors.New(`ent: missing required field "User.exclusive_recharge_enabled"`)}
 	}
 	if _, ok := _c.mutation.Status(); !ok {
 		return &ValidationError{Name: "status", err: errors.New(`ent: missing required field "User.status"`)}
@@ -832,6 +853,10 @@ func (_c *UserCreate) createSpec() (*User, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.Concurrency(); ok {
 		_spec.SetField(user.FieldConcurrency, field.TypeInt, value)
 		_node.Concurrency = value
+	}
+	if value, ok := _c.mutation.ExclusiveRechargeEnabled(); ok {
+		_spec.SetField(user.FieldExclusiveRechargeEnabled, field.TypeBool, value)
+		_node.ExclusiveRechargeEnabled = value
 	}
 	if value, ok := _c.mutation.Status(); ok {
 		_spec.SetField(user.FieldStatus, field.TypeString, value)
@@ -1295,6 +1320,18 @@ func (u *UserUpsert) AddConcurrency(v int) *UserUpsert {
 	return u
 }
 
+// SetExclusiveRechargeEnabled sets the "exclusive_recharge_enabled" field.
+func (u *UserUpsert) SetExclusiveRechargeEnabled(v bool) *UserUpsert {
+	u.Set(user.FieldExclusiveRechargeEnabled, v)
+	return u
+}
+
+// UpdateExclusiveRechargeEnabled sets the "exclusive_recharge_enabled" field to the value that was provided on create.
+func (u *UserUpsert) UpdateExclusiveRechargeEnabled() *UserUpsert {
+	u.SetExcluded(user.FieldExclusiveRechargeEnabled)
+	return u
+}
+
 // SetStatus sets the "status" field.
 func (u *UserUpsert) SetStatus(v string) *UserUpsert {
 	u.Set(user.FieldStatus, v)
@@ -1726,6 +1763,20 @@ func (u *UserUpsertOne) AddConcurrency(v int) *UserUpsertOne {
 func (u *UserUpsertOne) UpdateConcurrency() *UserUpsertOne {
 	return u.Update(func(s *UserUpsert) {
 		s.UpdateConcurrency()
+	})
+}
+
+// SetExclusiveRechargeEnabled sets the "exclusive_recharge_enabled" field.
+func (u *UserUpsertOne) SetExclusiveRechargeEnabled(v bool) *UserUpsertOne {
+	return u.Update(func(s *UserUpsert) {
+		s.SetExclusiveRechargeEnabled(v)
+	})
+}
+
+// UpdateExclusiveRechargeEnabled sets the "exclusive_recharge_enabled" field to the value that was provided on create.
+func (u *UserUpsertOne) UpdateExclusiveRechargeEnabled() *UserUpsertOne {
+	return u.Update(func(s *UserUpsert) {
+		s.UpdateExclusiveRechargeEnabled()
 	})
 }
 
@@ -2364,6 +2415,20 @@ func (u *UserUpsertBulk) AddConcurrency(v int) *UserUpsertBulk {
 func (u *UserUpsertBulk) UpdateConcurrency() *UserUpsertBulk {
 	return u.Update(func(s *UserUpsert) {
 		s.UpdateConcurrency()
+	})
+}
+
+// SetExclusiveRechargeEnabled sets the "exclusive_recharge_enabled" field.
+func (u *UserUpsertBulk) SetExclusiveRechargeEnabled(v bool) *UserUpsertBulk {
+	return u.Update(func(s *UserUpsert) {
+		s.SetExclusiveRechargeEnabled(v)
+	})
+}
+
+// UpdateExclusiveRechargeEnabled sets the "exclusive_recharge_enabled" field to the value that was provided on create.
+func (u *UserUpsertBulk) UpdateExclusiveRechargeEnabled() *UserUpsertBulk {
+	return u.Update(func(s *UserUpsert) {
+		s.UpdateExclusiveRechargeEnabled()
 	})
 }
 

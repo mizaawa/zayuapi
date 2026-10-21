@@ -51,3 +51,21 @@ func TestAdminUserList_ParsesAPIKeyGroupID(t *testing.T) {
 		})
 	}
 }
+
+func TestAdminUserList_ParsesExclusiveRechargeAndEmailFilters(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	for _, enabled := range []string{"true", "false"} {
+		t.Run(enabled, func(t *testing.T) {
+			stub := &listUsersFilterStub{AdminService: newStubAdminService()}
+			h := NewUserHandler(stub, nil, nil, nil, nil, nil, nil)
+			router := gin.New()
+			router.GET("/admin/users", h.List)
+			recorder := httptest.NewRecorder()
+			router.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/admin/users?exclusive_recharge_enabled="+enabled+"&email=%20user%40example.com%20&page_size=10", nil))
+			require.Equal(t, http.StatusOK, recorder.Code)
+			require.NotNil(t, stub.captured.ExclusiveRechargeEnabled)
+			require.Equal(t, enabled == "true", *stub.captured.ExclusiveRechargeEnabled)
+			require.Equal(t, "user@example.com", stub.captured.Email)
+		})
+	}
+}

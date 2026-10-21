@@ -555,6 +555,8 @@ export default {
       enterUsername: '请输入用户名（选填）',
       enterNotes: '请输入备注（仅管理员可见）',
       notesHint: '此备注仅对管理员可见',
+      exclusiveRecharge: '授予专属充值权限',
+      exclusiveRechargeHint: '开启后，将为此用户开启专属充值渠道。',
       enterNewPassword: '请输入新密码（选填）',
       leaveEmptyToKeep: '留空则保持原密码不变',
       generatePassword: '生成随机密码',

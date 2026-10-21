@@ -28,6 +28,8 @@ func RegisterPaymentRoutes(
 	authenticated.Use(middleware.BackendModeUserGuard(settingService))
 	// 面板全局按用户限流
 	authenticated.Use(panelRateLimiter.Global())
+	authenticated.GET("/access", paymentHandler.GetPaymentAccess)
+	authenticated.Use(paymentHandler.RequirePaymentAccess)
 	{
 		authenticated.GET("/config", paymentHandler.GetPaymentConfig)
 		authenticated.GET("/checkout-info", paymentHandler.GetCheckoutInfo)

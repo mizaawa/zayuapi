@@ -114,6 +114,7 @@ func (r *userRepository) create(ctx context.Context, userIn *service.User, guard
 		SetEmail(userIn.Email).
 		SetUsername(userIn.Username).
 		SetNotes(userIn.Notes).
+		SetExclusiveRechargeEnabled(userIn.ExclusiveRechargeEnabled).
 		SetPasswordHash(userIn.PasswordHash).
 		SetRole(userIn.Role).
 		SetBalance(userIn.Balance).
@@ -339,6 +340,9 @@ func (r *userRepository) Update(ctx context.Context, userIn *service.User, field
 	}
 	if fields.Notes {
 		updateOp = updateOp.SetNotes(userIn.Notes)
+	}
+	if fields.ExclusiveRechargeEnabled {
+		updateOp = updateOp.SetExclusiveRechargeEnabled(userIn.ExclusiveRechargeEnabled)
 	}
 	if fields.PasswordHash {
 		updateOp = updateOp.SetPasswordHash(userIn.PasswordHash)
@@ -577,6 +581,12 @@ func (r *userRepository) ListWithFilters(ctx context.Context, params pagination.
 	}
 	if filters.Role != "" {
 		q = q.Where(dbuser.RoleEQ(filters.Role))
+	}
+	if filters.ExclusiveRechargeEnabled != nil {
+		q = q.Where(dbuser.ExclusiveRechargeEnabledEQ(*filters.ExclusiveRechargeEnabled))
+	}
+	if filters.Email != "" {
+		q = q.Where(dbuser.EmailContainsFold(filters.Email))
 	}
 	if filters.Search != "" {
 		q = q.Where(

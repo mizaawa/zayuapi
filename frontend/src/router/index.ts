@@ -8,6 +8,7 @@ import { useAuthStore } from '@/stores/auth'
 import { useAppStore } from '@/stores/app'
 import { useAdminSettingsStore } from '@/stores/adminSettings'
 import { useAdminComplianceStore } from '@/stores/adminCompliance'
+import { isUserPaymentPath, usePaymentAccessStore } from '@/stores/paymentAccess'
 import { useNavigationLoadingState } from '@/composables/useNavigationLoading'
 import { useRoutePrefetch } from '@/composables/useRoutePrefetch'
 import { getSetupStatus } from '@/api/setup'
@@ -862,6 +863,22 @@ router.beforeEach(async (to, _from, next) => {
       }
     } catch {
       // If setup status cannot be determined, keep the setup page reachable.
+    }
+  }
+
+  if (isUserPaymentPath(to.path)) {
+    if (authStore.isAuthenticated) {
+      const access = await usePaymentAccessStore().refresh()
+      if (!access?.allowed) {
+        next(authStore.isAdmin ? '/admin/dashboard' : '/dashboard')
+        return
+      }
+    } else if (!requiresAuth) {
+      const settings = await appStore.fetchPublicSettings(true)
+      if (!settings || settings.payment_exclusive_enabled === true) {
+        next({ path: '/login', query: { redirect: to.fullPath } })
+        return
+      }
     }
   }
 

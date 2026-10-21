@@ -224,6 +224,7 @@ import { computed, h, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'v
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAdminSettingsStore, useAppStore, useAuthStore, useOnboardingStore } from '@/stores'
+import { usePaymentAccessStore } from '@/stores/paymentAccess'
 import VersionBadge from '@/components/common/VersionBadge.vue'
 import Icon from '@/components/icons/Icon.vue'
 import { sanitizeSvg } from '@/utils/sanitize'
@@ -749,7 +750,8 @@ const ChevronDownIcon = {
 const flagChannelMonitor = makeSidebarFlag(FeatureFlags.channelMonitor)
 const flagImageWorkbench = makeSidebarFlag(FeatureFlags.imageWorkbench)
 const flagVideoWorkbench = makeSidebarFlag(FeatureFlags.videoWorkbench)
-const flagPayment = makeSidebarFlag(FeatureFlags.payment)
+const paymentAccess = usePaymentAccessStore()
+const flagPayment = () => paymentAccess.allowed
 const flagAvailableChannels = makeSidebarFlag(FeatureFlags.availableChannels)
 const flagLeaderboard = makeSidebarFlag(FeatureFlags.leaderboard)
 const flagModelPlaza = makeSidebarFlag(FeatureFlags.modelPlaza)

@@ -9,6 +9,7 @@ import AnnouncementPopup from '@/components/common/AnnouncementPopup.vue'
 import { useAppStore, useAuthStore, useSubscriptionStore, useAnnouncementStore, useAdminComplianceStore, useAdminSettingsStore } from '@/stores'
 import { getSetupStatus } from '@/api/setup'
 import { updateFavicon } from '@/utils/branding'
+import { isUserPaymentPath, usePaymentAccessStore } from '@/stores/paymentAccess'
 
 const router = useRouter()
 const route = useRoute()
@@ -18,6 +19,47 @@ const subscriptionStore = useSubscriptionStore()
 const announcementStore = useAnnouncementStore()
 const adminComplianceStore = useAdminComplianceStore()
 const adminSettingsStore = useAdminSettingsStore()
+const paymentAccess = usePaymentAccessStore()
+let paymentAccessTimer: ReturnType<typeof setTimeout> | null = null
+let paymentAccessRefreshGeneration = 0
+
+function stopPaymentAccessRefresh() {
+  paymentAccessRefreshGeneration++
+  paymentAccess.stopWatching()
+  if (paymentAccessTimer !== null) clearTimeout(paymentAccessTimer)
+  paymentAccessTimer = null
+}
+
+async function refreshPaymentAccess() {
+  stopPaymentAccessRefresh()
+  const generation = paymentAccessRefreshGeneration
+  if (!authStore.isAuthenticated || document.visibilityState === 'hidden') return
+  await paymentAccess.refresh()
+  if (generation === paymentAccessRefreshGeneration && authStore.isAuthenticated && !document.hidden) {
+    paymentAccessTimer = setTimeout(watchPaymentAccess, 0)
+  }
+}
+
+async function watchPaymentAccess() {
+  const generation = paymentAccessRefreshGeneration
+  const received = await paymentAccess.waitForChange()
+  if (generation === paymentAccessRefreshGeneration && authStore.isAuthenticated && !document.hidden) {
+    paymentAccessTimer = setTimeout(watchPaymentAccess, received ? 0 : 3000)
+  }
+}
+
+function onPaymentAccessDenied() {
+  paymentAccess.deny()
+}
+
+watch(
+  () => paymentAccess.allowed,
+  (allowed) => {
+    if (!allowed && authStore.isAuthenticated && isUserPaymentPath(route.path)) {
+      void router.replace(authStore.isAdmin ? '/admin/dashboard' : '/dashboard')
+    }
+  }
+)
 
 function updateDocumentTitle() {
   const customMenuItems = [
@@ -56,6 +98,9 @@ watch(
 function onVisibilityChange() {
   if (document.visibilityState === 'visible' && authStore.isAuthenticated) {
     announcementStore.fetchAnnouncements()
+    void refreshPaymentAccess()
+  } else {
+    stopPaymentAccessRefresh()
   }
 }
 
@@ -75,7 +120,9 @@ watch(
   [() => authStore.isAuthenticated, () => authStore.user?.id],
   ([isAuthenticated, userId], oldValue) => {
     cancelAnnouncementLoginTimer()
+    stopPaymentAccessRefresh()
     if (isAuthenticated) {
+      void refreshPaymentAccess()
       if (authStore.isAdmin) {
         adminComplianceStore.fetchStatus().catch((error) => {
           console.error('Failed to fetch admin compliance status:', error)
@@ -105,6 +152,7 @@ watch(
       // Register visibility change listener
       document.addEventListener('visibilitychange', onVisibilityChange)
     } else {
+      paymentAccess.reset()
       // User logged out: clear data and stop polling
       subscriptionStore.clear()
       announcementStore.reset()
@@ -123,12 +171,17 @@ router.afterEach(() => {
 })
 
 onBeforeUnmount(() => {
+  stopPaymentAccessRefresh()
+  window.removeEventListener('payment-access-denied', onPaymentAccessDenied)
+  window.removeEventListener('payment-access-changed', refreshPaymentAccess)
   cancelAnnouncementLoginTimer()
   document.removeEventListener('visibilitychange', onVisibilityChange)
   window.removeEventListener('admin-compliance-required', onAdminComplianceRequired)
 })
 
 onMounted(async () => {
+  window.addEventListener('payment-access-denied', onPaymentAccessDenied)
+  window.addEventListener('payment-access-changed', refreshPaymentAccess)
   window.addEventListener('admin-compliance-required', onAdminComplianceRequired)
 
   // Check if setup is needed

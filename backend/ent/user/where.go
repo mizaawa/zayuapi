@@ -105,6 +105,11 @@ func Concurrency(v int) predicate.User {
 	return predicate.User(sql.FieldEQ(FieldConcurrency, v))
 }
 
+// ExclusiveRechargeEnabled applies equality check predicate on the "exclusive_recharge_enabled" field. It's identical to ExclusiveRechargeEnabledEQ.
+func ExclusiveRechargeEnabled(v bool) predicate.User {
+	return predicate.User(sql.FieldEQ(FieldExclusiveRechargeEnabled, v))
+}
+
 // Status applies equality check predicate on the "status" field. It's identical to StatusEQ.
 func Status(v string) predicate.User {
 	return predicate.User(sql.FieldEQ(FieldStatus, v))
@@ -663,6 +668,16 @@ func ConcurrencyLT(v int) predicate.User {
 // ConcurrencyLTE applies the LTE predicate on the "concurrency" field.
 func ConcurrencyLTE(v int) predicate.User {
 	return predicate.User(sql.FieldLTE(FieldConcurrency, v))
+}
+
+// ExclusiveRechargeEnabledEQ applies the EQ predicate on the "exclusive_recharge_enabled" field.
+func ExclusiveRechargeEnabledEQ(v bool) predicate.User {
+	return predicate.User(sql.FieldEQ(FieldExclusiveRechargeEnabled, v))
+}
+
+// ExclusiveRechargeEnabledNEQ applies the NEQ predicate on the "exclusive_recharge_enabled" field.
+func ExclusiveRechargeEnabledNEQ(v bool) predicate.User {
+	return predicate.User(sql.FieldNEQ(FieldExclusiveRechargeEnabled, v))
 }
 
 // StatusEQ applies the EQ predicate on the "status" field.

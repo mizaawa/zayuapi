@@ -1,0 +1,114 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { flushPromises, mount } from '@vue/test-utils'
+import UserEditModal from '../UserEditModal.vue'
+import type { AdminUser } from '@/types'
+
+const { getConfig, getUser, updateUser, showError, showSuccess } = vi.hoisted(() => ({
+  getConfig: vi.fn(), getUser: vi.fn(), updateUser: vi.fn(), showError: vi.fn(), showSuccess: vi.fn(),
+}))
+vi.mock('@/api/admin', () => ({ adminAPI: {
+  payment: { getConfig }, users: { getById: getUser, update: updateUser },
+} }))
+vi.mock('@/stores/app', () => ({ useAppStore: () => ({ showError, showSuccess }) }))
+vi.mock('vue-i18n', async (importOriginal) => ({
+  ...await importOriginal<typeof import('vue-i18n')>(),
+  useI18n: () => ({ t: (key: string) => key }),
+}))
+vi.mock('@/composables/useClipboard', () => ({ useClipboard: () => ({ copyToClipboard: vi.fn() }) }))
+vi.mock('@/composables/useStepUp', () => ({
+  useStepUp: () => ({ run: (fn: () => Promise<unknown>) => fn() }),
+  isStepUpBlocked: () => false, isStepUpCancelled: () => false, stepUpBlockReason: () => '',
+}))
+
+const user = { id: 4, email: 'test@example.com', role: 'user', concurrency: 2, notes: 'Notes', exclusive_recharge_enabled: true } as AdminUser
+const wrappers: ReturnType<typeof mount>[] = []
+const render = () => {
+  const wrapper = mount(UserEditModal, {
+    props: { show: true, user },
+    global: { stubs: {
+      BaseDialog: { props: ['show'], template: '<div v-if="show"><slot /><slot name="footer" /></div>' },
+      UserAttributeForm: true, TotpStepUpDialog: true,
+    } },
+  })
+  wrappers.push(wrapper)
+  return wrapper
+}
+
+describe('UserEditModal exclusive recharge permission', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    getConfig.mockResolvedValue({ data: { payment_exclusive_enabled: true } })
+    getUser.mockResolvedValue(user)
+    updateUser.mockImplementation(async (_id, data) => {
+      const updated = { ...user, ...data }
+      getUser.mockResolvedValue(updated)
+      return updated
+    })
+  })
+  afterEach(() => wrappers.splice(0).forEach(wrapper => wrapper.unmount()))
+
+  it('places the immediate authorization switch between notes and concurrency', async () => {
+    const wrapper = render()
+    await flushPromises()
+    const labels = wrapper.findAll('label').map(label => label.text())
+    const index = labels.indexOf('admin.users.exclusiveRecharge')
+    expect(labels[index - 1]).toBe('admin.users.notes')
+    expect(labels[index + 1]).toBe('admin.users.columns.concurrency')
+    expect(wrapper.text()).toContain('admin.users.exclusiveRechargeHint')
+    expect(wrapper.get('[role="switch"]').attributes('aria-checked')).toBe('true')
+    await wrapper.get('[role="switch"]').trigger('click')
+    await flushPromises()
+    expect(updateUser).toHaveBeenCalledWith(4, { exclusive_recharge_enabled: false })
+    expect(wrapper.get('[role="switch"]').attributes('aria-checked')).toBe('false')
+    expect(wrapper.emitted('success')).toHaveLength(1)
+    expect(wrapper.emitted('close')).toBeUndefined()
+  })
+
+  it('hides the grant when disabled and never changes permission on regular save', async () => {
+    getConfig.mockResolvedValue({ data: { payment_exclusive_enabled: false } })
+    const wrapper = render()
+    await flushPromises()
+    expect(wrapper.find('[role="switch"]').exists()).toBe(false)
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+    expect(updateUser).toHaveBeenCalledTimes(1)
+    expect(updateUser.mock.calls[0][1]).not.toHaveProperty('exclusive_recharge_enabled')
+  })
+
+  it('reloads the grant from the server after another panel revokes it', async () => {
+    const wrapper = render()
+    await flushPromises()
+    getUser.mockResolvedValue({ ...user, exclusive_recharge_enabled: false })
+    window.dispatchEvent(new Event('payment-access-changed'))
+    await flushPromises()
+    expect(wrapper.get('[role="switch"]').attributes('aria-checked')).toBe('false')
+    getConfig.mockResolvedValue({ data: { payment_exclusive_enabled: false } })
+    window.dispatchEvent(new Event('focus'))
+    await flushPromises()
+    expect(wrapper.find('[role="switch"]').exists()).toBe(false)
+  })
+
+  it('keeps the current grant if the update fails', async () => {
+    updateUser.mockRejectedValueOnce(new Error('Failed to update'))
+    const wrapper = render()
+    await flushPromises()
+    await wrapper.get('[role="switch"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.get('[role="switch"]').attributes('aria-checked')).toBe('true')
+    expect(showError).toHaveBeenCalledWith('Failed to update')
+  })
+
+  it('refreshes a mode change received while the grant is being saved', async () => {
+    let resolveUpdate!: (value: AdminUser) => void
+    updateUser.mockReturnValueOnce(new Promise<AdminUser>(resolve => { resolveUpdate = resolve }))
+    const wrapper = render()
+    await flushPromises()
+    await wrapper.get('[role="switch"]').trigger('click')
+    getConfig.mockResolvedValue({ data: { payment_exclusive_enabled: false } })
+    window.dispatchEvent(new Event('payment-mode-changed'))
+    await flushPromises()
+    resolveUpdate({ ...user, exclusive_recharge_enabled: false })
+    await flushPromises()
+    expect(wrapper.find('[role="switch"]').exists()).toBe(false)
+  })
+})

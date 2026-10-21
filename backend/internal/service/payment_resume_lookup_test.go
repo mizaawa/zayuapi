@@ -88,6 +88,7 @@ func TestGetPublicOrderByResumeTokenReturnsMatchingOrder(t *testing.T) {
 	svc := &PaymentService{
 		entClient:     client,
 		resumeService: resumeSvc,
+		configService: &PaymentConfigService{settingRepo: &paymentConfigSettingRepoStub{}},
 	}
 
 	got, err := svc.GetPublicOrderByResumeToken(ctx, token)
@@ -140,6 +141,7 @@ func TestGetPublicOrderByResumeTokenRejectsSnapshotMismatch(t *testing.T) {
 	svc := &PaymentService{
 		entClient:     client,
 		resumeService: resumeSvc,
+		configService: &PaymentConfigService{settingRepo: &paymentConfigSettingRepoStub{}},
 	}
 
 	_, err = svc.GetPublicOrderByResumeToken(ctx, token)
@@ -197,6 +199,7 @@ func TestGetPublicOrderByResumeTokenUsesSnapshotAuthorityWhenColumnsDiffer(t *te
 	svc := &PaymentService{
 		entClient:     client,
 		resumeService: resumeSvc,
+		configService: &PaymentConfigService{settingRepo: &paymentConfigSettingRepoStub{}},
 	}
 
 	got, err := svc.GetPublicOrderByResumeToken(ctx, token)
@@ -251,6 +254,7 @@ func TestGetPublicOrderByResumeTokenChecksUpstreamForPendingOrder(t *testing.T) 
 		registry:        registry,
 		resumeService:   resumeSvc,
 		providersLoaded: true,
+		configService:   &PaymentConfigService{settingRepo: &paymentConfigSettingRepoStub{}},
 	}
 
 	got, err := svc.GetPublicOrderByResumeToken(ctx, token)
@@ -296,6 +300,7 @@ func TestVerifyOrderPublicDoesNotCheckUpstreamForPendingOrder(t *testing.T) {
 		entClient:       client,
 		registry:        registry,
 		providersLoaded: true,
+		configService:   &PaymentConfigService{settingRepo: &paymentConfigSettingRepoStub{}},
 	}
 
 	got, err := svc.VerifyOrderPublic(ctx, order.OutTradeNo)
