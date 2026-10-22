@@ -7,6 +7,7 @@ import (
 	"crypto/md5"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -255,32 +256,77 @@ func (e *EasyPay) upstreamPaymentType(paymentType string) string {
 }
 
 func (e *EasyPay) QueryOrder(ctx context.Context, tradeNo string) (*payment.QueryOrderResponse, error) {
+	result, err := e.queryOrder(ctx, tradeNo)
+	if err != nil {
+		return nil, err
+	}
+	responseTradeNo := tradeNo
+	if result.tradeNo != "" {
+		responseTradeNo = result.tradeNo
+	}
+	amount, _ := strconv.ParseFloat(result.money, 64)
+	return &payment.QueryOrderResponse{
+		TradeNo:  responseTradeNo,
+		Status:   result.status,
+		Amount:   amount,
+		Metadata: e.MerchantIdentityMetadata(),
+	}, nil
+}
+
+type easyPayQueryResult struct {
+	status  string
+	money   string
+	tradeNo string
+}
+
+func (e *EasyPay) queryOrder(ctx context.Context, outTradeNo string) (*easyPayQueryResult, error) {
 	params := map[string]string{
 		"act": "order", "pid": e.config["pid"],
-		"key": e.config["pkey"], "out_trade_no": tradeNo,
+		"key": e.config["pkey"], "out_trade_no": outTradeNo,
 	}
-	body, err := e.post(ctx, e.apiBase()+"/api.php", params)
+	// Some EasyPay-compatible APIs only read act=order fields from the query
+	// string, while others read the form body. Send both for compatibility.
+	query := url.Values{}
+	for k, v := range params {
+		query.Set(k, v)
+	}
+	body, err := e.post(ctx, e.apiBase()+"/api.php?"+query.Encode(), params)
 	if err != nil {
+		// The query string includes the merchant key; do not include the full
+		// request URL in errors that may be written to logs.
+		var urlErr *url.Error
+		if errors.As(err, &urlErr) {
+			err = urlErr.Err
+		}
 		return nil, fmt.Errorf("easypay query: %w", err)
 	}
 	type easyPayQueryData struct {
-		TradeStatus *string `json:"trade_status"`
-		Status      *int    `json:"status"`
-		Money       *string `json:"money"`
-		TradeNo     *string `json:"trade_no"`
+		TradeStatus *string         `json:"trade_status"`
+		Status      json.RawMessage `json:"status"`
+		Money       json.RawMessage `json:"money"`
+		TradeNo     json.RawMessage `json:"trade_no"`
+		OutTradeNo  json.RawMessage `json:"out_trade_no"`
 	}
 	var resp struct {
-		Code        int              `json:"code"`
-		Msg         string           `json:"msg"`
-		TradeStatus *string          `json:"trade_status"`
-		Status      *int             `json:"status"`
-		Money       *string          `json:"money"`
-		TradeNo     *string          `json:"trade_no"`
-		Data        easyPayQueryData `json:"data"`
+		easyPayQueryData
+		Code any              `json:"code"`
+		Msg  string           `json:"msg"`
+		Data easyPayQueryData `json:"data"`
 	}
 	if err := json.Unmarshal(body, &resp); err != nil {
 		return nil, fmt.Errorf("easypay parse query: %w", err)
 	}
+	if resp.Code != nil && !easyPayResponseCodeIsSuccess(resp.Code) {
+		msg := strings.TrimSpace(resp.Msg)
+		if msg == "" {
+			msg = summarizeEasyPayResponse(body)
+		}
+		return nil, fmt.Errorf("easypay query failed: %s", msg)
+	}
+	if echoed := easyPayJSONScalar(pickEasyPayJSON(resp.OutTradeNo, resp.Data.OutTradeNo)); echoed != "" && echoed != strings.TrimSpace(outTradeNo) {
+		return nil, fmt.Errorf("easypay query out_trade_no mismatch: expected %s, got %s", strings.TrimSpace(outTradeNo), echoed)
+	}
+
 	status := payment.ProviderStatusPending
 	if resp.TradeStatus != nil {
 		if *resp.TradeStatus == tradeStatusSuccess {
@@ -290,36 +336,42 @@ func (e *EasyPay) QueryOrder(ctx context.Context, tradeNo string) (*payment.Quer
 		if *resp.Data.TradeStatus == tradeStatusSuccess {
 			status = payment.ProviderStatusPaid
 		}
-	} else if resp.Status != nil {
-		if *resp.Status == easypayStatusPaid {
+	} else if raw := pickEasyPayJSON(resp.Status, resp.Data.Status); raw != nil {
+		if easyPayJSONScalar(raw) == strconv.Itoa(easypayStatusPaid) {
 			status = payment.ProviderStatusPaid
 		}
-	} else if resp.Data.Status != nil && *resp.Data.Status == easypayStatusPaid {
-		status = payment.ProviderStatusPaid
 	}
 
-	money := ""
-	if resp.Money != nil {
-		money = *resp.Money
-	} else if resp.Data.Money != nil {
-		money = *resp.Data.Money
-	}
-	responseTradeNo := tradeNo
-	if resp.TradeNo != nil {
-		if *resp.TradeNo != "" {
-			responseTradeNo = *resp.TradeNo
-		}
-	} else if resp.Data.TradeNo != nil && *resp.Data.TradeNo != "" {
-		responseTradeNo = *resp.Data.TradeNo
-	}
-
-	amount, _ := strconv.ParseFloat(money, 64)
-	return &payment.QueryOrderResponse{
-		TradeNo:  responseTradeNo,
-		Status:   status,
-		Amount:   amount,
-		Metadata: e.MerchantIdentityMetadata(),
+	return &easyPayQueryResult{
+		status:  status,
+		money:   easyPayJSONScalar(pickEasyPayJSON(resp.Money, resp.Data.Money)),
+		tradeNo: easyPayJSONScalar(pickEasyPayJSON(resp.TradeNo, resp.Data.TradeNo)),
 	}, nil
+}
+
+func easyPayJSONScalar(raw json.RawMessage) string {
+	if len(raw) == 0 {
+		return ""
+	}
+	var str string
+	if err := json.Unmarshal(raw, &str); err == nil {
+		return strings.TrimSpace(str)
+	}
+	var num json.Number
+	if err := json.Unmarshal(raw, &num); err == nil {
+		return num.String()
+	}
+	return ""
+}
+
+func pickEasyPayJSON(top, nested json.RawMessage) json.RawMessage {
+	if len(top) > 0 && string(top) != "null" {
+		return top
+	}
+	if len(nested) > 0 && string(nested) != "null" {
+		return nested
+	}
+	return nil
 }
 
 func (e *EasyPay) VerifyNotification(_ context.Context, rawBody string, _ map[string]string) (*payment.PaymentNotification, error) {
