@@ -4,11 +4,9 @@ import PaymentPermissionsPanel from '../PaymentPermissionsPanel.vue'
 import Pagination from '@/components/common/Pagination.vue'
 import SearchInput from '@/components/common/SearchInput.vue'
 
-const { getConfig, updateConfig, listUsers } = vi.hoisted(() => ({
-  getConfig: vi.fn(), updateConfig: vi.fn(), listUsers: vi.fn(),
-}))
+const { listUsers } = vi.hoisted(() => ({ listUsers: vi.fn() }))
 vi.mock('@/api/admin', () => ({ adminAPI: {
-  payment: { getConfig, updateConfig }, users: { list: listUsers },
+  users: { list: listUsers },
 } }))
 vi.mock('vue-i18n', async (importOriginal) => ({
   ...await importOriginal<typeof import('vue-i18n')>(),
@@ -29,13 +27,11 @@ const render = (props: { enabled?: boolean; pendingRemovals?: number[] } = {}) =
 describe('PaymentPermissionsPanel', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    getConfig.mockResolvedValue({ data: { payment_exclusive_enabled: true } })
     listUsers.mockResolvedValue(response([1]))
   })
   afterEach(() => wrappers.splice(0).forEach(wrapper => wrapper.unmount()))
 
   it('keeps the channel toggle as a draft and hides grants while disabled', async () => {
-    getConfig.mockResolvedValueOnce({ data: { payment_exclusive_enabled: false } })
     const wrapper = render()
     await flushPromises()
     expect(listUsers).not.toHaveBeenCalled()
@@ -43,8 +39,7 @@ describe('PaymentPermissionsPanel', () => {
     expect(wrapper.get('[role="switch"]').attributes('aria-describedby')).toBe('exclusive-payment-hint')
     expect(wrapper.findComponent(SearchInput).exists()).toBe(false)
     await wrapper.get('[role="switch"]').trigger('click')
-    expect(updateConfig).not.toHaveBeenCalled()
-    expect(wrapper.emitted('update:enabled')).toEqual([[false], [true]])
+    expect(wrapper.emitted('update:enabled')).toEqual([[true]])
   })
 
   it('marks permission revocations as pending without updating the user', async () => {
@@ -114,9 +109,10 @@ describe('PaymentPermissionsPanel', () => {
     await flushPromises()
     expect(wrapper.text()).toContain('user2@example.com')
     expect(wrapper.text()).not.toContain('user1@example.com')
-    getConfig.mockResolvedValueOnce({ data: { payment_exclusive_enabled: false } })
+    listUsers.mockResolvedValueOnce(response([3]))
     window.dispatchEvent(new Event('focus'))
     await flushPromises()
+    expect(wrapper.text()).toContain('user3@example.com')
     await wrapper.setProps({ enabled: false })
     await flushPromises()
     expect(wrapper.findComponent(SearchInput).exists()).toBe(false)

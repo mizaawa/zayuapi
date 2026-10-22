@@ -18,21 +18,14 @@
         <Toggle
           class="mt-0.5 shrink-0"
           :model-value="props.enabled"
-          :disabled="configLoading || props.saving || !configLoaded"
+          :disabled="props.saving"
           aria-labelledby="exclusive-payment-label"
           aria-describedby="exclusive-payment-hint"
           data-test="exclusive-payment-toggle"
           @update:model-value="updateEnabled"
         />
       </div>
-      <div v-if="configError" class="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between" role="alert">
-        <p class="text-sm text-red-600 dark:text-red-400">{{ configError }}</p>
-        <button type="button" class="btn btn-secondary btn-sm" :disabled="configLoading || props.saving" @click="loadConfig">
-          <Icon name="refresh" size="sm" />
-          {{ t('common.refresh') }}
-        </button>
-      </div>
-      <template v-if="props.enabled && configLoaded">
+      <template v-if="props.enabled">
         <div class="flex min-w-0 items-center gap-2 sm:gap-3">
           <SearchInput
             class="min-w-0 flex-1"
@@ -125,9 +118,6 @@ const emit = defineEmits<{
 }>()
 const { t } = useI18n()
 const pageSize = 10
-const configLoaded = ref(false)
-const configLoading = ref(false)
-const configError = ref('')
 const usersLoading = ref(false)
 const usersError = ref('')
 const search = ref('')
@@ -137,9 +127,6 @@ const total = ref(0)
 const users = ref<AdminUser[]>([])
 let listRequest = 0
 let listController: AbortController | undefined
-let configRequest = 0
-let initialized = false
-const committedEnabled = ref(false)
 
 const columns = computed<Column[]>(() => [
   { key: 'email', label: t('admin.settings.payment.permissions.email') },
@@ -155,35 +142,13 @@ function cancelListRequest() {
   usersLoading.value = false
 }
 
-async function loadConfig() {
-  const request = ++configRequest
-  configLoading.value = true
-  configError.value = ''
-  try {
-    const { data } = await adminAPI.payment.getConfig()
-    if (request !== configRequest) return
-    const nextEnabled = data.payment_exclusive_enabled === true
-    const hasDraft = initialized && props.enabled !== committedEnabled.value
-    committedEnabled.value = nextEnabled
-    configLoaded.value = true
-    if (!hasDraft) emit('update:enabled', nextEnabled)
-    initialized = true
-  } catch (error) {
-    if (request !== configRequest) return
-    configLoaded.value = false
-    configError.value = extractApiErrorMessage(error, t('admin.settings.payment.permissions.loadFailed'))
-  } finally {
-    if (request === configRequest) configLoading.value = false
-  }
-}
-
 function updateEnabled(value: boolean) {
-  if (props.saving || configLoading.value || !configLoaded.value) return
+  if (props.saving) return
   emit('update:enabled', value)
 }
 
 async function loadUsers() {
-  if (!props.enabled || !props.active || !configLoaded.value) return
+  if (!props.enabled || !props.active) return
   const request = ++listRequest
   listController?.abort()
   listController = new AbortController()
@@ -232,38 +197,27 @@ function togglePendingRemoval(userId: number) {
   emit('update:pendingRemovals', [...pending])
 }
 
-watch(() => props.active, (active) => {
-  if (active) void loadConfig()
-  else {
-    configRequest++
-    cancelListRequest()
-  }
-}, { immediate: true })
-
 watch(
-  () => [props.active, props.enabled, configLoaded.value] as const,
-  ([active, enabled, loaded]) => {
-    if (active && enabled && loaded) {
+  () => [props.active, props.enabled] as const,
+  ([active, enabled]) => {
+    if (active && enabled) {
       page.value = 1
       void loadUsers()
     } else {
       cancelListRequest()
     }
   },
+  { immediate: true },
 )
 
 watch(() => props.saveVersion, (version, previousVersion) => {
   if (version === previousVersion) return
-  committedEnabled.value = props.enabled
-  initialized = true
   page.value = 1
   void loadUsers()
 })
 
 function refreshPermissions() {
-  if (props.active && !props.saving) {
-    void loadConfig().then(() => loadUsers())
-  }
+  if (props.active && props.enabled && !props.saving) void loadUsers()
 }
 
 useEventListener(window, 'focus', refreshPermissions)
@@ -271,7 +225,6 @@ useEventListener(window, 'payment-access-changed', refreshPermissions)
 useEventListener(window, 'payment-mode-changed', refreshPermissions)
 
 onBeforeUnmount(() => {
-  configRequest++
   cancelListRequest()
 })
 </script>
