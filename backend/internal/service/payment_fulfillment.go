@@ -113,11 +113,27 @@ func (s *PaymentService) confirmPayment(ctx context.Context, oid int64, tradeNo 
 		})
 		return fmt.Errorf("invalid paid amount from provider: %v", paid)
 	}
-	if math.Abs(paid-o.PayAmount) > paymentAmountToleranceForCurrency(PaymentOrderCurrency(o)) {
+	if !providerAmountMatchesOrder(paid, o.PayAmount, PaymentOrderCurrency(o)) {
 		s.writeAuditLog(ctx, o.ID, "PAYMENT_AMOUNT_MISMATCH", pk, map[string]any{"expected": o.PayAmount, "paid": paid, "tradeNo": tradeNo})
 		return fmt.Errorf("amount mismatch: expected %s, got %s", strconv.FormatFloat(o.PayAmount, 'f', -1, 64), strconv.FormatFloat(paid, 'f', -1, 64))
 	}
 	return s.toPaid(ctx, o, tradeNo, paid, pk)
+}
+
+// providerAmountMatchesOrder compares the exact currency minor units. A
+// tolerance of one cent can otherwise settle an order after the provider
+// reports one cent less than the amount that was charged.
+func providerAmountMatchesOrder(paid, expected float64, currency string) bool {
+	// Reject unequal amounts before conversion can overflow the minor-unit range.
+	if paid != expected {
+		return false
+	}
+	paidMinor, err := payment.AmountToMinorUnit(strconv.FormatFloat(paid, 'f', -1, 64), currency)
+	if err != nil {
+		return false
+	}
+	expectedMinor, err := payment.AmountToMinorUnit(strconv.FormatFloat(expected, 'f', -1, 64), currency)
+	return err == nil && paidMinor == expectedMinor
 }
 
 func paymentAmountToleranceForCurrency(currency string) float64 {

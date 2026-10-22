@@ -1,7 +1,12 @@
 <template>
   <BaseDialog :show="show" :title="dialogTitle" width="narrow" @close="handleClose">
+    <div v-if="failedOrder" class="flex flex-col items-center space-y-4 py-4 text-center" role="alert">
+      <p class="text-lg font-bold text-red-500">{{ t(failedOrder.paid_at ? 'payment.qr.fulfillmentFailed' : 'payment.qr.failed') }}</p>
+      <p class="text-sm text-gray-500 dark:text-gray-400">{{ t(failedOrder.paid_at ? 'payment.qr.fulfillmentFailedDesc' : 'payment.qr.failedDesc') }}</p>
+      <p v-if="failedOrder.out_trade_no" class="break-all text-sm text-gray-500 dark:text-gray-400">{{ t('payment.orders.orderNo') }}: {{ failedOrder.out_trade_no }}</p>
+    </div>
     <!-- QR Code + Polling State -->
-    <div v-if="!success" class="flex flex-col items-center space-y-4">
+    <div v-else-if="!success" class="flex flex-col items-center space-y-4">
       <!-- QR Code mode -->
       <template v-if="qrUrl">
         <div class="rounded-2xl bg-white p-4 shadow-sm dark:bg-dark-800">
@@ -56,13 +61,13 @@
     </div>
     <template #footer>
       <div class="flex justify-end gap-3">
-        <button v-if="!success && !expired" class="btn btn-secondary" :disabled="cancelling" @click="handleCancel">
+        <button v-if="!success && !expired && !failedOrder" class="btn btn-secondary" :disabled="cancelling" @click="handleCancel">
           {{ cancelling ? t('common.processing') : t('payment.qr.cancelOrder') }}
         </button>
         <button v-if="success" class="btn btn-primary" @click="handleDone">
           {{ t('common.confirm') }}
         </button>
-        <button v-if="expired" class="btn btn-primary" @click="handleClose">
+        <button v-if="expired || failedOrder" class="btn btn-primary" @click="handleClose">
           {{ t('payment.result.backToRecharge') }}
         </button>
       </div>
@@ -112,6 +117,7 @@ const expired = ref(false)
 const cancelling = ref(false)
 const success = ref(false)
 const paidOrder = ref<PaymentOrder | null>(null)
+const failedOrder = ref<PaymentOrder | null>(null)
 const creditedAmountSymbol = currencySymbol('USD')
 
 let pollTimer: ReturnType<typeof setInterval> | null = null
@@ -127,6 +133,7 @@ const isWxpay = computed(() => isBuiltInWxpayMethod(props.paymentType))
 
 const dialogTitle = computed(() => {
   if (success.value) return t('payment.result.success')
+  if (failedOrder.value) return t(failedOrder.value.paid_at ? 'payment.qr.fulfillmentFailed' : 'payment.qr.failed')
   if (!qrUrl.value) return t('payment.qr.payInNewWindow')
   if (isAlipay.value) return t('payment.qr.scanAlipay')
   if (isWxpay.value) return t('payment.qr.scanWxpay')
@@ -205,7 +212,10 @@ async function pollStatus() {
     paidOrder.value = order
     success.value = true
     emit('success')
-  } else if (order.status === 'EXPIRED' || order.status === 'CANCELLED' || order.status === 'FAILED') {
+  } else if (order.status === 'FAILED') {
+    cleanup()
+    failedOrder.value = order
+  } else if (order.status === 'EXPIRED' || order.status === 'CANCELLED') {
     cleanup()
     expired.value = true
   }
@@ -280,6 +290,7 @@ function init() {
   // Reset state
   success.value = false
   paidOrder.value = null
+  failedOrder.value = null
   expired.value = false
   cancelling.value = false
   qrUrl.value = props.qrCode

@@ -73,6 +73,37 @@ describe('PaymentStatusPanel', () => {
     vi.useRealTimers()
   })
 
+  it.each([
+    ['2026-04-20T12:01:00Z', 'payment.qr.fulfillmentFailed', 'payment.qr.fulfillmentFailedDesc'],
+    [undefined, 'payment.qr.failed', 'payment.qr.failedDesc'],
+  ])('shows a distinct failure result with paid_at=%s', async (paidAt, title, description) => {
+    pollOrderStatus.mockResolvedValue({ ...orderFactory('FAILED'), paid_at: paidAt })
+    const wrapper = mount(PaymentStatusPanel, {
+      props: {
+        orderId: 42,
+        qrCode: '',
+        expiresAt: '2099-01-01T12:30:00Z',
+        paymentType: 'alipay',
+        providerKey: 'easypay',
+      },
+      global: { stubs: { Icon: true } },
+    })
+
+    await flushPromises()
+    await vi.advanceTimersByTimeAsync(3000)
+    expect(wrapper.text()).toContain(title)
+    expect(wrapper.text()).toContain(description)
+    expect(wrapper.text()).not.toContain('payment.qr.expired')
+    expect(wrapper.text()).not.toContain('payment.qr.openPayWindow')
+    expect(wrapper.emitted('settled')).toEqual([['failed']])
+    expect(wrapper.emitted('success')).toBeUndefined()
+    const callsAfterFailure = pollOrderStatus.mock.calls.length
+    await vi.advanceTimersByTimeAsync(30000)
+    expect(pollOrderStatus).toHaveBeenCalledTimes(callsAfterFailure)
+    expect(verifyOrder).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
   it('treats RECHARGING as a successful terminal state', async () => {
     pollOrderStatus.mockResolvedValue(orderFactory('RECHARGING'))
 
@@ -382,6 +413,8 @@ describe('PaymentStatusPanel', () => {
     await vi.advanceTimersByTimeAsync(15000)
     expect(verifyOrder).toHaveBeenCalledTimes(15)
     expect(wrapper.emitted('settled')).toEqual([['expired']])
+    expect(wrapper.text()).toContain('payment.qr.expiredDesc')
+    expect(wrapper.text()).not.toContain('payment.qr.fulfillmentFailed')
     await vi.advanceTimersByTimeAsync(30000)
     expect(verifyOrder).toHaveBeenCalledTimes(15)
     wrapper.unmount()

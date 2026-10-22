@@ -21,7 +21,8 @@ export function useOnboardingTour(options: OnboardingOptions) {
   const TIMING = {
     INTERACTIVE_WAIT_MS: 800,        // Default wait time for interactive steps
     ELEMENT_TIMEOUT_MS: 8000,        // Timeout for element detection
-    AUTO_START_DELAY_MS: 1000        // Delay before auto-starting tour
+    AUTO_START_DELAY_MS: 1000,       // Delay before auto-starting tour
+    STALE_ROUTE_GRACE_MS: 1000       // Let guided sidebar navigation advance before cleaning up
   } as const
 
   // Helper: Check if a step is interactive (only close button shown)
@@ -55,6 +56,7 @@ export function useOnboardingTour(options: OnboardingOptions) {
     eventTypes?: string[] // Track which event types were added
   } | null = null
   let autoStartTimer: ReturnType<typeof setTimeout> | null = null
+  let staleDriverTimer: ReturnType<typeof setTimeout> | null = null
   let globalKeyboardHandler: ((e: KeyboardEvent) => void) | null = null
 
   const getStorageKey = () => {
@@ -528,6 +530,37 @@ export function useOnboardingTour(options: OnboardingOptions) {
 
     if (onboardingStore.isDriverActive()) {
       driverInstance = onboardingStore.getDriverInstance()
+      const activeStepElement = driverInstance?.getActiveStep()?.element
+      const mountedStepTarget = typeof activeStepElement === 'string'
+        ? document.querySelector(activeStepElement)
+        : typeof activeStepElement === 'function'
+          ? activeStepElement()
+          : activeStepElement
+
+      if (mountedStepTarget?.isConnected) {
+        // The same guided target was recreated with the route's AppLayout.
+        // Refresh Driver.js so it stops pointing to the detached old node.
+        driverInstance?.refresh()
+        return
+      }
+
+      // AppLayout is recreated for each route. A tour step can briefly point
+      // at the previous route's detached DOM node while its guided next step
+      // is advancing. Keep it alive for that transition, then release the
+      // global Driver.js interaction lock if no live target replaced it.
+      staleDriverTimer = setTimeout(() => {
+        staleDriverTimer = null
+        if (!driverInstance?.isActive()) return
+
+        const activeElement = driverInstance.getActiveElement()
+        if (activeElement?.isConnected && activeElement.id !== 'driver-dummy-element') return
+
+        markAsSeen()
+        driverInstance.destroy()
+        if (onboardingStore.getDriverInstance() === driverInstance) {
+          onboardingStore.setDriverInstance(null)
+        }
+      }, TIMING.STALE_ROUTE_GRACE_MS)
       return
     }
 
@@ -552,6 +585,10 @@ export function useOnboardingTour(options: OnboardingOptions) {
     if (autoStartTimer) {
       clearTimeout(autoStartTimer)
       autoStartTimer = null
+    }
+    if (staleDriverTimer) {
+      clearTimeout(staleDriverTimer)
+      staleDriverTimer = null
     }
     // 关键修复：不再此处清理 globalKeyboardHandler，交由 driver.onDestroyed 管理
     onboardingStore.clearControlMethods()

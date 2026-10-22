@@ -748,12 +748,56 @@ func TestDuplicatePaymentNotificationDoesNotReprocessCompletedBalanceOrder(t *te
 	require.Empty(t, redeemRepo.useCalls, "a duplicate notification must not redeem the balance code again")
 }
 
+func TestProviderAmountMatchesOrder(t *testing.T) {
+	tests := []struct {
+		name     string
+		paid     float64
+		expected float64
+		currency string
+		want     bool
+	}{
+		{name: "CNY exact cents", paid: 0.35, expected: 0.35, currency: "CNY", want: true},
+		{name: "CNY ordinary amount", paid: 100.01, expected: 100.01, currency: "CNY", want: true},
+		{name: "CNY int64 minor unit overflow collision", paid: 184467440737095520, expected: 3.84, currency: "CNY"},
+		{name: "CNY one cent short", paid: 0.34, expected: 0.35, currency: "CNY"},
+		{name: "CNY one cent over", paid: 0.36, expected: 0.35, currency: "CNY"},
+		{name: "CNY paid excess precision", paid: 0.351, expected: 0.35, currency: "CNY"},
+		{name: "CNY expected excess precision", paid: 0.35, expected: 0.351, currency: "CNY"},
+		{name: "CNY matching excess precision", paid: 0.351, expected: 0.351, currency: "CNY"},
+		{name: "default currency", paid: 0.35, expected: 0.35, want: true},
+		{name: "normalized currency", paid: 0.35, expected: 0.35, currency: " cny ", want: true},
+		{name: "invalid currency", paid: 0.35, expected: 0.35, currency: "CN"},
+		{name: "JPY whole yen", paid: 350, expected: 350, currency: "JPY", want: true},
+		{name: "JPY one yen short", paid: 349, expected: 350, currency: "JPY"},
+		{name: "JPY fractional paid", paid: 350.01, expected: 350, currency: "JPY"},
+		{name: "JPY fractional expected", paid: 350, expected: 350.01, currency: "JPY"},
+		{name: "KWD exact fils", paid: 1.234, expected: 1.234, currency: "KWD", want: true},
+		{name: "KWD one fils short", paid: 1.233, expected: 1.234, currency: "KWD"},
+		{name: "KWD one fils over", paid: 1.235, expected: 1.234, currency: "KWD"},
+		{name: "KWD paid excess precision", paid: 1.2341, expected: 1.234, currency: "KWD"},
+		{name: "KWD expected excess precision", paid: 1.234, expected: 1.2341, currency: "KWD"},
+		{name: "NaN paid", paid: math.NaN(), expected: 0.35, currency: "CNY"},
+		{name: "NaN expected", paid: 0.35, expected: math.NaN(), currency: "CNY"},
+		{name: "positive infinity paid", paid: math.Inf(1), expected: 0.35, currency: "CNY"},
+		{name: "negative infinity paid", paid: math.Inf(-1), expected: 0.35, currency: "CNY"},
+		{name: "positive infinity expected", paid: 0.35, expected: math.Inf(1), currency: "CNY"},
+		{name: "negative infinity expected", paid: 0.35, expected: math.Inf(-1), currency: "CNY"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			require.Equal(t, tt.want, providerAmountMatchesOrder(tt.paid, tt.expected, tt.currency))
+		})
+	}
+}
+
 func TestPaymentNotificationRejectsAmountMismatchBeforeFulfillment(t *testing.T) {
 	ctx := context.Background()
 	client := newPaymentConfigServiceTestClient(t)
 	order := createPaymentFulfillmentSubscriptionOrder(t, ctx, client, OrderStatusPending, time.Now())
 	order, err := client.PaymentOrder.UpdateOneID(order.ID).
 		SetOrderType(payment.OrderTypeBalance).
+		SetAmount(0.35).
+		SetPayAmount(0.35).
 		ClearPlanID().
 		ClearSubscriptionGroupID().
 		ClearSubscriptionDays().
@@ -763,9 +807,9 @@ func TestPaymentNotificationRejectsAmountMismatchBeforeFulfillment(t *testing.T)
 	svc := &PaymentService{entClient: client, registry: payment.NewRegistry()}
 	svc.registry.Register(&paymentOrderLifecycleQueryProvider{})
 	err = svc.HandlePaymentNotification(ctx, &payment.PaymentNotification{
-		TradeNo:  "alipay-trade-wrong-amount",
+		TradeNo:  "alipay-trade-one-cent-short",
 		OrderID:  order.OutTradeNo,
-		Amount:   order.PayAmount - 1,
+		Amount:   0.34,
 		Status:   payment.NotificationStatusSuccess,
 		Metadata: map[string]string{"app_id": "test-alipay-app"},
 	}, payment.TypeAlipay)
