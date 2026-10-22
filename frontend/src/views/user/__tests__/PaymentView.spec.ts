@@ -423,6 +423,7 @@ describe('PaymentView payment recovery', () => {
       qrCode: 'ldc-qr',
       expiresAt: '2099-01-01T00:10:00.000Z',
       paymentType: 'ldc',
+      providerKey: 'easypay',
       payUrl: 'https://pay.example.com/ldc',
       outTradeNo: 'sub2_ldc_888',
       clientSecret: '',
@@ -457,6 +458,7 @@ describe('PaymentView payment recovery', () => {
     })
     await flushPromises()
     await flushPromises()
+    expect(wrapper.find('[data-test="payment-done"]').attributes('provider-key')).toBe('easypay')
     await wrapper.find('[data-test="payment-done"]').trigger('click')
     await flushPromises()
 

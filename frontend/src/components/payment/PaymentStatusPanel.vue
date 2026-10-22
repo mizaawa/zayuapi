@@ -67,6 +67,17 @@
       </div>
     </template>
 
+    <template v-else-if="remainingSeconds <= 0">
+      <div class="card p-6" data-test="payment-expiry-processing" role="status">
+        <div class="flex flex-col items-center space-y-4 py-4 text-center">
+          <div class="h-10 w-10 animate-spin rounded-full border-4 border-primary-500 border-t-transparent"></div>
+          <p class="text-lg font-semibold text-gray-900 dark:text-white">{{ t('payment.result.processing') }}</p>
+          <p class="text-sm text-gray-500 dark:text-gray-400">{{ t('payment.result.processingHint') }}</p>
+          <button class="btn btn-secondary" @click="handleDone">{{ t('payment.result.backToRecharge') }}</button>
+        </div>
+      </div>
+    </template>
+
     <!-- ═══ Active States: QR or Popup waiting ═══ -->
 
     <!-- Mobile Alipay app handoff. The QR fallback stays hidden until launch timeout. -->
@@ -245,6 +256,7 @@ const props = defineProps<{
   qrCode: string
   expiresAt: string
   paymentType: string
+  providerKey?: string
   payUrl?: string
   orderType?: string
   currency?: string
@@ -290,9 +302,14 @@ let alipayLauncher: AlipayDeepLinkLauncher | null = null
 
 const VERIFY_RETRY_INTERVAL_MS = 15000
 const VERIFY_RETRY_MAX_ATTEMPTS = 6
+const EXPIRY_RETRY_MAX_ATTEMPTS = 15
 
 const isAlipay = computed(() => isBuiltInAlipayMethod(props.paymentType))
 const isWxpay = computed(() => isBuiltInWxpayMethod(props.paymentType))
+const isEasyPay = computed(() => {
+  const key = props.providerKey?.trim().toLowerCase() || ''
+  return key === 'easypay' || key.startsWith('easypay_')
+})
 const isMobileAlipayDeepLink = computed(() => props.mobileAlipayDeepLink === true && isAlipay.value && !!qrUrl.value)
 const showQRCode = computed(() => !!qrUrl.value && (!isMobileAlipayDeepLink.value || deepLinkFallbackVisible.value))
 
@@ -392,14 +409,14 @@ function saveQRCode() {
   link.remove()
 }
 
-async function tryRecoverPendingOrder(order: PaymentOrder): Promise<PaymentOrder> {
-  if (!isWxpay.value && !isMobileAlipayDeepLink.value) return order
+async function tryRecoverPendingOrder(order: PaymentOrder, finalCheck = false): Promise<PaymentOrder> {
+  if (!isWxpay.value && !isMobileAlipayDeepLink.value && !isEasyPay.value) return order
   const outTradeNo = String(order.out_trade_no || '').trim()
   if (!outTradeNo) return order
   const normalizedStatus = String(order.status || '').trim().toUpperCase()
-  if (normalizedStatus !== 'PENDING') return order
+  if (normalizedStatus !== 'PENDING' && normalizedStatus !== 'EXPIRED') return order
   const now = Date.now()
-  if (verifyAttempts >= VERIFY_RETRY_MAX_ATTEMPTS || now - lastVerifyAt < VERIFY_RETRY_INTERVAL_MS) {
+  if (!finalCheck && (verifyAttempts >= VERIFY_RETRY_MAX_ATTEMPTS || now - lastVerifyAt < VERIFY_RETRY_INTERVAL_MS)) {
     return order
   }
 
@@ -408,24 +425,37 @@ async function tryRecoverPendingOrder(order: PaymentOrder): Promise<PaymentOrder
   try {
     const result = await paymentAPI.verifyOrder(outTradeNo)
     return result.data ?? order
-  } catch {
+  } catch (error) {
+    if (finalCheck) throw error
     return order
   }
 }
 
-let pollInFlight = false
-async function pollStatus() {
-  if (!props.orderId || outcome.value) return
-  // 防重入：接口（含 verifyOrder 二次确认）响应慢于 3 秒轮询间隔时避免并发重叠请求。
-  if (pollInFlight) return
-  pollInFlight = true
+let pollInFlight: Promise<boolean> | null = null
+let expiryCheckInFlight = false
+let expiryCheckAttempts = 0
+let lastExpiryCheckAt: number | null = null
+let disposed = false
+
+function pollStatus(finalCheck = false): Promise<boolean> {
+  if (!props.orderId || outcome.value || disposed) return Promise.resolve(false)
+  if (pollInFlight) return pollInFlight
+  pollInFlight = checkStatus(finalCheck).finally(() => { pollInFlight = null })
+  return pollInFlight
+}
+
+async function checkStatus(finalCheck: boolean): Promise<boolean> {
   try {
     let order = await paymentStore.pollOrderStatus(props.orderId)
-    if (!order) return
-    // 已进入终态则不再处理迟到的响应。
-    if (outcome.value) return
-    order = await tryRecoverPendingOrder(order)
-    if (outcome.value) return
+    if (!order || outcome.value || disposed) return false
+    const expiredOnServer = order.status === 'EXPIRED'
+    if (expiredOnServer && !finalCheck) {
+      const now = Date.now()
+      if (lastExpiryCheckAt !== null && now - lastExpiryCheckAt < VERIFY_RETRY_INTERVAL_MS) return false
+      lastExpiryCheckAt = now
+    }
+    order = await tryRecoverPendingOrder(order, finalCheck || expiredOnServer)
+    if (outcome.value || disposed) return false
     if (isSuccessStatus(order.status)) {
       cleanup()
       paidOrder.value = order
@@ -434,21 +464,51 @@ async function pollStatus() {
     } else if (order.status === 'CANCELLED') {
       cleanup()
       setOutcome('cancelled')
-    } else if (order.status === 'EXPIRED' || order.status === 'FAILED') {
+    } else if (order.status === 'EXPIRED') {
+      remainingSeconds.value = 0
+      if (countdownTimer) clearInterval(countdownTimer)
+      countdownTimer = null
+    } else if (order.status === 'FAILED') {
+      cleanup()
+      setOutcome('expired')
+    }
+    return true
+  } catch {
+    return false
+  }
+}
+
+async function finishExpiredOrder() {
+  if (outcome.value || disposed || expiryCheckInFlight) return
+  const now = Date.now()
+  if (lastExpiryCheckAt !== null && now - lastExpiryCheckAt < VERIFY_RETRY_INTERVAL_MS) return
+  expiryCheckInFlight = true
+  lastExpiryCheckAt = now
+  try {
+    // Let a payment confirmation already in flight settle before the final expiry check.
+    await pollInFlight
+    if (outcome.value || disposed) return
+    expiryCheckAttempts += 1
+    await pollStatus(true)
+    if (expiryCheckAttempts >= EXPIRY_RETRY_MAX_ATTEMPTS && !outcome.value && !disposed) {
       cleanup()
       setOutcome('expired')
     }
   } finally {
-    pollInFlight = false
+    expiryCheckInFlight = false
   }
 }
 
 function startCountdown(seconds: number) {
   remainingSeconds.value = Math.max(0, seconds)
-  if (remainingSeconds.value <= 0) { setOutcome('expired'); return }
+  if (remainingSeconds.value <= 0) { void finishExpiredOrder(); return }
   countdownTimer = setInterval(() => {
     remainingSeconds.value--
-    if (remainingSeconds.value <= 0) { setOutcome('expired'); cleanup() }
+    if (remainingSeconds.value <= 0) {
+      if (countdownTimer) clearInterval(countdownTimer)
+      countdownTimer = null
+      void finishExpiredOrder()
+    }
   }, 1000)
 }
 
@@ -484,7 +544,10 @@ if (props.expiresAt) {
   seconds = Math.floor((new Date(props.expiresAt).getTime() - Date.now()) / 1000)
 }
 startCountdown(seconds)
-pollTimer = setInterval(pollStatus, 3000)
+pollTimer = setInterval(() => {
+  if (remainingSeconds.value <= 0) void finishExpiredOrder()
+  else void pollStatus()
+}, 3000)
 renderQR()
 
 watch([() => qrUrl.value, showQRCode], () => renderQR())
@@ -500,5 +563,5 @@ onMounted(() => {
   })
   alipayLauncher.launch()
 })
-onUnmounted(() => cleanup())
+onUnmounted(() => { disposed = true; cleanup() })
 </script>

@@ -185,6 +185,208 @@ describe('PaymentStatusPanel', () => {
     expect(wrapper.emitted('success')).toHaveLength(1)
   })
 
+  it.each([
+    ['alipay', 'easypay'],
+    ['creditcard', 'easypay'],
+    ['alipay', 'easypay_alipay'],
+  ])('actively verifies pending %s orders from %s', async (paymentType, providerKey) => {
+    pollOrderStatus.mockResolvedValue(orderFactory('PENDING'))
+    verifyOrder.mockResolvedValue({ data: orderFactory('COMPLETED') })
+
+    const wrapper = mount(PaymentStatusPanel, {
+      props: {
+        orderId: 42,
+        qrCode: 'https://pay.example.com/qr/42',
+        expiresAt: '2099-01-01T12:30:00Z',
+        paymentType,
+        providerKey,
+        orderType: 'balance',
+      },
+      global: { stubs: { Icon: true } },
+    })
+
+    await flushPromises()
+    await vi.advanceTimersByTimeAsync(3000)
+    await flushPromises()
+
+    expect(verifyOrder).toHaveBeenCalledWith('sub2_20260420abcd1234')
+    expect(wrapper.emitted('success')).toHaveLength(1)
+    wrapper.unmount()
+  })
+
+  it('throttles EasyPay verification while keeping an unpaid order pending', async () => {
+    pollOrderStatus.mockResolvedValue(orderFactory('PENDING'))
+    verifyOrder.mockResolvedValue({ data: orderFactory('PENDING') })
+
+    const wrapper = mount(PaymentStatusPanel, {
+      props: {
+        orderId: 42,
+        qrCode: 'https://pay.example.com/qr/42',
+        expiresAt: '2099-01-01T12:30:00Z',
+        paymentType: 'alipay',
+        providerKey: 'easypay',
+        orderType: 'balance',
+      },
+      global: { stubs: { Icon: true } },
+    })
+
+    await flushPromises()
+    await vi.advanceTimersByTimeAsync(12000)
+    expect(verifyOrder).toHaveBeenCalledTimes(1)
+    expect(wrapper.emitted('success')).toBeUndefined()
+    await vi.advanceTimersByTimeAsync(6000)
+    expect(verifyOrder).toHaveBeenCalledTimes(2)
+    wrapper.unmount()
+  })
+
+  it('verifies an already expired EasyPay order before showing a terminal result', async () => {
+    pollOrderStatus.mockResolvedValue(orderFactory('EXPIRED'))
+    verifyOrder.mockResolvedValue({ data: orderFactory('COMPLETED') })
+    const wrapper = mount(PaymentStatusPanel, {
+      props: {
+        orderId: 42,
+        qrCode: 'https://pay.example.com/qr/42',
+        expiresAt: new Date(Date.now() - 1000).toISOString(),
+        paymentType: 'alipay',
+        providerKey: 'easypay',
+      },
+      global: { stubs: { Icon: true } },
+    })
+
+    expect(wrapper.emitted('settled')).toBeUndefined()
+    await flushPromises()
+    expect(pollOrderStatus).toHaveBeenCalledTimes(1)
+    expect(verifyOrder).toHaveBeenCalledWith('sub2_20260420abcd1234')
+    expect(wrapper.emitted('settled')).toEqual([['success']])
+    wrapper.unmount()
+  })
+
+  it('waits for a successful in-flight confirmation when the countdown expires', async () => {
+    let resolveVerify!: (value: { data: ReturnType<typeof orderFactory> }) => void
+    pollOrderStatus.mockResolvedValue(orderFactory('PENDING'))
+    verifyOrder.mockImplementation(() => new Promise(resolve => { resolveVerify = resolve }))
+    const wrapper = mount(PaymentStatusPanel, {
+      props: {
+        orderId: 42,
+        qrCode: 'https://pay.example.com/qr/42',
+        expiresAt: new Date(Date.now() + 4000).toISOString(),
+        paymentType: 'alipay',
+        providerKey: 'easypay',
+      },
+      global: { stubs: { Icon: true } },
+    })
+
+    await vi.advanceTimersByTimeAsync(4000)
+    expect(verifyOrder).toHaveBeenCalledTimes(1)
+    expect(wrapper.emitted('settled')).toBeUndefined()
+    resolveVerify({ data: orderFactory('COMPLETED') })
+    await flushPromises()
+    expect(wrapper.emitted('settled')).toEqual([['success']])
+    expect(pollOrderStatus).toHaveBeenCalledTimes(1)
+    wrapper.unmount()
+  })
+
+  it('runs the final EasyPay verification after the regular retry budget is exhausted', async () => {
+    pollOrderStatus.mockResolvedValue(orderFactory('PENDING'))
+    verifyOrder.mockResolvedValue({ data: orderFactory('PENDING') })
+    const wrapper = mount(PaymentStatusPanel, {
+      props: {
+        orderId: 42,
+        qrCode: 'https://pay.example.com/qr/42',
+        expiresAt: new Date(Date.now() + 100000).toISOString(),
+        paymentType: 'alipay',
+        providerKey: 'easypay',
+      },
+      global: { stubs: { Icon: true } },
+    })
+
+    await vi.advanceTimersByTimeAsync(99000)
+    expect(verifyOrder).toHaveBeenCalledTimes(6)
+    verifyOrder.mockResolvedValueOnce({ data: orderFactory('COMPLETED') })
+    await vi.advanceTimersByTimeAsync(1000)
+    expect(verifyOrder).toHaveBeenCalledTimes(7)
+    expect(wrapper.emitted('settled')).toEqual([['success']])
+    wrapper.unmount()
+  })
+
+  it('keeps an expired EasyPay order retryable when its final verification fails', async () => {
+    pollOrderStatus.mockResolvedValue(orderFactory('EXPIRED'))
+    verifyOrder.mockRejectedValueOnce(new Error('Gateway unavailable'))
+      .mockResolvedValueOnce({ data: orderFactory('COMPLETED') })
+    const wrapper = mount(PaymentStatusPanel, {
+      props: {
+        orderId: 42,
+        qrCode: 'https://pay.example.com/qr/42',
+        expiresAt: new Date(Date.now() - 1000).toISOString(),
+        paymentType: 'alipay',
+        providerKey: 'easypay',
+      },
+      global: { stubs: { Icon: true } },
+    })
+
+    await flushPromises()
+    expect(wrapper.emitted('settled')).toBeUndefined()
+    expect(wrapper.find('[data-test="payment-expiry-processing"]').exists()).toBe(true)
+    expect(wrapper.find('canvas').exists()).toBe(false)
+    expect(wrapper.text()).not.toContain('payment.qr.openPayWindow')
+    await vi.advanceTimersByTimeAsync(12000)
+    expect(verifyOrder).toHaveBeenCalledTimes(1)
+    await vi.advanceTimersByTimeAsync(3000)
+    expect(wrapper.emitted('settled')).toEqual([['success']])
+    wrapper.unmount()
+  })
+
+  it.each(['PENDING', 'EXPIRED'])('retries an HTTP 200 %s result after expiry until payment is confirmed', async (status) => {
+    pollOrderStatus.mockResolvedValue(orderFactory(status))
+    verifyOrder.mockResolvedValueOnce({ data: orderFactory(status) })
+      .mockResolvedValueOnce({ data: orderFactory('COMPLETED') })
+    const wrapper = mount(PaymentStatusPanel, {
+      props: {
+        orderId: 42,
+        qrCode: 'https://pay.example.com/qr/42',
+        expiresAt: new Date(Date.now() - 1000).toISOString(),
+        paymentType: 'alipay',
+        providerKey: 'easypay',
+      },
+      global: { stubs: { Icon: true } },
+    })
+
+    await flushPromises()
+    expect(wrapper.emitted('settled')).toBeUndefined()
+    await vi.advanceTimersByTimeAsync(12000)
+    expect(verifyOrder).toHaveBeenCalledTimes(1)
+    await vi.advanceTimersByTimeAsync(3000)
+    expect(verifyOrder).toHaveBeenCalledTimes(2)
+    expect(wrapper.emitted('settled')).toEqual([['success']])
+    wrapper.unmount()
+  })
+
+  it('bounds post-expiry verification when the gateway never confirms payment', async () => {
+    pollOrderStatus.mockResolvedValue(orderFactory('EXPIRED'))
+    verifyOrder.mockResolvedValue({ data: orderFactory('EXPIRED') })
+    const wrapper = mount(PaymentStatusPanel, {
+      props: {
+        orderId: 42,
+        qrCode: 'https://pay.example.com/qr/42',
+        expiresAt: new Date(Date.now() - 1000).toISOString(),
+        paymentType: 'alipay',
+        providerKey: 'easypay',
+      },
+      global: { stubs: { Icon: true } },
+    })
+
+    await flushPromises()
+    await vi.advanceTimersByTimeAsync(195000)
+    expect(verifyOrder).toHaveBeenCalledTimes(14)
+    expect(wrapper.emitted('settled')).toBeUndefined()
+    await vi.advanceTimersByTimeAsync(15000)
+    expect(verifyOrder).toHaveBeenCalledTimes(15)
+    expect(wrapper.emitted('settled')).toEqual([['expired']])
+    await vi.advanceTimersByTimeAsync(30000)
+    expect(verifyOrder).toHaveBeenCalledTimes(15)
+    wrapper.unmount()
+  })
+
   it('actively verifies a pending mobile Alipay precreate order', async () => {
     const originalLocation = window.location
     const originalHidden = Object.getOwnPropertyDescriptor(document, 'hidden')

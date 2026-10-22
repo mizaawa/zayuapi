@@ -7763,11 +7763,11 @@
 
         <!-- Tab: Email -->
         <!-- Tab: Payment -->
-        <div v-show="activeTab === 'payment'" class="space-y-6">
+        <div v-show="activeTab === 'payment'" class="space-y-4 sm:space-y-6">
           <!-- Payment System Settings -->
           <div class="card">
             <div
-              class="border-b border-gray-100 px-6 py-4 dark:border-dark-700"
+              class="border-b border-gray-100 px-4 py-4 dark:border-dark-700 sm:px-6"
             >
               <h2 class="text-lg font-semibold text-gray-900 dark:text-white">
                 {{ t("admin.settings.payment.title") }}
@@ -7797,9 +7797,9 @@
                 </a>
               </p>
             </div>
-            <div class="space-y-4 p-6">
+            <div class="space-y-4 p-4 sm:p-6">
               <!-- Enable toggle -->
-              <div class="flex items-center justify-between">
+              <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <label class="font-medium text-gray-900 dark:text-white">{{
                     t("admin.settings.payment.enabled")
@@ -7851,7 +7851,10 @@
                   </div>
                 </div>
                 <!-- Row 2: Balance toggle + amounts -->
-                <div class="grid grid-cols-2 gap-3 sm:grid-cols-5">
+                <div
+                  data-testid="payment-amount-grid"
+                  class="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4"
+                >
                   <div>
                     <label class="input-label">{{
                       t("admin.settings.payment.minAmount")
@@ -8039,8 +8042,11 @@
                   </div>
                 </div>
                 <!-- Row 3: Pending orders + load balance + cancel rate limit (all in one row) -->
-                <div class="flex flex-wrap items-end gap-4">
-                  <div class="w-28">
+                <div
+                  data-testid="payment-mobile-options"
+                  class="flex flex-col items-stretch gap-4 sm:flex-row sm:flex-wrap sm:items-end"
+                >
+                  <div class="w-full sm:w-28">
                     <label class="input-label">{{
                       t("admin.settings.payment.maxPendingOrders")
                     }}</label
@@ -8051,21 +8057,21 @@
                       class="input"
                     />
                   </div>
-                  <div>
+                  <div class="w-full sm:w-auto">
                     <label class="input-label">{{
                       t("admin.settings.payment.loadBalanceStrategy")
                     }}</label>
                     <Select
                       v-model="form.payment_load_balance_strategy"
                       :options="loadBalanceOptions"
-                      class="w-40"
+                      class="w-full sm:w-40"
                     />
                   </div>
                   <div>
                     <label class="input-label">{{
                       t("admin.settings.payment.cancelRateLimit")
                     }}</label>
-                    <div class="flex items-center gap-2">
+                    <div class="flex flex-wrap items-center gap-2">
                       <button
                         type="button"
                         :class="[
@@ -8295,11 +8301,15 @@
             </div>
           </div>
 
-          <PaymentPermissionsPanel :active="activeTab === 'payment'" />
+          <PaymentPermissionsPanel
+            v-if="form.payment_enabled"
+            :active="activeTab === 'payment'"
+          />
 
           <!-- Provider Management -->
           <PaymentProviderList
             v-if="form.payment_enabled"
+            data-testid="payment-provider-management"
             :providers="providers"
             :loading="providersLoading"
             :can-create="hasAnyPaymentTypeEnabled"

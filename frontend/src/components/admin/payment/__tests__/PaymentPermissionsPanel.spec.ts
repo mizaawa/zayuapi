@@ -41,6 +41,8 @@ describe('PaymentPermissionsPanel', () => {
     const wrapper = render()
     await flushPromises()
     expect(listUsers).not.toHaveBeenCalled()
+    expect(wrapper.get('#exclusive-payment-hint').text()).toBe('admin.settings.payment.permissions.exclusiveHint')
+    expect(wrapper.get('[role="switch"]').attributes('aria-describedby')).toBe('exclusive-payment-hint')
     expect(wrapper.findComponent(SearchInput).exists()).toBe(false)
     await wrapper.get('[role="switch"]').trigger('click')
     await flushPromises()

@@ -5,6 +5,7 @@ package service
 import (
 	"context"
 	"database/sql"
+	"strconv"
 	"testing"
 	"time"
 
@@ -24,6 +25,8 @@ type paymentOrderLifecycleQueryProvider struct {
 	lastQueryTradeNo  string
 	lastCancelTradeNo string
 	queryCalls        int
+	queryTradeNos     []string
+	queryFn           func(context.Context, string) (*payment.QueryOrderResponse, error)
 	cancelCalls       int
 	responses         []*payment.QueryOrderResponse
 	resp              *payment.QueryOrderResponse
@@ -56,9 +59,15 @@ func (p *paymentOrderLifecycleQueryProvider) CreatePayment(context.Context, paym
 	panic("unexpected call")
 }
 
-func (p *paymentOrderLifecycleQueryProvider) QueryOrder(_ context.Context, tradeNo string) (*payment.QueryOrderResponse, error) {
+func (p *paymentOrderLifecycleQueryProvider) QueryOrder(ctx context.Context, tradeNo string) (*payment.QueryOrderResponse, error) {
 	p.lastQueryTradeNo = tradeNo
 	p.queryCalls++
+	p.queryTradeNos = append(p.queryTradeNos, tradeNo)
+	if p.queryFn != nil {
+		resp, err := p.queryFn(ctx, tradeNo)
+		p.addMerchantMetadata(resp)
+		return resp, err
+	}
 	if len(p.responses) > 0 {
 		resp := p.responses[0]
 		if len(p.responses) > 1 {
@@ -72,7 +81,7 @@ func (p *paymentOrderLifecycleQueryProvider) QueryOrder(_ context.Context, trade
 }
 
 func (p *paymentOrderLifecycleQueryProvider) MerchantIdentityMetadata() map[string]string {
-	return map[string]string{"app_id": "test-alipay-app", "appid": "test-wx-app", "mchid": "test-mch", "currency": "CNY"}
+	return map[string]string{"app_id": "test-alipay-app", "appid": "test-wx-app", "mchid": "test-mch", "currency": "CNY", "pid": "test-easypay-pid"}
 }
 
 func (p *paymentOrderLifecycleQueryProvider) addMerchantMetadata(resp *payment.QueryOrderResponse) {
@@ -685,6 +694,363 @@ func TestReconcilePendingWxpayOrdersBackfillsPaidOrder(t *testing.T) {
 	require.Equal(t, "wxpay-upstream-trade-123", reloaded.PaymentTradeNo)
 	require.Equal(t, 50.0, userRepo.getByIDUser.Balance)
 	require.Len(t, redeemRepo.useCalls, 1)
+}
+
+func TestReconcilePendingPaymentOrdersBackfillsPaidEasyPayOrder(t *testing.T) {
+	ctx := context.Background()
+	client := newPaymentOrderLifecycleTestClient(t)
+
+	user, err := client.User.Create().
+		SetEmail("easypay-reconcile@example.com").
+		SetPasswordHash("hash").
+		SetUsername("easypay-reconcile-user").
+		Save(ctx)
+	require.NoError(t, err)
+
+	providerKey := payment.TypeEasyPay
+	providerInstance, err := client.PaymentProviderInstance.Create().
+		SetProviderKey(providerKey).
+		SetName("easypay-reconcile").
+		SetConfig(`{"pid":"test-easypay-pid"}`).
+		SetSupportedTypes(payment.TypeAlipay).
+		SetEnabled(true).
+		Save(ctx)
+	require.NoError(t, err)
+	order, err := client.PaymentOrder.Create().
+		SetUserID(user.ID).
+		SetUserEmail(user.Email).
+		SetUserName(user.Username).
+		SetAmount(50).
+		SetPayAmount(50).
+		SetFeeRate(0).
+		SetRechargeCode("EASYPAY-RECONCILE").
+		SetOutTradeNo("sub2_easypay_reconcile").
+		SetPaymentType(payment.TypeAlipay).
+		SetProviderKey(providerKey).
+		SetProviderInstanceID(strconv.FormatInt(int64(providerInstance.ID), 10)).
+		SetPaymentTradeNo("").
+		SetOrderType(payment.OrderTypeBalance).
+		SetStatus(OrderStatusPending).
+		SetExpiresAt(time.Now().Add(time.Hour)).
+		SetClientIP("127.0.0.1").
+		SetSrcHost("api.example.com").
+		Save(ctx)
+	require.NoError(t, err)
+
+	userRepo := &mockUserRepo{
+		getByIDUser: &User{
+			ID:       user.ID,
+			Email:    user.Email,
+			Username: user.Username,
+			Balance:  0,
+		},
+	}
+	userRepo.updateBalanceFn = func(_ context.Context, id int64, amount float64) error {
+		require.Equal(t, user.ID, id)
+		userRepo.getByIDUser.Balance += amount
+		return nil
+	}
+	redeemRepo := &paymentOrderLifecycleRedeemRepo{
+		codesByCode: map[string]*RedeemCode{
+			order.RechargeCode: {
+				ID:     1,
+				Code:   order.RechargeCode,
+				Type:   RedeemTypeBalance,
+				Value:  order.Amount,
+				Status: StatusUnused,
+			},
+		},
+	}
+	redeemService := NewRedeemService(redeemRepo, userRepo, nil, nil, nil, client, nil, nil)
+	registry := payment.NewRegistry()
+	provider := &paymentOrderLifecycleQueryProvider{
+		key: payment.TypeEasyPay,
+		resp: &payment.QueryOrderResponse{
+			TradeNo: "easypay-upstream-trade-123",
+			Status:  payment.ProviderStatusPaid,
+			Amount:  50,
+			Metadata: map[string]string{
+				"pid": "test-easypay-pid",
+			},
+		},
+	}
+	registry.Register(provider)
+	originalFactory := createPaymentProviderFromInstance
+	createPaymentProviderFromInstance = func(key, instanceID string, config map[string]string) (payment.Provider, error) {
+		require.Equal(t, payment.TypeEasyPay, key)
+		require.Equal(t, strconv.FormatInt(int64(providerInstance.ID), 10), instanceID)
+		require.Equal(t, "test-easypay-pid", config["pid"])
+		return provider, nil
+	}
+	t.Cleanup(func() { createPaymentProviderFromInstance = originalFactory })
+
+	svc := &PaymentService{
+		entClient:       client,
+		registry:        registry,
+		loadBalancer:    newWebhookProviderTestLoadBalancer(client),
+		redeemService:   redeemService,
+		userRepo:        userRepo,
+		providersLoaded: true,
+	}
+
+	recovered, err := svc.ReconcilePendingPaymentOrders(ctx)
+	require.NoError(t, err)
+	require.Equal(t, 1, recovered)
+	require.Equal(t, order.OutTradeNo, provider.lastQueryTradeNo)
+	require.Zero(t, provider.cancelCalls)
+
+	reloaded, err := client.PaymentOrder.Get(ctx, order.ID)
+	require.NoError(t, err)
+	require.Equal(t, OrderStatusCompleted, reloaded.Status)
+	require.Equal(t, "easypay-upstream-trade-123", reloaded.PaymentTradeNo)
+	require.Equal(t, 50.0, userRepo.getByIDUser.Balance)
+	require.Len(t, redeemRepo.useCalls, 1)
+}
+
+func TestReconcilePendingPaymentOrdersBackfillsRecentExpiredEasyPayOnly(t *testing.T) {
+	ctx := context.Background()
+	client := newPaymentOrderLifecycleTestClient(t)
+
+	user, err := client.User.Create().
+		SetEmail("easypay-reconcile@example.com").
+		SetPasswordHash("hash").
+		SetUsername("easypay-reconcile-user").
+		Save(ctx)
+	require.NoError(t, err)
+
+	createOrder := func(code, outTradeNo string, paymentType payment.PaymentType, status string, updatedAt *time.Time) *dbent.PaymentOrder {
+		builder := client.PaymentOrder.Create().
+			SetUserID(user.ID).
+			SetUserEmail(user.Email).
+			SetUserName(user.Username).
+			SetAmount(50).
+			SetPayAmount(50).
+			SetFeeRate(0).
+			SetRechargeCode(code).
+			SetOutTradeNo(outTradeNo).
+			SetPaymentType(paymentType).
+			SetPaymentTradeNo("").
+			SetOrderType(payment.OrderTypeBalance).
+			SetStatus(status).
+			SetExpiresAt(time.Now().Add(time.Hour)).
+			SetClientIP("127.0.0.1").
+			SetSrcHost("api.example.com")
+		if status == OrderStatusExpired {
+			builder.SetExpiresAt(time.Now().Add(-time.Minute))
+		}
+		if updatedAt != nil {
+			builder.SetUpdatedAt(*updatedAt)
+		}
+		order, createErr := builder.Save(ctx)
+		require.NoError(t, createErr)
+		return order
+	}
+	order := createOrder("EASYPAY-RECONCILE", "sub2_easypay_reconcile", payment.TypeEasyPay, OrderStatusPending, nil)
+	recentExpiredOrder := createOrder("EASYPAY-RECONCILE-EXPIRED", "sub2_easypay_reconcile_expired", payment.TypeEasyPay, OrderStatusExpired, nil)
+	oldExpiredOrder := createOrder("EASYPAY-RECONCILE-OLD", "sub2_easypay_reconcile_old", payment.TypeEasyPay, OrderStatusExpired, ptr(time.Now().Add(-(paymentGraceMinutes+1)*time.Minute)))
+	expiredWxpayOrder := createOrder("WXPAY-RECONCILE-EXPIRED", "sub2_wxpay_reconcile_expired", payment.TypeWxpay, OrderStatusExpired, nil)
+
+	userRepo := &mockUserRepo{
+		getByIDUser: &User{
+			ID:       user.ID,
+			Email:    user.Email,
+			Username: user.Username,
+			Balance:  0,
+		},
+	}
+	userRepo.updateBalanceFn = func(ctx context.Context, id int64, amount float64) error {
+		require.Equal(t, user.ID, id)
+		if userRepo.getByIDUser != nil {
+			userRepo.getByIDUser.Balance += amount
+		}
+		return nil
+	}
+	redeemRepo := &paymentOrderLifecycleRedeemRepo{
+		codesByCode: map[string]*RedeemCode{
+			order.RechargeCode: {
+				ID:     1,
+				Code:   order.RechargeCode,
+				Type:   RedeemTypeBalance,
+				Value:  order.Amount,
+				Status: StatusUnused,
+			},
+			recentExpiredOrder.RechargeCode: {
+				ID:     2,
+				Code:   recentExpiredOrder.RechargeCode,
+				Type:   RedeemTypeBalance,
+				Value:  recentExpiredOrder.Amount,
+				Status: StatusUnused,
+			},
+		},
+	}
+	redeemService := NewRedeemService(redeemRepo, userRepo, nil, nil, nil, client, nil, nil)
+	registry := payment.NewRegistry()
+	provider := &paymentOrderLifecycleQueryProvider{
+		key: payment.TypeEasyPay,
+		resp: &payment.QueryOrderResponse{
+			TradeNo: "easypay-upstream-trade-123",
+			Status:  payment.ProviderStatusPaid,
+			Amount:  50,
+		},
+	}
+	registry.Register(provider)
+	svc := &PaymentService{
+		entClient:       client,
+		registry:        registry,
+		redeemService:   redeemService,
+		userRepo:        userRepo,
+		providersLoaded: true,
+	}
+
+	recovered, err := svc.ReconcilePendingPaymentOrders(ctx)
+	require.NoError(t, err)
+	require.Equal(t, 2, recovered)
+	require.Equal(t, 2, provider.queryCalls)
+	require.Zero(t, provider.cancelCalls)
+
+	reloaded, err := client.PaymentOrder.Get(ctx, order.ID)
+	require.NoError(t, err)
+	require.Equal(t, OrderStatusCompleted, reloaded.Status)
+	require.Equal(t, "easypay-upstream-trade-123", reloaded.PaymentTradeNo)
+	require.Equal(t, 100.0, userRepo.getByIDUser.Balance)
+	require.Len(t, redeemRepo.useCalls, 2)
+	expiredReloaded, err := client.PaymentOrder.Get(ctx, recentExpiredOrder.ID)
+	require.NoError(t, err)
+	require.Equal(t, OrderStatusCompleted, expiredReloaded.Status)
+	oldExpiredReloaded, err := client.PaymentOrder.Get(ctx, oldExpiredOrder.ID)
+	require.NoError(t, err)
+	require.Equal(t, OrderStatusExpired, oldExpiredReloaded.Status)
+	expiredWxpayReloaded, err := client.PaymentOrder.Get(ctx, expiredWxpayOrder.ID)
+	require.NoError(t, err)
+	require.Equal(t, OrderStatusExpired, expiredWxpayReloaded.Status)
+}
+
+func TestReconcilePendingPaymentOrdersRotatesBeyondUnpaidBatch(t *testing.T) {
+	ctx := context.Background()
+	svc, provider, orders := newPendingPaymentReconcileTestOrders(t, pendingPaymentReconcileLimit+1)
+	wantTradeNos := make([]string, len(orders))
+	for i, order := range orders {
+		wantTradeNos[i] = order.OutTradeNo
+	}
+
+	recovered, err := svc.ReconcilePendingPaymentOrders(ctx)
+	require.NoError(t, err)
+	require.Zero(t, recovered)
+	require.Equal(t, wantTradeNos[:pendingPaymentReconcileLimit], provider.queryTradeNos)
+
+	recovered, err = svc.ReconcilePendingPaymentOrders(ctx)
+	require.NoError(t, err)
+	require.Zero(t, recovered)
+	require.Equal(t, wantTradeNos, provider.queryTradeNos)
+
+	recovered, err = svc.ReconcilePendingPaymentOrders(ctx)
+	require.NoError(t, err)
+	require.Zero(t, recovered)
+	require.Equal(t, wantTradeNos[:pendingPaymentReconcileLimit], provider.queryTradeNos[len(orders):])
+	require.Zero(t, provider.cancelCalls)
+}
+
+func TestReconcilePendingPaymentOrdersResumesAfterProviderCancelsContext(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	svc, provider, orders := newPendingPaymentReconcileTestOrders(t, 3)
+	provider.queryFn = func(ctx context.Context, _ string) (*payment.QueryOrderResponse, error) {
+		cancel()
+		return nil, ctx.Err()
+	}
+
+	recovered, err := svc.ReconcilePendingPaymentOrders(ctx)
+	require.ErrorIs(t, err, context.Canceled)
+	require.Zero(t, recovered)
+	require.Equal(t, []string{orders[0].OutTradeNo}, provider.queryTradeNos)
+	require.Equal(t, orders[0].ID, svc.reconcileCursor)
+
+	provider.queryFn = nil
+	recovered, err = svc.ReconcilePendingPaymentOrders(context.Background())
+	require.NoError(t, err)
+	require.Zero(t, recovered)
+	require.Equal(t, []string{orders[0].OutTradeNo, orders[1].OutTradeNo, orders[2].OutTradeNo}, provider.queryTradeNos)
+	require.Equal(t, orders[2].ID, svc.reconcileCursor)
+}
+
+func TestVerifyOrderByOutTradeNoDoesNotReopenExpiredGraceForNewTradeNo(t *testing.T) {
+	ctx := context.Background()
+	svc, provider, orders := newPendingPaymentReconcileTestOrders(t, 1)
+	order, err := svc.entClient.PaymentOrder.UpdateOneID(orders[0].ID).
+		SetStatus(OrderStatusExpired).
+		SetExpiresAt(time.Now().Add(-10 * time.Minute)).
+		SetUpdatedAt(time.Now().Add(-(paymentGraceMinutes + 1) * time.Minute)).
+		Save(ctx)
+	require.NoError(t, err)
+	provider.resp = &payment.QueryOrderResponse{
+		TradeNo: "late-easypay-trade",
+		Status:  payment.ProviderStatusPaid,
+		Amount:  order.PayAmount,
+	}
+	userRepo := &mockUserRepo{getByIDUser: &User{ID: order.UserID, Balance: 25}}
+	userRepo.updateBalanceFn = func(_ context.Context, _ int64, amount float64) error {
+		userRepo.getByIDUser.Balance += amount
+		return nil
+	}
+	redeemRepo := &paymentOrderLifecycleRedeemRepo{codesByCode: map[string]*RedeemCode{
+		order.RechargeCode: {ID: 1, Code: order.RechargeCode, Type: RedeemTypeBalance, Value: order.Amount, Status: StatusUnused},
+	}}
+	svc.userRepo = userRepo
+	svc.redeemService = NewRedeemService(redeemRepo, userRepo, nil, nil, nil, svc.entClient, nil, nil)
+
+	got, err := svc.VerifyOrderByOutTradeNo(ctx, order.OutTradeNo, order.UserID)
+	require.NoError(t, err)
+	require.Equal(t, OrderStatusExpired, got.Status)
+	require.Empty(t, got.PaymentTradeNo)
+	reloaded, err := svc.entClient.PaymentOrder.Get(ctx, order.ID)
+	require.NoError(t, err)
+	require.Equal(t, OrderStatusExpired, reloaded.Status)
+	require.True(t, order.UpdatedAt.Equal(reloaded.UpdatedAt))
+	require.Empty(t, reloaded.PaymentTradeNo)
+	require.Equal(t, 25.0, userRepo.getByIDUser.Balance)
+	require.Empty(t, redeemRepo.useCalls)
+}
+
+func newPendingPaymentReconcileTestOrders(t *testing.T, count int) (*PaymentService, *paymentOrderLifecycleQueryProvider, []*dbent.PaymentOrder) {
+	t.Helper()
+	ctx := context.Background()
+	client := newPaymentOrderLifecycleTestClient(t)
+	user, err := client.User.Create().
+		SetEmail("reconcile-cursor@example.com").
+		SetPasswordHash("hash").
+		SetUsername("reconcile-cursor").
+		Save(ctx)
+	require.NoError(t, err)
+	orders := make([]*dbent.PaymentOrder, 0, count)
+	for i := 0; i < count; i++ {
+		suffix := strconv.Itoa(i)
+		order, createErr := client.PaymentOrder.Create().
+			SetUserID(user.ID).
+			SetUserEmail(user.Email).
+			SetUserName(user.Username).
+			SetAmount(50).
+			SetPayAmount(50).
+			SetFeeRate(0).
+			SetRechargeCode("RECONCILE-CURSOR-" + suffix).
+			SetOutTradeNo("sub2_reconcile_cursor_" + suffix).
+			SetPaymentType(payment.TypeEasyPay).
+			SetPaymentTradeNo("").
+			SetOrderType(payment.OrderTypeBalance).
+			SetStatus(OrderStatusPending).
+			SetExpiresAt(time.Now().Add(time.Hour)).
+			SetClientIP("127.0.0.1").
+			SetSrcHost("api.example.com").
+			Save(ctx)
+		require.NoError(t, createErr)
+		orders = append(orders, order)
+	}
+	provider := &paymentOrderLifecycleQueryProvider{
+		key:  payment.TypeEasyPay,
+		resp: &payment.QueryOrderResponse{Status: payment.ProviderStatusPending},
+	}
+	registry := payment.NewRegistry()
+	registry.Register(provider)
+	return &PaymentService{entClient: client, registry: registry, providersLoaded: true}, provider, orders
 }
 
 func TestVerifyOrderByOutTradeNoUsesOutTradeNoWhenPaymentTradeNoAlreadyExistsForAlipay(t *testing.T) {

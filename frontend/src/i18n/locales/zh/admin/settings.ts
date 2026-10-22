@@ -704,6 +704,7 @@ export default {
         permissions: {
           title: '权限管理',
           exclusive: '设为专用通道',
+          exclusiveHint: '开启后，仅已获授权的用户可使用站内充值与购买套餐。可在用户管理中为指定用户授予专属充值权限。',
           email: '用户邮箱',
           concurrency: '最大并发',
           search: '搜索用户邮箱',

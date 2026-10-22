@@ -301,6 +301,105 @@ describe('PaymentResultView', () => {
     expect(wrapper.text()).toContain('payment.result.success')
   })
 
+  it.each(['PENDING', 'EXPIRED'])('verifies a %s order on return even when order_id lookup succeeds', async (status) => {
+    routeState.query = { order_id: '42', trade_status: 'TRADE_SUCCESS' }
+    pollOrderStatus.mockResolvedValue(orderFactory(status))
+    verifyOrder.mockResolvedValue({ data: orderFactory('COMPLETED') })
+
+    const wrapper = mount(PaymentResultView, {
+      global: { stubs: { OrderStatusBadge: true } },
+    })
+    await flushPromises()
+
+    expect(pollOrderStatus).toHaveBeenCalledWith(42)
+    expect(verifyOrder).toHaveBeenCalledWith('sub2_20260420abcd1234')
+    expect(wrapper.text()).toContain('payment.result.success')
+    expect(verifyOrderPublic).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it('retries upstream verification when the return order is still pending', async () => {
+    vi.useFakeTimers()
+    routeState.query = { order_id: '42' }
+    pollOrderStatus.mockResolvedValue(orderFactory('PENDING'))
+    verifyOrder
+      .mockRejectedValueOnce(new Error('provider unavailable'))
+      .mockResolvedValueOnce({ data: orderFactory('PAID') })
+
+    const wrapper = mount(PaymentResultView, {
+      global: { stubs: { OrderStatusBadge: true } },
+    })
+    await flushPromises()
+    expect(wrapper.text()).toContain('payment.result.processing')
+
+    await vi.advanceTimersByTimeAsync(2000)
+    await flushPromises()
+    expect(verifyOrder).toHaveBeenCalledTimes(2)
+    expect(wrapper.text()).toContain('payment.result.success')
+    wrapper.unmount()
+  })
+
+  it('keeps retrying an expired return order until payment recovery succeeds', async () => {
+    vi.useFakeTimers()
+    routeState.query = { order_id: '42' }
+    window.localStorage.setItem(PAYMENT_RECOVERY_STORAGE_KEY, JSON.stringify(recoverySnapshotFactory('resume-42')))
+    pollOrderStatus.mockResolvedValue(orderFactory('EXPIRED'))
+    verifyOrder
+      .mockResolvedValueOnce({ data: orderFactory('EXPIRED') })
+      .mockResolvedValueOnce({ data: orderFactory('COMPLETED') })
+
+    const wrapper = mount(PaymentResultView, {
+      global: { stubs: { OrderStatusBadge: true } },
+    })
+    await flushPromises()
+    expect(wrapper.text()).not.toContain('payment.result.success')
+    expect(wrapper.text()).toContain('payment.result.processing')
+    expect(window.localStorage.getItem(PAYMENT_RECOVERY_STORAGE_KEY)).not.toBeNull()
+
+    await vi.advanceTimersByTimeAsync(2000)
+    await flushPromises()
+    expect(verifyOrder).toHaveBeenCalledTimes(2)
+    expect(wrapper.text()).toContain('payment.result.success')
+    expect(window.localStorage.getItem(PAYMENT_RECOVERY_STORAGE_KEY)).toBeNull()
+    wrapper.unmount()
+  })
+
+  it('bounds recovery attempts when an order remains expired', async () => {
+    vi.useFakeTimers()
+    routeState.query = { order_id: '42' }
+    window.localStorage.setItem(PAYMENT_RECOVERY_STORAGE_KEY, JSON.stringify(recoverySnapshotFactory('resume-42')))
+    pollOrderStatus.mockResolvedValue(orderFactory('EXPIRED'))
+    verifyOrder.mockResolvedValue({ data: orderFactory('EXPIRED') })
+
+    const wrapper = mount(PaymentResultView, {
+      global: { stubs: { OrderStatusBadge: true } },
+    })
+    await flushPromises()
+    await vi.advanceTimersByTimeAsync(40000)
+    await flushPromises()
+
+    expect(verifyOrder).toHaveBeenCalledTimes(16)
+    expect(wrapper.text()).toContain('payment.result.failed')
+    expect(window.localStorage.getItem(PAYMENT_RECOVERY_STORAGE_KEY)).toBeNull()
+    wrapper.unmount()
+  })
+
+  it('preserves a new recovery snapshot when an initial lookup finishes after unmount', async () => {
+    routeState.query = { order_id: '42' }
+    let finishLookup!: (order: ReturnType<typeof orderFactory>) => void
+    pollOrderStatus.mockReturnValue(new Promise((resolve) => { finishLookup = resolve }))
+    const wrapper = mount(PaymentResultView, {
+      global: { stubs: { OrderStatusBadge: true } },
+    })
+    await flushPromises()
+    wrapper.unmount()
+    const newSnapshot = JSON.stringify({ ...recoverySnapshotFactory('resume-new'), orderId: 43 })
+    window.localStorage.setItem(PAYMENT_RECOVERY_STORAGE_KEY, newSnapshot)
+    finishLookup(orderFactory('COMPLETED'))
+    await flushPromises()
+    expect(window.localStorage.getItem(PAYMENT_RECOVERY_STORAGE_KEY)).toBe(newSnapshot)
+  })
+
   it('ignores a stale global recovery snapshot when legacy return markers do not identify the order', async () => {
     routeState.query = {
       trade_status: 'TRADE_SUCCESS',

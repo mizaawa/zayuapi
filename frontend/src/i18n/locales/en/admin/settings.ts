@@ -709,6 +709,7 @@ export default {
         permissions: {
           title: 'Permission Management',
           exclusive: 'Set as exclusive channel',
+          exclusiveHint: 'Only authorized users can recharge and purchase plans when enabled. Grant exclusive recharge access to specific users in User Management.',
           email: 'User email',
           concurrency: 'Maximum concurrency',
           search: 'Search user email',

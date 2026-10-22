@@ -143,6 +143,7 @@ describe('decidePaymentLaunch', () => {
 
   it('keeps hosted redirect metadata for recovery flows', () => {
     const decision = decidePaymentLaunch(createOrderResult({
+      provider_key: 'easypay',
       pay_url: 'https://pay.example.com/session/abc',
       payment_mode: 'popup',
       resume_token: 'resume-2',
@@ -156,6 +157,7 @@ describe('decidePaymentLaunch', () => {
     expect(decision.kind).toBe('redirect_waiting')
     expect(decision.paymentState.payUrl).toBe('https://pay.example.com/session/abc')
     expect(decision.recovery.paymentMode).toBe('popup')
+    expect(decision.recovery.providerKey).toBe('easypay')
     expect(decision.recovery.outTradeNo).toBe('sub2_abc')
     expect(decision.recovery.resumeToken).toBe('resume-2')
   })
@@ -384,6 +386,7 @@ describe('readPaymentRecoverySnapshot', () => {
       expiresAt: '2099-01-01T00:10:00.000Z',
       paymentType: 'alipay',
       payUrl: 'https://pay.example.com/session/33',
+      providerKey: 'easypay',
       outTradeNo: 'sub2_33',
       clientSecret: '',
       intentId: '',
@@ -403,6 +406,10 @@ describe('readPaymentRecoverySnapshot', () => {
     })
 
     expect(restored?.orderId).toBe(33)
+    expect(restored?.providerKey).toBe('easypay')
+    expect(readPaymentRecoverySnapshot(JSON.stringify({
+      ...snapshot, providerKey: 42,
+    }))).toBeNull()
   })
 
   it('drops expired or mismatched recovery snapshots', () => {
@@ -461,6 +468,7 @@ describe('readPaymentRecoverySnapshot', () => {
     })
 
     expect(restored?.orderId).toBe(44)
+    expect(restored?.providerKey).toBe('')
     expect(restored?.outTradeNo).toBe('')
   })
 

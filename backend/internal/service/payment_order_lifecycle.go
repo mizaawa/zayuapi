@@ -27,7 +27,7 @@ const (
 	checkPaidResultAlreadyPaid = "already_paid"
 	checkPaidResultCancelled   = "cancelled"
 
-	pendingWxpayReconcileLimit = 20
+	pendingPaymentReconcileLimit = 20
 )
 
 type checkPaidOptions struct {
@@ -182,14 +182,8 @@ func (s *PaymentService) checkPaidWithOptions(ctx context.Context, o *dbent.Paym
 		}
 		notificationTradeNo := o.PaymentTradeNo
 		if upstreamTradeNo := strings.TrimSpace(resp.TradeNo); paymentOrderShouldPersistUpstreamTradeNo(queryRef, upstreamTradeNo, notificationTradeNo) {
-			if _, updateErr := s.entClient.PaymentOrder.Update().
-				Where(paymentorder.IDEQ(o.ID)).
-				SetPaymentTradeNo(upstreamTradeNo).
-				Save(ctx); updateErr != nil {
-				slog.Error("persist upstream trade no during checkPaid failed", "orderID", o.ID, "tradeNo", upstreamTradeNo, "error", updateErr)
-			} else {
-				o.PaymentTradeNo = upstreamTradeNo
-			}
+			// toPaid persists this atomically with the status transition. Writing it
+			// here would refresh UpdatedAt and reopen an expired order's grace period.
 			notificationTradeNo = upstreamTradeNo
 		}
 		if err := s.HandlePaymentNotification(ctx, &payment.PaymentNotification{TradeNo: notificationTradeNo, OrderID: o.OutTradeNo, Amount: resp.Amount, Status: payment.ProviderStatusSuccess, Metadata: resp.Metadata}, prov.ProviderKey()); err != nil {
@@ -303,35 +297,77 @@ func (s *PaymentService) VerifyOrderByOutTradeNo(ctx context.Context, outTradeNo
 	return o, nil
 }
 
-// ReconcilePendingWxpayOrders actively checks recent pending WeChat orders so
-// missed provider notifications do not wait until order expiry to fulfill.
-func (s *PaymentService) ReconcilePendingWxpayOrders(ctx context.Context) (int, error) {
+// ReconcilePendingPaymentOrders actively checks recent pending orders handled
+// by providers whose callbacks are commonly delayed or lost. This lets a
+// successful EasyPay checkout settle before the expiry sweep marks the order
+// expired, including visible alipay/wxpay methods routed through EasyPay.
+func (s *PaymentService) ReconcilePendingPaymentOrders(ctx context.Context) (int, error) {
+	s.reconcileMu.Lock()
+	defer s.reconcileMu.Unlock()
+	if err := ctx.Err(); err != nil {
+		return 0, err
+	}
 	now := time.Now()
-	orders, err := s.entClient.PaymentOrder.Query().
+	query := s.entClient.PaymentOrder.Query().
 		Where(
-			paymentorder.StatusEQ(OrderStatusPending),
-			paymentorder.ExpiresAtGT(now),
 			paymentorder.Or(
-				paymentorder.PaymentTypeEQ(payment.TypeWxpay),
-				paymentorder.PaymentTypeHasPrefix(payment.TypeWxpay+"_"),
-				paymentorder.ProviderKeyEQ(payment.TypeWxpay),
-				paymentorder.ProviderKeyHasPrefix(payment.TypeWxpay+"_"),
+				paymentorder.And(
+					paymentorder.StatusEQ(OrderStatusPending),
+					paymentorder.ExpiresAtGT(now),
+					paymentorder.Or(
+						paymentorder.PaymentTypeEQ(payment.TypeEasyPay),
+						paymentorder.ProviderKeyEQ(payment.TypeEasyPay),
+						paymentorder.ProviderKeyHasPrefix(payment.TypeEasyPay+"_"),
+						paymentorder.PaymentTypeEQ(payment.TypeWxpay),
+						paymentorder.PaymentTypeHasPrefix(payment.TypeWxpay+"_"),
+						paymentorder.ProviderKeyEQ(payment.TypeWxpay),
+						paymentorder.ProviderKeyHasPrefix(payment.TypeWxpay+"_"),
+					),
+				),
+				paymentorder.And(
+					paymentorder.StatusEQ(OrderStatusExpired),
+					paymentorder.UpdatedAtGTE(now.Add(-paymentGraceMinutes*time.Minute)),
+					paymentorder.Or(
+						paymentorder.PaymentTypeEQ(payment.TypeEasyPay),
+						paymentorder.ProviderKeyEQ(payment.TypeEasyPay),
+						paymentorder.ProviderKeyHasPrefix(payment.TypeEasyPay+"_"),
+					),
+				),
 			),
 		).
-		Order(dbent.Asc(paymentorder.FieldCreatedAt)).
-		Limit(pendingWxpayReconcileLimit).
-		All(ctx)
+		Order(dbent.Asc(paymentorder.FieldID)).
+		Limit(pendingPaymentReconcileLimit)
+	orders, err := query.Clone().Where(paymentorder.IDGT(s.reconcileCursor)).All(ctx)
 	if err != nil {
-		return 0, fmt.Errorf("query pending wxpay orders: %w", err)
+		return 0, fmt.Errorf("query pending payment orders: %w", err)
+	}
+	if len(orders) == 0 && s.reconcileCursor > 0 {
+		orders, err = query.All(ctx)
+		if err != nil {
+			return 0, fmt.Errorf("query pending payment orders after cursor wrap: %w", err)
+		}
+		s.reconcileCursor = 0
 	}
 
 	recovered := 0
 	for _, order := range orders {
+		if err := ctx.Err(); err != nil {
+			return recovered, err
+		}
+		// Advance only for attempted orders, including a slow provider timeout,
+		// so the next sweep can reach orders beyond the first unpaid batch.
+		s.reconcileCursor = order.ID
 		if s.reconcilePaid(ctx, order) == checkPaidResultAlreadyPaid {
 			recovered++
 		}
 	}
-	return recovered, nil
+	return recovered, ctx.Err()
+}
+
+// ReconcilePendingWxpayOrders is retained for callers that used the old
+// method name. The periodic worker now also reconciles EasyPay orders.
+func (s *PaymentService) ReconcilePendingWxpayOrders(ctx context.Context) (int, error) {
+	return s.ReconcilePendingPaymentOrders(ctx)
 }
 
 // VerifyOrderPublic returns the currently persisted public order state without

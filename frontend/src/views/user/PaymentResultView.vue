@@ -15,7 +15,7 @@
               <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
             </svg>
           </div>
-          <div v-else-if="isPending"
+          <div v-else-if="isProcessing"
             class="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-yellow-100 dark:bg-yellow-900/30">
             <div class="h-10 w-10 animate-spin rounded-full border-4 border-yellow-500 border-t-transparent"></div>
           </div>
@@ -28,7 +28,7 @@
           <h2 class="mt-4 text-2xl font-bold text-gray-900 dark:text-white">
             {{ statusTitle }}
           </h2>
-          <p v-if="isPending" class="mt-2 text-sm text-gray-500 dark:text-gray-400">
+          <p v-if="isProcessing" class="mt-2 text-sm text-gray-500 dark:text-gray-400">
             {{ t('payment.result.processingHint') }}
           </p>
         </div>
@@ -139,6 +139,7 @@ const STATUS_REFRESH_INTERVAL_MS = 2000
 const STATUS_REFRESH_MAX_ATTEMPTS = 15
 
 let statusRefreshTimer: ReturnType<typeof setTimeout> | null = null
+let disposed = false
 const refreshAttempts = ref(0)
 
 /** 充值金额 = pay_amount / (1 + fee_rate/100)，fee_rate=0 时等于 pay_amount */
@@ -170,15 +171,16 @@ const isSuccess = computed(() => {
   return isSuccessStatus(order.value?.status)
 })
 
-const isPending = computed(() => {
+const isProcessing = computed(() => {
   return isPendingStatus(order.value?.status)
+    || (normalizeOrderStatus(order.value?.status) === 'EXPIRED' && refreshAttempts.value < STATUS_REFRESH_MAX_ATTEMPTS)
 })
 
 const statusTitle = computed(() => {
   if (isSuccess.value) {
     return t('payment.result.success')
   }
-  if (isPending.value) {
+  if (isProcessing.value) {
     return t('payment.result.processing')
   }
   return t('payment.result.failed')
@@ -225,6 +227,10 @@ function isSuccessStatus(status: string | null | undefined): boolean {
 
 function isPendingStatus(status: string | null | undefined): boolean {
   return PENDING_STATUSES.has(normalizeOrderStatus(status))
+}
+
+function canRefreshStatus(status: string | null | undefined): boolean {
+  return isPendingStatus(status) || normalizeOrderStatus(status) === 'EXPIRED'
 }
 
 function readRouteQueryString(key: string): string {
@@ -298,6 +304,21 @@ async function resolveOrderFromOutTradeNo(outTradeNo: string): Promise<ResolvedO
   }
 }
 
+async function pollAndVerifyOrder(orderId: number): Promise<ResolvedOrder | null> {
+  const currentOrder = await paymentStore.pollOrderStatus(orderId)
+  if (!currentOrder) return null
+  const status = normalizeOrderStatus(currentOrder.status)
+  if ((status === 'PENDING' || status === 'EXPIRED') && currentOrder.out_trade_no) {
+    try {
+      const result = await paymentAPI.verifyOrder(currentOrder.out_trade_no)
+      return result.data ?? currentOrder
+    } catch {
+      return currentOrder
+    }
+  }
+  return currentOrder
+}
+
 function clearStatusRefreshTimer(): void {
   if (statusRefreshTimer !== null) {
     clearTimeout(statusRefreshTimer)
@@ -312,26 +333,27 @@ function clearRecoverySnapshot(): void {
 
 function clearRecoverySnapshotForTerminalStatus(status: string | null | undefined): void {
   if (!status) return
-  if (!isPendingStatus(status)) {
+  if (!canRefreshStatus(status) || (normalizeOrderStatus(status) === 'EXPIRED' && refreshAttempts.value >= STATUS_REFRESH_MAX_ATTEMPTS)) {
     clearRecoverySnapshot()
   }
 }
 
 function scheduleStatusRefresh(refreshOrder: (() => Promise<ResolvedOrder | null>) | null): void {
   clearStatusRefreshTimer()
-  if (!refreshOrder || !isPending.value || refreshAttempts.value >= STATUS_REFRESH_MAX_ATTEMPTS) {
+  if (disposed || !refreshOrder || !canRefreshStatus(order.value?.status) || refreshAttempts.value >= STATUS_REFRESH_MAX_ATTEMPTS) {
     return
   }
 
   statusRefreshTimer = setTimeout(async () => {
     refreshAttempts.value += 1
     const refreshedOrder = await refreshOrder()
+    if (disposed) return
     if (refreshedOrder) {
       setResolvedOrder(refreshedOrder)
       clearRecoverySnapshotForTerminalStatus(refreshedOrder.status)
     }
 
-    if (isPendingStatus(order.value?.status)) {
+    if (canRefreshStatus(order.value?.status)) {
       scheduleStatusRefresh(refreshOrder)
     }
   }, STATUS_REFRESH_INTERVAL_MS)
@@ -361,6 +383,7 @@ onMounted(async () => {
 
   if (resumeToken) {
     const resolvedOrder = await resolveOrderFromResumeToken(resumeToken)
+    if (disposed) return
     if (resolvedOrder) {
       setResolvedOrder(resolvedOrder)
       if (!orderId) {
@@ -381,7 +404,9 @@ onMounted(async () => {
 
   if (!order.value && orderId && (!resumeToken || routeOrderId > 0)) {
     try {
-      setResolvedOrder(await paymentStore.pollOrderStatus(orderId))
+      const resolvedOrder = await pollAndVerifyOrder(orderId)
+      if (disposed) return
+      setResolvedOrder(resolvedOrder)
     } catch (_err: unknown) {
       // Order lookup failed, will try legacy fallback below when possible.
     }
@@ -389,6 +414,7 @@ onMounted(async () => {
 
   if (!order.value && shouldUsePublicOutTradeNo && (!resumeToken || resumeTokenLookupFailed)) {
     const legacyOrder = await resolveOrderFromOutTradeNo(outTradeNo)
+    if (disposed) return
     if (legacyOrder) {
       setResolvedOrder(legacyOrder)
       if (!orderId) {
@@ -416,7 +442,8 @@ onMounted(async () => {
 
     if (orderId) {
       try {
-        return await paymentStore.pollOrderStatus(orderId)
+        const refreshedOrder = await pollAndVerifyOrder(orderId)
+        if (refreshedOrder) return refreshedOrder
       } catch (_err: unknown) {
         // Fall through to legacy public verification when order polling is unavailable.
       }
@@ -429,7 +456,7 @@ onMounted(async () => {
     return null
   }
 
-  if (isPendingStatus(order.value?.status)) {
+  if (canRefreshStatus(order.value?.status)) {
     scheduleStatusRefresh(refreshOrder)
   } else if (order.value) {
     clearRecoverySnapshotForTerminalStatus(order.value.status)
@@ -440,6 +467,7 @@ onMounted(async () => {
 })
 
 onBeforeUnmount(() => {
+  disposed = true
   clearStatusRefreshTimer()
 })
 </script>

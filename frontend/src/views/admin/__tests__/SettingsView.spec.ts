@@ -1157,6 +1157,41 @@ describe("admin SettingsView payment visible method controls", () => {
     expect(wrapper.text()).not.toContain("支付来源");
   });
 
+  it("uses a narrow-screen layout for payment settings", async () => {
+    const wrapper = mountView();
+
+    await flushPromises();
+    await openPaymentTab(wrapper);
+
+    expect(wrapper.get('[data-testid="payment-amount-grid"]').classes()).toContain(
+      "grid-cols-1",
+    );
+    expect(wrapper.get('[data-testid="payment-amount-grid"]').classes()).toContain(
+      "sm:grid-cols-2",
+    );
+    expect(wrapper.get('[data-testid="payment-mobile-options"]').classes()).toContain(
+      "flex-col",
+    );
+    expect(wrapper.find('payment-permissions-panel-stub').exists()).toBe(true);
+  });
+
+  it("hides payment configuration, permissions and provider management when payment is disabled", async () => {
+    getSettings.mockResolvedValueOnce({
+      ...baseSettingsResponse,
+      payment_enabled: false,
+    });
+    const wrapper = mountView();
+
+    await flushPromises();
+    await openPaymentTab(wrapper);
+
+    expect(wrapper.find('[data-testid="payment-amount-grid"]').exists()).toBe(false);
+    expect(wrapper.find('[data-testid="payment-mobile-options"]').exists()).toBe(false);
+    expect(wrapper.find('[data-testid="payment-provider-management"]').exists()).toBe(false);
+    expect(wrapper.find('payment-permissions-panel-stub').exists()).toBe(false);
+    expect(wrapper.text()).not.toContain("admin.settings.payment.providerManagement");
+  });
+
   it("shows valid passkey RP configuration and persists the sign-in toggle", async () => {
     const wrapper = mountView();
 

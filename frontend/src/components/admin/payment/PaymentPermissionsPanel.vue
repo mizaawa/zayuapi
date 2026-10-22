@@ -1,24 +1,31 @@
 <template>
   <section class="card" data-test="payment-permissions">
-    <div class="border-b border-gray-100 px-6 py-4 dark:border-dark-700">
-      <h2 class="text-lg font-semibold text-gray-900 dark:text-white">
+    <div class="border-b border-gray-100 px-4 py-4 dark:border-dark-700 sm:px-6">
+      <h2 class="text-base font-semibold text-gray-900 dark:text-white sm:text-lg">
         {{ t('admin.settings.payment.permissions.title') }}
       </h2>
     </div>
-    <div class="space-y-4 p-6">
-      <div class="flex items-center justify-between gap-4">
-        <label id="exclusive-payment-label" class="font-medium text-gray-900 dark:text-white">
-          {{ t('admin.settings.payment.permissions.exclusive') }}
-        </label>
+    <div class="space-y-4 p-4 sm:p-6">
+      <div class="flex items-start justify-between gap-4">
+        <div class="min-w-0">
+          <label id="exclusive-payment-label" class="font-medium text-gray-900 dark:text-white">
+            {{ t('admin.settings.payment.permissions.exclusive') }}
+          </label>
+          <p id="exclusive-payment-hint" class="mt-1 text-xs leading-5 text-gray-500 dark:text-gray-400">
+            {{ t('admin.settings.payment.permissions.exclusiveHint') }}
+          </p>
+        </div>
         <Toggle
+          class="mt-0.5 shrink-0"
           :model-value="enabled"
           :disabled="configLoading || saving || !configLoaded"
           aria-labelledby="exclusive-payment-label"
+          aria-describedby="exclusive-payment-hint"
           data-test="exclusive-payment-toggle"
           @update:model-value="updateEnabled"
         />
       </div>
-      <div v-if="configError" class="flex items-center justify-between gap-3" role="alert">
+      <div v-if="configError" class="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between" role="alert">
         <p class="text-sm text-red-600 dark:text-red-400">{{ configError }}</p>
         <button type="button" class="btn btn-secondary btn-sm" :disabled="configLoading" @click="loadConfig">
           <Icon name="refresh" size="sm" />
@@ -26,8 +33,9 @@
         </button>
       </div>
       <template v-if="enabled && configLoaded">
-        <div class="flex items-center gap-3">
+        <div class="flex min-w-0 items-center gap-2 sm:gap-3">
           <SearchInput
+            class="min-w-0 flex-1"
             v-model="search"
             :placeholder="t('admin.settings.payment.permissions.search')"
             @search="applySearch"
@@ -35,7 +43,7 @@
           />
           <button
             type="button"
-            class="btn btn-secondary"
+            class="btn btn-secondary shrink-0"
             :disabled="usersLoading"
             :title="t('common.refresh')"
             :aria-label="t('common.refresh')"
@@ -56,7 +64,7 @@
           <template #cell-actions="{ row }">
             <button
               type="button"
-              class="btn btn-danger btn-sm"
+              class="btn btn-danger btn-sm w-full sm:w-auto"
               :disabled="removingUserId !== null || saving"
               :aria-label="`${t('admin.settings.payment.permissions.remove')} ${row.email}`"
               @click="removePermission(row.id)"

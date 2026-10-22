@@ -2,8 +2,8 @@
   <div class="card">
     <!-- Header -->
     <div class="border-b border-gray-100 px-4 py-3 dark:border-dark-700">
-      <div class="flex items-center justify-between">
-        <div>
+      <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div class="min-w-0">
           <h2 class="text-base font-semibold text-gray-900 dark:text-white">
             {{ t('admin.settings.payment.providerManagement') }}
           </h2>
@@ -11,7 +11,7 @@
             {{ t('admin.settings.payment.providerManagementDesc') }}
           </p>
         </div>
-        <div class="flex items-center gap-2">
+        <div class="flex shrink-0 items-center gap-2">
           <button
             type="button"
             @click="emit('refresh')"
