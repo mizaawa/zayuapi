@@ -17,8 +17,8 @@
         </div>
         <Toggle
           class="mt-0.5 shrink-0"
-          :model-value="enabled"
-          :disabled="configLoading || saving || !configLoaded"
+          :model-value="props.enabled"
+          :disabled="configLoading || props.saving || !configLoaded"
           aria-labelledby="exclusive-payment-label"
           aria-describedby="exclusive-payment-hint"
           data-test="exclusive-payment-toggle"
@@ -27,12 +27,12 @@
       </div>
       <div v-if="configError" class="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between" role="alert">
         <p class="text-sm text-red-600 dark:text-red-400">{{ configError }}</p>
-        <button type="button" class="btn btn-secondary btn-sm" :disabled="configLoading" @click="loadConfig">
+        <button type="button" class="btn btn-secondary btn-sm" :disabled="configLoading || props.saving" @click="loadConfig">
           <Icon name="refresh" size="sm" />
           {{ t('common.refresh') }}
         </button>
       </div>
-      <template v-if="enabled && configLoaded">
+      <template v-if="props.enabled && configLoaded">
         <div class="flex min-w-0 items-center gap-2 sm:gap-3">
           <SearchInput
             class="min-w-0 flex-1"
@@ -64,12 +64,14 @@
           <template #cell-actions="{ row }">
             <button
               type="button"
-              class="btn btn-danger btn-sm w-full sm:w-auto"
-              :disabled="removingUserId !== null || saving"
-              :aria-label="`${t('admin.settings.payment.permissions.remove')} ${row.email}`"
-              @click="removePermission(row.id)"
+              class="btn btn-sm w-full sm:w-auto"
+              :class="props.pendingRemovals.includes(row.id) ? 'btn-secondary' : 'btn-danger'"
+              :disabled="props.saving"
+              :aria-pressed="props.pendingRemovals.includes(row.id)"
+              :aria-label="`${props.pendingRemovals.includes(row.id) ? t('common.cancel') : t('admin.settings.payment.permissions.remove')} ${row.email}`"
+              @click="togglePendingRemoval(row.id)"
             >
-              {{ t('admin.settings.payment.permissions.remove') }}
+              {{ props.pendingRemovals.includes(row.id) ? t('common.cancel') : t('admin.settings.payment.permissions.remove') }}
             </button>
           </template>
           <template #empty>
@@ -97,7 +99,6 @@ import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useEventListener } from '@vueuse/core'
 import { useI18n } from 'vue-i18n'
 import { adminAPI } from '@/api/admin'
-import { useAppStore } from '@/stores/app'
 import type { AdminUser } from '@/types'
 import type { Column } from '@/components/common/types'
 import DataTable from '@/components/common/DataTable.vue'
@@ -108,18 +109,27 @@ import Icon from '@/components/icons/Icon.vue'
 import { extractApiErrorMessage } from '@/utils/apiError'
 import { formatCurrency } from '@/utils/format'
 
-const props = defineProps<{ active: boolean }>()
+const props = withDefaults(defineProps<{
+  active: boolean
+  enabled: boolean
+  pendingRemovals: number[]
+  saving?: boolean
+  saveVersion?: number
+}>(), {
+  saving: false,
+  saveVersion: 0,
+})
+const emit = defineEmits<{
+  'update:enabled': [value: boolean]
+  'update:pendingRemovals': [value: number[]]
+}>()
 const { t } = useI18n()
-const appStore = useAppStore()
 const pageSize = 10
-const enabled = ref(false)
 const configLoaded = ref(false)
 const configLoading = ref(false)
 const configError = ref('')
-const saving = ref(false)
 const usersLoading = ref(false)
 const usersError = ref('')
-const removingUserId = ref<number | null>(null)
 const search = ref('')
 const appliedSearch = ref('')
 const page = ref(1)
@@ -128,6 +138,8 @@ const users = ref<AdminUser[]>([])
 let listRequest = 0
 let listController: AbortController | undefined
 let configRequest = 0
+let initialized = false
+const committedEnabled = ref(false)
 
 const columns = computed<Column[]>(() => [
   { key: 'email', label: t('admin.settings.payment.permissions.email') },
@@ -150,10 +162,12 @@ async function loadConfig() {
   try {
     const { data } = await adminAPI.payment.getConfig()
     if (request !== configRequest) return
-    enabled.value = data.payment_exclusive_enabled === true
+    const nextEnabled = data.payment_exclusive_enabled === true
+    const hasDraft = initialized && props.enabled !== committedEnabled.value
+    committedEnabled.value = nextEnabled
     configLoaded.value = true
-    if (enabled.value) await loadUsers()
-    else cancelListRequest()
+    if (!hasDraft) emit('update:enabled', nextEnabled)
+    initialized = true
   } catch (error) {
     if (request !== configRequest) return
     configLoaded.value = false
@@ -163,26 +177,13 @@ async function loadConfig() {
   }
 }
 
-async function updateEnabled(value: boolean) {
-  if (saving.value || configLoading.value || !configLoaded.value) return
-  saving.value = true
-  try {
-    await adminAPI.payment.updateConfig({ payment_exclusive_enabled: value })
-    enabled.value = value
-    page.value = 1
-    if (value) await loadUsers()
-    else cancelListRequest()
-    window.dispatchEvent(new Event('payment-access-changed'))
-    appStore.showSuccess(t('admin.settings.payment.permissions.updated'))
-  } catch (error) {
-    appStore.showError(extractApiErrorMessage(error, t('admin.settings.payment.permissions.updateFailed')))
-  } finally {
-    saving.value = false
-  }
+function updateEnabled(value: boolean) {
+  if (props.saving || configLoading.value || !configLoaded.value) return
+  emit('update:enabled', value)
 }
 
 async function loadUsers() {
-  if (!enabled.value || !props.active) return
+  if (!props.enabled || !props.active || !configLoaded.value) return
   const request = ++listRequest
   listController?.abort()
   listController = new AbortController()
@@ -223,19 +224,12 @@ function changePage(value: number) {
   void loadUsers()
 }
 
-async function removePermission(userId: number) {
-  if (removingUserId.value !== null || saving.value) return
-  removingUserId.value = userId
-  try {
-    await adminAPI.users.update(userId, { exclusive_recharge_enabled: false })
-    window.dispatchEvent(new Event('payment-access-changed'))
-    await loadUsers()
-    appStore.showSuccess(t('admin.settings.payment.permissions.removed'))
-  } catch (error) {
-    appStore.showError(extractApiErrorMessage(error, t('admin.settings.payment.permissions.updateFailed')))
-  } finally {
-    removingUserId.value = null
-  }
+function togglePendingRemoval(userId: number) {
+  if (props.saving) return
+  const pending = new Set(props.pendingRemovals)
+  if (pending.has(userId)) pending.delete(userId)
+  else pending.add(userId)
+  emit('update:pendingRemovals', [...pending])
 }
 
 watch(() => props.active, (active) => {
@@ -246,8 +240,30 @@ watch(() => props.active, (active) => {
   }
 }, { immediate: true })
 
+watch(
+  () => [props.active, props.enabled, configLoaded.value] as const,
+  ([active, enabled, loaded]) => {
+    if (active && enabled && loaded) {
+      page.value = 1
+      void loadUsers()
+    } else {
+      cancelListRequest()
+    }
+  },
+)
+
+watch(() => props.saveVersion, (version, previousVersion) => {
+  if (version === previousVersion) return
+  committedEnabled.value = props.enabled
+  initialized = true
+  page.value = 1
+  void loadUsers()
+})
+
 function refreshPermissions() {
-  if (props.active && !saving.value && removingUserId.value === null) void loadConfig()
+  if (props.active && !props.saving) {
+    void loadConfig().then(() => loadUsers())
+  }
 }
 
 useEventListener(window, 'focus', refreshPermissions)

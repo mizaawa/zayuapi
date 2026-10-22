@@ -3,7 +3,7 @@
     :show="show"
     :title="t('admin.users.editUser')"
     width="normal"
-    @close="$emit('close')"
+    @close="handleClose"
   >
     <form v-if="user" id="edit-user-form" @submit.prevent="handleUpdateUser" class="space-y-5">
       <div>
@@ -47,7 +47,7 @@
         </div>
         <Toggle
           :model-value="exclusiveRechargeEnabled"
-          :disabled="permissionLoading || permissionSaving || submitting"
+          :disabled="permissionLoading || submitting"
           aria-labelledby="exclusive-recharge-label"
           @update:model-value="updateExclusivePermission"
         />
@@ -72,8 +72,8 @@
     </form>
     <template #footer>
       <div class="flex justify-end gap-3">
-        <button @click="$emit('close')" type="button" class="btn btn-secondary">{{ t('common.cancel') }}</button>
-        <button type="submit" form="edit-user-form" :disabled="submitting || permissionSaving" class="btn btn-primary">
+        <button @click="handleClose" type="button" class="btn btn-secondary">{{ t('common.cancel') }}</button>
+        <button type="submit" form="edit-user-form" :disabled="submitting" class="btn btn-primary">
           {{ submitting ? t('admin.users.updating') : t('common.update') }}
         </button>
       </div>
@@ -85,7 +85,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, watch, onBeforeUnmount } from 'vue'
+import { computed, ref, reactive, watch, onBeforeUnmount } from 'vue'
 import { useEventListener } from '@vueuse/core'
 import { useI18n } from 'vue-i18n'
 import { useAppStore } from '@/stores/app'
@@ -107,9 +107,14 @@ const { t } = useI18n(); const appStore = useAppStore(); const { copyToClipboard
 const submitting = ref(false); const passwordCopied = ref(false)
 const exclusivePaymentEnabled = ref(false)
 const exclusiveRechargeEnabled = ref(false)
+const loadedExclusiveRechargeEnabled = ref<boolean | null>(null)
 const permissionLoading = ref(false)
-const permissionSaving = ref(false)
 let permissionRequest = 0
+let dialogSession = 0
+const exclusivePermissionChanged = computed(() =>
+  loadedExclusiveRechargeEnabled.value !== null &&
+  exclusiveRechargeEnabled.value !== loadedExclusiveRechargeEnabled.value
+)
 const form = reactive({ email: '', password: '', username: '', notes: '', role: 'user', concurrency: 1, rpm_limit: 0, customAttributes: {} as UserAttributeValuesMap })
 
 watch(() => props.user, (u) => {
@@ -121,7 +126,7 @@ watch(() => props.user, (u) => {
 
 async function loadExclusivePermission() {
   const userId = props.user?.id
-  if (!props.show || !userId || permissionSaving.value) return
+  if (!props.show || !userId || submitting.value || permissionLoading.value) return
   const request = ++permissionRequest
   permissionLoading.value = true
   try {
@@ -131,7 +136,10 @@ async function loadExclusivePermission() {
     ])
     if (request !== permissionRequest || props.user?.id !== userId || !props.show) return
     exclusivePaymentEnabled.value = config.data.payment_exclusive_enabled === true
-    exclusiveRechargeEnabled.value = user.exclusive_recharge_enabled === true
+    if (!exclusivePermissionChanged.value) {
+      loadedExclusiveRechargeEnabled.value = user.exclusive_recharge_enabled === true
+      exclusiveRechargeEnabled.value = loadedExclusiveRechargeEnabled.value
+    }
   } catch (error) {
     if (request !== permissionRequest) return
     exclusivePaymentEnabled.value = false
@@ -141,33 +149,34 @@ async function loadExclusivePermission() {
   }
 }
 
-async function updateExclusivePermission(value: boolean) {
-  const userId = props.user?.id
-  if (!userId || !exclusivePaymentEnabled.value || permissionSaving.value || permissionLoading.value || submitting.value) return
-  permissionSaving.value = true
-  try {
-    const user = await adminAPI.users.update(userId, { exclusive_recharge_enabled: value })
-    if (props.user?.id === userId) exclusiveRechargeEnabled.value = user.exclusive_recharge_enabled === true
-    window.dispatchEvent(new Event('payment-access-changed'))
-    appStore.showSuccess(t('admin.users.userUpdated'))
-    emit('success')
-  } catch (error) {
-    appStore.showError(extractApiErrorMessage(error, t('admin.settings.payment.permissions.updateFailed')))
-  } finally {
-    permissionSaving.value = false
-    if (props.show) void loadExclusivePermission()
-  }
+function updateExclusivePermission(value: boolean) {
+  if (!exclusivePaymentEnabled.value || loadedExclusiveRechargeEnabled.value === null || permissionLoading.value || submitting.value) return
+  exclusiveRechargeEnabled.value = value
+}
+
+function resetExclusivePermissionDraft() {
+  dialogSession++
+  permissionRequest++
+  submitting.value = false
+  exclusivePaymentEnabled.value = false
+  exclusiveRechargeEnabled.value = false
+  loadedExclusiveRechargeEnabled.value = null
+  permissionLoading.value = false
+}
+
+function handleClose() {
+  resetExclusivePermissionDraft()
+  emit('close')
 }
 
 watch([() => props.show, () => props.user?.id], () => {
-  permissionRequest++
-  exclusivePaymentEnabled.value = false
+  resetExclusivePermissionDraft()
   if (props.show) void loadExclusivePermission()
 }, { immediate: true })
 useEventListener(window, 'focus', loadExclusivePermission)
 useEventListener(window, 'payment-access-changed', loadExclusivePermission)
 useEventListener(window, 'payment-mode-changed', loadExclusivePermission)
-onBeforeUnmount(() => { permissionRequest++ })
+onBeforeUnmount(() => { permissionRequest++; dialogSession++ })
 
 const generatePassword = () => {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789!@#$%^&*'
@@ -182,7 +191,7 @@ const copyPassword = async () => {
 const stepUp = useStepUp()
 
 const handleUpdateUser = async () => {
-  if (!props.user || permissionSaving.value) return
+  if (!props.user || submitting.value) return
   if (!form.email.trim()) {
     appStore.showError(t('admin.users.emailRequired'))
     return
@@ -192,16 +201,28 @@ const handleUpdateUser = async () => {
     return
   }
   const userId = props.user.id
+  const session = dialogSession
+  const customAttributes = { ...form.customAttributes }
   submitting.value = true
   try {
     const data: any = { email: form.email, username: form.username, notes: form.notes, role: form.role, concurrency: form.concurrency, rpm_limit: form.rpm_limit }
     if (form.password.trim()) data.password = form.password.trim()
+    if (exclusivePaymentEnabled.value && exclusivePermissionChanged.value) {
+      data.exclusive_recharge_enabled = exclusiveRechargeEnabled.value
+    }
     // 提升为管理员属敏感操作：后端返回 STEP_UP_REQUIRED 时弹 TOTP 验证并重试
-    await stepUp.run(() => adminAPI.users.update(userId, data))
-    if (Object.keys(form.customAttributes).length > 0) await adminAPI.userAttributes.updateUserAttributeValues(userId, form.customAttributes)
+    const updatedUser = await stepUp.run(() => adminAPI.users.update(userId, data))
+    if (data.exclusive_recharge_enabled !== undefined) window.dispatchEvent(new Event('payment-access-changed'))
+    if (Object.keys(customAttributes).length > 0) await adminAPI.userAttributes.updateUserAttributeValues(userId, customAttributes)
+    if (session !== dialogSession || props.user?.id !== userId || !props.show) return
+    if (data.exclusive_recharge_enabled !== undefined) {
+      loadedExclusiveRechargeEnabled.value = updatedUser.exclusive_recharge_enabled === true
+      exclusiveRechargeEnabled.value = loadedExclusiveRechargeEnabled.value
+    }
     appStore.showSuccess(t('admin.users.userUpdated'))
     emit('success'); emit('close')
   } catch (e: any) {
+    if (session !== dialogSession || props.user?.id !== userId || !props.show) return
     if (isStepUpCancelled(e)) {
       // 用户主动取消二次验证：静默返回，表单保持打开。
     } else if (isStepUpBlocked(e)) {
@@ -213,6 +234,6 @@ const handleUpdateUser = async () => {
     } else {
       appStore.showError(e?.message || t('admin.users.failedToUpdate'))
     }
-  } finally { submitting.value = false }
+  } finally { if (session === dialogSession) submitting.value = false }
 }
 </script>

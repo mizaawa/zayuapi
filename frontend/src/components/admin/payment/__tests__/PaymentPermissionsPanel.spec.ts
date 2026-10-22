@@ -4,14 +4,12 @@ import PaymentPermissionsPanel from '../PaymentPermissionsPanel.vue'
 import Pagination from '@/components/common/Pagination.vue'
 import SearchInput from '@/components/common/SearchInput.vue'
 
-const { getConfig, updateConfig, listUsers, updateUser, showError, showSuccess } = vi.hoisted(() => ({
-  getConfig: vi.fn(), updateConfig: vi.fn(), listUsers: vi.fn(), updateUser: vi.fn(),
-  showError: vi.fn(), showSuccess: vi.fn(),
+const { getConfig, updateConfig, listUsers } = vi.hoisted(() => ({
+  getConfig: vi.fn(), updateConfig: vi.fn(), listUsers: vi.fn(),
 }))
 vi.mock('@/api/admin', () => ({ adminAPI: {
-  payment: { getConfig, updateConfig }, users: { list: listUsers, update: updateUser },
+  payment: { getConfig, updateConfig }, users: { list: listUsers },
 } }))
-vi.mock('@/stores/app', () => ({ useAppStore: () => ({ showError, showSuccess }) }))
 vi.mock('vue-i18n', async (importOriginal) => ({
   ...await importOriginal<typeof import('vue-i18n')>(),
   useI18n: () => ({ t: (key: string) => key }),
@@ -20,8 +18,10 @@ vi.mock('vue-i18n', async (importOriginal) => ({
 const user = (id: number) => ({ id, email: `user${id}@example.com`, notes: `Notes ${id}`, balance: 25.5, concurrency: 3 })
 const response = (ids: number[], total = ids.length, page = 1) => ({ items: ids.map(user), total, page, page_size: 10, pages: Math.ceil(total / 10) })
 const wrappers: ReturnType<typeof mount>[] = []
-const render = () => {
-  const wrapper = mount(PaymentPermissionsPanel, { props: { active: true } })
+const render = (props: { enabled?: boolean; pendingRemovals?: number[] } = {}) => {
+  const wrapper = mount(PaymentPermissionsPanel, { props: {
+    active: true, enabled: false, pendingRemovals: [], ...props,
+  } })
   wrappers.push(wrapper)
   return wrapper
 }
@@ -30,13 +30,11 @@ describe('PaymentPermissionsPanel', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     getConfig.mockResolvedValue({ data: { payment_exclusive_enabled: true } })
-    updateConfig.mockResolvedValue({})
-    updateUser.mockResolvedValue({ exclusive_recharge_enabled: false })
     listUsers.mockResolvedValue(response([1]))
   })
   afterEach(() => wrappers.splice(0).forEach(wrapper => wrapper.unmount()))
 
-  it('hides grants while disabled and changes only the global setting when toggled', async () => {
+  it('keeps the channel toggle as a draft and hides grants while disabled', async () => {
     getConfig.mockResolvedValueOnce({ data: { payment_exclusive_enabled: false } })
     const wrapper = render()
     await flushPromises()
@@ -45,29 +43,20 @@ describe('PaymentPermissionsPanel', () => {
     expect(wrapper.get('[role="switch"]').attributes('aria-describedby')).toBe('exclusive-payment-hint')
     expect(wrapper.findComponent(SearchInput).exists()).toBe(false)
     await wrapper.get('[role="switch"]').trigger('click')
-    await flushPromises()
-    expect(updateConfig).toHaveBeenLastCalledWith({ payment_exclusive_enabled: true })
-    expect(listUsers).toHaveBeenCalledWith(1, 10, { exclusive_recharge_enabled: true, email: '' }, { signal: expect.any(AbortSignal) })
-    await wrapper.get('[role="switch"]').trigger('click')
-    await flushPromises()
-    expect(updateConfig).toHaveBeenLastCalledWith({ payment_exclusive_enabled: false })
-    expect(wrapper.findComponent(SearchInput).exists()).toBe(false)
-    expect(updateUser).not.toHaveBeenCalled()
+    expect(updateConfig).not.toHaveBeenCalled()
+    expect(wrapper.emitted('update:enabled')).toEqual([[false], [true]])
   })
 
-  it('keeps the previous setting if saving fails', async () => {
-    updateConfig.mockRejectedValueOnce(new Error('Save failed'))
-    const wrapper = render()
+  it('marks permission revocations as pending without updating the user', async () => {
+    const wrapper = render({ enabled: true })
     await flushPromises()
-    await wrapper.get('[role="switch"]').trigger('click')
-    await flushPromises()
-    expect(wrapper.get('[role="switch"]').attributes('aria-checked')).toBe('true')
-    expect(showError).toHaveBeenCalledWith('Save failed')
+    await wrapper.get('button[aria-label$="user1@example.com"]').trigger('click')
+    expect(wrapper.emitted('update:pendingRemovals')).toEqual([[ [1] ]])
   })
 
   it('uses ten rows per page, searches email only, and resets the search page', async () => {
     listUsers.mockResolvedValue(response(Array.from({ length: 10 }, (_, i) => i + 1), 21))
-    const wrapper = render()
+    const wrapper = render({ enabled: true })
     await flushPromises()
     expect(wrapper.findAll('tbody tr')).toHaveLength(10)
     expect(wrapper.getComponent(Pagination).props('showPageSizeSelector')).toBe(false)
@@ -83,39 +72,28 @@ describe('PaymentPermissionsPanel', () => {
     ])
   })
 
-  it('removes a grant and returns to the previous page when the last row is removed', async () => {
+  it('does not remove a grant until its pending change is committed', async () => {
     listUsers.mockResolvedValueOnce(response([1], 11))
-    const wrapper = render()
+    const wrapper = render({ enabled: true })
     await flushPromises()
     listUsers.mockResolvedValueOnce(response([11], 11, 2))
     wrapper.getComponent(Pagination).vm.$emit('update:page', 2)
     await flushPromises()
-    listUsers.mockResolvedValueOnce(response([], 10, 2)).mockResolvedValueOnce(response([1], 10))
     await wrapper.get('button[aria-label$="user11@example.com"]').trigger('click')
-    await flushPromises()
-    expect(updateUser).toHaveBeenCalledWith(11, { exclusive_recharge_enabled: false })
-    expect(listUsers).toHaveBeenLastCalledWith(1, 10, expect.any(Object), expect.any(Object))
-    expect(wrapper.findComponent(Pagination).exists()).toBe(false)
-    expect(wrapper.text()).toContain('user1@example.com')
-    expect(wrapper.text()).not.toContain('user11@example.com')
+    expect(wrapper.emitted('update:pendingRemovals')).toEqual([[ [11] ]])
   })
 
-  it('preserves the current search after removal and displays an empty search result', async () => {
-    const wrapper = render()
+  it('lets a pending permission revocation be cancelled', async () => {
+    const wrapper = render({ enabled: true, pendingRemovals: [1] })
     await flushPromises()
-    wrapper.getComponent(SearchInput).vm.$emit('search', 'user1@')
-    await flushPromises()
-    listUsers.mockResolvedValueOnce(response([]))
     await wrapper.get('button[aria-label$="user1@example.com"]').trigger('click')
-    await flushPromises()
-    expect(listUsers).toHaveBeenLastCalledWith(1, 10, { exclusive_recharge_enabled: true, email: 'user1@' }, expect.any(Object))
-    expect(wrapper.text()).toContain('admin.settings.payment.permissions.noResults')
+    expect(wrapper.emitted('update:pendingRemovals')).toEqual([[ [] ]])
   })
 
   it('discards stale search responses and stale responses after disabling', async () => {
     let resolveOld!: (value: ReturnType<typeof response>) => void
     listUsers.mockImplementationOnce(() => new Promise(resolve => { resolveOld = resolve }))
-    const wrapper = render()
+    const wrapper = render({ enabled: true })
     await flushPromises()
     listUsers.mockResolvedValueOnce(response([2]))
     wrapper.getComponent(SearchInput).vm.$emit('search', 'user2@')
@@ -123,23 +101,13 @@ describe('PaymentPermissionsPanel', () => {
     resolveOld(response([99]))
     await flushPromises()
     expect(wrapper.text()).not.toContain('user99@example.com')
-    await wrapper.get('[role="switch"]').trigger('click')
+    await wrapper.setProps({ enabled: false })
     await flushPromises()
     expect(wrapper.findComponent(SearchInput).exists()).toBe(false)
   })
 
-  it('does not remove rows when revocation fails', async () => {
-    updateUser.mockRejectedValueOnce(new Error('Permission update failed'))
-    const wrapper = render()
-    await flushPromises()
-    await wrapper.get('button[aria-label$="user1@example.com"]').trigger('click')
-    await flushPromises()
-    expect(wrapper.text()).toContain('user1@example.com')
-    expect(showError).toHaveBeenCalledWith('Permission update failed')
-  })
-
   it('refreshes grants and the master setting after changes from another panel', async () => {
-    const wrapper = render()
+    const wrapper = render({ enabled: true })
     await flushPromises()
     listUsers.mockResolvedValueOnce(response([2]))
     window.dispatchEvent(new Event('payment-access-changed'))
@@ -148,6 +116,8 @@ describe('PaymentPermissionsPanel', () => {
     expect(wrapper.text()).not.toContain('user1@example.com')
     getConfig.mockResolvedValueOnce({ data: { payment_exclusive_enabled: false } })
     window.dispatchEvent(new Event('focus'))
+    await flushPromises()
+    await wrapper.setProps({ enabled: false })
     await flushPromises()
     expect(wrapper.findComponent(SearchInput).exists()).toBe(false)
     expect(wrapper.get('[role="switch"]').attributes('aria-checked')).toBe('false')

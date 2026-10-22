@@ -28,6 +28,7 @@ const {
   updateProvider,
   createProvider,
   deleteProvider,
+  updateUser,
   fetchPublicSettings,
   adminSettingsFetch,
   showError,
@@ -69,6 +70,7 @@ const {
   updateProvider: vi.fn(),
   createProvider: vi.fn(),
   deleteProvider: vi.fn(),
+  updateUser: vi.fn(),
   fetchPublicSettings: vi.fn(),
   adminSettingsFetch: vi.fn(),
   showError: vi.fn(),
@@ -112,6 +114,7 @@ vi.mock("@/api", () => ({
       createProvider,
       deleteProvider,
     },
+    users: { update: updateUser },
   },
 }));
 
@@ -536,6 +539,23 @@ const baseSettingsResponse = {
   },
 };
 
+const PaymentPermissionsPanelStub = defineComponent({
+  name: "PaymentPermissionsPanelStub",
+  props: ["active", "enabled", "pendingRemovals", "saving", "saveVersion"],
+  emits: ["update:enabled", "update:pendingRemovals"],
+  setup(props, { emit }) {
+    return () => h("payment-permissions-panel-stub", {
+      active: String(props.active),
+      enabled: String(props.enabled),
+      "pending-removals": JSON.stringify(props.pendingRemovals),
+      saving: String(props.saving),
+      "save-version": String(props.saveVersion),
+      onUpdateEnabled: (value: boolean) => emit("update:enabled", value),
+      onUpdatePendingRemovals: (value: number[]) => emit("update:pendingRemovals", value),
+    });
+  },
+});
+
 function mountView() {
   return mount(SettingsView, {
     global: {
@@ -546,7 +566,7 @@ function mountView() {
         Icon: true,
         ConfirmDialog: true,
         PaymentProviderList: true,
-        PaymentPermissionsPanel: true,
+        PaymentPermissionsPanel: PaymentPermissionsPanelStub,
         PaymentProviderDialog: true,
         GroupBadge: true,
         GroupOptionItem: true,
@@ -631,6 +651,7 @@ describe("admin SettingsView payment visible method controls", () => {
     updateProvider.mockReset();
     createProvider.mockReset();
     deleteProvider.mockReset();
+    updateUser.mockReset();
     fetchPublicSettings.mockReset();
     adminSettingsFetch.mockReset();
     showError.mockReset();
@@ -698,6 +719,7 @@ describe("admin SettingsView payment visible method controls", () => {
     getProviders.mockResolvedValue({
       data: [],
     });
+    updateUser.mockImplementation(async (_id: number, payload: Record<string, unknown>) => payload);
     fetchPublicSettings.mockResolvedValue(undefined);
     adminSettingsFetch.mockResolvedValue(undefined);
   });
@@ -707,7 +729,7 @@ describe("admin SettingsView payment visible method controls", () => {
     const wrapper = mountView();
     await flushPromises();
     await openPaymentTab(wrapper);
-    const permissions = wrapper.get("payment-permissions-panel-stub");
+    const permissions = wrapper.findComponent(PaymentPermissionsPanelStub);
     expect(permissions.attributes("active")).toBe("true");
     expect(permissions.element.previousElementSibling?.querySelector("h2")?.textContent)
       .toContain("admin.settings.payment.title");
@@ -730,6 +752,79 @@ describe("admin SettingsView payment visible method controls", () => {
     expect(updateSettings).toHaveBeenCalledWith(
       expect.objectContaining({ compact_home_enabled: true }),
     );
+  });
+
+  it("applies exclusive channel and permission drafts only when settings are saved", async () => {
+    getSettings.mockResolvedValueOnce({
+      ...baseSettingsResponse,
+      payment_enabled: true,
+      payment_exclusive_enabled: true,
+    });
+    const wrapper = mountView();
+    await flushPromises();
+    await openPaymentTab(wrapper);
+
+    const permissions = wrapper.findComponent(PaymentPermissionsPanelStub);
+    expect(permissions.attributes("enabled")).toBe("true");
+    permissions.vm.$emit("update:enabled", false);
+    permissions.vm.$emit("update:pending-removals", [42]);
+    await flushPromises();
+
+    expect(updateSettings).not.toHaveBeenCalled();
+    expect(updateUser).not.toHaveBeenCalled();
+
+    await wrapper.find("form").trigger("submit.prevent");
+    await flushPromises();
+
+    expect(updateSettings).toHaveBeenCalledWith(
+      expect.objectContaining({ payment_exclusive_enabled: false }),
+    );
+    expect(updateUser).toHaveBeenCalledWith(42, { exclusive_recharge_enabled: false });
+    expect(updateSettings.mock.invocationCallOrder[0]).toBeLessThan(updateUser.mock.invocationCallOrder[0]);
+    expect(permissions.props("pendingRemovals")).toEqual([]);
+    wrapper.unmount();
+  });
+
+  it("keeps only failed permission revocations pending after a partial save", async () => {
+    getSettings.mockResolvedValueOnce({ ...baseSettingsResponse, payment_enabled: true });
+    updateUser.mockImplementation(async (id: number) => {
+      if (id === 43) throw new Error("Permission update failed");
+      return { exclusive_recharge_enabled: false };
+    });
+    const wrapper = mountView();
+    await flushPromises();
+    await openPaymentTab(wrapper);
+
+    const permissions = wrapper.findComponent(PaymentPermissionsPanelStub);
+    permissions.vm.$emit("update:pendingRemovals", [42, 43]);
+    await flushPromises();
+    await wrapper.find("form").trigger("submit.prevent");
+    await flushPromises();
+
+    expect(updateUser.mock.calls.map(([id]) => id)).toEqual([42, 43]);
+    expect(permissions.props("pendingRemovals")).toEqual([43]);
+    expect(permissions.props("saveVersion")).toBe(1);
+    expect(showError).toHaveBeenCalledWith("error");
+    wrapper.unmount();
+  });
+
+  it("does not revoke permissions when the main settings save fails", async () => {
+    getSettings.mockResolvedValueOnce({ ...baseSettingsResponse, payment_enabled: true });
+    updateSettings.mockRejectedValueOnce(new Error("Settings save failed"));
+    const wrapper = mountView();
+    await flushPromises();
+    await openPaymentTab(wrapper);
+
+    const permissions = wrapper.findComponent(PaymentPermissionsPanelStub);
+    permissions.vm.$emit("update:pendingRemovals", [42]);
+    await flushPromises();
+    await wrapper.find("form").trigger("submit.prevent");
+    await flushPromises();
+
+    expect(updateUser).not.toHaveBeenCalled();
+    expect(permissions.props("pendingRemovals")).toEqual([42]);
+    expect(permissions.props("saveVersion")).toBe(0);
+    wrapper.unmount();
   });
 
   it("shows the image size hint and saves an unlimited per-image size", async () => {

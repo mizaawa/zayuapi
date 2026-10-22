@@ -47,7 +47,7 @@ describe('UserEditModal exclusive recharge permission', () => {
   })
   afterEach(() => wrappers.splice(0).forEach(wrapper => wrapper.unmount()))
 
-  it('places the immediate authorization switch between notes and concurrency', async () => {
+  it('keeps the authorization as a draft and submits it with the user form', async () => {
     const wrapper = render()
     await flushPromises()
     const labels = wrapper.findAll('label').map(label => label.text())
@@ -57,11 +57,17 @@ describe('UserEditModal exclusive recharge permission', () => {
     expect(wrapper.text()).toContain('admin.users.exclusiveRechargeHint')
     expect(wrapper.get('[role="switch"]').attributes('aria-checked')).toBe('true')
     await wrapper.get('[role="switch"]').trigger('click')
-    await flushPromises()
-    expect(updateUser).toHaveBeenCalledWith(4, { exclusive_recharge_enabled: false })
+    expect(updateUser).not.toHaveBeenCalled()
     expect(wrapper.get('[role="switch"]').attributes('aria-checked')).toBe('false')
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+    expect(updateUser).toHaveBeenCalledWith(4, expect.objectContaining({
+      email: user.email,
+      role: user.role,
+      exclusive_recharge_enabled: false,
+    }))
     expect(wrapper.emitted('success')).toHaveLength(1)
-    expect(wrapper.emitted('close')).toBeUndefined()
+    expect(wrapper.emitted('close')).toHaveLength(1)
   })
 
   it('hides the grant when disabled and never changes permission on regular save', async () => {
@@ -75,40 +81,74 @@ describe('UserEditModal exclusive recharge permission', () => {
     expect(updateUser.mock.calls[0][1]).not.toHaveProperty('exclusive_recharge_enabled')
   })
 
-  it('reloads the grant from the server after another panel revokes it', async () => {
+  it('does not overwrite an unsaved draft when focus or payment events refresh access', async () => {
     const wrapper = render()
     await flushPromises()
+    await wrapper.get('[role="switch"]').trigger('click')
     getUser.mockResolvedValue({ ...user, exclusive_recharge_enabled: false })
+    getConfig.mockResolvedValue({ data: { payment_exclusive_enabled: true } })
     window.dispatchEvent(new Event('payment-access-changed'))
-    await flushPromises()
-    expect(wrapper.get('[role="switch"]').attributes('aria-checked')).toBe('false')
-    getConfig.mockResolvedValue({ data: { payment_exclusive_enabled: false } })
+    window.dispatchEvent(new Event('payment-mode-changed'))
     window.dispatchEvent(new Event('focus'))
     await flushPromises()
-    expect(wrapper.find('[role="switch"]').exists()).toBe(false)
+    expect(wrapper.get('[role="switch"]').attributes('aria-checked')).toBe('false')
+    expect(getUser).toHaveBeenCalledTimes(2)
+    expect(updateUser).not.toHaveBeenCalled()
   })
 
-  it('keeps the current grant if the update fails', async () => {
+  it('discards the draft on close and reloads the server value on reopen', async () => {
+    const wrapper = render()
+    await flushPromises()
+    await wrapper.get('[role="switch"]').trigger('click')
+    const cancel = wrapper.findAll('button').find(button => button.text() === 'common.cancel')!
+    await cancel.trigger('click')
+    expect(wrapper.emitted('close')).toHaveLength(1)
+    await wrapper.setProps({ show: false })
+    await wrapper.setProps({ show: true })
+    await flushPromises()
+    expect(wrapper.get('[role="switch"]').attributes('aria-checked')).toBe('true')
+    expect(getUser).toHaveBeenCalledTimes(2)
+  })
+
+  it('keeps the draft after a failed form save', async () => {
     updateUser.mockRejectedValueOnce(new Error('Failed to update'))
     const wrapper = render()
     await flushPromises()
     await wrapper.get('[role="switch"]').trigger('click')
+    await wrapper.get('form').trigger('submit')
     await flushPromises()
-    expect(wrapper.get('[role="switch"]').attributes('aria-checked')).toBe('true')
+    expect(wrapper.get('[role="switch"]').attributes('aria-checked')).toBe('false')
     expect(showError).toHaveBeenCalledWith('Failed to update')
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+    expect(updateUser).toHaveBeenCalledTimes(2)
+    expect(updateUser.mock.calls[1][1].exclusive_recharge_enabled).toBe(false)
   })
 
-  it('refreshes a mode change received while the grant is being saved', async () => {
-    let resolveUpdate!: (value: AdminUser) => void
-    updateUser.mockReturnValueOnce(new Promise<AdminUser>(resolve => { resolveUpdate = resolve }))
+  it('does not carry a draft over when switching to another user', async () => {
     const wrapper = render()
     await flushPromises()
     await wrapper.get('[role="switch"]').trigger('click')
-    getConfig.mockResolvedValue({ data: { payment_exclusive_enabled: false } })
-    window.dispatchEvent(new Event('payment-mode-changed'))
+    const otherUser = { ...user, id: 9, email: 'other@example.com', exclusive_recharge_enabled: false } as AdminUser
+    getUser.mockImplementation(async id => id === otherUser.id ? otherUser : user)
+    await wrapper.setProps({ user: otherUser })
     await flushPromises()
-    resolveUpdate({ ...user, exclusive_recharge_enabled: false })
+    expect(wrapper.get('[role="switch"]').attributes('aria-checked')).toBe('false')
+    await wrapper.get('[role="switch"]').trigger('click')
+    await wrapper.get('form').trigger('submit')
     await flushPromises()
-    expect(wrapper.find('[role="switch"]').exists()).toBe(false)
+    expect(updateUser).toHaveBeenCalledWith(9, expect.objectContaining({ exclusive_recharge_enabled: true }))
+  })
+
+  it('omits the permission when saving before its server value has loaded', async () => {
+    let resolveUser!: (value: AdminUser) => void
+    getUser.mockReturnValueOnce(new Promise<AdminUser>(resolve => { resolveUser = resolve }))
+    const wrapper = render()
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+    expect(updateUser).toHaveBeenCalledTimes(1)
+    expect(updateUser.mock.calls[0][1]).not.toHaveProperty('exclusive_recharge_enabled')
+    resolveUser(user)
+    await flushPromises()
   })
 })

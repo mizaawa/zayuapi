@@ -556,7 +556,7 @@ export default {
       enterNotes: 'Enter notes (admin only)',
       notesHint: 'This note is only visible to administrators',
       exclusiveRecharge: 'Grant exclusive recharge permission',
-      exclusiveRechargeHint: 'Enabling this gives the user access to the exclusive recharge channel.',
+      exclusiveRechargeHint: 'Grant access to the exclusive recharge channel. Changes take effect after you click Update and save successfully.',
       enterNewPassword: 'Enter new password (optional)',
       leaveEmptyToKeep: 'Leave empty to keep current password',
       generatePassword: 'Generate random password',

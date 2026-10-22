@@ -8304,6 +8304,12 @@
           <PaymentPermissionsPanel
             v-if="form.payment_enabled"
             :active="activeTab === 'payment'"
+            :enabled="form.payment_exclusive_enabled"
+            :pending-removals="pendingExclusivePermissionRevocations"
+            :saving="saving"
+            :save-version="paymentSettingsSaveVersion"
+            @update:enabled="form.payment_exclusive_enabled = $event"
+            @update:pending-removals="pendingExclusivePermissionRevocations = $event"
           />
 
           <!-- Provider Management -->
@@ -9016,6 +9022,8 @@ const { copyToClipboard } = useClipboard();
 const loading = ref(true);
 const loadFailed = ref(false);
 const saving = ref(false);
+const pendingExclusivePermissionRevocations = ref<number[]>([]);
+const paymentSettingsSaveVersion = ref(0);
 const testingSmtp = ref(false);
 const sendingTestEmail = ref(false);
 const smtpPasswordManuallyEdited = ref(false);
@@ -9644,6 +9652,7 @@ const form = reactive<SettingsForm>({
   backend_mode_enabled: false,
   hide_ccs_import_button: false,
   payment_enabled: false,
+  payment_exclusive_enabled: false,
   risk_control_enabled: false,
   cyber_session_block_enabled: false,
   cyber_session_block_ttl_seconds: 3600,
@@ -11105,6 +11114,7 @@ async function saveSettings() {
     return;
   }
   saving.value = true;
+  let permissionUpdateError: unknown;
   try {
     const videoLimits = [form.video_workbench_max_concurrent, form.video_workbench_max_reference_images, form.video_workbench_max_reference_videos, form.video_workbench_max_reference_audios];
     if (videoLimits.some(value => !Number.isSafeInteger(value) || value < 1 || value > 100) || !Number.isSafeInteger(form.video_workbench_retention_minutes) || form.video_workbench_retention_minutes < 1 || form.video_workbench_retention_minutes > 10080) {
@@ -11481,6 +11491,7 @@ async function saveSettings() {
       ),
       // Payment configuration
       payment_enabled: form.payment_enabled,
+      payment_exclusive_enabled: form.payment_exclusive_enabled,
       risk_control_enabled: form.risk_control_enabled,
       cyber_session_block_enabled: form.cyber_session_block_enabled,
       cyber_session_block_ttl_seconds:
@@ -11639,11 +11650,27 @@ async function saveSettings() {
     const updated = await settingsStepUp.run(() =>
       adminAPI.settings.updateSettings(payload),
     );
+    const pendingRevocations = [...pendingExclusivePermissionRevocations.value];
+    const failedRevocations: number[] = [];
+    for (const userId of pendingRevocations) {
+      try {
+        await adminAPI.users.update(userId, { exclusive_recharge_enabled: false });
+      } catch (error) {
+        failedRevocations.push(userId);
+        permissionUpdateError ??= error;
+      }
+    }
+    const permissionsChanged = pendingRevocations.length > failedRevocations.length;
+    pendingExclusivePermissionRevocations.value = failedRevocations;
     for (const [key, value] of Object.entries(updated)) {
       if (key === "openai_fast_policy_settings") continue;
       if (value !== null && value !== undefined) {
         (form as Record<string, unknown>)[key] = value;
       }
+    }
+    paymentSettingsSaveVersion.value++;
+    if (permissionsChanged || updated.payment_exclusive_enabled !== undefined) {
+      window.dispatchEvent(new Event("payment-access-changed"));
     }
     Object.assign(authSourceDefaults, buildAuthSourceDefaultsState(updated));
     form.default_platform_quotas = normalizePlatformQuotasMap(updated.default_platform_quotas);
@@ -11715,7 +11742,14 @@ async function saveSettings() {
     // Refresh cached settings so sidebar/header update immediately
     await appStore.fetchPublicSettings(true);
     await adminSettingsStore.fetch(true);
-    if (wsOk) {
+    if (permissionUpdateError) {
+      appStore.showError(
+        extractApiErrorMessage(
+          permissionUpdateError,
+          t("admin.settings.payment.permissions.updateFailed"),
+        ),
+      );
+    } else if (wsOk) {
       appStore.showSuccess(t("admin.settings.settingsSaved"));
     }
   } catch (error: unknown) {
