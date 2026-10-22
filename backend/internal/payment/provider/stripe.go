@@ -229,8 +229,12 @@ func (s *Stripe) Refund(ctx context.Context, req payment.RefundRequest) (*paymen
 		PaymentIntent: stripe.String(req.TradeNo),
 		Amount:        stripe.Int64(amountInMinorUnit),
 		Reason:        stripe.String(string(stripe.RefundReasonRequestedByCustomer)),
+		Metadata: map[string]string{
+			"orderId":         req.OrderID,
+			"refundRequestId": stripeRefundRequestID(req.OrderID, amountInMinorUnit),
+		},
 	}
-	params.SetIdempotencyKey(fmt.Sprintf("re-%s-%d", req.OrderID, amountInMinorUnit))
+	params.SetIdempotencyKey(stripeRefundRequestID(req.OrderID, amountInMinorUnit))
 	params.Context = ctx
 
 	r, err := s.sc.V1Refunds.Create(ctx, params)
@@ -249,34 +253,65 @@ func (s *Stripe) Refund(ctx context.Context, req payment.RefundRequest) (*paymen
 	}, nil
 }
 
-// QueryRefund retrieves a Stripe refund by refund ID when available, otherwise
-// falls back to the latest refund for the PaymentIntent.
+func stripeRefundRequestID(orderID string, amountInMinorUnit int64) string {
+	return fmt.Sprintf("re-%s-%d", orderID, amountInMinorUnit)
+}
+
+// QueryRefund only accepts a refund bound to the current request. When a create
+// response was lost, metadata recovers that request without trusting list order.
 func (s *Stripe) QueryRefund(ctx context.Context, req payment.RefundQueryRequest) (*payment.RefundResponse, error) {
 	s.ensureInit()
 
+	tradeNo := strings.TrimSpace(req.TradeNo)
+	if tradeNo == "" {
+		return nil, fmt.Errorf("stripe query refund: missing payment intent id")
+	}
+	currency := s.currency()
+	amount, err := payment.AmountToMinorUnit(req.Amount, currency)
+	if err != nil || amount <= 0 {
+		return nil, fmt.Errorf("stripe query refund: invalid refund amount")
+	}
 	var r *stripe.Refund
-	var err error
-	if refundID := strings.TrimSpace(req.RefundID); refundID != "" {
+	refundID := strings.TrimSpace(req.RefundID)
+	if refundID != "" {
 		r, err = s.sc.V1Refunds.Retrieve(ctx, refundID, nil)
 		if err != nil {
 			return nil, fmt.Errorf("stripe query refund: %w", err)
 		}
+		if r == nil || r.ID != refundID {
+			return nil, fmt.Errorf("stripe query refund: refund id mismatch")
+		}
 	} else {
-		tradeNo := strings.TrimSpace(req.TradeNo)
-		if tradeNo == "" {
-			return nil, fmt.Errorf("stripe query refund: missing payment intent id")
+		if strings.TrimSpace(req.OrderID) == "" {
+			return nil, fmt.Errorf("stripe query refund: missing order id")
 		}
+		requestID := stripeRefundRequestID(req.OrderID, amount)
 		params := &stripe.RefundListParams{PaymentIntent: stripe.String(tradeNo)}
-		params.Limit = stripe.Int64(1)
+		params.Limit = stripe.Int64(100)
 		list := s.sc.V1Refunds.List(ctx, params)
-		if list.Err() != nil {
-			return nil, fmt.Errorf("stripe query refund: %w", list.Err())
+		for candidate, listErr := range list.All(ctx) {
+			if listErr != nil {
+				return nil, fmt.Errorf("stripe query refund: %w", listErr)
+			}
+			if candidate == nil || candidate.Metadata["orderId"] != req.OrderID || candidate.Metadata["refundRequestId"] != requestID {
+				continue
+			}
+			if r != nil {
+				return nil, fmt.Errorf("stripe query refund: ambiguous refund request")
+			}
+			r = candidate
 		}
-		refunds := list.Data()
-		if len(refunds) == 0 {
-			return nil, fmt.Errorf("stripe query refund: no refund found")
+		if r == nil {
+			return nil, fmt.Errorf("stripe query refund: current refund not identified")
 		}
-		r = refunds[0]
+	}
+	if r.ID == "" || r.PaymentIntent == nil || r.PaymentIntent.ID != tradeNo || r.Amount != amount || !strings.EqualFold(string(r.Currency), currency) {
+		return nil, fmt.Errorf("stripe query refund: payment intent, amount or currency mismatch")
+	}
+	// Stripe may prune an idempotency key before a later same-amount retry.
+	// A failed metadata match alone cannot prove that the latest attempt failed.
+	if refundID == "" && stripeRefundProviderStatus(r.Status) == payment.ProviderStatusFailed {
+		return nil, fmt.Errorf("stripe query refund: failed refund requires its exact refund id")
 	}
 
 	return &payment.RefundResponse{RefundID: r.ID, Status: stripeRefundProviderStatus(r.Status)}, nil

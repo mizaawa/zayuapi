@@ -134,6 +134,7 @@ type RefundPlan struct {
 	BalanceToDeduct         float64
 	SubDaysToDeduct         int
 	SubscriptionID          int64
+	SubscriptionRevoked     bool
 	DeductionAlreadyApplied bool
 }
 
@@ -190,6 +191,8 @@ type PaymentService struct {
 	providerMu               sync.Mutex
 	reconcileMu              sync.Mutex
 	reconcileCursor          int64
+	publicQueryMu            sync.Mutex
+	publicQueries            map[int64]publicPaymentQuery
 	providersLoaded          bool
 	entClient                *dbent.Client
 	registry                 *payment.Registry

@@ -430,7 +430,7 @@ func (e *EasyPay) VerifyNotification(_ context.Context, rawBody string, _ map[st
 func (e *EasyPay) Refund(ctx context.Context, req payment.RefundRequest) (*payment.RefundResponse, error) {
 	attempts := e.refundAttempts(req)
 	if len(attempts) == 0 {
-		return nil, fmt.Errorf("easypay refund missing order identifier")
+		return &payment.RefundResponse{Status: payment.ProviderStatusFailed}, fmt.Errorf("easypay refund missing order identifier")
 	}
 	var firstErr error
 	for i, attempt := range attempts {
@@ -442,8 +442,13 @@ func (e *EasyPay) Refund(ctx context.Context, req payment.RefundRequest) (*payme
 			if firstErr == nil {
 				firstErr = err
 			}
-			if i+1 < len(attempts) && isEasyPayRefundOrderNotFound(err) {
+			var rejected *easyPayRefundRejectedError
+			isRejected := errors.As(err, &rejected)
+			if isRejected && i+1 < len(attempts) && isEasyPayRefundOrderNotFound(err) {
 				continue
+			}
+			if isRejected {
+				return &payment.RefundResponse{RefundID: attempt.refundID, Status: payment.ProviderStatusFailed}, err
 			}
 			return nil, err
 		}
@@ -524,15 +529,37 @@ func parseEasyPayRefundResponse(status int, body []byte) error {
 		if msg == "" {
 			msg = summary
 		}
-		return fmt.Errorf("easypay refund failed (HTTP %d): %s", status, msg)
+		err := fmt.Errorf("easypay refund failed (HTTP %d): %s", status, msg)
+		// Only a parsed, explicit rejection is definitive. Empty, malformed,
+		// fractional, and missing response codes leave the outcome uncertain.
+		if easyPayRefundCodeIsRejection(resp.Code) {
+			return &easyPayRefundRejectedError{message: err.Error()}
+		}
+		return err
 	}
 	return nil
+}
+
+type easyPayRefundRejectedError struct{ message string }
+
+func (e *easyPayRefundRejectedError) Error() string { return e.message }
+
+func easyPayRefundCodeIsRejection(code any) bool {
+	switch v := code.(type) {
+	case float64:
+		return v == float64(int64(v)) && v != easypayCodeSuccess
+	case string:
+		n, err := strconv.ParseInt(strings.TrimSpace(v), 10, 64)
+		return err == nil && n != easypayCodeSuccess
+	default:
+		return false
+	}
 }
 
 func easyPayResponseCodeIsSuccess(code any) bool {
 	switch v := code.(type) {
 	case float64:
-		return int(v) == easypayCodeSuccess
+		return v == easypayCodeSuccess
 	case string:
 		n, err := strconv.Atoi(strings.TrimSpace(v))
 		return err == nil && n == easypayCodeSuccess

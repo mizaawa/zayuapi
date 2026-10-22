@@ -1,10 +1,16 @@
 <template>
   <AppLayout>
     <div class="mx-auto flex max-w-md flex-col items-center space-y-6 py-8">
+      <p v-if="loading" role="status">{{ t('common.loading') }}</p>
+      <div v-else-if="loadError" class="text-center" role="alert">
+        <p class="text-red-500">{{ loadError }}</p>
+        <button class="btn btn-primary mt-4" @click="router.push('/purchase')">{{ t('payment.result.backToRecharge') }}</button>
+      </div>
+      <template v-else>
       <h2 class="text-xl font-semibold text-gray-900 dark:text-white">
         {{ qrUrl ? scanTitle : t('payment.qr.payInNewWindow') }}
       </h2>
-      <div v-if="qrUrl" class="rounded-2xl bg-white p-6 shadow-lg dark:bg-dark-800">
+      <div v-if="qrUrl && !expired" class="rounded-2xl bg-white p-6 shadow-lg dark:bg-dark-800">
         <canvas ref="qrCanvas" class="mx-auto"></canvas>
       </div>
       <!-- Scan prompt for QR code -->
@@ -28,6 +34,7 @@
       <button v-if="!expired && orderId" class="btn btn-secondary w-full" :disabled="cancelling" @click="handleCancel">
         {{ cancelling ? t('common.processing') : t('payment.qr.cancelOrder') }}
       </button>
+      </template>
     </div>
   </AppLayout>
 </template>
@@ -42,6 +49,7 @@ import { paymentAPI } from '@/api/payment'
 import { extractI18nErrorMessage } from '@/utils/apiError'
 import { useAppStore } from '@/stores'
 import { isBuiltInAlipayMethod, isBuiltInWxpayMethod } from '@/components/payment/providerConfig'
+import { sanitizePaymentUrl } from '@/components/payment/paymentUrl'
 import QRCode from 'qrcode'
 import alipayIcon from '@/assets/icons/alipay.svg'
 import wxpayIcon from '@/assets/icons/wxpay.svg'
@@ -60,6 +68,9 @@ const remainingSeconds = ref(0)
 const expired = ref(false)
 const cancelling = ref(false)
 const paymentType = ref('')
+const loading = ref(true)
+const loadError = ref('')
+let disposed = false
 
 let pollTimer: ReturnType<typeof setInterval> | null = null
 let countdownTimer: ReturnType<typeof setInterval> | null = null
@@ -143,7 +154,7 @@ async function pollStatus() {
     if (!order) return
     // 定时器已被 cleanup 清除时不再执行终态跳转（响应可能在 cleanup 后才回来）。
     if (!pollTimer) return
-    if (order.status === 'COMPLETED' || order.status === 'PAID') {
+    if (order.status === 'COMPLETED' || order.status === 'PAID' || order.status === 'RECHARGING') {
       cleanup()
       router.push({ path: '/payment/result', query: { order_id: String(orderId.value), status: 'success' } })
     } else if (order.status === 'EXPIRED' || order.status === 'CANCELLED' || order.status === 'FAILED') {
@@ -191,24 +202,48 @@ function cleanup() {
 
 watch(qrUrl, () => renderQR())
 
-onMounted(() => {
-  orderId.value = Number(route.query.order_id) || 0
-  qrUrl.value = String(route.query.qr || '')
-  payUrl.value = String(route.query.pay_url || '')
-  paymentType.value = String(route.query.payment_type || '')
-
-  // Calculate countdown from expiresAt
-  const expiresAtStr = String(route.query.expires_at || '')
-  let seconds = 30 * 60 // fallback: 30 minutes
-  if (expiresAtStr) {
-    const expiresAt = new Date(expiresAtStr)
-    const now = new Date()
-    seconds = Math.floor((expiresAt.getTime() - now.getTime()) / 1000)
+onMounted(async () => {
+  const rawID = route.query.order_id
+  const requestedID = typeof rawID === 'string' && /^[1-9]\d*$/.test(rawID) ? Number(rawID) : 0
+  if (!Number.isSafeInteger(requestedID) || requestedID <= 0) {
+    loadError.value = t('payment.errors.NOT_FOUND')
+    loading.value = false
+    return
   }
-  startCountdown(seconds)
-  pollTimer = setInterval(pollStatus, 3000)
-  renderQR()
+
+  try {
+    // All payment contents must come from this authenticated, owner-checked lookup.
+    // Query parameters are untrusted and must never choose the payee or expiry.
+    const { data: order } = await paymentAPI.getOrder(requestedID)
+    if (disposed) return
+    if (!order || order.id !== requestedID) throw new Error('Invalid payment order')
+    orderId.value = order.id
+    if (['COMPLETED', 'PAID', 'RECHARGING'].includes(order.status)) {
+      await router.replace({ path: '/payment/result', query: { order_id: String(order.id), status: 'success' } })
+      return
+    }
+    if (order.status !== 'PENDING') {
+      expired.value = true
+      return
+    }
+
+    const expiresAt = Date.parse(order.expires_at)
+    if (!Number.isFinite(expiresAt)) throw new Error('Invalid payment expiry')
+    qrUrl.value = sanitizePaymentUrl(order.qr_code)
+    payUrl.value = sanitizePaymentUrl(order.pay_url)
+    paymentType.value = order.payment_type
+    if (!qrUrl.value && !payUrl.value) {
+      loadError.value = t('payment.errors.PAYMENT_GATEWAY_ERROR')
+      return
+    }
+    startCountdown(Math.floor((expiresAt - Date.now()) / 1000))
+    if (!expired.value) pollTimer = setInterval(pollStatus, 3000)
+  } catch (err: unknown) {
+    if (!disposed) loadError.value = extractI18nErrorMessage(err, t, 'payment.errors', t('common.error'))
+  } finally {
+    if (!disposed) loading.value = false
+  }
 })
 
-onUnmounted(() => cleanup())
+onUnmounted(() => { disposed = true; cleanup() })
 </script>

@@ -59,19 +59,30 @@ func (s *PaymentConfigService) ListProviderInstancesWithConfig(ctx context.Conte
 	}
 	result := make([]ProviderInstanceResponse, 0, len(instances))
 	for _, inst := range instances {
-		resp := ProviderInstanceResponse{
-			ID: int64(inst.ID), ProviderKey: inst.ProviderKey, Name: inst.Name,
-			SupportedTypes: splitTypes(inst.SupportedTypes), Limits: inst.Limits,
-			Enabled: inst.Enabled, RefundEnabled: inst.RefundEnabled, AllowUserRefund: inst.AllowUserRefund,
-			SortOrder: inst.SortOrder, PaymentMode: inst.PaymentMode,
-		}
-		resp.Config, err = s.decryptAndMaskConfig(inst.ProviderKey, inst.Config)
+		resp, err := s.ProviderInstanceForResponse(inst)
 		if err != nil {
-			return nil, fmt.Errorf("decrypt config for instance %d: %w", inst.ID, err)
+			return nil, err
 		}
 		result = append(result, resp)
 	}
 	return result, nil
+}
+
+// ProviderInstanceForResponse applies the same secret filtering to every admin
+// provider response, including creation and updates of existing credentials.
+func (s *PaymentConfigService) ProviderInstanceForResponse(inst *dbent.PaymentProviderInstance) (ProviderInstanceResponse, error) {
+	resp := ProviderInstanceResponse{
+		ID: int64(inst.ID), ProviderKey: inst.ProviderKey, Name: inst.Name,
+		SupportedTypes: splitTypes(inst.SupportedTypes), Limits: inst.Limits,
+		Enabled: inst.Enabled, RefundEnabled: inst.RefundEnabled, AllowUserRefund: inst.AllowUserRefund,
+		SortOrder: inst.SortOrder, PaymentMode: inst.PaymentMode,
+	}
+	var err error
+	resp.Config, err = s.decryptAndMaskConfig(inst.ProviderKey, inst.Config)
+	if err != nil {
+		return ProviderInstanceResponse{}, fmt.Errorf("decrypt config for instance %d: %w", inst.ID, err)
+	}
+	return resp, nil
 }
 
 // decryptAndMaskConfig returns the stored config with sensitive fields omitted.

@@ -2,12 +2,13 @@ package provider
 
 import (
 	"context"
+	"crypto/sha256"
+	"errors"
 	"fmt"
 	"net/url"
 	"strconv"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/payment"
 	"github.com/smartwalle/alipay/v3"
@@ -24,7 +25,6 @@ const (
 const (
 	alipayFundChangeYes    = "Y"
 	alipayErrTradeNotExist = "ACQ.TRADE_NOT_EXIST"
-	alipayRefundSuffix     = "-refund"
 )
 
 var (
@@ -36,6 +36,12 @@ var (
 	}
 	alipayTradePagePay = func(client *alipay.Client, param alipay.TradePagePay) (*url.URL, error) {
 		return client.TradePagePay(param)
+	}
+	alipayTradeRefund = func(ctx context.Context, client *alipay.Client, param alipay.TradeRefund) (*alipay.TradeRefundRsp, error) {
+		return client.TradeRefund(ctx, param)
+	}
+	alipayTradeRefundQuery = func(ctx context.Context, client *alipay.Client, param alipay.TradeFastPayRefundQuery) (*alipay.TradeFastPayRefundQueryRsp, error) {
+		return client.TradeFastPayRefundQuery(ctx, param)
 	}
 )
 
@@ -338,33 +344,112 @@ func (a *Alipay) VerifyNotification(ctx context.Context, rawBody string, _ map[s
 func (a *Alipay) Refund(ctx context.Context, req payment.RefundRequest) (*payment.RefundResponse, error) {
 	client, err := a.getClient()
 	if err != nil {
-		return nil, err
+		return &payment.RefundResponse{Status: payment.ProviderStatusFailed}, err
 	}
 
-	result, err := client.TradeRefund(ctx, alipay.TradeRefund{
+	requestID, err := alipayRefundRequestID(req.OrderID, req.Amount)
+	if err != nil {
+		return &payment.RefundResponse{Status: payment.ProviderStatusFailed}, err
+	}
+	result, err := alipayTradeRefund(ctx, client, alipay.TradeRefund{
 		OutTradeNo:   req.OrderID,
 		RefundAmount: req.Amount,
 		RefundReason: req.Reason,
-		OutRequestNo: fmt.Sprintf("%s-refund-%d", req.OrderID, time.Now().UnixNano()),
+		OutRequestNo: requestID,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("alipay TradeRefund: %w", err)
+		var upstreamErr *alipay.Error
+		if errors.As(err, &upstreamErr) && alipayRefundDefinitivelyRejected(upstreamErr) {
+			return &payment.RefundResponse{RefundID: requestID, Status: payment.ProviderStatusFailed}, fmt.Errorf("alipay TradeRefund: %w", err)
+		}
+		return &payment.RefundResponse{RefundID: requestID, Status: payment.ProviderStatusPending}, fmt.Errorf("alipay TradeRefund: %w", err)
+	}
+	if result == nil {
+		return &payment.RefundResponse{RefundID: requestID, Status: payment.ProviderStatusPending}, fmt.Errorf("alipay TradeRefund: missing response")
+	}
+	if result.Code != alipay.CodeSuccess {
+		status := payment.ProviderStatusPending
+		if alipayRefundDefinitivelyRejected(&result.Error) {
+			status = payment.ProviderStatusFailed
+		}
+		return &payment.RefundResponse{RefundID: requestID, Status: status}, fmt.Errorf("alipay TradeRefund: %w", result.Error)
 	}
 
 	refundStatus := payment.ProviderStatusPending
-	if result.FundChange == alipayFundChangeYes {
+	// An idempotent retry can succeed without moving funds a second time (N).
+	if result.FundChange == alipayFundChangeYes || result.FundChange == "N" {
 		refundStatus = payment.ProviderStatusSuccess
 	}
 
-	refundID := result.TradeNo
-	if refundID == "" {
-		refundID = req.OrderID + alipayRefundSuffix
-	}
-
 	return &payment.RefundResponse{
-		RefundID: refundID,
+		RefundID: requestID,
 		Status:   refundStatus,
 	}, nil
+}
+
+func alipayRefundRequestID(orderID, amount string) (string, error) {
+	minor, err := payment.AmountToMinorUnit(amount, "CNY")
+	if err != nil || minor <= 0 || strings.TrimSpace(orderID) == "" {
+		return "", fmt.Errorf("alipay refund: invalid order or amount")
+	}
+	// Keep the identifier under Alipay's 64-character limit even for long IDs.
+	digest := sha256.Sum256([]byte(orderID + "\x00" + strconv.FormatInt(minor, 10)))
+	return fmt.Sprintf("ar-%x", digest[:24]), nil
+}
+
+func alipayRefundDefinitivelyRejected(err *alipay.Error) bool {
+	if err == nil {
+		return false
+	}
+	switch err.Code {
+	case alipay.CodeInvalidAuthToken, alipay.CodeMissingParam, alipay.CodeInvalidParam,
+		alipay.CodeCallLimited, alipay.CodePermissionDenied:
+		return true
+	case alipay.CodeBusinessFailed:
+		switch err.SubCode {
+		case alipayErrTradeNotExist, "ACQ.TRADE_STATUS_ERROR", "ACQ.REFUND_AMT_NOT_EQUAL_TOTAL",
+			"ACQ.REFUND_AMT_NOT_EQUAL_REMAIN", "ACQ.SELLER_BALANCE_NOT_ENOUGH":
+			return true
+		}
+	}
+	return false
+}
+
+// QueryRefund resolves uncertain requests using the same idempotent identifier.
+func (a *Alipay) QueryRefund(ctx context.Context, req payment.RefundQueryRequest) (*payment.RefundResponse, error) {
+	client, err := a.getClient()
+	if err != nil {
+		return nil, err
+	}
+	requestID := strings.TrimSpace(req.RefundID)
+	if requestID == "" {
+		requestID, err = alipayRefundRequestID(req.OrderID, req.Amount)
+		if err != nil {
+			return nil, err
+		}
+	}
+	result, err := alipayTradeRefundQuery(ctx, client, alipay.TradeFastPayRefundQuery{
+		OutTradeNo: req.OrderID, OutRequestNo: requestID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("alipay query refund: %w", err)
+	}
+	if result == nil || result.Code != alipay.CodeSuccess {
+		return nil, fmt.Errorf("alipay query refund: missing or unsuccessful response")
+	}
+	if result.OutRequestNo != requestID || result.OutTradeNo != req.OrderID {
+		return nil, fmt.Errorf("alipay query refund: refund identity mismatch")
+	}
+	status := payment.ProviderStatusPending
+	if result.RefundStatus == "REFUND_SUCCESS" {
+		want, wantErr := payment.AmountToMinorUnit(req.Amount, "CNY")
+		got, gotErr := payment.AmountToMinorUnit(result.RefundAmount, "CNY")
+		if wantErr != nil || gotErr != nil || want <= 0 || got != want {
+			return nil, fmt.Errorf("alipay query refund: refund amount mismatch")
+		}
+		status = payment.ProviderStatusSuccess
+	}
+	return &payment.RefundResponse{RefundID: requestID, Status: status}, nil
 }
 
 // CancelPayment closes a pending trade on Alipay.
@@ -410,4 +495,5 @@ var (
 	_ payment.Provider                 = (*Alipay)(nil)
 	_ payment.CancelableProvider       = (*Alipay)(nil)
 	_ payment.MerchantIdentityProvider = (*Alipay)(nil)
+	_ payment.RefundQueryProvider      = (*Alipay)(nil)
 )

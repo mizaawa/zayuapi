@@ -179,6 +179,22 @@ func TestSanitizeCreatePaymentResponseDetailsRemovesNULBytes(t *testing.T) {
 	}
 }
 
+func TestSanitizeCreatePaymentResponseDetailsRejectsUnsafeLinks(t *testing.T) {
+	for _, value := range []string{
+		"javascript:alert(1)", "java\x00script:alert(1)", "java\tscript:alert(1)",
+		"data:text/html,pay", "file:///tmp/payment", "blob:https://site.example/1",
+		"intent://payment", "//attacker.example/pay", "/payment",
+	} {
+		t.Run(value, func(t *testing.T) {
+			resp := &payment.CreatePaymentResponse{PayURL: value, QRCode: value}
+			sanitizeCreatePaymentResponseDetails(resp)
+			if resp.PayURL != "" || resp.QRCode != "" {
+				t.Fatalf("unsafe payment details remain: pay_url=%q qr_code=%q", resp.PayURL, resp.QRCode)
+			}
+		})
+	}
+}
+
 func TestValidateSelectedCreateOrderAmountCurrencyRejectsFractionalZeroDecimal(t *testing.T) {
 	t.Parallel()
 

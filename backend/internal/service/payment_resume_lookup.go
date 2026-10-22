@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	dbent "github.com/Wei-Shaw/sub2api/ent"
 	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
@@ -48,7 +49,8 @@ func (s *PaymentService) GetPublicOrderByResumeToken(ctx context.Context, token 
 	if err := s.RequirePaymentAccess(ctx, order.UserID); err != nil {
 		return nil, err
 	}
-	if order.Status == OrderStatusPending || order.Status == OrderStatusExpired {
+	if (order.Status == OrderStatusPending || order.Status == OrderStatusExpired) && s.beginPublicPaymentQuery(order.ID) {
+		defer s.finishPublicPaymentQuery(order.ID)
 		result := s.reconcilePaid(ctx, order)
 		if result == checkPaidResultAlreadyPaid {
 			order, err = s.entClient.PaymentOrder.Get(ctx, order.ID)
@@ -59,6 +61,47 @@ func (s *PaymentService) GetPublicOrderByResumeToken(ctx context.Context, token 
 	}
 
 	return order, nil
+}
+
+const publicPaymentQueryCooldown = 2 * time.Second
+const maxPublicPaymentQueries = 4096
+
+type publicPaymentQuery struct {
+	inFlight bool
+	after    time.Time
+}
+
+// Signed recovery tokens are reusable; they must not grant unlimited upstream
+// requests. Other callers still receive the current persisted order state.
+func (s *PaymentService) beginPublicPaymentQuery(orderID int64) bool {
+	s.publicQueryMu.Lock()
+	defer s.publicQueryMu.Unlock()
+	now := time.Now()
+	entry, exists := s.publicQueries[orderID]
+	if exists && (entry.inFlight || now.Before(entry.after)) {
+		return false
+	}
+	if s.publicQueries == nil {
+		s.publicQueries = make(map[int64]publicPaymentQuery)
+	}
+	if !exists && len(s.publicQueries) >= maxPublicPaymentQueries {
+		for id, old := range s.publicQueries {
+			if !old.inFlight && !now.Before(old.after) {
+				delete(s.publicQueries, id)
+			}
+		}
+		if len(s.publicQueries) >= maxPublicPaymentQueries {
+			return false
+		}
+	}
+	s.publicQueries[orderID] = publicPaymentQuery{inFlight: true}
+	return true
+}
+
+func (s *PaymentService) finishPublicPaymentQuery(orderID int64) {
+	s.publicQueryMu.Lock()
+	defer s.publicQueryMu.Unlock()
+	s.publicQueries[orderID] = publicPaymentQuery{after: time.Now().Add(publicPaymentQueryCooldown)}
 }
 
 func invalidResumeTokenMatchError() error {

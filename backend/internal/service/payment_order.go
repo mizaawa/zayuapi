@@ -518,8 +518,8 @@ func sanitizeCreatePaymentResponseDetails(pr *payment.CreatePaymentResponse) {
 		return
 	}
 	pr.TradeNo = removePostgresTextNUL(pr.TradeNo)
-	pr.PayURL = removePostgresTextNUL(pr.PayURL)
-	pr.QRCode = removePostgresTextNUL(pr.QRCode)
+	pr.PayURL = payment.SanitizeURL(removePostgresTextNUL(pr.PayURL))
+	pr.QRCode = payment.SanitizeURL(removePostgresTextNUL(pr.QRCode))
 }
 
 func removePostgresTextNUL(value string) string {

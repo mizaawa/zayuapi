@@ -104,6 +104,9 @@ export interface PaymentOrder {
   refund_request_reason?: string
   plan_id?: number
   provider_instance_id?: string
+  /** Server-bound payment details returned only by the authenticated order lookup. */
+  pay_url?: string
+  qr_code?: string
 }
 
 // ==================== Plans & Channels ====================

@@ -374,7 +374,7 @@ func (h *PaymentHandler) GetOrder(c *gin.Context) {
 		response.ErrorFrom(c, err)
 		return
 	}
-	response.Success(c, sanitizePaymentOrderForResponse(order))
+	response.Success(c, sanitizePaymentOrderDetailsForResponse(order))
 }
 
 // CancelOrder cancels a pending order for the authenticated user.
@@ -641,6 +641,30 @@ type PaymentOrderResult struct {
 	RefundRequestReason *string    `json:"refund_request_reason,omitempty"`
 	PlanID              *int64     `json:"plan_id,omitempty"`
 	ProviderInstanceID  *string    `json:"provider_instance_id,omitempty"`
+}
+
+// Payment links are exposed only by the authenticated, owner-checked GetOrder.
+// Public lookup responses continue using their own restricted DTOs.
+type PaymentOrderDetailsResult struct {
+	*PaymentOrderResult
+	PayURL string `json:"pay_url,omitempty"`
+	QRCode string `json:"qr_code,omitempty"`
+}
+
+func sanitizePaymentOrderDetailsForResponse(order *dbent.PaymentOrder) *PaymentOrderDetailsResult {
+	if order == nil {
+		return nil
+	}
+	result := &PaymentOrderDetailsResult{PaymentOrderResult: sanitizePaymentOrderForResponse(order)}
+	if order.Status == service.OrderStatusPending {
+		if order.PayURL != nil {
+			result.PayURL = payment.SanitizeURL(*order.PayURL)
+		}
+		if order.QrCode != nil {
+			result.QRCode = payment.SanitizeURL(*order.QrCode)
+		}
+	}
+	return result
 }
 
 func sanitizePaymentOrdersForResponse(orders []*dbent.PaymentOrder) []PaymentOrderResult {
