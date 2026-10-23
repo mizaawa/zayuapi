@@ -738,6 +738,86 @@ describe("admin SettingsView payment visible method controls", () => {
     wrapper.unmount();
   });
 
+  it("shows original quick amount defaults below provider management when not configured", async () => {
+    const wrapper = mountView();
+    await flushPromises();
+    await openPaymentTab(wrapper);
+    const panel = wrapper.get('[data-testid="payment-quick-amounts"]');
+    expect(panel.element.previousElementSibling?.tagName.toLowerCase()).toBe("payment-provider-list-stub");
+    expect(panel.find("h2").text()).toBe("admin.settings.payment.rechargeSubscription");
+    expect(panel.findAll<HTMLInputElement>('input[type="number"]').map((input) => Number(input.element.value)))
+      .toEqual([10, 20, 50, 100, 200, 500, 1000, 2000, 5000]);
+    wrapper.unmount();
+  });
+
+  it("edits, reorders, deletes and adds quick amounts before saving the ordered list", async () => {
+    getSettings.mockResolvedValueOnce({ ...baseSettingsResponse, payment_quick_amounts: [30, 10, 20] });
+    const wrapper = mountView();
+    await flushPromises();
+    await openPaymentTab(wrapper);
+    const panel = wrapper.get('[data-testid="payment-quick-amounts"]');
+    await panel.findAll('input[type="number"]')[0].setValue(35.5);
+    await panel.findAll('[aria-label="admin.settings.payment.quickAmountsMoveDown"]')[0].trigger("click");
+    await panel.findAll('[aria-label="admin.settings.payment.quickAmountsMoveUp"]')[2].trigger("click");
+    await panel.findAll('[aria-label="admin.settings.payment.quickAmountsDelete"]')[2].trigger("click");
+    await panel.findAll('button').find((button) => button.text() === "admin.settings.payment.quickAmountsAdd")?.trigger("click");
+    await wrapper.find("form").trigger("submit.prevent");
+    await flushPromises();
+    expect(updateSettings).toHaveBeenCalledWith(expect.objectContaining({ payment_quick_amounts: [10, 20, 30] }));
+    wrapper.unmount();
+  });
+
+  it("persists an explicitly empty quick amount list and can restore original defaults", async () => {
+    getSettings.mockResolvedValueOnce({ ...baseSettingsResponse, payment_quick_amounts: [10] });
+    const wrapper = mountView();
+    await flushPromises();
+    await openPaymentTab(wrapper);
+    const panel = wrapper.get('[data-testid="payment-quick-amounts"]');
+    await panel.get('[aria-label="admin.settings.payment.quickAmountsDelete"]').trigger("click");
+    expect(panel.findAll('input[type="number"]')).toHaveLength(0);
+    expect(panel.text()).toContain("admin.settings.payment.quickAmountsEmpty");
+    await wrapper.find("form").trigger("submit.prevent");
+    await flushPromises();
+    expect(updateSettings).toHaveBeenLastCalledWith(expect.objectContaining({ payment_quick_amounts: [] }));
+    await panel.findAll('button').find((button) => button.text() === "admin.settings.payment.quickAmountsRestoreDefaults")?.trigger("click");
+    await wrapper.find("form").trigger("submit.prevent");
+    await flushPromises();
+    expect(updateSettings).toHaveBeenLastCalledWith(expect.objectContaining({ payment_quick_amounts: [10, 20, 50, 100, 200, 500, 1000, 2000, 5000] }));
+    wrapper.unmount();
+  });
+
+  it("keeps a loaded empty quick amount list empty", async () => {
+    getSettings.mockResolvedValueOnce({ ...baseSettingsResponse, payment_quick_amounts: [] });
+    const wrapper = mountView();
+    await flushPromises();
+    await openPaymentTab(wrapper);
+    expect(wrapper.get('[data-testid="payment-quick-amounts"]').findAll('input[type="number"]')).toHaveLength(0);
+    wrapper.unmount();
+  });
+
+  it.each([0, 0.001, 1.234, 100000001, ""])("rejects invalid quick amount %s before saving", async (value) => {
+    getSettings.mockResolvedValueOnce({ ...baseSettingsResponse, payment_quick_amounts: [10] });
+    const wrapper = mountView();
+    await flushPromises();
+    await openPaymentTab(wrapper);
+    await wrapper.get('[data-testid="payment-quick-amounts"] input').setValue(value);
+    await wrapper.find("form").trigger("submit.prevent");
+    await flushPromises();
+    expect(updateSettings).not.toHaveBeenCalled();
+    expect(showError).toHaveBeenCalledWith("admin.settings.payment.quickAmountsInvalid");
+    wrapper.unmount();
+  });
+
+  it("accepts two decimal quick amounts and removes duplicates while preserving order", async () => {
+    getSettings.mockResolvedValueOnce({ ...baseSettingsResponse, payment_quick_amounts: [0.29, 100000000, 0.01, 0.29, 99999999.99] });
+    const wrapper = mountView();
+    await flushPromises();
+    await wrapper.find("form").trigger("submit.prevent");
+    await flushPromises();
+    expect(updateSettings).toHaveBeenCalledWith(expect.objectContaining({ payment_quick_amounts: [0.29, 100000000, 0.01, 99999999.99] }));
+    wrapper.unmount();
+  });
+
   it("submits the compact home page toggle", async () => {
     const wrapper = mountView();
     await flushPromises();

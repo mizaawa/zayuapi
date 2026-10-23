@@ -49,7 +49,7 @@
             <div class="card p-6">
               <AmountInput
                 v-model="amount"
-                :amounts="[10, 20, 50, 100, 200, 500, 1000, 2000, 5000]"
+                :amounts="quickAmounts"
                 :min="globalMinAmount"
                 :max="globalMaxAmount"
               />
@@ -506,6 +506,13 @@ const checkout = ref<CheckoutInfoResponse>({
   methods: {}, global_min: 0, global_max: 0,
   plans: [], balance_disabled: false, balance_recharge_multiplier: 1, subscription_usd_to_cny_rate: 0, recharge_fee_rate: 0, help_text: '', help_image_url: '', stripe_publishable_key: '',
 })
+
+const DEFAULT_QUICK_AMOUNTS = [10, 20, 50, 100, 200, 500, 1000, 2000, 5000]
+const quickAmounts = computed(() =>
+  Array.isArray(checkout.value.quick_amounts)
+    ? checkout.value.quick_amounts
+    : DEFAULT_QUICK_AMOUNTS,
+)
 
 const tabs = computed(() => {
   const result: { key: 'recharge' | 'subscription'; label: string }[] = []

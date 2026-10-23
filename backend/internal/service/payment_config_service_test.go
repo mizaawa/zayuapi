@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"math"
 	"net/url"
 	"os"
 	"strings"
@@ -238,6 +239,51 @@ func TestParsePaymentConfig(t *testing.T) {
 			t.Fatalf("expected empty EnabledTypes for empty string, got %v", cfg.EnabledTypes)
 		}
 	})
+}
+
+func TestParseQuickRechargeAmounts(t *testing.T) {
+	svc := &PaymentConfigService{}
+	got := svc.parsePaymentConfig(map[string]string{}).QuickAmounts
+	require.Equal(t, DefaultQuickRechargeAmounts, got)
+	got[0] = 999
+	require.Equal(t, float64(10), svc.parsePaymentConfig(map[string]string{}).QuickAmounts[0])
+	for _, raw := range []string{"", " ", "null", "{", `"10"`} {
+		t.Run("default/"+raw, func(t *testing.T) {
+			require.Equal(t, DefaultQuickRechargeAmounts, svc.parsePaymentConfig(map[string]string{SettingQuickRechargeAmounts: raw}).QuickAmounts)
+		})
+	}
+	custom := svc.parsePaymentConfig(map[string]string{SettingQuickRechargeAmounts: `[100, 20, 100, 5]`}).QuickAmounts
+	require.Equal(t, []float64{100, 20, 5}, custom)
+	empty := svc.parsePaymentConfig(map[string]string{SettingQuickRechargeAmounts: `[]`}).QuickAmounts
+	require.NotNil(t, empty)
+	require.Empty(t, empty)
+	require.Equal(t, []float64{0.01, 0.29, 99999999.99, 100000000}, parseQuickRechargeAmounts(`[0.01,0.29,99999999.99,100000000,-1,0,0.001,100000000.01]`))
+}
+
+func TestUpdatePaymentConfigPersistsQuickRechargeAmounts(t *testing.T) {
+	repo := &paymentConfigSettingRepoStub{values: map[string]string{}}
+	svc := &PaymentConfigService{settingRepo: repo}
+	amounts := []float64{100, 20, 100, 5}
+	require.NoError(t, svc.UpdatePaymentConfig(context.Background(), UpdatePaymentConfigRequest{QuickAmounts: &amounts}))
+	require.Equal(t, `[100,20,5]`, repo.values[SettingQuickRechargeAmounts])
+	empty := []float64{}
+	require.NoError(t, svc.UpdatePaymentConfig(context.Background(), UpdatePaymentConfigRequest{QuickAmounts: &empty}))
+	require.Equal(t, `[]`, repo.values[SettingQuickRechargeAmounts])
+	enabled := true
+	require.NoError(t, svc.UpdatePaymentConfig(context.Background(), UpdatePaymentConfigRequest{Enabled: &enabled}))
+	require.Equal(t, `[]`, repo.values[SettingQuickRechargeAmounts], "omitting the field must preserve the saved list")
+}
+
+func TestUpdatePaymentConfigRejectsInvalidQuickRechargeAmounts(t *testing.T) {
+	for _, value := range []float64{0, -1, 0.001, 1.234, 100000000.01, math.NaN(), math.Inf(1), math.Inf(-1)} {
+		t.Run(fmt.Sprint(value), func(t *testing.T) {
+			repo := &paymentConfigSettingRepoStub{values: map[string]string{SettingQuickRechargeAmounts: `[10]`}}
+			svc := &PaymentConfigService{settingRepo: repo}
+			invalid := []float64{10, value}
+			require.Error(t, svc.UpdatePaymentConfig(context.Background(), UpdatePaymentConfigRequest{QuickAmounts: &invalid}))
+			require.Equal(t, `[10]`, repo.values[SettingQuickRechargeAmounts], "invalid input must not replace the previous configuration")
+		})
+	}
 }
 
 func TestGetBasePaymentType(t *testing.T) {

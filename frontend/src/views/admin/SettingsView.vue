@@ -8330,6 +8330,71 @@
             @toggle-type="handleToggleType"
             @reorder="handleReorderProviders"
           />
+
+          <!-- Recharge and subscription -->
+          <div v-if="form.payment_enabled" class="card" data-testid="payment-quick-amounts">
+            <div class="border-b border-gray-100 px-4 py-3 dark:border-dark-700">
+              <h2 class="text-base font-semibold text-gray-900 dark:text-white">
+                {{ t("admin.settings.payment.rechargeSubscription") }}
+              </h2>
+            </div>
+            <div class="p-4">
+              <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <h3 class="input-label">{{ t("admin.settings.payment.quickAmounts") }}</h3>
+                  <p class="text-xs text-gray-500 dark:text-gray-400">{{ t("admin.settings.payment.quickAmountsHint") }}</p>
+                </div>
+                <div class="flex shrink-0 flex-wrap gap-2">
+                  <button type="button" class="btn btn-secondary btn-sm" @click="resetPaymentQuickAmounts">
+                    {{ t("admin.settings.payment.quickAmountsRestoreDefaults") }}
+                  </button>
+                  <button type="button" class="btn btn-primary btn-sm" @click="addPaymentQuickAmount">
+                    {{ t("admin.settings.payment.quickAmountsAdd") }}
+                  </button>
+                </div>
+              </div>
+              <div v-if="form.payment_quick_amounts.length" class="mt-3 space-y-2">
+                <div
+                  v-for="(_, index) in form.payment_quick_amounts"
+                  :key="`quick-amount-${index}`"
+                  class="flex items-center gap-2"
+                >
+                  <span class="w-5 shrink-0 text-center text-xs text-gray-400">{{ index + 1 }}</span>
+                  <input
+                    v-model.number="form.payment_quick_amounts[index]"
+                    type="number"
+                    min="0.01"
+                    max="100000000"
+                    step="0.01"
+                    inputmode="decimal"
+                    class="input min-w-0 flex-1"
+                    :aria-label="t('admin.settings.payment.quickAmountsValue', { index: index + 1 })"
+                  />
+                  <button
+                    type="button"
+                    class="btn btn-secondary btn-sm"
+                    :disabled="index === 0"
+                    :aria-label="t('admin.settings.payment.quickAmountsMoveUp')"
+                    @click="movePaymentQuickAmount(index, -1)"
+                  >↑</button>
+                  <button
+                    type="button"
+                    class="btn btn-secondary btn-sm"
+                    :disabled="index === form.payment_quick_amounts.length - 1"
+                    :aria-label="t('admin.settings.payment.quickAmountsMoveDown')"
+                    @click="movePaymentQuickAmount(index, 1)"
+                  >↓</button>
+                  <button
+                    type="button"
+                    class="btn btn-secondary btn-sm text-red-600 dark:text-red-400"
+                    :aria-label="t('admin.settings.payment.quickAmountsDelete')"
+                    @click="removePaymentQuickAmount(index)"
+                  >×</button>
+                </div>
+              </div>
+              <p v-else class="mt-3 text-sm text-gray-500 dark:text-gray-400">{{ t("admin.settings.payment.quickAmountsEmpty") }}</p>
+            </div>
+          </div>
         </div>
 
         <div v-show="activeTab === 'email'" class="space-y-6">
@@ -9602,6 +9667,7 @@ type SettingsForm = Omit<
   openai_advanced_scheduler_weight_session_sticky: string;
   // 系统全局平台限额 map；form 内始终归一化为全 4 平台对象（模板非空绑定依赖此不变量）
   default_platform_quotas: DefaultPlatformQuotasMap;
+  payment_quick_amounts: number[];
 };
 
 const clearUpdateGitHubToken = ref(false);
@@ -9665,6 +9731,7 @@ const form = reactive<SettingsForm>({
   payment_balance_recharge_multiplier: 1,
   payment_subscription_usd_to_cny_rate: 0,
   payment_recharge_fee_rate: 0,
+  payment_quick_amounts: [10, 20, 50, 100, 200, 500, 1000, 2000, 5000],
   payment_enabled_types: [],
   payment_help_image_url: "",
   payment_help_text: "",
@@ -10720,6 +10787,40 @@ function removeEndpoint(index: number) {
   form.custom_endpoints.splice(index, 1);
 }
 
+const DEFAULT_PAYMENT_QUICK_AMOUNTS = [10, 20, 50, 100, 200, 500, 1000, 2000, 5000];
+
+function normalizePaymentQuickAmounts(input: unknown): number[] {
+  if (!Array.isArray(input)) return [...DEFAULT_PAYMENT_QUICK_AMOUNTS];
+  return input
+    .map((value) => typeof value === "number" ? value : Number(value))
+    .filter((value) => Number.isFinite(value) && value >= 0.01 && value <= 100000000)
+    .map((value) => Math.round(value * 100) / 100);
+}
+
+function addPaymentQuickAmount(): void {
+  let amount = 10;
+  while (form.payment_quick_amounts.includes(amount)) amount += 10;
+  form.payment_quick_amounts.push(amount);
+}
+
+function removePaymentQuickAmount(index: number): void {
+  if (index >= 0 && index < form.payment_quick_amounts.length) {
+    form.payment_quick_amounts.splice(index, 1);
+  }
+}
+
+function movePaymentQuickAmount(index: number, direction: -1 | 1): void {
+  const target = index + direction;
+  if (target < 0 || target >= form.payment_quick_amounts.length) return;
+  const current = form.payment_quick_amounts[index];
+  form.payment_quick_amounts[index] = form.payment_quick_amounts[target];
+  form.payment_quick_amounts[target] = current;
+}
+
+function resetPaymentQuickAmounts(): void {
+  form.payment_quick_amounts = [...DEFAULT_PAYMENT_QUICK_AMOUNTS];
+}
+
 function addLoginAgreementDocument() {
   form.login_agreement_documents.push({
     id: `custom-${Date.now().toString(36)}`,
@@ -10885,6 +10986,9 @@ async function loadSettings() {
         (form as Record<string, unknown>)[key] = value;
       }
     }
+    form.payment_quick_amounts = normalizePaymentQuickAmounts(
+      settings.payment_quick_amounts,
+    );
     form.registration_announcement_enabled = settings.registration_announcement_enabled ?? false;
     form.registration_announcement_content = settings.registration_announcement_content ?? "";
     syncCaptchaProviderSelection();
@@ -11161,6 +11265,25 @@ async function saveSettings() {
 
     form.table_default_page_size = normalizedTableDefaultPageSize;
     form.table_page_size_options = normalizedTablePageSizeOptions;
+
+    const normalizedPaymentQuickAmounts = form.payment_quick_amounts.map(
+      (value) => Number(value),
+    );
+    if (
+      normalizedPaymentQuickAmounts.some(
+        (value) =>
+          !Number.isFinite(value) ||
+          value < 0.01 ||
+          value > 100000000 ||
+          Math.round(value * 100) / 100 !== value,
+      )
+    ) {
+      appStore.showError(t("admin.settings.payment.quickAmountsInvalid"));
+      return;
+    }
+    form.payment_quick_amounts = [...new Set(normalizedPaymentQuickAmounts.map(
+      (value) => Math.round(value * 100) / 100,
+    ))];
 
     const normalizedLoginAgreementDocuments =
       normalizeLoginAgreementDocumentsForSave();
@@ -11508,6 +11631,7 @@ async function saveSettings() {
       payment_subscription_usd_to_cny_rate:
         Number(form.payment_subscription_usd_to_cny_rate) || 0,
       payment_recharge_fee_rate: Number(form.payment_recharge_fee_rate) || 0,
+      payment_quick_amounts: [...form.payment_quick_amounts],
       payment_enabled_types: form.payment_enabled_types,
       payment_load_balance_strategy: form.payment_load_balance_strategy,
       payment_product_name_prefix: form.payment_product_name_prefix,

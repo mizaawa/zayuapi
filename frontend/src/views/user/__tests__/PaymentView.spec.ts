@@ -4,6 +4,7 @@ import PaymentView from '../PaymentView.vue'
 import { PAYMENT_RECOVERY_STORAGE_KEY } from '@/components/payment/paymentFlow'
 import { formatPaymentAmount } from '@/components/payment/currency'
 import SubscriptionPlanCard from '@/components/payment/SubscriptionPlanCard.vue'
+import AmountInput from '@/components/payment/AmountInput.vue'
 import type { CheckoutInfoResponse, MethodLimit, SubscriptionPlan } from '@/types/payment'
 
 const routeState = vi.hoisted(() => ({
@@ -276,6 +277,26 @@ async function mountSubscriptionPlanList(planCount: number) {
   await flushPromises()
   return wrapper
 }
+
+describe('PaymentView quick recharge amounts', () => {
+  it.each([
+    { quick_amounts: undefined, expected: [10, 20, 50, 100, 200, 500, 1000, 2000, 5000] },
+    { quick_amounts: [], expected: [] },
+    { quick_amounts: [35.5, 10, 250], expected: [35.5, 10, 250] },
+  ])('passes configured quick amounts $quick_amounts to the amount selector', async ({ quick_amounts, expected }) => {
+    vi.useRealTimers()
+    routeState.path = '/purchase'
+    routeState.query = {}
+    getCheckoutInfo.mockReset().mockResolvedValue(checkoutInfoFixture({ quick_amounts }))
+    window.localStorage.clear()
+    const wrapper = shallowMount(PaymentView, {
+      global: { stubs: { AppLayout: { template: '<div><slot /></div>' }, Teleport: true, Transition: false } },
+    })
+    await flushPromises()
+    expect(wrapper.getComponent(AmountInput).props('amounts')).toEqual(expected)
+    wrapper.unmount()
+  })
+})
 
 describe('PaymentView subscription plan grid', () => {
   it.each([3, 4, 6])('keeps %i plans on the existing mobile/tablet/desktop grid', async (planCount) => {

@@ -7,6 +7,7 @@ FRONTEND_CRITICAL_VITEST := \
 	src/router/__tests__/feature-access.spec.ts \
 	src/components/layout/__tests__/AppSidebar.customMenu.spec.ts \
 	src/components/admin/payment/__tests__/PaymentPermissionsPanel.spec.ts \
+	src/components/payment/__tests__/AmountInput.spec.ts \
 	src/components/admin/user/__tests__/UserEditModal.paymentPermissions.spec.ts \
 	src/api/__tests__/imageWorkbench.spec.ts \
 	src/views/auth/__tests__/LinuxDoCallbackView.spec.ts \
