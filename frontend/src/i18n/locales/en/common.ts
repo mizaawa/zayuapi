@@ -188,6 +188,7 @@ export default {
     github: 'GitHub',
     mySubscriptions: 'My Subscriptions',
     buySubscription: 'Recharge / Subscription',
+    exclusivePayment: 'Exclusive',
     docs: 'Docs',
     myOrders: 'My Orders',
     orderManagement: 'Orders',

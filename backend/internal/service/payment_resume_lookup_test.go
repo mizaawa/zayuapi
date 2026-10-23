@@ -261,6 +261,20 @@ func TestGetPublicOrderByResumeTokenChecksUpstreamForPendingOrder(t *testing.T) 
 	require.NoError(t, err)
 	require.Equal(t, order.ID, got.ID)
 	require.Equal(t, 1, provider.queryCount)
+
+	for range 9 {
+		got, err = svc.GetPublicOrderByResumeToken(ctx, token)
+		require.NoError(t, err)
+		require.Equal(t, order.ID, got.ID)
+	}
+	t.Logf("signed resume lookup: requests=10 upstream_queries=%d order_status=%s", provider.queryCount, got.Status)
+	require.Equal(t, 1, provider.queryCount, "replayed recovery tokens must not flood the payment provider")
+
+	// A later legitimate poll can reconcile again; the token stays usable.
+	time.Sleep(2100 * time.Millisecond)
+	_, err = svc.GetPublicOrderByResumeToken(ctx, token)
+	require.NoError(t, err)
+	require.Equal(t, 2, provider.queryCount)
 }
 
 func TestVerifyOrderPublicDoesNotCheckUpstreamForPendingOrder(t *testing.T) {

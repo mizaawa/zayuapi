@@ -160,6 +160,15 @@ func TestPrepDeductBalanceRequiresForceWhenBalanceIsInsufficient(t *testing.T) {
 func TestExecuteRefundUsesActualAvailableBalanceDeduction(t *testing.T) {
 	ctx := context.Background()
 	client := newPaymentConfigServiceTestClient(t)
+	inst, err := client.PaymentProviderInstance.Create().
+		SetProviderKey(payment.TypeStripe).
+		SetName("refund-execute-clamp-provider").
+		SetConfig("{}").
+		SetSupportedTypes("stripe").
+		SetEnabled(true).
+		SetRefundEnabled(true).
+		Save(ctx)
+	require.NoError(t, err)
 	user, err := client.User.Create().
 		SetEmail("refund-execute-clamp@example.com").
 		SetPasswordHash("hash").
@@ -176,7 +185,8 @@ func TestExecuteRefundUsesActualAvailableBalanceDeduction(t *testing.T) {
 		SetRechargeCode("REFUND-EXECUTE-CLAMP").
 		SetOutTradeNo("refund_execute_clamp").
 		SetPaymentType(payment.TypeStripe).
-		SetPaymentTradeNo("").
+		SetPaymentTradeNo("pi_refund_execute_clamp").
+		SetProviderInstanceID(strconv.FormatInt(inst.ID, 10)).
 		SetOrderType(payment.OrderTypeBalance).
 		SetStatus(OrderStatusCompleted).
 		SetExpiresAt(time.Now().Add(time.Hour)).
@@ -196,9 +206,12 @@ func TestExecuteRefundUsesActualAvailableBalanceDeduction(t *testing.T) {
 		Reason: "concurrent spend", Force: true, DeductionType: payment.DeductionTypeBalance, BalanceToDeduct: 100,
 	}
 
-	result, err := (&PaymentService{entClient: client, userRepo: repo}).ExecuteRefund(ctx, plan)
+	prov := &uncertainRefundProviderForTest{response: &payment.RefundResponse{RefundID: "rf_execute_clamp", Status: payment.ProviderStatusSuccess}}
+	defer replacePaymentProviderFactoryForTest(t, prov)()
+	result, err := (&PaymentService{entClient: client, userRepo: repo, loadBalancer: &captureLoadBalancer{}}).ExecuteRefund(ctx, plan)
 	require.NoError(t, err)
 	require.True(t, result.Success)
+	require.Equal(t, 1, prov.calls)
 	require.Equal(t, 25.0, plan.BalanceToDeduct)
 	require.Equal(t, 25.0, result.BalanceDeducted)
 	audit, err := client.PaymentAuditLog.Query().

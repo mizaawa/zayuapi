@@ -154,7 +154,10 @@
           >
             <span v-if="item.iconSvg" class="h-5 w-5 flex-shrink-0 sidebar-svg-icon" v-html="sanitizeSvg(item.iconSvg)"></span>
             <component v-else :is="item.icon" class="h-5 w-5 flex-shrink-0" />
-            <span class="sidebar-label" :class="{ 'sidebar-label-collapsed': sidebarCollapsed }" :aria-hidden="sidebarCollapsed ? 'true' : 'false'">{{ item.label }}</span>
+            <span class="sidebar-label sidebar-label-with-badge" :class="{ 'sidebar-label-collapsed': sidebarCollapsed }" :aria-hidden="sidebarCollapsed ? 'true' : 'false'">
+              <span class="min-w-0 truncate">{{ item.label }}</span>
+              <span v-if="item.badge && !sidebarCollapsed" class="sidebar-exclusive-badge">{{ item.badge }}</span>
+            </span>
           </component>
         </div>
       </template>
@@ -183,7 +186,10 @@
           >
             <span v-if="item.iconSvg" class="h-5 w-5 flex-shrink-0 sidebar-svg-icon" v-html="sanitizeSvg(item.iconSvg)"></span>
             <component v-else :is="item.icon" class="h-5 w-5 flex-shrink-0" />
-            <span class="sidebar-label" :class="{ 'sidebar-label-collapsed': sidebarCollapsed }" :aria-hidden="sidebarCollapsed ? 'true' : 'false'">{{ item.label }}</span>
+            <span class="sidebar-label sidebar-label-with-badge" :class="{ 'sidebar-label-collapsed': sidebarCollapsed }" :aria-hidden="sidebarCollapsed ? 'true' : 'false'">
+              <span class="min-w-0 truncate">{{ item.label }}</span>
+              <span v-if="item.badge && !sidebarCollapsed" class="sidebar-exclusive-badge">{{ item.badge }}</span>
+            </span>
           </component>
         </div>
       </template>
@@ -237,6 +243,7 @@ import { useBatchImageAccess } from '@/composables/useBatchImageAccess'
 interface NavItem {
   path: string
   label: string
+  badge?: string
   icon: unknown
   iconSvg?: string
   hideInSimpleMode?: boolean
@@ -795,7 +802,7 @@ function buildSelfNavItems(withDashboard: boolean): NavItem[] {
     { path: '/monitor', label: t('nav.channelStatus'), icon: SignalIcon, featureFlag: flagChannelMonitor },
     { path: '/model-plaza', label: t('nav.modelPlaza'), icon: ModelPlazaIcon, openInNewWindow: true, featureFlag: flagModelPlaza },
     { path: '/subscriptions', label: t('nav.mySubscriptions'), icon: CreditCardIcon, hideInSimpleMode: true },
-    { path: '/purchase', label: t('nav.buySubscription'), icon: RechargeSubscriptionIcon, hideInSimpleMode: true, featureFlag: flagPayment },
+    { path: '/purchase', label: t('nav.buySubscription'), badge: paymentAccess.access?.exclusive_enabled === true ? t('nav.exclusivePayment') : undefined, icon: RechargeSubscriptionIcon, hideInSimpleMode: true, featureFlag: flagPayment },
     { path: '/orders', label: t('nav.myOrders'), icon: OrderListIcon, hideInSimpleMode: true, featureFlag: flagPayment },
     { path: '/redeem', label: t('nav.redeem'), icon: GiftIcon, hideInSimpleMode: true },
     { path: '/leaderboard', label: t('nav.leaderboard'), icon: LeaderboardIcon, hideInSimpleMode: true, featureFlag: flagLeaderboard },
@@ -1228,6 +1235,24 @@ onBeforeUnmount(() => {
   align-items: center;
   justify-content: space-between;
   gap: 0.5rem;
+}
+
+.sidebar-label-with-badge {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+
+.sidebar-exclusive-badge {
+  flex-shrink: 0;
+  padding: 0.0625rem 0.375rem;
+  border: 1px solid color-mix(in srgb, var(--md-sys-color-primary) 20%, transparent);
+  border-radius: 9999px;
+  background: color-mix(in srgb, var(--md-sys-color-primary) 12%, var(--md-sys-color-surface));
+  color: var(--md-sys-color-on-surface);
+  font-size: 0.625rem;
+  font-weight: 600;
+  line-height: 1rem;
 }
 
 .sidebar-label-collapsed {

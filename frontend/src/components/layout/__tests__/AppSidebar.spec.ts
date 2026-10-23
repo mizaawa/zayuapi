@@ -12,6 +12,8 @@ const layoutPath = resolve(dirname(fileURLToPath(import.meta.url)), '../AppLayou
 const layoutSource = readFileSync(layoutPath, 'utf8')
 const stylePath = resolve(dirname(fileURLToPath(import.meta.url)), '../../../style.css')
 const styleSource = readFileSync(stylePath, 'utf8')
+const onboardingStylePath = resolve(dirname(fileURLToPath(import.meta.url)), '../../../styles/onboarding.css')
+const onboardingStyleSource = readFileSync(onboardingStylePath, 'utf8')
 
 describe('AppSidebar custom SVG styles', () => {
   it('does not override uploaded SVG fill or stroke colors', () => {
@@ -71,6 +73,14 @@ describe('AppSidebar grouped navigation', () => {
     expect(componentSource).toContain('personal-panel-section')
     expect(componentSource).toContain('mobile-sidebar-backdrop fixed inset-0 z-40')
     expect(styleSource).toContain('@apply fixed inset-y-0 left-0 z-50;')
+  })
+})
+
+describe('AppSidebar navigation during onboarding', () => {
+  it('keeps sidebar route links clickable while Driver.js disables the rest of the page', () => {
+    expect(onboardingStyleSource).toContain('.driver-active .sidebar,')
+    expect(onboardingStyleSource).toContain('.driver-active .sidebar * {')
+    expect(onboardingStyleSource).toContain('pointer-events: auto !important;')
   })
 })
 

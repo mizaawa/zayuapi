@@ -51,7 +51,7 @@
       </div>
     </template>
 
-    <!-- Expired / Failed -->
+    <!-- Expired -->
     <template v-else-if="outcome === 'expired'">
       <div class="card p-6">
         <div class="flex flex-col items-center space-y-4 py-4">
@@ -62,6 +62,20 @@
           </div>
           <p class="text-lg font-bold text-gray-900 dark:text-white">{{ t('payment.qr.expired') }}</p>
           <p class="text-sm text-gray-500 dark:text-gray-400">{{ t('payment.qr.expiredDesc') }}</p>
+          <button class="btn btn-primary" @click="handleDone">{{ t('common.confirm') }}</button>
+        </div>
+      </div>
+    </template>
+
+    <template v-else-if="outcome === 'failed'">
+      <div class="card p-6" role="alert">
+        <div class="flex flex-col items-center space-y-4 py-4 text-center">
+          <div class="flex h-16 w-16 items-center justify-center rounded-full bg-red-100 dark:bg-red-900/30">
+            <Icon name="x" size="lg" class="text-red-500" />
+          </div>
+          <p class="text-lg font-bold text-gray-900 dark:text-white">{{ t(failedOrder?.paid_at ? 'payment.qr.fulfillmentFailed' : 'payment.qr.failed') }}</p>
+          <p class="text-sm text-gray-500 dark:text-gray-400">{{ t(failedOrder?.paid_at ? 'payment.qr.fulfillmentFailedDesc' : 'payment.qr.failedDesc') }}</p>
+          <p v-if="failedOrder?.out_trade_no" class="break-all text-sm text-gray-500 dark:text-gray-400">{{ t('payment.orders.orderNo') }}: {{ failedOrder.out_trade_no }}</p>
           <button class="btn btn-primary" @click="handleDone">{{ t('common.confirm') }}</button>
         </div>
       </div>
@@ -191,7 +205,7 @@
             </div>
           </div>
           <p v-if="scanHint" class="text-center text-sm text-gray-500 dark:text-gray-400">{{ scanHint }}</p>
-          <button v-if="payUrl" class="btn btn-secondary text-sm" @click="reopenPopup">
+          <button v-if="safePayUrl" class="btn btn-secondary text-sm" @click="reopenPopup">
             {{ t('payment.qr.openPayWindow') }}
           </button>
         </div>
@@ -212,7 +226,7 @@
         <div class="flex flex-col items-center space-y-4 py-4">
           <div class="h-10 w-10 animate-spin rounded-full border-4 border-primary-500 border-t-transparent"></div>
           <p class="text-sm text-gray-500 dark:text-gray-400">{{ t('payment.qr.payInNewWindowHint') }}</p>
-          <button v-if="payUrl" class="btn btn-secondary text-sm" @click="reopenPopup">
+          <button v-if="safePayUrl" class="btn btn-secondary text-sm" @click="reopenPopup">
             {{ t('payment.qr.openPayWindow') }}
           </button>
         </div>
@@ -243,6 +257,7 @@ import QRCode from 'qrcode'
 import alipayIcon from '@/assets/icons/alipay.svg'
 import wxpayIcon from '@/assets/icons/wxpay.svg'
 import paymentIcon from '@/assets/icons/payment.svg'
+import { sanitizePaymentUrl } from './paymentUrl'
 import {
   createAlipayDeepLinkLauncher,
   type AlipayDeepLinkLauncher,
@@ -264,7 +279,7 @@ const props = defineProps<{
   mobileAlipayDeepLink?: boolean
 }>()
 
-type PaymentOutcome = 'success' | 'cancelled' | 'expired'
+type PaymentOutcome = 'success' | 'cancelled' | 'expired' | 'failed'
 
 const emit = defineEmits<{ done: []; success: []; settled: [outcome: PaymentOutcome] }>()
 
@@ -275,9 +290,11 @@ const appStore = useAppStore()
 
 const qrCanvas = ref<HTMLCanvasElement | null>(null)
 const qrUrl = ref('')
+const safePayUrl = computed(() => sanitizePaymentUrl(props.payUrl))
 const remainingSeconds = ref(0)
 const cancelling = ref(false)
 const paidOrder = ref<PaymentOrder | null>(null)
+const failedOrder = ref<PaymentOrder | null>(null)
 const deepLinkState = ref<AlipayDeepLinkState>('idle')
 const deepLinkFallbackVisible = ref(false)
 const paymentCurrency = computed(() => normalizePaymentCurrency(props.currency))
@@ -291,7 +308,7 @@ const localeCode = computed(() => {
   return undefined
 })
 
-// Terminal outcome: null = still active, 'success' | 'cancelled' | 'expired'
+// Null remains active; all outcomes stop polling and show a terminal result.
 const outcome = ref<PaymentOutcome | null>(null)
 
 let pollTimer: ReturnType<typeof setInterval> | null = null
@@ -361,10 +378,10 @@ function isSuccessStatus(status: string | null | undefined): boolean {
 }
 
 function reopenPopup() {
-  if (props.payUrl) {
-    const win = window.open(props.payUrl, 'paymentPopup', getPaymentPopupFeatures())
+  if (safePayUrl.value) {
+    const win = window.open(safePayUrl.value, 'paymentPopup', getPaymentPopupFeatures())
     if (!win || win.closed) {
-      window.location.href = props.payUrl
+      window.location.href = safePayUrl.value
     }
   }
 }
@@ -470,7 +487,8 @@ async function checkStatus(finalCheck: boolean): Promise<boolean> {
       countdownTimer = null
     } else if (order.status === 'FAILED') {
       cleanup()
-      setOutcome('expired')
+      failedOrder.value = order
+      setOutcome('failed')
     }
     return true
   } catch {
@@ -536,7 +554,7 @@ function cleanup() {
 }
 
 // Initialize on mount
-qrUrl.value = props.qrCode
+qrUrl.value = sanitizePaymentUrl(props.qrCode)
 verifyAttempts = 0
 lastVerifyAt = 0
 let seconds = 30 * 60

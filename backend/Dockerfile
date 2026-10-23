@@ -1,4 +1,4 @@
-FROM golang:1.27.2-alpine
+FROM golang:1.27.3-alpine
 
 ARG SOURCE_REPOSITORY=mizaawa/zayuapi
 LABEL org.opencontainers.image.source="https://github.com/${SOURCE_REPOSITORY}"

@@ -19,6 +19,13 @@
   pointer-events: none !important;
 }
 
+/* Keep route links usable while a tour is active. Driver.js disables every
+   page element globally and only re-enables the highlighted target. */
+.driver-active .sidebar,
+.driver-active .sidebar * {
+  pointer-events: auto !important;
+}
+
 .driver-active-element {
   position: relative !important;
   z-index: 99999999 !important;
