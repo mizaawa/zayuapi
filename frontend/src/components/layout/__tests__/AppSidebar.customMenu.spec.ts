@@ -11,7 +11,7 @@ const stores = vi.hoisted(() => ({
   auth: {} as Record<string, unknown>,
   admin: {} as Record<string, unknown>,
   onboarding: { isCurrentStep: () => false },
-  payment: { allowed: false },
+  payment: { allowed: false, access: null as { exclusive_enabled: boolean } | null },
 }))
 
 vi.mock('@/stores', () => ({
@@ -68,7 +68,7 @@ function menuLink(label: string) {
 }
 
 beforeEach(() => {
-  stores.payment = reactive({ allowed: false })
+  stores.payment = reactive({ allowed: false, access: null })
   localStorage.setItem('sub2api-admin-panel-expanded', 'true')
   document.documentElement.classList.remove('dark')
 })
@@ -82,13 +82,24 @@ afterEach(() => {
 describe('AppSidebar custom menu navigation', () => {
   it('reactively hides both payment entries when authorization is revoked', async () => {
     stores.payment.allowed = true
+    stores.payment.access = { exclusive_enabled: true }
     await renderSidebar()
     expect(wrapper.text()).toContain('nav.buySubscription')
     expect(wrapper.text()).toContain('nav.myOrders')
+    expect(wrapper.text()).toContain('nav.exclusivePayment')
     stores.payment.allowed = false
     await flushPromises()
     expect(wrapper.text()).not.toContain('nav.buySubscription')
     expect(wrapper.text()).not.toContain('nav.myOrders')
+    expect(wrapper.text()).not.toContain('nav.exclusivePayment')
+  })
+
+  it('never renders an exclusive badge or payment navigation without a grant', async () => {
+    stores.payment.access = { exclusive_enabled: true }
+    await renderSidebar()
+    expect(wrapper.text()).not.toContain('nav.buySubscription')
+    expect(wrapper.text()).not.toContain('nav.myOrders')
+    expect(wrapper.text()).not.toContain('nav.exclusivePayment')
   })
   it.each([undefined, false])('keeps embedded navigation when the flag is %s', async enabled => {
     await renderSidebar(enabled)

@@ -55,8 +55,10 @@ func TestPaymentAccessMiddlewareRevokesExistingSessionAndKeepsAccessProbe(t *tes
 	require.Equal(t, http.StatusNoContent, request("/payment/config").Code)
 	require.NoError(t, client.User.UpdateOneID(user.ID).SetExclusiveRechargeEnabled(false).Exec(ctx))
 	denied := request("/payment/config")
-	require.Equal(t, http.StatusForbidden, denied.Code)
-	require.Contains(t, denied.Body.String(), "PAYMENT_ACCESS_DENIED")
+	unknown := request("/unknown")
+	require.Equal(t, unknown.Code, denied.Code)
+	require.Equal(t, unknown.Body.String(), denied.Body.String())
+	require.Equal(t, unknown.Header().Get("Content-Type"), denied.Header().Get("Content-Type"))
 	probe := request("/payment/access")
 	require.Equal(t, http.StatusOK, probe.Code)
 	require.Equal(t, "no-store", probe.Header().Get("Cache-Control"))
@@ -64,10 +66,14 @@ func TestPaymentAccessMiddlewareRevokesExistingSessionAndKeepsAccessProbe(t *tes
 		Data service.PaymentAccess `json:"data"`
 	}
 	require.NoError(t, json.Unmarshal(probe.Body.Bytes(), &result))
-	require.True(t, result.Data.Enabled)
-	require.True(t, result.Data.ExclusiveEnabled)
+	require.False(t, result.Data.Enabled)
+	require.False(t, result.Data.ExclusiveEnabled)
 	require.False(t, result.Data.Allowed)
 	enabled = false
 	require.NoError(t, config.UpdatePaymentConfig(ctx, service.UpdatePaymentConfigRequest{PaymentExclusiveEnabled: &enabled}))
 	require.Equal(t, http.StatusNoContent, request("/payment/config").Code)
+	require.NoError(t, config.UpdatePaymentConfig(ctx, service.UpdatePaymentConfigRequest{Enabled: &enabled}))
+	disabled := request("/payment/config")
+	require.Equal(t, unknown.Code, disabled.Code)
+	require.Equal(t, unknown.Body.String(), disabled.Body.String())
 }

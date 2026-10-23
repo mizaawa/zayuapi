@@ -97,7 +97,9 @@ func TestPaymentOrderDetailsExposeOnlyOwnerBoundSafeLinks(t *testing.T) {
 
 	subjectID = other.ID
 	foreign := request(http.MethodGet, path, "")
-	require.Equal(t, http.StatusForbidden, foreign.Code, foreign.Body.String())
+	require.Equal(t, http.StatusNotFound, foreign.Code, foreign.Body.String())
+	foreignMissing := request(http.MethodGet, "/payment/orders/999999", "")
+	require.Equal(t, foreignMissing.Body.String(), foreign.Body.String())
 	require.NotContains(t, foreign.Body.String(), "pay.example.com")
 	require.NotContains(t, foreign.Body.String(), "weixin:")
 	t.Logf("other user lookup: HTTP %d", foreign.Code)

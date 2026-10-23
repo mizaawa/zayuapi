@@ -135,8 +135,12 @@ apiClient.interceptors.response.use(
       // Validate `data` shape to avoid HTML error pages breaking our error handling.
       const apiData = (typeof data === 'object' && data !== null ? data : {}) as Record<string, any>
 
-      if (status === 403 && apiData.code === 'PAYMENT_ACCESS_DENIED') {
-        window.dispatchEvent(new CustomEvent('payment-access-denied'))
+      const pathname = new URL(url, window.location.origin).pathname
+      const paymentRequest = /^(?:\/api\/v1)?\/payment(?:\/|$)/.test(pathname)
+      const paymentAccessRequest = /^(?:\/api\/v1)?\/payment\/access\/?$/.test(pathname)
+      if (paymentRequest && ((status === 404 && !paymentAccessRequest) ||
+        (status === 403 && apiData.code === 'PAYMENT_ACCESS_DENIED'))) {
+        window.dispatchEvent(new CustomEvent('payment-access-denied', { detail: { status } }))
       }
 
       // Ops monitoring disabled: treat as feature-flagged 404, and proactively redirect away

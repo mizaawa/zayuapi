@@ -1376,6 +1376,7 @@ func newWeChatOAuthTestHandlerWithSettings(t *testing.T, invitationEnabled bool,
 		},
 	}
 	values := map[string]string{
+		service.SettingPaymentEnabled:           "true",
 		service.SettingKeyRegistrationEnabled:   "true",
 		service.SettingKeyInvitationCodeEnabled: boolSettingValue(invitationEnabled),
 	}

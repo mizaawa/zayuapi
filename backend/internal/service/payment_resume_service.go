@@ -35,6 +35,7 @@ const (
 	VisibleMethodSourceEasyPayWechat  = "easypay_wxpay"
 
 	wechatPaymentResumeTokenType = "wechat_payment_resume"
+	wechatPaymentAccessTokenType = "wechat_payment_access"
 
 	paymentResumeNotConfiguredCode    = "PAYMENT_RESUME_NOT_CONFIGURED"
 	paymentResumeNotConfiguredMessage = "payment resume tokens require a configured signing key"
@@ -70,6 +71,46 @@ type WeChatPaymentResumeClaims struct {
 type PaymentResumeService struct {
 	signingKey []byte
 	verifyKeys [][]byte
+}
+
+// WeChatPaymentAccessClaims authorizes only the short browser OAuth handoff.
+// It is not a login token or an authorization to create or settle an order.
+type WeChatPaymentAccessClaims struct {
+	TokenType string `json:"tk"`
+	UserID    int64  `json:"uid"`
+	IssuedAt  int64  `json:"iat"`
+	ExpiresAt int64  `json:"exp"`
+}
+
+func (s *PaymentResumeService) CreateWeChatPaymentAccessToken(userID int64) (string, error) {
+	if err := s.ensureSigningKey(); err != nil {
+		return "", err
+	}
+	if userID <= 0 {
+		return "", fmt.Errorf("wechat payment access requires user id")
+	}
+	now := time.Now()
+	return s.createSignedToken(WeChatPaymentAccessClaims{
+		TokenType: wechatPaymentAccessTokenType, UserID: userID,
+		IssuedAt: now.Unix(), ExpiresAt: now.Add(10 * time.Minute).Unix(),
+	})
+}
+
+func (s *PaymentResumeService) ParseWeChatPaymentAccessToken(token string) (*WeChatPaymentAccessClaims, error) {
+	if err := s.ensureSigningKey(); err != nil {
+		return nil, err
+	}
+	var claims WeChatPaymentAccessClaims
+	if err := s.parseSignedToken(token, &claims); err != nil {
+		return nil, ErrPaymentAccessDenied
+	}
+	now := time.Now().Unix()
+	if claims.TokenType != wechatPaymentAccessTokenType || claims.UserID <= 0 ||
+		claims.IssuedAt <= 0 || claims.IssuedAt > now || claims.ExpiresAt <= now ||
+		claims.ExpiresAt > claims.IssuedAt+600 {
+		return nil, ErrPaymentAccessDenied
+	}
+	return &claims, nil
 }
 
 type visibleMethodLoadBalancer struct {

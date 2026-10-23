@@ -227,6 +227,38 @@ describe('API Client', () => {
   // --- 响应拦截器 ---
 
   describe('响应拦截器', () => {
+    it.each(['/payment/checkout-info', '/api/v1/payment/public/orders/resolve', 'https://api.example.test/api/v1/payment/orders/7'])(
+      'requests payment access confirmation for an indistinguishable 404 on %s', async url => {
+        const denied = vi.fn()
+        window.addEventListener('payment-access-denied', denied)
+        apiClient.defaults.adapter = async config => {
+          throw { config, response: { status: 404, data: '404 page not found' } }
+        }
+        try {
+          await expect(apiClient.get(url)).rejects.toMatchObject({ status: 404 })
+          expect(denied).toHaveBeenCalledOnce()
+          expect(denied.mock.calls[0][0].detail).toEqual({ status: 404 })
+        } finally {
+          window.removeEventListener('payment-access-denied', denied)
+        }
+      },
+    )
+
+    it.each(['/admin/payment/orders', '/user', '/payment-other/orders', '/payment/access', '/api/v1/payment/access?watch=true:true:true'])(
+      'does not revoke payment access for an unrelated 404 on %s', async url => {
+        const denied = vi.fn()
+        window.addEventListener('payment-access-denied', denied)
+        apiClient.defaults.adapter = async config => {
+          throw { config, response: { status: 404, data: '404 page not found' } }
+        }
+        try {
+          await expect(apiClient.get(url)).rejects.toMatchObject({ status: 404 })
+          expect(denied).not.toHaveBeenCalled()
+        } finally {
+          window.removeEventListener('payment-access-denied', denied)
+        }
+      },
+    )
     it('code=0 时解包 data 字段', async () => {
       const adapter = vi.fn().mockResolvedValue({
         status: 200,

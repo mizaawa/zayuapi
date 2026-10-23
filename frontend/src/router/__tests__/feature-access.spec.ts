@@ -19,7 +19,7 @@ const authStore = vi.hoisted(() => ({
   hasPendingAuthSession: false,
 }))
 
-const paymentAccess = vi.hoisted(() => ({ refresh: vi.fn() }))
+const paymentAccess = vi.hoisted(() => ({ refresh: vi.fn(), reset: vi.fn() }))
 vi.mock('@/stores/paymentAccess', async (importOriginal) => ({
   ...await importOriginal<typeof import('@/stores/paymentAccess')>(),
   usePaymentAccessStore: () => paymentAccess,
@@ -107,6 +107,8 @@ function runGuard(meta: Record<string, unknown>, path: string) {
       fullPath: path,
       name: 'FeatureRoute',
       params: {},
+      query: {},
+      hash: '',
       meta: { requiresAuth: true, ...meta },
     },
     {},
@@ -128,6 +130,7 @@ describe('feature route guard', () => {
     appStore.cachedPublicSettings = null
     appStore.fetchPublicSettings.mockReset()
     paymentAccess.refresh.mockReset().mockResolvedValue({ enabled: true, allowed: true, exclusive_enabled: false })
+    paymentAccess.reset.mockReset()
   })
 
   it('keeps a direct administrator route for the feature-management tab', () => {
@@ -168,7 +171,7 @@ describe('feature route guard', () => {
       paymentAccess.refresh.mockResolvedValue({ enabled: true, allowed: false, exclusive_enabled: true })
       const { navigation, next } = runGuard({ requiresAuth: false }, path)
       await navigation
-      expect(next).toHaveBeenCalledWith('/dashboard')
+      expect(next).toHaveBeenCalledWith(expect.objectContaining({ name: 'NotFound', replace: true }))
     }
   )
 
@@ -176,15 +179,76 @@ describe('feature route guard', () => {
     paymentAccess.refresh.mockResolvedValue(null)
     const { navigation, next } = runGuard({ requiresPayment: true }, '/purchase')
     await navigation
-    expect(next).toHaveBeenCalledWith('/dashboard')
+    expect(next).toHaveBeenCalledWith(expect.objectContaining({ name: 'NotFound', replace: true }))
   })
 
-  it('requires login for an exclusive anonymous payment continuation', async () => {
+  it.each(['/purchase', '/orders', '/payment/result', '/auth/wechat/payment/callback'])('hides an exclusive anonymous payment path %s', async path => {
     authStore.isAuthenticated = false
     appStore.fetchPublicSettings.mockResolvedValue({ payment_exclusive_enabled: true })
+    const { navigation, next } = runGuard({ requiresAuth: !path.startsWith('/payment/') && !path.startsWith('/auth/') }, path)
+    await navigation
+    expect(next).toHaveBeenCalledWith(expect.objectContaining({ name: 'NotFound', replace: true }))
+  })
+
+  it.each([null, { payment_exclusive_enabled: undefined }, { payment_exclusive_enabled: false, payment_enabled: false }])(
+    'hides anonymous payment continuations when the feature state is unknown or disabled: %j', async settings => {
+      authStore.isAuthenticated = false
+      appStore.fetchPublicSettings.mockResolvedValue(settings)
+      const { navigation, next } = runGuard({ requiresAuth: false }, '/payment/result')
+      await navigation
+      expect(next).toHaveBeenCalledWith(expect.objectContaining({ name: 'NotFound' }))
+    },
+  )
+
+  it('fails closed when the anonymous settings request rejects', async () => {
+    authStore.isAuthenticated = false
+    appStore.fetchPublicSettings.mockRejectedValue(new Error('offline'))
     const { navigation, next } = runGuard({ requiresAuth: false }, '/payment/result')
     await navigation
-    expect(next).toHaveBeenCalledWith({ path: '/login', query: { redirect: '/payment/result' } })
+    expect(next).toHaveBeenCalledWith(expect.objectContaining({ name: 'NotFound' }))
+  })
+
+  it.each([
+    { enabled: false, allowed: true, exclusive_enabled: false },
+    { enabled: true, allowed: 'true', exclusive_enabled: false },
+  ])('requires an explicit enabled grant: %j', async access => {
+    paymentAccess.refresh.mockResolvedValue(access)
+    const { navigation, next } = runGuard({ requiresPayment: true }, '/purchase')
+    await navigation
+    expect(next).toHaveBeenCalledWith(expect.objectContaining({ name: 'NotFound' }))
+  })
+
+  it('does not publish a protected title while checking authorization', async () => {
+    document.title = '404 Not Found - Sub2API'
+    const deferred = createDeferred<null>()
+    paymentAccess.refresh.mockReturnValue(deferred.promise)
+    const { navigation } = runGuard({ title: 'Exclusive payment' }, '/purchase')
+    expect(document.title).toBe('404 Not Found - Sub2API')
+    deferred.resolve(null)
+    await navigation
+    expect(document.title).toBe('404 Not Found - Sub2API')
+  })
+
+  it('rechecks a session established during an anonymous payment continuation check', async () => {
+    authStore.isAuthenticated = false
+    const deferred = createDeferred<{ payment_exclusive_enabled: boolean }>()
+    appStore.fetchPublicSettings.mockReturnValue(deferred.promise)
+    paymentAccess.refresh.mockResolvedValue({ enabled: false, allowed: false, exclusive_enabled: false })
+    const { navigation, next } = runGuard({ requiresAuth: false }, '/payment/result')
+    authStore.isAuthenticated = true
+    deferred.resolve({ payment_exclusive_enabled: false })
+    await navigation
+    expect(paymentAccess.refresh).toHaveBeenCalledOnce()
+    expect(next).toHaveBeenCalledWith(expect.objectContaining({ name: 'NotFound' }))
+  })
+
+  it('lets the public unknown-page record handle a denied URL without rechecking payment', async () => {
+    authStore.isAuthenticated = false
+    const next = vi.fn()
+    await routerHarness.guard!({ name: 'NotFound', path: '/purchase', meta: { requiresAuth: false } }, {}, next)
+    expect(next).toHaveBeenCalledWith()
+    expect(paymentAccess.refresh).not.toHaveBeenCalled()
+    expect(appStore.fetchPublicSettings).not.toHaveBeenCalled()
   })
 
   it('preserves anonymous payment continuations when exclusive mode is off', async () => {
@@ -193,6 +257,7 @@ describe('feature route guard', () => {
     const { navigation, next } = runGuard({ requiresAuth: false }, '/payment/result')
     await navigation
     expect(next).toHaveBeenCalledWith()
+    expect(paymentAccess.reset).toHaveBeenCalledOnce()
   })
 
   it.each([
@@ -211,7 +276,7 @@ describe('feature route guard', () => {
   })
 
   it.each([
-    ['payment', { requiresPayment: true }, { payment_enabled: false }, '/dashboard'],
+    ['payment', { requiresPayment: true }, { payment_enabled: false }, { name: 'NotFound', params: { pathMatch: ['feature'] }, query: {}, hash: '', replace: true }],
     [
       'risk control',
       { requiresRiskControl: true },

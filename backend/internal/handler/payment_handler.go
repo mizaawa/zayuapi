@@ -35,7 +35,7 @@ func NewPaymentHandler(paymentService *service.PaymentService, configService *se
 func (h *PaymentHandler) GetPaymentConfig(c *gin.Context) {
 	cfg, err := h.configService.GetPaymentConfig(c.Request.Context())
 	if err != nil {
-		response.ErrorFrom(c, err)
+		writePaymentAccessError(c, err)
 		return
 	}
 	response.Success(c, cfg)
@@ -46,7 +46,7 @@ func (h *PaymentHandler) GetPaymentConfig(c *gin.Context) {
 func (h *PaymentHandler) GetPlans(c *gin.Context) {
 	plans, err := h.configService.ListPlansForSale(c.Request.Context())
 	if err != nil {
-		response.ErrorFrom(c, err)
+		writePaymentAccessError(c, err)
 		return
 	}
 	// Enrich plans with group platform for frontend color coding
@@ -99,21 +99,21 @@ func (h *PaymentHandler) GetCheckoutInfo(c *gin.Context) {
 	// Fetch limits (methods + global range)
 	limitsResp, err := h.configService.GetAvailableMethodLimits(ctx)
 	if err != nil {
-		response.ErrorFrom(c, err)
+		writePaymentAccessError(c, err)
 		return
 	}
 
 	// Fetch payment config
 	cfg, err := h.configService.GetPaymentConfig(ctx)
 	if err != nil {
-		response.ErrorFrom(c, err)
+		writePaymentAccessError(c, err)
 		return
 	}
 	alipayMobilePrecreateDeepLink := false
 	if cfg.AlipayMobilePrecreateDeepLink {
 		alipayMobilePrecreateDeepLink, err = h.configService.UsesOfficialAlipayVisibleMethod(ctx)
 		if err != nil {
-			response.ErrorFrom(c, err)
+			writePaymentAccessError(c, err)
 			return
 		}
 	}
@@ -222,7 +222,7 @@ func parseFeatures(raw string) []string {
 func (h *PaymentHandler) GetLimits(c *gin.Context) {
 	resp, err := h.configService.GetAvailableMethodLimits(c.Request.Context())
 	if err != nil {
-		response.ErrorFrom(c, err)
+		writePaymentAccessError(c, err)
 		return
 	}
 	response.Success(c, resp)
@@ -260,11 +260,11 @@ func (h *PaymentHandler) CreateOrder(c *gin.Context) {
 	if strings.TrimSpace(req.WechatResumeToken) != "" {
 		claims, err := h.paymentService.ParseWeChatPaymentResumeToken(req.WechatResumeToken)
 		if err != nil {
-			response.ErrorFrom(c, err)
+			writePaymentAccessError(c, err)
 			return
 		}
 		if err := applyWeChatPaymentResumeClaims(&req, claims); err != nil {
-			response.ErrorFrom(c, err)
+			writePaymentAccessError(c, err)
 			return
 		}
 	}
@@ -290,7 +290,7 @@ func (h *PaymentHandler) CreateOrder(c *gin.Context) {
 		Locale:          c.GetHeader("Accept-Language"),
 	})
 	if err != nil {
-		response.ErrorFrom(c, err)
+		writePaymentAccessError(c, err)
 		return
 	}
 	response.Success(c, result)
@@ -351,7 +351,7 @@ func (h *PaymentHandler) GetMyOrders(c *gin.Context) {
 		PaymentType: c.Query("payment_type"),
 	})
 	if err != nil {
-		response.ErrorFrom(c, err)
+		writePaymentAccessError(c, err)
 		return
 	}
 	response.Paginated(c, sanitizePaymentOrdersForResponse(orders), int64(total), page, pageSize)
@@ -373,7 +373,7 @@ func (h *PaymentHandler) GetOrder(c *gin.Context) {
 
 	order, err := h.paymentService.GetOrder(c.Request.Context(), orderID, subject.UserID)
 	if err != nil {
-		response.ErrorFrom(c, err)
+		writePaymentAccessError(c, err)
 		return
 	}
 	response.Success(c, sanitizePaymentOrderDetailsForResponse(order))
@@ -395,7 +395,7 @@ func (h *PaymentHandler) CancelOrder(c *gin.Context) {
 
 	msg, err := h.paymentService.CancelOrder(c.Request.Context(), orderID, subject.UserID)
 	if err != nil {
-		response.ErrorFrom(c, err)
+		writePaymentAccessError(c, err)
 		return
 	}
 	response.Success(c, gin.H{"message": msg})
@@ -427,7 +427,7 @@ func (h *PaymentHandler) RequestRefund(c *gin.Context) {
 	}
 
 	if err := h.paymentService.RequestRefund(c.Request.Context(), orderID, subject.UserID, req.Reason); err != nil {
-		response.ErrorFrom(c, err)
+		writePaymentAccessError(c, err)
 		return
 	}
 	response.Success(c, gin.H{"message": "refund requested"})
@@ -437,7 +437,7 @@ func (h *PaymentHandler) RequestRefund(c *gin.Context) {
 func (h *PaymentHandler) GetRefundEligibleProviders(c *gin.Context) {
 	ids, err := h.configService.GetUserRefundEligibleInstanceIDs(c.Request.Context())
 	if err != nil {
-		response.ErrorFrom(c, err)
+		writePaymentAccessError(c, err)
 		return
 	}
 	response.Success(c, gin.H{"provider_instance_ids": ids})
@@ -469,7 +469,7 @@ func (h *PaymentHandler) VerifyOrder(c *gin.Context) {
 
 	order, err := h.paymentService.VerifyOrderByOutTradeNo(c.Request.Context(), req.OutTradeNo, subject.UserID)
 	if err != nil {
-		response.ErrorFrom(c, err)
+		writePaymentAccessError(c, err)
 		return
 	}
 	response.Success(c, sanitizePaymentOrderForResponse(order))
@@ -576,7 +576,7 @@ func (h *PaymentHandler) VerifyOrderPublic(c *gin.Context) {
 
 	order, err := h.paymentService.VerifyOrderPublic(c.Request.Context(), req.OutTradeNo)
 	if err != nil {
-		response.ErrorFrom(c, err)
+		writePaymentAccessError(c, err)
 		return
 	}
 	response.Success(c, buildPublicOrderVerifyResult(order))
@@ -593,7 +593,7 @@ func (h *PaymentHandler) ResolveOrderPublicByResumeToken(c *gin.Context) {
 
 	order, err := h.paymentService.GetPublicOrderByResumeToken(c.Request.Context(), req.ResumeToken)
 	if err != nil {
-		response.ErrorFrom(c, err)
+		writePaymentAccessError(c, err)
 		return
 	}
 	response.Success(c, buildPublicOrderResult(order))

@@ -41,6 +41,7 @@ const (
 	wechatPaymentOAuthRedirect    = "wechat_payment_oauth_redirect"
 	wechatPaymentOAuthContextName = "wechat_payment_oauth_context"
 	wechatPaymentOAuthScope       = "wechat_payment_oauth_scope"
+	wechatPaymentOAuthAccess      = "wechat_payment_oauth_access"
 	wechatPaymentOAuthDefaultTo   = "/purchase"
 	wechatPaymentOAuthFrontendCB  = "/auth/wechat/payment/callback"
 
@@ -333,6 +334,12 @@ func (h *AuthHandler) WeChatOAuthCallback(c *gin.Context) {
 // WeChatPaymentOAuthStart starts the WeChat payment OAuth flow.
 // GET /api/v1/auth/oauth/wechat/payment/start?payment_type=wxpay&redirect=/purchase
 func (h *AuthHandler) WeChatPaymentOAuthStart(c *gin.Context) {
+	c.Header("Referrer-Policy", "no-referrer")
+	c.Header("Cache-Control", "no-store")
+	accessToken := strings.TrimSpace(c.Query("access_token"))
+	if !h.requireWeChatPaymentOAuthAccess(c, accessToken) {
+		return
+	}
 	cfg, err := h.getWeChatOAuthConfig(c.Request.Context(), "mp", c)
 	if err != nil {
 		response.ErrorFrom(c, err)
@@ -368,6 +375,11 @@ func (h *AuthHandler) WeChatPaymentOAuthStart(c *gin.Context) {
 
 	scope := normalizeWeChatPaymentScope(c.Query("scope"))
 	secureCookie := isRequestHTTPS(c)
+	if accessToken != "" {
+		wechatPaymentSetCookie(c, wechatPaymentOAuthAccess, encodeCookieValue(accessToken), wechatOAuthCookieMaxAgeSec, secureCookie)
+	} else {
+		wechatPaymentClearCookie(c, wechatPaymentOAuthAccess, secureCookie)
+	}
 	wechatPaymentSetCookie(c, wechatPaymentOAuthStateName, encodeCookieValue(state), wechatOAuthCookieMaxAgeSec, secureCookie)
 	wechatPaymentSetCookie(c, wechatPaymentOAuthRedirect, encodeCookieValue(redirectTo), wechatOAuthCookieMaxAgeSec, secureCookie)
 	wechatPaymentSetCookie(c, wechatPaymentOAuthContextName, encodeCookieValue(rawContext), wechatOAuthCookieMaxAgeSec, secureCookie)
@@ -387,6 +399,13 @@ func (h *AuthHandler) WeChatPaymentOAuthStart(c *gin.Context) {
 // WeChatPaymentOAuthCallback exchanges a payment OAuth code for an OpenID and
 // forwards the browser back to the frontend callback route.
 func (h *AuthHandler) WeChatPaymentOAuthCallback(c *gin.Context) {
+	c.Header("Referrer-Policy", "no-referrer")
+	c.Header("Cache-Control", "no-store")
+	accessToken, _ := readCookieDecoded(c, wechatPaymentOAuthAccess)
+	if !h.requireWeChatPaymentOAuthAccess(c, accessToken) {
+		wechatPaymentClearCookie(c, wechatPaymentOAuthAccess, isRequestHTTPS(c))
+		return
+	}
 	frontendCallback := wechatPaymentOAuthFrontendCB
 
 	if providerErr := strings.TrimSpace(c.Query("error")); providerErr != "" {
@@ -403,6 +422,7 @@ func (h *AuthHandler) WeChatPaymentOAuthCallback(c *gin.Context) {
 
 	secureCookie := isRequestHTTPS(c)
 	defer func() {
+		wechatPaymentClearCookie(c, wechatPaymentOAuthAccess, secureCookie)
 		wechatPaymentClearCookie(c, wechatPaymentOAuthStateName, secureCookie)
 		wechatPaymentClearCookie(c, wechatPaymentOAuthRedirect, secureCookie)
 		wechatPaymentClearCookie(c, wechatPaymentOAuthContextName, secureCookie)
@@ -473,6 +493,28 @@ func (h *AuthHandler) WeChatPaymentOAuthCallback(c *gin.Context) {
 	fragment.Set("wechat_resume_token", resumeToken)
 	fragment.Set("redirect", redirectTo)
 	redirectWithFragment(c, frontendCallback, fragment)
+}
+
+func (h *AuthHandler) requireWeChatPaymentOAuthAccess(c *gin.Context, token string) bool {
+	enabled, exclusive, err := h.settingSvc.GetPaymentAccessSettings(c.Request.Context())
+	if err != nil || !enabled {
+		writePaymentAccessError(c, service.ErrPaymentAccessDenied)
+		return false
+	}
+	if !exclusive {
+		return true
+	}
+	claims, err := h.wechatPaymentResumeService().ParseWeChatPaymentAccessToken(token)
+	if err != nil || h.entClient() == nil {
+		writePaymentAccessError(c, service.ErrPaymentAccessDenied)
+		return false
+	}
+	user, err := h.entClient().User.Get(c.Request.Context(), claims.UserID)
+	if err != nil || user.Status != service.StatusActive || !user.ExclusiveRechargeEnabled {
+		writePaymentAccessError(c, service.ErrPaymentAccessDenied)
+		return false
+	}
+	return true
 }
 
 func (h *AuthHandler) wechatPaymentResumeService() *service.PaymentResumeService {

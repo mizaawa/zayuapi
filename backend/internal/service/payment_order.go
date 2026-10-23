@@ -614,6 +614,20 @@ func (s *PaymentService) buildWeChatOAuthRequiredResponse(ctx context.Context, r
 	if err != nil {
 		return nil, err
 	}
+	if req.UserID > 0 {
+		accessToken, err := s.paymentResume().CreateWeChatPaymentAccessToken(req.UserID)
+		if err != nil {
+			return nil, err
+		}
+		u, err := url.Parse(authorizeURL)
+		if err != nil {
+			return nil, err
+		}
+		query := u.Query()
+		query.Set("access_token", accessToken)
+		u.RawQuery = query.Encode()
+		authorizeURL = u.String()
+	}
 
 	return &CreateOrderResponse{
 		Amount:      amount,
@@ -847,7 +861,7 @@ func (s *PaymentService) GetOrder(ctx context.Context, orderID, userID int64) (*
 		return nil, infraerrors.NotFound("NOT_FOUND", "order not found")
 	}
 	if o.UserID != userID {
-		return nil, infraerrors.Forbidden("FORBIDDEN", "no permission for this order")
+		return nil, infraerrors.NotFound("NOT_FOUND", "order not found")
 	}
 	return o, nil
 }

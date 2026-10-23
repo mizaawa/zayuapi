@@ -6,7 +6,6 @@
           <div class="min-w-0">
             <p class="hero-period text-xs font-semibold uppercase tracking-[0.12em]">{{ t('leaderboard.periodToday') }}</p>
             <h1 class="mt-1 text-2xl font-bold tracking-tight sm:text-3xl">{{ t('leaderboard.title') }}</h1>
-            <p class="hero-description mt-2 max-w-xl text-sm leading-6">{{ t('leaderboard.description') }}</p>
           </div>
           <div class="rank-summary shrink-0 rounded-2xl border px-4 py-3 text-right">
             <p class="hero-period text-xs">{{ t('leaderboard.myRank') }}</p>

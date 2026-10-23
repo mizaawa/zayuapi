@@ -1,6 +1,8 @@
 package handler
 
 import (
+	"errors"
+	"net/http"
 	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/pkg/response"
@@ -21,7 +23,7 @@ func (h *PaymentHandler) GetPaymentAccess(c *gin.Context) {
 		access, err = h.paymentService.GetPaymentAccess(c.Request.Context(), subject.UserID)
 	}
 	if err != nil {
-		response.ErrorFrom(c, err)
+		writePaymentAccessError(c, err)
 		return
 	}
 	c.Header("Cache-Control", "no-store")
@@ -34,10 +36,27 @@ func (h *PaymentHandler) RequirePaymentAccess(c *gin.Context) {
 		c.Abort()
 		return
 	}
-	if err := h.paymentService.RequirePaymentAccess(c.Request.Context(), subject.UserID); err != nil {
-		response.ErrorFrom(c, err)
+	access, err := h.paymentService.GetPaymentAccess(c.Request.Context(), subject.UserID)
+	if err != nil {
+		writePaymentAccessError(c, err)
+		c.Abort()
+		return
+	}
+	if !access.Enabled || !access.Allowed {
+		writePaymentAccessError(c, service.ErrPaymentAccessDenied)
 		c.Abort()
 		return
 	}
 	c.Next()
+}
+
+func writePaymentAccessError(c *gin.Context, err error) bool {
+	// ApplicationError.Is matches code and reason, so every standard NOT_FOUND
+	// result is intentionally indistinguishable from an unknown API route.
+	if errors.Is(err, service.ErrPaymentAccessDenied) {
+		c.Header("Content-Type", "text/plain")
+		c.String(http.StatusNotFound, "404 page not found")
+		return true
+	}
+	return response.ErrorFrom(c, err)
 }

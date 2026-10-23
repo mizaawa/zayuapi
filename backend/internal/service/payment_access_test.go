@@ -28,11 +28,11 @@ func TestPaymentAccessChangesApplyToExistingUsersImmediately(t *testing.T) {
 	enabled := true
 	require.NoError(t, config.UpdatePaymentConfig(ctx, UpdatePaymentConfigRequest{PaymentExclusiveEnabled: &enabled}))
 	err = svc.RequirePaymentAccess(ctx, user.ID)
-	require.Equal(t, "PAYMENT_ACCESS_DENIED", infraerrors.Reason(err))
+	require.Equal(t, "NOT_FOUND", infraerrors.Reason(err))
 	require.NoError(t, client.User.UpdateOneID(user.ID).SetExclusiveRechargeEnabled(true).Exec(ctx))
 	require.NoError(t, svc.RequirePaymentAccess(ctx, user.ID))
 	require.NoError(t, client.User.UpdateOneID(user.ID).SetExclusiveRechargeEnabled(false).Exec(ctx))
-	require.Equal(t, "PAYMENT_ACCESS_DENIED", infraerrors.Reason(svc.RequirePaymentAccess(ctx, user.ID)))
+	require.Equal(t, "NOT_FOUND", infraerrors.Reason(svc.RequirePaymentAccess(ctx, user.ID)))
 
 	// The global switch changes enforcement without rewriting user grants.
 	require.NoError(t, client.User.UpdateOneID(user.ID).SetExclusiveRechargeEnabled(true).Exec(ctx))
@@ -46,7 +46,7 @@ func TestPaymentAccessChangesApplyToExistingUsersImmediately(t *testing.T) {
 	require.NoError(t, svc.RequirePaymentAccess(ctx, user.ID))
 	enabled = true
 	require.NoError(t, config.UpdatePaymentConfig(ctx, UpdatePaymentConfigRequest{PaymentExclusiveEnabled: &enabled}))
-	require.Equal(t, "PAYMENT_ACCESS_DENIED", infraerrors.Reason(svc.RequirePaymentAccess(ctx, user.ID)))
+	require.Equal(t, "NOT_FOUND", infraerrors.Reason(svc.RequirePaymentAccess(ctx, user.ID)))
 }
 
 func TestPaymentAccessDoesNotExemptAdminRecharge(t *testing.T) {
@@ -55,7 +55,7 @@ func TestPaymentAccessDoesNotExemptAdminRecharge(t *testing.T) {
 	admin, err := client.User.Create().SetEmail("admin-access@example.com").SetPasswordHash("hash").SetRole(RoleAdmin).Save(ctx)
 	require.NoError(t, err)
 	svc := &PaymentService{entClient: client, configService: &PaymentConfigService{settingRepo: &paymentConfigSettingRepoStub{values: map[string]string{SettingPaymentExclusiveEnabled: "true"}}}}
-	require.Equal(t, "PAYMENT_ACCESS_DENIED", infraerrors.Reason(svc.RequirePaymentAccess(ctx, admin.ID)))
+	require.Equal(t, "NOT_FOUND", infraerrors.Reason(svc.RequirePaymentAccess(ctx, admin.ID)))
 	require.NoError(t, client.User.UpdateOneID(admin.ID).SetExclusiveRechargeEnabled(true).Exec(ctx))
 	require.NoError(t, svc.RequirePaymentAccess(ctx, admin.ID))
 }
@@ -80,9 +80,9 @@ func TestPaymentAccessRevocationBlocksExistingResumeAndPublicOrder(t *testing.T)
 		configService: &PaymentConfigService{settingRepo: &paymentConfigSettingRepoStub{values: map[string]string{SettingPaymentExclusiveEnabled: "true"}}}}
 	require.NoError(t, client.User.UpdateOneID(user.ID).SetExclusiveRechargeEnabled(false).Exec(ctx))
 	_, err = svc.GetPublicOrderByResumeToken(ctx, token)
-	require.Equal(t, "PAYMENT_ACCESS_DENIED", infraerrors.Reason(err))
+	require.Equal(t, "NOT_FOUND", infraerrors.Reason(err))
 	_, err = svc.VerifyOrderPublic(ctx, order.OutTradeNo)
-	require.Equal(t, "PAYMENT_ACCESS_DENIED", infraerrors.Reason(err))
+	require.Equal(t, "NOT_FOUND", infraerrors.Reason(err))
 	require.Zero(t, provider.queryCount)
 	stored, err := client.PaymentOrder.Get(ctx, order.ID)
 	require.NoError(t, err)
@@ -109,7 +109,7 @@ func TestCreateOrderRejectsUnauthorizedBeforeOrderValidation(t *testing.T) {
 		SettingPaymentEnabled: "true", SettingPaymentExclusiveEnabled: "true",
 	}}}}
 	_, err = svc.CreateOrder(ctx, CreateOrderRequest{UserID: user.ID, Amount: 10, PaymentType: payment.TypeAlipay})
-	require.Equal(t, "PAYMENT_ACCESS_DENIED", infraerrors.Reason(err))
+	require.Equal(t, "NOT_FOUND", infraerrors.Reason(err))
 	count, err := client.PaymentOrder.Query().Count(ctx)
 	require.NoError(t, err)
 	require.Zero(t, count)

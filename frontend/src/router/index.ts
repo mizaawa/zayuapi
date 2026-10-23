@@ -14,6 +14,7 @@ import { useRoutePrefetch } from '@/composables/useRoutePrefetch'
 import { getSetupStatus } from '@/api/setup'
 import { resolveCompletedSetupRedirectPath } from './setupRedirect'
 import { resolveRouteDocumentTitle } from './title'
+import { notFoundLocation } from './notFound'
 
 /**
  * Route definitions with lazy loading
@@ -286,7 +287,6 @@ const routes: RouteRecordRaw[] = [
       requiresAdmin: false,
       title: 'Leaderboard',
       titleKey: 'leaderboard.title',
-      descriptionKey: 'leaderboard.description',
       requiresLeaderboard: true,
     },
   },
@@ -771,6 +771,7 @@ const routes: RouteRecordRaw[] = [
     name: 'NotFound',
     component: () => import('@/views/NotFoundView.vue'),
     meta: {
+      requiresAuth: false,
       title: '404 Not Found'
     }
   }
@@ -841,14 +842,14 @@ router.beforeEach(async (to, _from, next) => {
     authInitialized = true
   }
 
-  // Set page title
   const appStore = useAppStore()
   const adminSettingsStore = useAdminSettingsStore()
-  const customMenuItems = [
-    ...(appStore.cachedPublicSettings?.custom_menu_items ?? []),
-    ...(authStore.isAdmin ? adminSettingsStore.customMenuItems : []),
-  ]
-  document.title = resolveRouteDocumentTitle(to, appStore.siteName, customMenuItems)
+
+  // A denied payment URL resolves through this same record, so do not re-check its URL.
+  if (to.name === 'NotFound') {
+    next()
+    return
+  }
 
   // Check if route requires authentication
   const requiresAuth = to.meta.requiresAuth !== false // Default to true
@@ -867,16 +868,25 @@ router.beforeEach(async (to, _from, next) => {
   }
 
   if (isUserPaymentPath(to.path)) {
-    if (authStore.isAuthenticated) {
-      const access = await usePaymentAccessStore().refresh()
-      if (!access?.allowed) {
-        next(authStore.isAdmin ? '/admin/dashboard' : '/dashboard')
+    if (!authStore.isAuthenticated) {
+      let settings = null
+      try {
+        settings = await appStore.fetchPublicSettings(true)
+      } catch {
+        // A failed check must not expose a public payment continuation.
+      }
+      if (!settings || settings.payment_enabled === false || settings.payment_exclusive_enabled !== false) {
+        next(notFoundLocation(to))
         return
       }
-    } else if (!requiresAuth) {
-      const settings = await appStore.fetchPublicSettings(true)
-      if (!settings || settings.payment_exclusive_enabled === true) {
-        next({ path: '/login', query: { redirect: to.fullPath } })
+      // A fresh, explicitly public navigation may retry after a previous anonymous lookup was denied.
+      if (!authStore.isAuthenticated) usePaymentAccessStore().reset()
+    }
+    // Authentication may change while the public-settings request is in flight.
+    if (authStore.isAuthenticated) {
+      const access = await usePaymentAccessStore().refresh()
+      if (access?.enabled !== true || access.allowed !== true) {
+        next(notFoundLocation(to))
         return
       }
     }
@@ -999,7 +1009,7 @@ router.beforeEach(async (to, _from, next) => {
     appStore.publicSettingsLoaded &&
     appStore.cachedPublicSettings?.payment_enabled === false
   ) {
-    next(authStore.isAdmin ? '/admin/dashboard' : '/dashboard')
+    next(notFoundLocation(to))
     return
   }
 
@@ -1068,9 +1078,18 @@ router.beforeEach(async (to, _from, next) => {
 /**
  * Navigation guard: End loading and trigger prefetch
  */
-router.afterEach((to) => {
+router.afterEach((to, _from, failure) => {
   // 结束导航加载状态
   navigationLoading.endNavigation()
+
+  if (failure) return
+  const appStore = useAppStore()
+  const authStore = useAuthStore()
+  const adminSettingsStore = useAdminSettingsStore()
+  document.title = resolveRouteDocumentTitle(to, appStore.siteName, [
+    ...(appStore.cachedPublicSettings?.custom_menu_items ?? []),
+    ...(authStore.isAdmin ? adminSettingsStore.customMenuItems : []),
+  ])
 
   // 懒初始化预加载（首次导航时创建，传入 router 实例）
   if (!routePrefetch) {

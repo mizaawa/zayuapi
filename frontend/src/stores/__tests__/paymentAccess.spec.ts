@@ -33,6 +33,14 @@ describe('payment access', () => {
     expect(store.allowed).toBe(false)
   })
 
+  it('hides access as soon as authentication ends, even before the user object is cleared', async () => {
+    const store = usePaymentAccessStore()
+    mocks.get.mockResolvedValueOnce({ data: { enabled: true, allowed: true, exclusive_enabled: true } })
+    await store.refresh()
+    mocks.auth.isAuthenticated = false
+    expect(store.allowed).toBe(false)
+  })
+
   it('ignores an old response after logout or account replacement', async () => {
     const store = usePaymentAccessStore()
     let resolve!: (response: unknown) => void
@@ -56,6 +64,44 @@ describe('payment access', () => {
     store.deny()
     resolve({ data: { enabled: true, allowed: true, exclusive_enabled: true } })
     await Promise.all([first, second])
+    expect(store.allowed).toBe(false)
+  })
+
+  it('confirms a resource 404 with a fresh check and ignores older in-flight grants', async () => {
+    const store = usePaymentAccessStore()
+    mocks.get.mockResolvedValueOnce({ data: { enabled: true, allowed: true, exclusive_enabled: true } })
+    await store.refresh()
+    let resolveWatch!: (response: unknown) => void
+    let resolveCheck!: (response: unknown) => void
+    let resolveFresh!: (response: unknown) => void
+    mocks.get.mockReturnValueOnce(new Promise(done => { resolveWatch = done }))
+    const watching = store.waitForChange()
+    const watchSignal = mocks.get.mock.lastCall?.[1].signal as AbortSignal
+    mocks.get.mockReturnValueOnce(new Promise(done => { resolveCheck = done }))
+    const checking = store.refresh()
+    const checkSignal = mocks.get.mock.lastCall?.[1].signal as AbortSignal
+    mocks.get.mockReturnValueOnce(new Promise(done => { resolveFresh = done }))
+    const fresh = store.refresh(true)
+    expect(mocks.get).toHaveBeenCalledTimes(4)
+    expect(watchSignal.aborted).toBe(true)
+    expect(checkSignal.aborted).toBe(true)
+    expect(store.allowed).toBe(true)
+    resolveFresh({ data: { enabled: true, allowed: false, exclusive_enabled: true } })
+    await fresh
+    resolveWatch({ data: { enabled: true, allowed: true, exclusive_enabled: true } })
+    resolveCheck({ data: { enabled: true, allowed: true, exclusive_enabled: true } })
+    await Promise.all([watching, checking])
+    expect(store.allowed).toBe(false)
+  })
+
+  it('retains a legitimate grant after a missing-order check and fails closed if confirmation fails', async () => {
+    const store = usePaymentAccessStore()
+    mocks.get.mockResolvedValue({ data: { enabled: true, allowed: true, exclusive_enabled: true } })
+    await store.refresh()
+    await store.refresh(true)
+    expect(store.allowed).toBe(true)
+    mocks.get.mockRejectedValueOnce(new Error('permission endpoint unavailable'))
+    await store.refresh(true)
     expect(store.allowed).toBe(false)
   })
 
@@ -102,6 +148,50 @@ describe('payment access', () => {
     await watching
     resolveCheck({ data: { enabled: true, allowed: true, exclusive_enabled: true } })
     expect((await checking)?.allowed).toBe(false)
+    expect(store.allowed).toBe(false)
+  })
+
+  it('does not let a late watcher restore access after a failed independent check', async () => {
+    const store = usePaymentAccessStore()
+    mocks.get.mockResolvedValueOnce({ data: { enabled: true, allowed: true, exclusive_enabled: true } })
+    await store.refresh()
+    let resolveWatch!: (response: unknown) => void
+    mocks.get.mockReturnValueOnce(new Promise(done => { resolveWatch = done }))
+    const watching = store.waitForChange()
+    mocks.get.mockRejectedValueOnce(new Error('offline'))
+    await store.refresh()
+    expect(store.allowed).toBe(false)
+    resolveWatch({ data: { enabled: true, allowed: true, exclusive_enabled: true } })
+    await watching
+    expect(store.allowed).toBe(false)
+    expect(store.access).toBeNull()
+  })
+
+  it('does not let a late check restore access after a failed watcher', async () => {
+    const store = usePaymentAccessStore()
+    mocks.get.mockResolvedValueOnce({ data: { enabled: true, allowed: true, exclusive_enabled: true } })
+    await store.refresh()
+    let rejectWatch!: (error: Error) => void
+    let resolveCheck!: (response: unknown) => void
+    mocks.get.mockReturnValueOnce(new Promise((_done, fail) => { rejectWatch = fail }))
+    const watching = store.waitForChange()
+    mocks.get.mockReturnValueOnce(new Promise(done => { resolveCheck = done }))
+    const checking = store.refresh()
+    rejectWatch(new Error('offline'))
+    await watching
+    resolveCheck({ data: { enabled: true, allowed: true, exclusive_enabled: true } })
+    expect(await checking).toBeNull()
+    expect(store.allowed).toBe(false)
+  })
+
+  it.each([
+    null,
+    { enabled: true, allowed: 'true', exclusive_enabled: true },
+    { enabled: true, allowed: true },
+  ])('fails closed on malformed permission data %j', async data => {
+    const store = usePaymentAccessStore()
+    mocks.get.mockResolvedValue({ data })
+    expect(await store.refresh()).toBeNull()
     expect(store.allowed).toBe(false)
   })
 })

@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { RouterView, useRouter, useRoute } from 'vue-router'
-import { onMounted, onBeforeUnmount, watch } from 'vue'
+import { computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import Toast from '@/components/common/Toast.vue'
 import NavigationProgress from '@/components/common/NavigationProgress.vue'
 import AdminComplianceDialog from '@/components/admin/AdminComplianceDialog.vue'
-import { resolveRouteDocumentTitle } from '@/router/title'
+import { resolveDocumentTitle, resolveRouteDocumentTitle } from '@/router/title'
+import { notFoundLocation } from '@/router/notFound'
+import NotFoundView from '@/views/NotFoundView.vue'
 import AnnouncementPopup from '@/components/common/AnnouncementPopup.vue'
 import { useAppStore, useAuthStore, useSubscriptionStore, useAnnouncementStore, useAdminComplianceStore, useAdminSettingsStore } from '@/stores'
 import { getSetupStatus } from '@/api/setup'
@@ -20,6 +22,12 @@ const announcementStore = useAnnouncementStore()
 const adminComplianceStore = useAdminComplianceStore()
 const adminSettingsStore = useAdminSettingsStore()
 const paymentAccess = usePaymentAccessStore()
+const paymentPageHidden = computed(() => route.name !== 'NotFound' && isUserPaymentPath(route.path) && (
+  authStore.isAuthenticated
+    ? !paymentAccess.allowed
+    : paymentAccess.access?.allowed === false || route.meta.requiresAuth !== false ||
+      appStore.cachedPublicSettings?.payment_exclusive_enabled !== false
+))
 let paymentAccessTimer: ReturnType<typeof setTimeout> | null = null
 let paymentAccessRefreshGeneration = 0
 
@@ -48,20 +56,31 @@ async function watchPaymentAccess() {
   }
 }
 
-function onPaymentAccessDenied() {
+function onPaymentAccessDenied(event: Event) {
+  if ((event as CustomEvent<{ status?: number }>).detail?.status === 404 && authStore.isAuthenticated) {
+    // Missing orders use the same 404 as revoked access; confirm a fresh grant before hiding the menu.
+    void paymentAccess.refresh(true)
+    return
+  }
   paymentAccess.deny()
 }
 
 watch(
-  () => paymentAccess.allowed,
-  (allowed) => {
-    if (!allowed && authStore.isAuthenticated && isUserPaymentPath(route.path)) {
-      void router.replace(authStore.isAdmin ? '/admin/dashboard' : '/dashboard')
+  paymentPageHidden,
+  (hidden) => {
+    if (hidden) {
+      // Remove the protected component immediately, even before the replacement navigation completes.
+      document.title = resolveDocumentTitle('404 Not Found', appStore.siteName)
+      void router.replace(notFoundLocation(route))
     }
   }
 )
 
 function updateDocumentTitle() {
+  if (paymentPageHidden.value) {
+    document.title = resolveDocumentTitle('404 Not Found', appStore.siteName)
+    return
+  }
   const customMenuItems = [
     ...(appStore.cachedPublicSettings?.custom_menu_items ?? []),
     ...(authStore.isAdmin ? adminSettingsStore.customMenuItems : []),
@@ -85,6 +104,7 @@ watch(
     () => route.fullPath,
     () => route.meta.title,
     () => route.meta.titleKey,
+    () => paymentPageHidden.value,
     () => appStore.siteName,
     () => appStore.cachedPublicSettings?.custom_menu_items,
     () => authStore.isAdmin,
@@ -205,7 +225,10 @@ onMounted(async () => {
 
 <template>
   <NavigationProgress />
-  <RouterView />
+  <RouterView v-slot="{ Component }">
+    <NotFoundView v-if="paymentPageHidden" />
+    <component :is="Component" v-else />
+  </RouterView>
   <Toast />
   <AnnouncementPopup />
   <AdminComplianceDialog />

@@ -24,7 +24,14 @@ export const usePaymentAccessStore = defineStore('paymentAccess', () => {
   let request: Promise<PaymentAccess | null> | null = null
   let controller: AbortController | null = null
   let watchController: AbortController | null = null
-  const allowed = computed(() => ownerId.value === auth.user?.id && access.value?.enabled === true && access.value.allowed)
+  const allowed = computed(() => auth.isAuthenticated && ownerId.value === auth.user?.id &&
+    access.value?.enabled === true && access.value.allowed === true)
+
+  function invalidateAccess() {
+    // Invalidate every older in-flight response, including a long-poll that could restore a grant.
+    snapshotVersion++
+    access.value = null
+  }
 
   function reset() {
     generation++
@@ -42,6 +49,8 @@ export const usePaymentAccessStore = defineStore('paymentAccess', () => {
   }
 
   function applyAccess(value: PaymentAccess) {
+    if (!value || typeof value.enabled !== 'boolean' || typeof value.allowed !== 'boolean' ||
+      typeof value.exclusive_enabled !== 'boolean') throw new Error('Invalid payment access response')
     const modeChanged = access.value !== null && access.value.exclusive_enabled !== value.exclusive_enabled
     if (!access.value || access.value.enabled !== value.enabled || access.value.allowed !== value.allowed || modeChanged) snapshotVersion++
     access.value = value
@@ -66,14 +75,22 @@ export const usePaymentAccessStore = defineStore('paymentAccess', () => {
         snapshotVersion === requestSnapshotVersion) applyAccess(data)
       return true
     } catch {
-      if (!watcher.signal.aborted && generation === requestGeneration && snapshotVersion === requestSnapshotVersion) access.value = null
+      if (!watcher.signal.aborted && generation === requestGeneration && snapshotVersion === requestSnapshotVersion) invalidateAccess()
       return false
     } finally {
       if (watchController === watcher) watchController = null
     }
   }
 
-  async function refresh(): Promise<PaymentAccess | null> {
+  async function refresh(force = false): Promise<PaymentAccess | null> {
+    if (force) {
+      // A resource 404 needs a fresh decision, independent of older checks and long-polls.
+      generation++
+      stopWatching()
+      controller?.abort()
+      controller = null
+      request = null
+    }
     if (!auth.isAuthenticated || !auth.user) {
       reset()
       return null
@@ -95,7 +112,7 @@ export const usePaymentAccessStore = defineStore('paymentAccess', () => {
         return data
       } catch {
         // Never keep an earlier grant usable after a failed permission check.
-        if (generation === requestGeneration && snapshotVersion === requestSnapshotVersion) access.value = null
+        if (generation === requestGeneration && snapshotVersion === requestSnapshotVersion) invalidateAccess()
         return null
       } finally {
         if (generation === requestGeneration) {

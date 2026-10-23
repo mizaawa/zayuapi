@@ -188,7 +188,7 @@ func (s *PaymentService) validateRefundRequest(ctx context.Context, oid, uid int
 		return nil, infraerrors.NotFound("NOT_FOUND", "order not found")
 	}
 	if o.UserID != uid {
-		return nil, infraerrors.Forbidden("FORBIDDEN", "no permission")
+		return nil, infraerrors.NotFound("NOT_FOUND", "order not found")
 	}
 	if o.OrderType != payment.OrderTypeBalance {
 		return nil, infraerrors.BadRequest("INVALID_ORDER_TYPE", "only balance orders can request refund")

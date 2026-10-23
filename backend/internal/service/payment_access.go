@@ -14,6 +14,10 @@ type PaymentAccess struct {
 	ExclusiveEnabled bool `json:"exclusive_enabled"`
 }
 
+// ErrPaymentAccessDenied deliberately has no feature-specific public details.
+// HTTP handlers render it exactly like an unknown route.
+var ErrPaymentAccessDenied = infraerrors.NotFound("NOT_FOUND", "not found")
+
 // GetPaymentAccess reads the current grant and settings without an auth cache.
 // Revoking a grant must apply to already-issued sessions and resume tokens.
 func (s *PaymentService) GetPaymentAccess(ctx context.Context, userID int64) (*PaymentAccess, error) {
@@ -33,7 +37,7 @@ func (s *PaymentService) GetPaymentAccess(ctx context.Context, userID int64) (*P
 		return access, nil
 	}
 	if userID <= 0 {
-		return access, nil
+		return &PaymentAccess{}, nil
 	}
 	if s.entClient == nil {
 		return nil, fmt.Errorf("payment user repository is unavailable")
@@ -41,11 +45,14 @@ func (s *PaymentService) GetPaymentAccess(ctx context.Context, userID int64) (*P
 	user, err := s.entClient.User.Get(ctx, userID)
 	if err != nil {
 		if dbent.IsNotFound(err) {
-			return access, nil
+			return &PaymentAccess{}, nil
 		}
 		return nil, err
 	}
 	access.Allowed = user.Status == StatusActive && user.ExclusiveRechargeEnabled
+	if !access.Allowed {
+		return &PaymentAccess{}, nil
+	}
 	return access, nil
 }
 
@@ -55,7 +62,7 @@ func (s *PaymentService) RequirePaymentAccess(ctx context.Context, userID int64)
 		return err
 	}
 	if !access.Allowed {
-		return infraerrors.Forbidden("PAYMENT_ACCESS_DENIED", "exclusive recharge permission is required")
+		return ErrPaymentAccessDenied
 	}
 	return nil
 }

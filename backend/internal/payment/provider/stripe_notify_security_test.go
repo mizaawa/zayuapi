@@ -16,7 +16,7 @@ import (
 func TestStripeNotificationRequiresValidSignature(t *testing.T) {
 	t.Parallel()
 	provider := &Stripe{config: map[string]string{"webhookSecret": "whsec_test"}}
-	raw := fmt.Sprintf(`{"object":"event","api_version":%q,"type":"payment_intent.succeeded","data":{"object":{"id":"pi_123","amount":6500,"currency":"cny","metadata":{"orderId":"ORDER123"}}}}`, stripe.APIVersion)
+	raw := fmt.Sprintf(`{"object":"event","api_version":%q,"type":"payment_intent.succeeded","data":{"object":{"id":"pi_123","amount":6500,"amount_received":6500,"currency":"cny","metadata":{"orderId":"ORDER123"}}}}`, stripe.APIVersion)
 	signed := webhook.GenerateTestSignedPayload(&webhook.UnsignedPayload{
 		Payload: []byte(raw), Secret: "whsec_test", Timestamp: time.Now(),
 	})
