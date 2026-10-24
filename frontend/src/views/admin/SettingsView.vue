@@ -9814,6 +9814,7 @@ const uiAccessCheckError = computed(() => {
     timeout: ["地区检测超时，请稍后重试。", "Country detection timed out. Please retry."],
     cancelled: ["本次地区检测已取消，请重新检测。", "This country check was cancelled. Please run it again."],
     busy: ["地区检测服务繁忙，请稍后重试。", "Country detection is busy. Please retry shortly."],
+    retry_too_soon: ["检测过于频繁，请等待几秒后重试。", "Checks are too frequent. Wait a few seconds and retry."],
   };
   const message = messages[uiAccessCheckResult.value?.error_code ?? ""];
   return message ? localText(...message) : localText("检测失败，请检查访客 IP 配置后重试。", "Detection failed. Check visitor-IP settings and retry.");

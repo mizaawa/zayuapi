@@ -120,10 +120,93 @@ func TestUICountryRetryOverloadCannotReusePreviousAllowedCountry(t *testing.T) {
 	require.Error(t, err, "overload cannot expose an old allowed country")
 }
 
+// newTestCountryResolver disables the retry interval so tests can exercise
+// consecutive provider lookups for one address.
 func newTestCountryResolver() *CountryResolver {
 	resolver := NewCountryResolver()
 	resolver.fallbackEndpoint = ""
+	resolver.retryInterval = 0
 	return resolver
+}
+
+func TestUICountryLookupLimitsProviderRetriesPerAddress(t *testing.T) {
+	calls := 0
+	status := http.StatusOK
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		if status != http.StatusOK {
+			w.WriteHeader(status)
+			return
+		}
+		ip := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/"), ".json")
+		_, _ = fmt.Fprintf(w, `{"ip":%q,"country_code":"US"}`, ip)
+	}))
+	defer server.Close()
+	resolver := NewCountryResolver()
+	resolver.endpoint, resolver.fallbackEndpoint = server.URL+"/", ""
+	ctx := context.Background()
+
+	_, err := resolver.Detect(ctx, "8.8.8.8", false)
+	require.NoError(t, err)
+	result, err := resolver.Detect(ctx, "8.8.8.8", true)
+	require.NoError(t, err)
+	require.True(t, result.Cached, "an immediate retry reuses the fresh decision")
+	require.Equal(t, "US", result.Country)
+	require.Equal(t, 1, calls)
+
+	status = http.StatusServiceUnavailable
+	_, err = resolver.Detect(ctx, "1.1.1.1", false)
+	require.Error(t, err)
+	for _, refresh := range []bool{false, true, true} {
+		result, err = resolver.Detect(ctx, "1.1.1.1", refresh)
+		require.Error(t, err)
+		require.Empty(t, result.Country)
+		require.Equal(t, "retry_too_soon", result.ErrorCode)
+		require.Equal(t, "retry_too_soon", CountryLookupErrorCode(err))
+	}
+	require.Equal(t, 2, calls, "page loads and retries cannot repeat a failed lookup at once")
+	_, cached := resolver.cache["1.1.1.1"]
+	require.False(t, cached, "failures are never cached as a country")
+
+	status = http.StatusOK
+	_, err = resolver.Detect(ctx, "9.9.9.9", true)
+	require.NoError(t, err, "other addresses are unaffected")
+	require.Equal(t, 3, calls)
+
+	resolver.mu.Lock()
+	for ip := range resolver.attempts {
+		resolver.attempts[ip] = time.Now().Add(-uiCountryRetryInterval)
+	}
+	resolver.mu.Unlock()
+	result, err = resolver.Detect(ctx, "1.1.1.1", true)
+	require.NoError(t, err)
+	require.Equal(t, "US", result.Country)
+	result, err = resolver.Detect(ctx, "8.8.8.8", true)
+	require.NoError(t, err)
+	require.False(t, result.Cached, "after the interval a retry asks the provider again")
+	require.Equal(t, 5, calls)
+}
+
+func TestUICountryLookupRetryWindowsStayBounded(t *testing.T) {
+	resolver := NewCountryResolver()
+	now := time.Now()
+	for i := range uiCountryCacheMax {
+		resolver.attempts[fmt.Sprintf("203.0.%d.%d", i/256, i%256)] = now
+	}
+	resolver.recordAttempt("8.8.8.8", now)
+	require.Len(t, resolver.attempts, uiCountryCacheMax)
+	require.Equal(t, now, resolver.attempts["8.8.8.8"])
+
+	expired := 0
+	for key := range resolver.attempts {
+		if key != "8.8.8.8" && expired < 2 {
+			resolver.attempts[key] = now.Add(-uiCountryRetryInterval)
+			expired++
+		}
+	}
+	resolver.recordAttempt("9.9.9.9", now)
+	require.Len(t, resolver.attempts, uiCountryCacheMax-1, "expired windows are dropped before live ones")
+	require.Contains(t, resolver.attempts, "9.9.9.9")
 }
 
 func TestUICountryLookupFallsBackAfterPrimaryFailure(t *testing.T) {

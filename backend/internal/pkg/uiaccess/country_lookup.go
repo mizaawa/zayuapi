@@ -20,6 +20,10 @@ const (
 	uiCountryFallbackURL   = "https://api.country.is/"
 	uiCountryCacheTTL      = 10 * time.Minute
 	uiCountryCacheMax      = 1024
+	// uiCountryRetryInterval matches the Retry-After of the unavailable notice.
+	// Within it, one address cannot make the server contact providers again,
+	// neither through retry forms nor through page loads after a failure.
+	uiCountryRetryInterval = 5 * time.Second
 )
 
 // CountryLookupResult is safe to expose only through an authenticated admin
@@ -78,8 +82,10 @@ type CountryResolver struct {
 	client           *http.Client
 	endpoint         string
 	fallbackEndpoint string
+	retryInterval    time.Duration
 	mu               sync.Mutex
 	cache            map[string]uiCountryEntry
+	attempts         map[string]time.Time
 	inflight         map[string]*uiCountryFlight
 	capacity         chan struct{}
 }
@@ -87,15 +93,16 @@ type CountryResolver struct {
 func NewCountryResolver() *CountryResolver {
 	return &CountryResolver{
 		client:   &http.Client{Timeout: countryProviderTimeout, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }},
-		endpoint: uiCountryLookupURL, fallbackEndpoint: uiCountryFallbackURL,
-		cache: make(map[string]uiCountryEntry), inflight: make(map[string]*uiCountryFlight), capacity: make(chan struct{}, 8),
+		endpoint: uiCountryLookupURL, fallbackEndpoint: uiCountryFallbackURL, retryInterval: uiCountryRetryInterval,
+		cache: make(map[string]uiCountryEntry), attempts: make(map[string]time.Time), inflight: make(map[string]*uiCountryFlight), capacity: make(chan struct{}, 8),
 	}
 }
 
 var defaultCountryResolver = NewCountryResolver()
 
 // DetectCountry shares the UI resolver and its bounded cache with admin
-// diagnostics. A refresh retires the previous decision before a new lookup.
+// diagnostics. A refresh retires the previous decision before a new lookup,
+// unless the same address already reached a provider within the retry interval.
 func DetectCountry(ctx context.Context, rawIP string, refresh bool) (CountryLookupResult, error) {
 	return defaultCountryResolver.Detect(ctx, rawIP, refresh)
 }
@@ -120,14 +127,18 @@ func (r *CountryResolver) Detect(ctx context.Context, rawIP string, refresh bool
 	}
 	ip := result.IP
 	r.mu.Lock()
-	if refresh {
-		delete(r.cache, ip)
-	}
-	if entry, ok := r.cache[ip]; !refresh && ok && time.Now().Before(entry.expires) {
+	now := time.Now()
+	last, attempted := r.attempts[ip]
+	recent := attempted && now.Sub(last) < r.retryInterval
+	// A refresh within the retry interval reuses the decision it would repeat.
+	if entry, ok := r.cache[ip]; ok && now.Before(entry.expires) && (!refresh || recent) {
 		r.mu.Unlock()
 		result = entry.result
 		result.Cached = true
 		return result, nil
+	}
+	if refresh {
+		delete(r.cache, ip)
 	}
 	if flight, ok := r.inflight[ip]; ok {
 		r.mu.Unlock()
@@ -138,6 +149,13 @@ func (r *CountryResolver) Detect(ctx context.Context, rawIP string, refresh bool
 			result.ErrorCode = CountryLookupErrorCode(ctx.Err())
 			return result, ctx.Err()
 		}
+	}
+	if recent {
+		// Failures stay uncached, so an allowed country is never inferred, but
+		// they cannot be repeated at once to amplify traffic to the providers.
+		r.mu.Unlock()
+		result.ErrorCode = "retry_too_soon"
+		return result, countryFailure(result.ErrorCode)
 	}
 	select {
 	case r.capacity <- struct{}{}:
@@ -155,6 +173,8 @@ func (r *CountryResolver) Detect(ctx context.Context, rawIP string, refresh bool
 	cancel()
 	r.mu.Lock()
 	delete(r.inflight, ip)
+	// Cancelled lookups count too: the provider request may already have been sent.
+	r.recordAttempt(ip, time.Now())
 	if lookupErr == nil {
 		if len(r.cache) >= uiCountryCacheMax {
 			for key, entry := range r.cache {
@@ -176,6 +196,28 @@ func (r *CountryResolver) Detect(ctx context.Context, rawIP string, refresh bool
 	<-r.capacity
 	r.mu.Unlock()
 	return result, lookupErr
+}
+
+// recordAttempt must be called with r.mu held. Like the cache, the map is
+// bounded; expired windows are dropped first.
+func (r *CountryResolver) recordAttempt(ip string, now time.Time) {
+	if r.retryInterval <= 0 {
+		return
+	}
+	if _, exists := r.attempts[ip]; !exists && len(r.attempts) >= uiCountryCacheMax {
+		for key, last := range r.attempts {
+			if now.Sub(last) >= r.retryInterval {
+				delete(r.attempts, key)
+			}
+		}
+		if len(r.attempts) >= uiCountryCacheMax {
+			for key := range r.attempts {
+				delete(r.attempts, key)
+				break
+			}
+		}
+	}
+	r.attempts[ip] = now
 }
 
 func (r *CountryResolver) lookup(ctx context.Context, ip string) (CountryLookupResult, error) {
