@@ -675,6 +675,11 @@ export interface SystemSettings {
   account_quota_notify_enabled: boolean;
   account_quota_notify_emails: NotifyEmailEntry[];
 
+  /** Canonical bare domain retained when the HTML-only restriction is disabled. */
+  ui_access_domain: string;
+  ui_access_domain_enabled: boolean;
+  ui_country_restriction_enabled: boolean;
+  ui_blocked_countries: string;
   disable_redeem_code_creation_limit: boolean;
 
   // Frozen balance timeout in hours (1..720), defaults to 1.
@@ -1008,6 +1013,10 @@ export interface UpdateSettingsRequest {
   account_quota_notify_enabled?: boolean;
   account_quota_notify_emails?: NotifyEmailEntry[];
 
+  ui_access_domain?: string;
+  ui_access_domain_enabled?: boolean;
+  ui_country_restriction_enabled?: boolean;
+  ui_blocked_countries?: string;
   disable_redeem_code_creation_limit?: boolean;
 
   frozen_balance_release_hours?: number;

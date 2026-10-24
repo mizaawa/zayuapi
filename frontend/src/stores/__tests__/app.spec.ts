@@ -75,6 +75,28 @@ vi.mock('@/api/auth', () => ({
 }))
 
 describe('useAppStore', () => {
+  it('keeps injected accessibility controls without an API request and replaces them on the existing forced refresh', async () => {
+    const injected = createPublicSettings({ ui_access_domain: 'example.com', ui_access_domain_enabled: true, ui_country_restriction_enabled: true, ui_blocked_countries: 'CN,US' })
+    window.__APP_CONFIG__ = injected
+    const store = useAppStore()
+    await store.fetchPublicSettings()
+    expect(store.cachedPublicSettings?.ui_access_domain).toBe('example.com')
+    expect(store.cachedPublicSettings?.ui_access_domain_enabled).toBe(true)
+    expect(store.cachedPublicSettings?.ui_country_restriction_enabled).toBe(true)
+    expect(store.cachedPublicSettings?.ui_blocked_countries).toBe('CN,US')
+    expect(getPublicSettings).not.toHaveBeenCalled()
+    vi.mocked(getPublicSettings).mockResolvedValue(createPublicSettings({ ui_access_domain: 'example.com', ui_access_domain_enabled: false, ui_country_restriction_enabled: false, ui_blocked_countries: 'CN,US' }))
+    await store.fetchPublicSettings(true)
+    expect(getPublicSettings).toHaveBeenCalledOnce()
+    expect(store.cachedPublicSettings?.ui_access_domain).toBe('example.com')
+    expect(store.cachedPublicSettings?.ui_access_domain_enabled).toBe(false)
+    expect(store.cachedPublicSettings?.ui_country_restriction_enabled).toBe(false)
+    expect(store.cachedPublicSettings?.ui_blocked_countries).toBe('CN,US')
+    expect(window.__APP_CONFIG__?.ui_access_domain).toBe('example.com')
+    expect(window.__APP_CONFIG__?.ui_access_domain_enabled).toBe(false)
+    expect(window.__APP_CONFIG__?.ui_country_restriction_enabled).toBe(false)
+  })
+
   beforeEach(() => {
     setActivePinia(createPinia())
     vi.useFakeTimers()

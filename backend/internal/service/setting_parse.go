@@ -54,20 +54,24 @@ func (s *SettingService) InitializeDefaultSettings(ctx context.Context) error {
 
 	// 初始化默认设置
 	defaults := map[string]string{
-		SettingKeyUpdateGitHubToken:                         "",
-		SettingKeyRegistrationEnabled:                       "true",
-		SettingKeyRegistrationAnnouncementEnabled:           "false",
-		SettingKeyRegistrationAnnouncementContent:           "",
-		SettingKeyEmailVerifyEnabled:                        "false",
-		SettingKeyRegistrationEmailSuffixWhitelist:          "[]",
-		SettingKeyPromoCodeEnabled:                          "true", // 默认启用优惠码功能
-		SettingKeyLoginAgreementEnabled:                     "false",
-		SettingKeyLoginAgreementMode:                        defaultLoginAgreementMode,
-		SettingKeyLoginAgreementUpdatedAt:                   defaultLoginAgreementDate,
-		SettingKeyLoginAgreementDocuments:                   loginAgreementDocumentsJSON,
-		SettingKeyAPIKeyACLTrustForwardedIP:                 "true",
-		SettingKeyForwardedClientIPHeaders:                  string(forwardedClientIPHeadersJSON),
-		settingKeyForwardedClientIPModeV2:                   "true",
+		SettingKeyUpdateGitHubToken:                "",
+		SettingKeyRegistrationEnabled:              "true",
+		SettingKeyRegistrationAnnouncementEnabled:  "false",
+		SettingKeyRegistrationAnnouncementContent:  "",
+		SettingKeyEmailVerifyEnabled:               "false",
+		SettingKeyRegistrationEmailSuffixWhitelist: "[]",
+		SettingKeyPromoCodeEnabled:                 "true", // 默认启用优惠码功能
+		SettingKeyLoginAgreementEnabled:            "false",
+		SettingKeyLoginAgreementMode:               defaultLoginAgreementMode,
+		SettingKeyLoginAgreementUpdatedAt:          defaultLoginAgreementDate,
+		SettingKeyLoginAgreementDocuments:          loginAgreementDocumentsJSON,
+		SettingKeyAPIKeyACLTrustForwardedIP:        "true",
+		SettingKeyForwardedClientIPHeaders:         string(forwardedClientIPHeadersJSON),
+		settingKeyForwardedClientIPModeV2:          "true",
+		// Keep the domain switch absent: missing keys retain legacy domain enforcement.
+		SettingKeyUIAccessDomain:                            "",
+		SettingKeyUICountryRestrictionEnabled:               "false",
+		SettingKeyUIBlockedCountries:                        "",
 		SettingKeySiteName:                                  "Sub2API",
 		SettingKeySiteLogo:                                  "",
 		SettingKeyPurchaseSubscriptionEnabled:               "false",
@@ -375,6 +379,10 @@ func (s *SettingService) parseSettings(settings map[string]string) *SystemSettin
 		AliyunCaptchaRegion:                    normalizeAliyunCaptchaRegion(settings[SettingKeyAliyunCaptchaRegion]),
 		APIKeyACLTrustForwardedIP:              apiKeyACLTrustForwardedIP,
 		ForwardedClientIPHeaders:               forwardedClientIPHeaders,
+		UIAccessDomain:                         settings[SettingKeyUIAccessDomain],
+		UIAccessDomainEnabled:                  uiAccessDomainEnabled(settings),
+		UICountryRestrictionEnabled:            settings[SettingKeyUICountryRestrictionEnabled] == "true",
+		UIBlockedCountries:                     settings[SettingKeyUIBlockedCountries],
 		SiteName:                               s.getStringOrDefault(settings, SettingKeySiteName, "Sub2API"),
 		SiteLogo:                               settings[SettingKeySiteLogo],
 		SiteSubtitle:                           s.getStringOrDefault(settings, SettingKeySiteSubtitle, "Subscription to API Conversion Platform"),
@@ -1334,4 +1342,12 @@ func normalizeTablePreferences(defaultPageSize int, options []int) (int, []int) 
 	}
 
 	return defaultPageSize, normalizedOptions
+}
+
+// uiAccessDomainEnabled preserves restrictions saved before the switch existed.
+func uiAccessDomainEnabled(settings map[string]string) bool {
+	if enabled, exists := settings[SettingKeyUIAccessDomainEnabled]; exists {
+		return enabled == "true"
+	}
+	return strings.TrimSpace(settings[SettingKeyUIAccessDomain]) != ""
 }

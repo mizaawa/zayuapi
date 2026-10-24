@@ -14,6 +14,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/config"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/antigravity"
 	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/uiaccess"
 )
 
 // OmittedSettingKeys marks setting keys the caller's payload never carried.
@@ -93,12 +94,32 @@ func (s *SettingService) refreshCachedSettingsAfterWrite(ctx context.Context, se
 	stored, err := s.GetAllSettings(ctx)
 	if err != nil {
 		slog.Warn("refresh cached settings after partial update failed", "error", err)
+		// The write already succeeded; stale HTML must not retain an old host policy.
+		if s.onUpdate != nil {
+			s.onUpdate()
+		}
 		return
 	}
 	s.refreshCachedSettings(stored)
 }
 
 func (s *SettingService) buildSystemSettingsUpdates(ctx context.Context, settings *SystemSettings) (map[string]string, error) {
+	domain, domainErr := uiaccess.NormalizeDomain(settings.UIAccessDomain)
+	if domainErr != nil {
+		return nil, infraerrors.BadRequest("INVALID_UI_ACCESS_DOMAIN", domainErr.Error())
+	}
+	if settings.UIAccessDomainEnabled && domain == "" {
+		return nil, infraerrors.BadRequest("INVALID_UI_ACCESS_DOMAIN", "An enabled UI domain restriction requires a domain")
+	}
+	settings.UIAccessDomain = domain
+	countries, countryErr := uiaccess.NormalizeCountryCodes(settings.UIBlockedCountries)
+	if countryErr != nil {
+		return nil, infraerrors.BadRequest("INVALID_UI_BLOCKED_COUNTRIES", countryErr.Error())
+	}
+	if settings.UICountryRestrictionEnabled && countries == "" {
+		return nil, infraerrors.BadRequest("INVALID_UI_BLOCKED_COUNTRIES", "An enabled UI country restriction requires at least one country")
+	}
+	settings.UIBlockedCountries = countries
 	if err := s.validateDefaultSubscriptionGroups(ctx, settings.DefaultSubscriptions); err != nil {
 		return nil, err
 	}
@@ -338,6 +359,10 @@ func (s *SettingService) buildSystemSettingsUpdates(ctx context.Context, setting
 	}
 
 	// OEM设置
+	updates[SettingKeyUIAccessDomain] = settings.UIAccessDomain
+	updates[SettingKeyUIAccessDomainEnabled] = strconv.FormatBool(settings.UIAccessDomainEnabled)
+	updates[SettingKeyUICountryRestrictionEnabled] = strconv.FormatBool(settings.UICountryRestrictionEnabled)
+	updates[SettingKeyUIBlockedCountries] = settings.UIBlockedCountries
 	updates[SettingKeySiteName] = settings.SiteName
 	updates[SettingKeySiteLogo] = settings.SiteLogo
 	updates[SettingKeySiteSubtitle] = settings.SiteSubtitle

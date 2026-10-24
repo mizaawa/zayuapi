@@ -235,6 +235,11 @@ export interface PublicSettings {
   site_logo: string
   site_subtitle: string
   api_base_url: string
+  /** Canonical domain for webpage access only; empty means unrestricted. */
+  ui_access_domain?: string
+  ui_access_domain_enabled?: boolean
+  ui_country_restriction_enabled?: boolean
+  ui_blocked_countries?: string
   contact_info: string
   doc_url: string
   home_content: string

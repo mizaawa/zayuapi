@@ -421,9 +421,12 @@ func TestFrontendServer_ServeIndexHTML(t *testing.T) {
 
 		server.serveIndexHTML(c)
 
-		// Should still return 200 with base HTML
-		assert.Equal(t, http.StatusOK, w.Code)
+		// Unknown settings must not bypass the UI host policy with base HTML.
+		assert.Equal(t, http.StatusServiceUnavailable, w.Code)
 		assert.Contains(t, w.Header().Get("Content-Type"), "text/html")
+		assert.NotContains(t, w.Body.String(), "window.__APP_CONFIG__")
+		assert.NotContains(t, w.Body.String(), "<script")
+		assert.Equal(t, "private, no-store", w.Header().Get("Cache-Control"))
 	})
 }
 

@@ -261,6 +261,12 @@ func (api *OAuthRefreshAPI) RefreshIfNeeded(
 		// credentials. Never persist them after the attempt/cycle boundary.
 		return nil, ctxErr
 	}
+	// Deadline cancellation is delivered by an asynchronous timer callback.
+	// Under scheduler pressure Err can still be nil after the deadline, so the
+	// persistence boundary must also enforce the deadline itself.
+	if deadline, ok := ctx.Deadline(); ok && !time.Now().Before(deadline) {
+		return nil, context.DeadlineExceeded
+	}
 	if refreshErr != nil {
 		// 竞争恢复：invalid_grant 可能是另一个 worker 已消费了旧 refresh_token
 		// 重新读取 DB，如果 refresh_token 已更新则说明是竞争，返回成功

@@ -323,6 +323,18 @@ func diffSettings(before *service.SystemSettings, after *service.SystemSettings,
 	if before.OIDCConnectUserInfoUsernamePath != after.OIDCConnectUserInfoUsernamePath {
 		changed = append(changed, "oidc_connect_userinfo_username_path")
 	}
+	if before.UIAccessDomainEnabled != after.UIAccessDomainEnabled {
+		changed = append(changed, "ui_access_domain_enabled")
+	}
+	if before.UICountryRestrictionEnabled != after.UICountryRestrictionEnabled {
+		changed = append(changed, "ui_country_restriction_enabled")
+	}
+	if before.UIBlockedCountries != after.UIBlockedCountries {
+		changed = append(changed, "ui_blocked_countries")
+	}
+	if before.UIAccessDomain != after.UIAccessDomain {
+		changed = append(changed, "ui_access_domain")
+	}
 	if before.SiteName != after.SiteName {
 		changed = append(changed, "site_name")
 	}

@@ -151,6 +151,10 @@ type SystemSettings struct {
 	GoogleOAuthFrontendRedirectURL    string `json:"google_oauth_frontend_redirect_url"`
 
 	SiteName                    string           `json:"site_name"`
+	UIAccessDomain              string           `json:"ui_access_domain"`
+	UIAccessDomainEnabled       bool             `json:"ui_access_domain_enabled"`
+	UICountryRestrictionEnabled bool             `json:"ui_country_restriction_enabled"`
+	UIBlockedCountries          string           `json:"ui_blocked_countries"`
 	SiteLogo                    string           `json:"site_logo"`
 	SiteSubtitle                string           `json:"site_subtitle"`
 	APIBaseURL                  string           `json:"api_base_url"`
@@ -397,6 +401,10 @@ type PublicSettings struct {
 	AliyunCaptchaPrefix              string                   `json:"aliyun_captcha_prefix"`
 	AliyunCaptchaRegion              string                   `json:"aliyun_captcha_region"`
 	SiteName                         string                   `json:"site_name"`
+	UIAccessDomain                   string                   `json:"ui_access_domain"`
+	UIAccessDomainEnabled            bool                     `json:"ui_access_domain_enabled"`
+	UICountryRestrictionEnabled      bool                     `json:"ui_country_restriction_enabled"`
+	UIBlockedCountries               string                   `json:"ui_blocked_countries"`
 	SiteLogo                         string                   `json:"site_logo"`
 	SiteSubtitle                     string                   `json:"site_subtitle"`
 	APIBaseURL                       string                   `json:"api_base_url"`

@@ -652,6 +652,57 @@ func TestRefreshIfNeeded_LateSuccessAfterDeadlineDoesNotPersist(t *testing.T) {
 	require.Zero(t, repo.updateCredentialsCalls, "late credentials must not cross the unified API persistence boundary")
 }
 
+// Models the interval after the wall-clock deadline but before the context's
+// asynchronous timer callback has delivered cancellation. No sleep is needed.
+type refreshDeadlineNotificationPendingContext struct {
+	context.Context
+	deadline time.Time
+}
+
+func (c refreshDeadlineNotificationPendingContext) Deadline() (time.Time, bool) {
+	return c.deadline, true
+}
+
+func TestRefreshIfNeeded_ElapsedDeadlineWithoutCancellationNotificationDoesNotPersist(t *testing.T) {
+	for _, platform := range []string{PlatformGrok, PlatformGemini} {
+		t.Run(platform, func(t *testing.T) {
+			account := &Account{ID: 86, Platform: platform, Type: AccountTypeOAuth, Status: StatusActive, Credentials: map[string]any{"access_token": "original-token"}}
+			repo := &refreshAPIAccountRepo{account: account}
+			executor := &refreshAPIExecutorStub{needsRefresh: true, credentials: map[string]any{"access_token": "late-token"}}
+			api := NewOAuthRefreshAPI(repo, nil)
+			ctx := refreshDeadlineNotificationPendingContext{Context: context.Background(), deadline: time.Now().Add(-time.Second)}
+			require.NoError(t, ctx.Err(), "the deadline cancellation notification is intentionally pending")
+
+			result, err := api.RefreshIfNeeded(ctx, account, executor, time.Hour)
+
+			t.Logf("deadline_elapsed=%t context_err=%v refresh_error=%v refresh_calls=%d write_calls=%d success_cas_calls=%d", !time.Now().Before(ctx.deadline), ctx.Err(), err, executor.refreshCalls, repo.updateCredentialsCalls, repo.successCASCalls)
+			require.ErrorIs(t, err, context.DeadlineExceeded)
+			require.Nil(t, result)
+			require.Equal(t, 1, executor.refreshCalls)
+			require.Zero(t, repo.updateCredentialsCalls, "neither normal persistence nor Grok CAS may store late credentials")
+			require.Zero(t, repo.successCASCalls, "the deadline must be enforced before attempting CAS")
+			require.Equal(t, "original-token", repo.account.Credentials["access_token"])
+		})
+	}
+}
+
+func TestRefreshIfNeeded_FutureDeadlineWithoutCancellationCanPersist(t *testing.T) {
+	for _, platform := range []string{PlatformGrok, PlatformGemini} {
+		t.Run(platform, func(t *testing.T) {
+			account := &Account{ID: 87, Platform: platform, Type: AccountTypeOAuth, Status: StatusActive, Credentials: map[string]any{"access_token": "original-token"}}
+			repo := &refreshAPIAccountRepo{account: account}
+			executor := &refreshAPIExecutorStub{needsRefresh: true, credentials: map[string]any{"access_token": "fresh-token"}}
+			api := NewOAuthRefreshAPI(repo, nil)
+			ctx := refreshDeadlineNotificationPendingContext{Context: context.Background(), deadline: time.Now().Add(time.Hour)}
+			result, err := api.RefreshIfNeeded(ctx, account, executor, time.Hour)
+			require.NoError(t, err)
+			require.True(t, result.Refreshed)
+			require.Equal(t, 1, repo.updateCredentialsCalls)
+			require.Equal(t, "fresh-token", repo.account.Credentials["access_token"])
+		})
+	}
+}
+
 func TestRefreshIfNeeded_NilCredentials(t *testing.T) {
 	account := &Account{ID: 9, Platform: PlatformGemini, Type: AccountTypeOAuth, Status: StatusActive}
 	repo := &refreshAPIAccountRepo{account: account}

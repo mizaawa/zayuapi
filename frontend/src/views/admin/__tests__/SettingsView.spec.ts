@@ -1082,6 +1082,167 @@ describe("admin SettingsView payment visible method controls", () => {
     );
   });
 
+  it("shows one accessibility card only in security settings and saves an explicitly enabled domain", async () => {
+    const wrapper = mountView();
+    await flushPromises();
+    await openFeaturesTab(wrapper);
+    expect((wrapper.get('[data-testid="ui-accessibility-control"]').element.parentElement as HTMLElement).style.display).toBe("none");
+    await openSecurityTab(wrapper);
+    expect(wrapper.get('#settings-tab-security').attributes('aria-selected')).toBe('true');
+    const card = wrapper.get('[data-testid="ui-accessibility-control"]');
+    expect(card.isVisible()).toBe(true);
+    const input = wrapper.get('[data-testid="ui-access-domain"]');
+    expect((input.element as HTMLInputElement).value).toBe("");
+    expect(input.element.closest(".card")?.textContent).toContain("访问性控制");
+    expect(card.text()).toContain("不影响 API、流式请求或支付回调");
+    expect(wrapper.get('#ui-access-domain-hint').text()).toContain("HTTP/HTTPS");
+    expect(wrapper.get('[data-testid="ui-accessibility-proxy-hint"]').text()).toContain("server.trusted_proxies");
+    expect(wrapper.get('[data-testid="ui-accessibility-proxy-hint"]').text()).toContain("GeoJS");
+    expect(wrapper.get('[data-testid="ui-accessibility-proxy-hint"]').text()).toContain("重试页");
+    expect((wrapper.get('[data-testid="ui-access-domain-enabled-toggle"]').element as HTMLInputElement).checked).toBe(false);
+    expect((wrapper.get('[data-testid="ui-country-restriction-enabled-toggle"]').element as HTMLInputElement).checked).toBe(false);
+    expect((wrapper.get('[data-testid="ui-blocked-countries"]').element as HTMLInputElement).value).toBe("");
+    expect(wrapper.findAll('#ui-access-domain')).toHaveLength(1);
+    const originalLocation = window.location.href;
+    updateSettings.mockImplementationOnce(async payload => ({ ...baseSettingsResponse, ...payload, ui_access_domain: "canonical.example.com" }));
+    await input.setValue("  EXAMPLE.COM.  ");
+    await wrapper.get('[data-testid="ui-access-domain-enabled-toggle"]').setValue(true);
+    await wrapper.find("form").trigger("submit.prevent");
+    await flushPromises();
+    expect(updateSettings).toHaveBeenCalledWith(expect.objectContaining({ ui_access_domain: "example.com", ui_access_domain_enabled: true, ui_country_restriction_enabled: false, ui_blocked_countries: "" }));
+    expect((input.element as HTMLInputElement).value).toBe("canonical.example.com");
+    expect(fetchPublicSettings).toHaveBeenCalledWith(true);
+    expect(window.location.href).toBe(originalLocation);
+    wrapper.unmount();
+  });
+
+  it("infers a legacy configured domain as enabled and retains it when explicitly disabled", async () => {
+    getSettings.mockResolvedValue({ ...baseSettingsResponse, ui_access_domain: "example.com" });
+    const wrapper = mountView();
+    await flushPromises();
+    await openSecurityTab(wrapper);
+    const input = wrapper.get('[data-testid="ui-access-domain"]');
+    expect((input.element as HTMLInputElement).value).toBe("example.com");
+    const toggle = wrapper.get('[data-testid="ui-access-domain-enabled-toggle"]');
+    expect((toggle.element as HTMLInputElement).checked).toBe(true);
+    await toggle.setValue(false);
+    await wrapper.find("form").trigger("submit.prevent");
+    await flushPromises();
+    expect(updateSettings).toHaveBeenCalledWith(expect.objectContaining({ ui_access_domain: "example.com", ui_access_domain_enabled: false }));
+    expect((input.element as HTMLInputElement).value).toBe("example.com");
+    await input.setValue("   ");
+    await wrapper.find("form").trigger("submit.prevent");
+    await flushPromises();
+    expect(updateSettings).toHaveBeenLastCalledWith(expect.objectContaining({ ui_access_domain: "", ui_access_domain_enabled: false }));
+    expect((input.element as HTMLInputElement).value).toBe("");
+    wrapper.unmount();
+  });
+
+  it("rejects a URL locally and allows a corrected IDNA domain without changing the page location", async () => {
+    localeRef.value = "en";
+    const wrapper = mountView();
+    await flushPromises();
+    await openSecurityTab(wrapper);
+    const input = wrapper.get('[data-testid="ui-access-domain"]');
+    expect(input.element.closest(".card")?.textContent).toContain("Accessibility Controls");
+    await wrapper.get('[data-testid="ui-access-domain-enabled-toggle"]').setValue(true);
+    await input.setValue("https://example.com/path");
+    await wrapper.find("form").trigger("submit.prevent");
+    await flushPromises();
+    expect(updateSettings).not.toHaveBeenCalled();
+    expect(wrapper.get('#ui-access-domain-error').text()).toContain("bare domain");
+    expect(input.attributes('aria-invalid')).toBe('true');
+    await input.setValue("例子.测试");
+    expect(wrapper.find('#ui-access-domain-error').exists()).toBe(false);
+    await wrapper.find("form").trigger("submit.prevent");
+    await flushPromises();
+    expect(updateSettings).toHaveBeenCalledWith(expect.objectContaining({ ui_access_domain: "xn--fsqu00a.xn--0zwm56d" }));
+    wrapper.unmount();
+  });
+
+  it("keeps an explicitly disabled stored domain disabled and retains the country list when switched off", async () => {
+    getSettings.mockResolvedValue({ ...baseSettingsResponse, ui_access_domain: "example.com", ui_access_domain_enabled: false, ui_country_restriction_enabled: true, ui_blocked_countries: "CN,US" });
+    const wrapper = mountView();
+    await flushPromises();
+    await openSecurityTab(wrapper);
+    expect((wrapper.get('[data-testid="ui-access-domain-enabled-toggle"]').element as HTMLInputElement).checked).toBe(false);
+    const countryToggle = wrapper.get('[data-testid="ui-country-restriction-enabled-toggle"]');
+    expect((countryToggle.element as HTMLInputElement).checked).toBe(true);
+    await countryToggle.setValue(false);
+    await wrapper.find("form").trigger("submit.prevent");
+    await flushPromises();
+    expect(updateSettings).toHaveBeenCalledWith(expect.objectContaining({ ui_access_domain: "example.com", ui_access_domain_enabled: false, ui_country_restriction_enabled: false, ui_blocked_countries: "CN,US" }));
+    expect((wrapper.get('[data-testid="ui-blocked-countries"]').element as HTMLInputElement).value).toBe("CN,US");
+    wrapper.unmount();
+  });
+
+  it("requires a domain when the domain restriction is enabled and allows an empty disabled configuration", async () => {
+    const wrapper = mountView();
+    await flushPromises();
+    await openSecurityTab(wrapper);
+    const toggle = wrapper.get('[data-testid="ui-access-domain-enabled-toggle"]');
+    await toggle.setValue(true);
+    await wrapper.find("form").trigger("submit.prevent");
+    await flushPromises();
+    expect(updateSettings).not.toHaveBeenCalled();
+    expect(wrapper.get('#ui-access-domain-error').text()).toContain("启用时必须填写主域名");
+    await toggle.setValue(false);
+    expect(wrapper.find('#ui-access-domain-error').exists()).toBe(false);
+    await wrapper.find("form").trigger("submit.prevent");
+    await flushPromises();
+    expect(updateSettings).toHaveBeenCalledWith(expect.objectContaining({ ui_access_domain_enabled: false, ui_access_domain: "" }));
+    wrapper.unmount();
+  });
+
+  it("normalizes country CSV and accepts the server canonical result without enabling the domain restriction", async () => {
+    const wrapper = mountView();
+    await flushPromises();
+    await openSecurityTab(wrapper);
+    updateSettings.mockImplementationOnce(async payload => ({ ...baseSettingsResponse, ...payload, ui_blocked_countries: "US,CN" }));
+    await wrapper.get('[data-testid="ui-country-restriction-enabled-toggle"]').setValue(true);
+    const countries = wrapper.get('[data-testid="ui-blocked-countries"]');
+    await countries.setValue(" cn, US,cn ");
+    await wrapper.find("form").trigger("submit.prevent");
+    await flushPromises();
+    expect(updateSettings).toHaveBeenCalledWith(expect.objectContaining({ ui_access_domain_enabled: false, ui_country_restriction_enabled: true, ui_blocked_countries: "CN,US" }));
+    expect((countries.element as HTMLInputElement).value).toBe("US,CN");
+    expect(wrapper.get('[data-testid="ui-country-scope-hint"]').text()).toContain("否则作用于所有网页域名");
+    wrapper.unmount();
+  });
+
+  it("rejects enabled country restrictions with an empty list and allows disabling without discarding other fields", async () => {
+    localeRef.value = "en";
+    const wrapper = mountView();
+    await flushPromises();
+    await openSecurityTab(wrapper);
+    const toggle = wrapper.get('[data-testid="ui-country-restriction-enabled-toggle"]');
+    await toggle.setValue(true);
+    await wrapper.find("form").trigger("submit.prevent");
+    await flushPromises();
+    expect(updateSettings).not.toHaveBeenCalled();
+    expect(wrapper.get('#ui-blocked-countries-error').text()).toContain("at least one code");
+    expect(wrapper.get('[data-testid="ui-blocked-countries"]').attributes('aria-invalid')).toBe('true');
+    await toggle.setValue(false);
+    expect(wrapper.find('#ui-blocked-countries-error').exists()).toBe(false);
+    await wrapper.find("form").trigger("submit.prevent");
+    await flushPromises();
+    expect(updateSettings).toHaveBeenCalledWith(expect.objectContaining({ ui_country_restriction_enabled: false, ui_blocked_countries: "" }));
+    wrapper.unmount();
+  });
+
+  it.each(["ZZ", "CN,", "XK"])("rejects invalid country input %s before updating settings", async countries => {
+    const wrapper = mountView();
+    await flushPromises();
+    await openSecurityTab(wrapper);
+    await wrapper.get('[data-testid="ui-country-restriction-enabled-toggle"]').setValue(true);
+    await wrapper.get('[data-testid="ui-blocked-countries"]').setValue(countries);
+    await wrapper.find("form").trigger("submit.prevent");
+    await flushPromises();
+    expect(updateSettings).not.toHaveBeenCalled();
+    expect(wrapper.get('#ui-blocked-countries-error').text()).toContain("ISO");
+    wrapper.unmount();
+  });
+
   it("defaults the redeem code limit switch to off and saves both states from extended features", async () => {
     const wrapper = mountView();
     await flushPromises();

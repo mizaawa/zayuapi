@@ -14,6 +14,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/config"
 	"github.com/Wei-Shaw/sub2api/internal/handler/dto"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/response"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/uiaccess"
 	"github.com/Wei-Shaw/sub2api/internal/server/middleware"
 	"github.com/Wei-Shaw/sub2api/internal/service"
 
@@ -158,6 +159,10 @@ type UpdateSettingsRequest struct {
 	GoogleOAuthFrontendRedirectURL string `json:"google_oauth_frontend_redirect_url"`
 
 	// OEM设置
+	UIAccessDomain              string                `json:"ui_access_domain"`
+	UIAccessDomainEnabled       *bool                 `json:"ui_access_domain_enabled"`
+	UICountryRestrictionEnabled *bool                 `json:"ui_country_restriction_enabled"`
+	UIBlockedCountries          string                `json:"ui_blocked_countries"`
 	SiteName                    string                `json:"site_name"`
 	SiteLogo                    string                `json:"site_logo"`
 	SiteSubtitle                string                `json:"site_subtitle"`
@@ -511,12 +516,66 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		response.BadRequest(c, "Invalid request: "+err.Error())
 		return
 	}
+	for _, key := range []string{service.SettingKeyUIAccessDomain, service.SettingKeyUIAccessDomainEnabled, service.SettingKeyUICountryRestrictionEnabled, service.SettingKeyUIBlockedCountries} {
+		if raw, sent := sentFields[key]; sent && strings.TrimSpace(string(raw)) == "null" {
+			response.BadRequest(c, key+" must not be null")
+			return
+		}
+	}
+	domain, domainErr := uiaccess.NormalizeDomain(req.UIAccessDomain)
+	if domainErr != nil {
+		response.ErrorWithDetails(c, http.StatusBadRequest, domainErr.Error(), "INVALID_UI_ACCESS_DOMAIN", nil)
+		return
+	}
+	req.UIAccessDomain = domain
+	countries, countryErr := uiaccess.NormalizeCountryCodes(req.UIBlockedCountries)
+	if countryErr != nil {
+		response.ErrorWithDetails(c, http.StatusBadRequest, countryErr.Error(), "INVALID_UI_BLOCKED_COUNTRIES", nil)
+		return
+	}
+	req.UIBlockedCountries = countries
 	auditReq := settingsAuditRequest(req)
 	omitted := omittedSettingKeys(sentFields)
 
 	previousSettings, err := h.settingService.GetAllSettings(c.Request.Context())
 	if err != nil {
 		response.ErrorFrom(c, err)
+		return
+	}
+	// Merge every access-policy field before validation, so partial updates cannot
+	// silently reset a switch or validate an omitted list as an explicit clear.
+	uiAccessDomainEnabled := previousSettings.UIAccessDomainEnabled
+	if req.UIAccessDomainEnabled != nil {
+		uiAccessDomainEnabled = *req.UIAccessDomainEnabled
+	}
+	if _, sent := sentFields[service.SettingKeyUIAccessDomain]; !sent {
+		req.UIAccessDomain = previousSettings.UIAccessDomain
+	}
+	uiCountryRestrictionEnabled := previousSettings.UICountryRestrictionEnabled
+	if req.UICountryRestrictionEnabled != nil {
+		uiCountryRestrictionEnabled = *req.UICountryRestrictionEnabled
+	}
+	if _, sent := sentFields[service.SettingKeyUIBlockedCountries]; !sent {
+		req.UIBlockedCountries = previousSettings.UIBlockedCountries
+	}
+	domain, domainErr = uiaccess.NormalizeDomain(req.UIAccessDomain)
+	if domainErr != nil {
+		response.ErrorWithDetails(c, http.StatusBadRequest, domainErr.Error(), "INVALID_UI_ACCESS_DOMAIN", nil)
+		return
+	}
+	req.UIAccessDomain = domain
+	countries, countryErr = uiaccess.NormalizeCountryCodes(req.UIBlockedCountries)
+	if countryErr != nil {
+		response.ErrorWithDetails(c, http.StatusBadRequest, countryErr.Error(), "INVALID_UI_BLOCKED_COUNTRIES", nil)
+		return
+	}
+	req.UIBlockedCountries = countries
+	if uiAccessDomainEnabled && req.UIAccessDomain == "" {
+		response.ErrorWithDetails(c, http.StatusBadRequest, "An enabled UI domain restriction requires a domain", "INVALID_UI_ACCESS_DOMAIN", nil)
+		return
+	}
+	if uiCountryRestrictionEnabled && req.UIBlockedCountries == "" {
+		response.ErrorWithDetails(c, http.StatusBadRequest, "An enabled UI country restriction requires at least one country", "INVALID_UI_BLOCKED_COUNTRIES", nil)
 		return
 	}
 	previousAuthSourceDefaults, err := h.settingService.GetAuthSourceDefaultSettings(c.Request.Context())
@@ -1676,6 +1735,10 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		GoogleOAuthClientSecret:                req.GoogleOAuthClientSecret,
 		GoogleOAuthRedirectURL:                 req.GoogleOAuthRedirectURL,
 		GoogleOAuthFrontendRedirectURL:         req.GoogleOAuthFrontendRedirectURL,
+		UIAccessDomain:                         req.UIAccessDomain,
+		UIAccessDomainEnabled:                  uiAccessDomainEnabled,
+		UICountryRestrictionEnabled:            uiCountryRestrictionEnabled,
+		UIBlockedCountries:                     req.UIBlockedCountries,
 		SiteName:                               req.SiteName,
 		SiteLogo:                               req.SiteLogo,
 		SiteSubtitle:                           req.SiteSubtitle,
@@ -2408,6 +2471,10 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		GoogleOAuthClientSecretConfigured:                      updatedSettings.GoogleOAuthClientSecretConfigured,
 		GoogleOAuthRedirectURL:                                 updatedSettings.GoogleOAuthRedirectURL,
 		GoogleOAuthFrontendRedirectURL:                         updatedSettings.GoogleOAuthFrontendRedirectURL,
+		UIAccessDomain:                                         updatedSettings.UIAccessDomain,
+		UIAccessDomainEnabled:                                  updatedSettings.UIAccessDomainEnabled,
+		UICountryRestrictionEnabled:                            updatedSettings.UICountryRestrictionEnabled,
+		UIBlockedCountries:                                     updatedSettings.UIBlockedCountries,
 		SiteName:                                               updatedSettings.SiteName,
 		SiteLogo:                                               updatedSettings.SiteLogo,
 		SiteSubtitle:                                           updatedSettings.SiteSubtitle,

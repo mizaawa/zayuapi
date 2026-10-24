@@ -46,6 +46,91 @@
 
         <!-- Tab: Security — Admin API Key -->
         <div v-show="activeTab === 'security'" class="space-y-6">
+          <!-- Webpage Accessibility Controls -->
+          <div class="card" data-testid="ui-accessibility-control">
+            <div class="border-b border-gray-100 px-6 py-4 dark:border-dark-700">
+              <h2 class="text-lg font-semibold text-gray-900 dark:text-white">
+                {{ localText('访问性控制', 'Accessibility Controls') }}
+              </h2>
+              <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                {{ localText('仅控制网页访问，不影响 API、流式请求或支付回调。', 'Controls webpage access only; API, streaming requests and payment callbacks are unaffected.') }}
+              </p>
+            </div>
+            <div class="space-y-5 p-6">
+              <div class="flex items-center justify-between gap-4">
+                <div>
+                  <label id="ui-access-domain-enabled-label" class="font-medium text-gray-900 dark:text-white">
+                    {{ localText('限制主域名访问', 'Restrict webpage access domain') }}
+                  </label>
+                  <p id="ui-access-domain-enabled-hint" class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                    {{ localText('开启并填写主域名后，仅该域名可打开网页；关闭保留已填写的域名。', 'When enabled with a main domain, only that domain can open webpages. Disabling retains the saved domain.') }}
+                  </p>
+                </div>
+                <Toggle v-model="form.ui_access_domain_enabled" aria-labelledby="ui-access-domain-enabled-label" aria-describedby="ui-access-domain-enabled-hint" data-testid="ui-access-domain-enabled-toggle" @update:model-value="uiAccessDomainError = false" />
+              </div>
+              <div>
+                <label for="ui-access-domain" class="input-label">{{ localText('主域名', 'Main domain') }}</label>
+                <input
+                  id="ui-access-domain"
+                  v-model="form.ui_access_domain"
+                  type="text"
+                  inputmode="url"
+                  autocomplete="off"
+                  autocapitalize="none"
+                  spellcheck="false"
+                  class="input"
+                  placeholder="example.com"
+                  :aria-invalid="uiAccessDomainError ? 'true' : undefined"
+                  :aria-describedby="uiAccessDomainError ? 'ui-access-domain-hint ui-access-domain-error' : 'ui-access-domain-hint'"
+                  data-testid="ui-access-domain"
+                  @input="uiAccessDomainError = false"
+                />
+                <p id="ui-access-domain-hint" class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                  {{ localText('填写裸域名，不含协议、端口、路径或通配符；HTTP/HTTPS 均可。启用前请确认该域名可访问本站，启用时不可为空；关闭时保留配置。', 'Enter a bare domain without a scheme, port, path or wildcard; both HTTP and HTTPS work. Ensure it reaches this site before enabling. A domain is required when enabled; disabling retains the configuration.') }}
+                </p>
+                <p v-if="uiAccessDomainError" id="ui-access-domain-error" role="alert" class="mt-1 text-xs text-red-600 dark:text-red-400">{{ uiAccessDomainErrorMessage }}</p>
+              </div>
+              <div class="flex items-center justify-between gap-4 border-t border-gray-100 pt-4 dark:border-dark-700">
+                <div>
+                  <label id="ui-country-restriction-label" class="font-medium text-gray-900 dark:text-white">
+                    {{ localText('国家/地区不可访问性', 'Block webpage access by country/region') }}
+                  </label>
+                  <p id="ui-country-restriction-hint" class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                    {{ localText('开启后阻止所选国家/地区访问网页；关闭保留国家/地区列表。', 'When enabled, visitors from the selected countries/regions cannot open webpages. Disabling retains the list.') }}
+                  </p>
+                </div>
+                <Toggle v-model="form.ui_country_restriction_enabled" aria-labelledby="ui-country-restriction-label" aria-describedby="ui-country-restriction-hint" data-testid="ui-country-restriction-enabled-toggle" @update:model-value="uiBlockedCountriesError = false" />
+              </div>
+              <div>
+                <label for="ui-blocked-countries" class="input-label">{{ localText('不可访问的国家/地区', 'Blocked countries/regions') }}</label>
+                <input
+                  id="ui-blocked-countries"
+                  v-model="form.ui_blocked_countries"
+                  type="text"
+                  autocomplete="off"
+                  autocapitalize="characters"
+                  spellcheck="false"
+                  class="input"
+                  placeholder="CN, US"
+                  :aria-invalid="uiBlockedCountriesError ? 'true' : undefined"
+                  :aria-describedby="uiBlockedCountriesError ? 'ui-blocked-countries-hint ui-blocked-countries-error' : 'ui-blocked-countries-hint'"
+                  data-testid="ui-blocked-countries"
+                  @input="uiBlockedCountriesError = false"
+                />
+                <p id="ui-blocked-countries-hint" class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                  {{ localText('使用 ISO 两位国家/地区代码，以英文逗号分隔（如 CN, US）；保存时自动大写、去空格和去重，启用时不可为空。', 'Use ISO two-letter country/region codes separated by commas (for example CN, US). Saving trims, uppercases and removes duplicates; at least one code is required when enabled.') }}
+                </p>
+                <p v-if="uiBlockedCountriesError" id="ui-blocked-countries-error" role="alert" class="mt-1 text-xs text-red-600 dark:text-red-400">{{ uiBlockedCountriesErrorMessage }}</p>
+                <p class="mt-2 text-xs text-gray-500 dark:text-gray-400" data-testid="ui-country-scope-hint">
+                  {{ localText('域名限制启用且已填写主域名时，地区限制仅作用于该主域名；否则作用于所有网页域名。', 'When domain restriction is enabled with a main domain, country restrictions apply only to that domain; otherwise they apply to every webpage domain.') }}
+                </p>
+              </div>
+              <div class="space-y-2 rounded-lg bg-gray-50 p-3 text-xs text-gray-500 dark:bg-dark-800 dark:text-gray-400" data-testid="ui-accessibility-proxy-hint">
+                <p>{{ localText('仅限制网页；服务端通过 GeoJS 检测可信客户端 IP 所在国家/地区，检测暂不可用时显示重试页。CNAME 无法识别访客地区，也不会直接信任任意 CF-IPCountry 等请求头。', 'Only webpages are restricted. The server uses GeoJS to detect the country/region of the trusted client IP and shows a retry page if detection is temporarily unavailable. CNAME cannot identify visitor location, and arbitrary headers such as CF-IPCountry are not trusted directly.') }}</p>
+                <p>{{ localText('使用 CDN/反向代理时，请将可信代理地址或 CIDR 正确配置到 server.trusted_proxies，并保留原始 Host、传递真实客户端 IP。', 'When using a CDN/reverse proxy, configure trusted proxy addresses or CIDRs in server.trusted_proxies, preserve the original Host and forward the real client IP.') }}</p>
+              </div>
+            </div>
+          </div>
           <!-- Admin API Key Settings -->
           <div class="card">
             <div
@@ -8959,6 +9044,8 @@ import { extractApiErrorMessage, extractI18nErrorMessage } from "@/utils/apiErro
 import { useAppStore } from "@/stores";
 import { useAdminSettingsStore } from "@/stores/adminSettings";
 import { normalizeVisibleMethod } from "@/components/payment/paymentFlow";
+import { normalizeUiAccessDomain } from "@/utils/uiAccessDomain";
+import { normalizeUiBlockedCountries, resolveUiAccessDomainEnabled } from "@/utils/uiAccessControl";
 import {
   isRegistrationEmailSuffixDomainValid,
   normalizeRegistrationEmailSuffixDomain,
@@ -9671,8 +9758,22 @@ type SettingsForm = Omit<
 };
 
 const clearUpdateGitHubToken = ref(false);
+const uiAccessDomainError = ref(false);
+const uiAccessDomainErrorMessage = computed(() => localText(
+  "请输入有效的裸域名（例如 example.com），不含协议、端口、路径、账号、通配符或 IP 地址；启用时必须填写主域名。",
+  "Enter a valid bare domain (for example, example.com) without a scheme, port, path, user information, wildcard or IP address. A main domain is required when enabled.",
+));
+const uiBlockedCountriesError = ref(false);
+const uiBlockedCountriesErrorMessage = computed(() => localText(
+  "请输入有效的 ISO 两位国家/地区代码，以英文逗号分隔（例如 CN, US）；启用地区限制时至少填写一项。",
+  "Enter valid ISO two-letter country/region codes separated by commas (for example CN, US); at least one code is required when the restriction is enabled.",
+));
 
 const form = reactive<SettingsForm>({
+  ui_access_domain: "",
+  ui_access_domain_enabled: false,
+  ui_country_restriction_enabled: false,
+  ui_blocked_countries: "",
   update_github_token: "",
   update_github_token_configured: false,
   registration_enabled: true,
@@ -10986,6 +11087,9 @@ async function loadSettings() {
         (form as Record<string, unknown>)[key] = value;
       }
     }
+    form.ui_access_domain_enabled = resolveUiAccessDomainEnabled(settings);
+    form.ui_country_restriction_enabled = settings.ui_country_restriction_enabled ?? false;
+    form.ui_blocked_countries = settings.ui_blocked_countries ?? "";
     form.payment_quick_amounts = normalizePaymentQuickAmounts(
       settings.payment_quick_amounts,
     );
@@ -11212,6 +11316,18 @@ function findDuplicateDefaultSubscription(
 }
 
 async function saveSettings() {
+  const normalizedUiAccessDomain = normalizeUiAccessDomain(form.ui_access_domain);
+  uiAccessDomainError.value = normalizedUiAccessDomain === null || (form.ui_access_domain_enabled && normalizedUiAccessDomain === "");
+  if (uiAccessDomainError.value) {
+    appStore.showError(uiAccessDomainErrorMessage.value);
+    return;
+  }
+  const normalizedUiBlockedCountries = normalizeUiBlockedCountries(form.ui_blocked_countries);
+  uiBlockedCountriesError.value = normalizedUiBlockedCountries === null || (form.ui_country_restriction_enabled && normalizedUiBlockedCountries === "");
+  if (uiBlockedCountriesError.value) {
+    appStore.showError(uiBlockedCountriesErrorMessage.value);
+    return;
+  }
   const frozenBalanceReleaseHours = Number(form.frozen_balance_release_hours);
   if (!Number.isInteger(frozenBalanceReleaseHours) || frozenBalanceReleaseHours < 1 || frozenBalanceReleaseHours > 720) {
     appStore.showError(t('admin.settings.features.frozenBalance.releaseHoursInvalid'));
@@ -11728,6 +11844,10 @@ async function saveSettings() {
         : form.update_github_token.trim() || undefined,
       response_model_audit_bypass_enabled: form.response_model_audit_bypass_enabled,
       disable_temp_unschedulable: form.disable_temp_unschedulable,
+      ui_access_domain: normalizedUiAccessDomain ?? "",
+      ui_access_domain_enabled: form.ui_access_domain_enabled,
+      ui_country_restriction_enabled: form.ui_country_restriction_enabled,
+      ui_blocked_countries: normalizedUiBlockedCountries ?? "",
       disable_redeem_code_creation_limit: form.disable_redeem_code_creation_limit,
       frozen_balance_release_hours: frozenBalanceReleaseHours,
       resource_library_enabled: form.resource_library_enabled,
