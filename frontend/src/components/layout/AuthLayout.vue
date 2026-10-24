@@ -20,7 +20,7 @@
 
       <!-- Grid Pattern -->
       <div
-        class="absolute inset-0 bg-[linear-gradient(rgba(20,184,166,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(20,184,166,0.03)_1px,transparent_1px)] bg-[size:64px_64px]"
+        class="absolute inset-0 bg-[linear-gradient(rgba(151,104,0,0.035)_1px,transparent_1px),linear-gradient(90deg,rgba(151,104,0,0.035)_1px,transparent_1px)] bg-[size:64px_64px]"
       ></div>
     </div>
 
@@ -45,7 +45,7 @@
       </div>
 
       <!-- Card Container -->
-      <div class="card-glass rounded-2xl p-8 shadow-glass">
+      <div class="auth-card card-glass rounded-3xl p-8 shadow-card">
         <slot />
       </div>
 
@@ -84,5 +84,27 @@ onMounted(() => {
 <style scoped>
 .text-gradient {
   @apply bg-gradient-to-r from-primary-600 to-primary-500 bg-clip-text text-transparent;
+}
+
+.auth-card {
+  position: relative;
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.7),
+    0 0 0 1px rgb(215 193 106 / 0.22),
+    0 1.5rem 3rem -1.25rem rgb(63 52 32 / 0.28);
+}
+
+/* Thin gold-to-garden accent along the top edge of the card. */
+.auth-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 2rem;
+  left: 2rem;
+  height: 2px;
+  border-radius: 0 0 999px 999px;
+  background: linear-gradient(90deg, transparent, var(--md-sys-color-primary), var(--theme-garden), transparent);
+  opacity: 0.8;
+  pointer-events: none;
 }
 </style>

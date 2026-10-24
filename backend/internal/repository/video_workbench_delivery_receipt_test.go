@@ -12,7 +12,8 @@ import (
 func TestVideoWorkbenchDeliveryReceiptSurvivesTaskRemoval(t *testing.T) {
 	for _, removal := range []string{"delete", "expire"} {
 		t.Run(removal, func(t *testing.T) {
-			store := videoStoreFixture(t).(*videoWorkbenchStore)
+			store, ok := videoStoreFixture(t).(*videoWorkbenchStore)
+			require.True(t, ok)
 			ctx, now := context.Background(), time.Now().UTC()
 			task := videoTaskFixture(1, 7, now)
 			task.BillingID = "media:video-delivery"
@@ -58,7 +59,8 @@ func TestVideoWorkbenchDeliveryReceiptSurvivesTaskRemoval(t *testing.T) {
 func TestVideoWorkbenchDeliveryReceiptFollowsCompletionCAS(t *testing.T) {
 	for _, scenario := range []string{"failure-wins", "billing-mismatch", "unbilled"} {
 		t.Run(scenario, func(t *testing.T) {
-			store := videoStoreFixture(t).(*videoWorkbenchStore)
+			store, ok := videoStoreFixture(t).(*videoWorkbenchStore)
+			require.True(t, ok)
 			ctx, now := context.Background(), time.Now().UTC()
 			task := videoTaskFixture(1, 7, now)
 			if scenario != "unbilled" {

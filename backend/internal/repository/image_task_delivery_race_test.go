@@ -16,6 +16,14 @@ import (
 
 // Finish can lose to a different terminal writer after the service reads the
 // task. Keep that race deterministic while exercising the real Redis scripts.
+// mustImageTaskStore returns the concrete Redis-backed store so tests can wrap it.
+func mustImageTaskStore(t *testing.T, rdb *redis.Client) *imageTaskStore {
+	t.Helper()
+	store, ok := NewImageTaskStore(rdb).(*imageTaskStore)
+	require.True(t, ok)
+	return store
+}
+
 type imageDeliveryRaceStore struct {
 	*imageTaskStore
 	reads            int
@@ -29,7 +37,7 @@ func (s *imageDeliveryRaceStore) Get(ctx context.Context, id string) (*service.I
 		failed := *task
 		failed.Status = service.ImageTaskStatusFailed
 		failed.Error = json.RawMessage(`{"message":"interrupted"}`)
-		if err := s.imageTaskStore.Finish(ctx, &failed, time.Hour); err != nil {
+		if err := s.Finish(ctx, &failed, time.Hour); err != nil {
 			return nil, err
 		}
 	}
@@ -58,7 +66,7 @@ func TestImageTaskDeliveryRejectsConcurrentFailure(t *testing.T) {
 				mr := miniredis.RunT(t)
 				rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
 				t.Cleanup(func() { _ = rdb.Close() })
-				base := NewImageTaskStore(rdb).(*imageTaskStore)
+				base := mustImageTaskStore(t, rdb)
 				store := &imageDeliveryRaceStore{imageTaskStore: base, failBeforeFinish: atomicRace}
 				task := &service.ImageTaskRecord{ID: "imgtask_delivery_race", UserID: 7, APIKeyID: 9, UserEmail: "owner@example.com", Status: service.ImageTaskStatusProcessing, ExpiresAt: time.Now().Add(time.Hour).Unix(), BillingID: "media:delivery-race"}
 				if workbench {
@@ -142,7 +150,7 @@ func TestImageTaskDeliveryReceiptSurvivesImmediateDeletion(t *testing.T) {
 				mr := miniredis.RunT(t)
 				rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
 				t.Cleanup(func() { _ = rdb.Close() })
-				base := NewImageTaskStore(rdb).(*imageTaskStore)
+				base := mustImageTaskStore(t, rdb)
 				store := imageDeliveryDeleteStore{imageTaskStore: base, lostReply: tc.lostReply, receiptError: tc.receiptError, otherOwner: tc.otherOwner}
 				uploader := service.NewImageResultUploader(imageDeliveryRaceStorage{}, "images/", 0, nil)
 				svc := service.NewImageTaskServiceWithUploader(store, uploader, time.Hour, time.Minute)
@@ -194,7 +202,7 @@ func TestImageTaskDeliveryWithoutPrepaymentHasNoReceipt(t *testing.T) {
 	mr := miniredis.RunT(t)
 	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
 	t.Cleanup(func() { _ = rdb.Close() })
-	store := NewImageTaskStore(rdb).(*imageTaskStore)
+	store := mustImageTaskStore(t, rdb)
 	ctx := context.Background()
 	task := &service.ImageTaskRecord{ID: "imgtask_unpaid", UserID: 7, APIKeyID: 9, Status: service.ImageTaskStatusProcessing}
 	require.NoError(t, store.Save(ctx, task, time.Hour))
@@ -213,7 +221,7 @@ func TestImageTaskDuplicateCompletionDoesNotRecreateSettledReceipt(t *testing.T)
 			mr := miniredis.RunT(t)
 			rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
 			t.Cleanup(func() { _ = rdb.Close() })
-			store := NewImageTaskStore(rdb).(*imageTaskStore)
+			store := mustImageTaskStore(t, rdb)
 			ctx := context.Background()
 			task := &service.ImageTaskRecord{ID: "imgtask_repeat", UserID: 7, APIKeyID: 9, Status: service.ImageTaskStatusProcessing, BillingID: "media:repeat"}
 			if workbench {

@@ -803,18 +803,6 @@ func filterUserVisibleMenuItems(raw string) json.RawMessage {
 	return result
 }
 
-// safeRawJSONArray returns raw as json.RawMessage if it's valid JSON, otherwise "[]".
-func safeRawJSONArray(raw string) json.RawMessage {
-	raw = strings.TrimSpace(raw)
-	if raw == "" {
-		return json.RawMessage("[]")
-	}
-	if json.Valid([]byte(raw)) {
-		return json.RawMessage(raw)
-	}
-	return json.RawMessage("[]")
-}
-
 // GetFrameSrcOrigins returns deduplicated http(s) origins from home_content URL,
 // purchase_subscription_url, and all custom_menu_items URLs. Used by the router layer for CSP frame-src injection.
 func (s *SettingService) GetFrameSrcOrigins(ctx context.Context) ([]string, error) {

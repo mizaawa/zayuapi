@@ -1037,6 +1037,8 @@ defineExpose({
   top: 0;
   z-index: 210; /* 必须高于所有表体内容 */
   background-color: var(--md-sys-color-surface-container);
+  /* Hairline under the header that survives the transparent-border reset. */
+  box-shadow: inset 0 -1px 0 rgb(215 193 106 / 0.45);
 }
 
 /* Sticky 列基础样式 */
@@ -1090,7 +1092,7 @@ tbody tr:hover .sticky-col {
   bottom: 0;
   width: 10px;
   transform: translateX(100%);
-  background: linear-gradient(to right, rgba(0, 0, 0, 0.08), transparent);
+  background: linear-gradient(to right, rgba(63, 52, 32, 0.1), transparent);
   pointer-events: none;
 }
 
@@ -1103,7 +1105,7 @@ tbody tr:hover .sticky-col {
   bottom: 0;
   width: 10px;
   transform: translateX(100%);
-  background: linear-gradient(to right, rgba(0, 0, 0, 0.08), transparent);
+  background: linear-gradient(to right, rgba(63, 52, 32, 0.1), transparent);
   pointer-events: none;
 }
 
@@ -1116,7 +1118,7 @@ tbody tr:hover .sticky-col {
   bottom: 0;
   width: 10px;
   transform: translateX(-100%);
-  background: linear-gradient(to left, rgba(0, 0, 0, 0.08), transparent);
+  background: linear-gradient(to left, rgba(63, 52, 32, 0.1), transparent);
   pointer-events: none;
 }
 
@@ -1151,7 +1153,7 @@ tbody tr:hover .sticky-col {
 }
 
 .table-wrapper::-webkit-scrollbar-track {
-  background-color: rgba(0, 0, 0, 0.03) !important;
+  background-color: rgba(151, 104, 0, 0.05) !important;
   border-radius: 6px !important;
   margin: 0 4px !important;
 }
@@ -1161,14 +1163,14 @@ tbody tr:hover .sticky-col {
 
 /* 常驻、不透明的滑块，无视鼠标是否 hover 都在那！ */
 .table-wrapper::-webkit-scrollbar-thumb {
-  background-color: rgba(107, 114, 128, 0.75) !important; 
+  background-color: rgba(155, 140, 98, 0.6) !important;
   border-radius: 6px !important;
   border: 2px solid transparent !important;
   background-clip: padding-box !important;
   -webkit-appearance: none !important;
 }
 .table-wrapper::-webkit-scrollbar-thumb:hover {
-  background-color: rgba(75, 85, 99, 0.9) !important;
+  background-color: rgba(113, 103, 68, 0.85) !important;
 }
 
 .dark .table-wrapper::-webkit-scrollbar-thumb {
@@ -1182,7 +1184,7 @@ tbody tr:hover .sticky-col {
 @supports (-moz-appearance:none) {
   .table-wrapper {
     scrollbar-width: thin !important;
-    scrollbar-color: rgba(156, 163, 175, 0.5) rgba(0, 0, 0, 0.03) !important;
+    scrollbar-color: rgba(155, 140, 98, 0.55) rgba(151, 104, 0, 0.05) !important;
   }
   .dark .table-wrapper {
     scrollbar-color: rgba(75, 85, 99, 0.5) rgba(255, 255, 255, 0.05) !important;

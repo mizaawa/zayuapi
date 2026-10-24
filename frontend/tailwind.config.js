@@ -83,8 +83,8 @@ export default {
         'glass-sm': '0 1px 2px rgba(63, 52, 32, 0.06)',
         glow: '0 0 0 transparent',
         'glow-lg': '0 0 0 transparent',
-        card: '0 1px 2px rgba(63, 52, 32, 0.08)',
-        'card-hover': '0 4px 12px rgba(63, 52, 32, 0.12)',
+        card: '0 1px 2px rgba(63, 52, 32, 0.04), 0 8px 24px -12px rgba(63, 52, 32, 0.16)',
+        'card-hover': '0 2px 6px -2px rgba(63, 52, 32, 0.08), 0 18px 36px -16px rgba(63, 52, 32, 0.26)',
         'inner-glow': 'inset 0 1px 0 rgba(255, 255, 255, 0.1)'
       },
       backgroundImage: {

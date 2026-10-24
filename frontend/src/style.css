@@ -16,6 +16,13 @@
     --md-sys-color-on-primary: #3f3420;
     --md-sys-color-secondary: #477b54;
     --md-sys-color-placeholder: #716443;
+    --theme-garden: #79b37b;
+    --theme-scrim: rgb(53 44 28 / 0.5);
+    --theme-highlight: inset 0 1px 0 rgb(255 255 255 / 0.72);
+    --theme-elevation-1: 0 1px 2px rgb(63 52 32 / 0.05), 0 8px 22px -14px rgb(63 52 32 / 0.2);
+    --theme-elevation-2: 0 2px 6px -2px rgb(63 52 32 / 0.08), 0 16px 32px -16px rgb(63 52 32 / 0.26);
+    --theme-elevation-3: 0 4px 12px -4px rgb(63 52 32 / 0.1), 0 28px 56px -24px rgb(63 52 32 / 0.34);
+    --theme-ease-out: cubic-bezier(0.22, 1, 0.36, 1);
   }
 
   /* Night mode is intentionally disabled. Keep this fallback light so a
@@ -104,7 +111,7 @@
 
     *:hover,
     *:focus-within {
-      scrollbar-color: rgba(156, 163, 175, 0.5) transparent;
+      scrollbar-color: rgb(155 140 98 / 0.45) transparent;
     }
 
     .dark *:hover,
@@ -123,6 +130,8 @@
 
   ::-webkit-scrollbar-thumb {
     @apply rounded-full bg-transparent;
+    border: 1px solid transparent;
+    background-clip: padding-box;
     transition: background-color 0.2s ease;
   }
 
@@ -147,22 +156,48 @@
   .btn {
     @apply inline-flex items-center justify-center gap-2;
     @apply rounded-2xl px-5 py-2.5 text-sm font-semibold;
-    @apply transition-colors duration-200 ease-out;
     @apply focus:outline-none;
     @apply disabled:transform-none disabled:cursor-not-allowed disabled:opacity-50;
+    transition:
+      background-color 200ms ease-out,
+      color 200ms ease-out,
+      box-shadow 220ms var(--theme-ease-out),
+      transform 220ms var(--theme-ease-out);
+  }
+
+  .btn:active:not(:disabled) {
+    transform: translateY(0.5px) scale(0.985);
   }
 
   .btn-primary {
     background: var(--md-sys-color-primary);
     color: var(--md-sys-color-on-primary);
-    @apply shadow-none hover:bg-primary-400 dark:hover:bg-primary-400;
+    @apply hover:bg-primary-400 dark:hover:bg-primary-400;
+    background-image: linear-gradient(180deg, rgb(255 255 255 / 0.26), rgb(255 255 255 / 0) 60%);
+    box-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 0.45),
+      0 1px 2px rgb(151 104 0 / 0.18),
+      0 6px 16px -8px rgb(151 104 0 / 0.45);
+  }
+
+  .btn-primary:hover:not(:disabled) {
+    transform: translateY(-1px);
+    box-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 0.5),
+      0 2px 4px rgb(151 104 0 / 0.16),
+      0 12px 22px -10px rgb(151 104 0 / 0.5);
   }
 
   .btn-secondary {
     background: var(--md-sys-color-surface-container);
     color: var(--md-sys-color-on-surface);
-    @apply border border-transparent shadow-none;
+    @apply border border-transparent;
     @apply hover:bg-primary-100 dark:hover:bg-dark-700;
+    box-shadow: var(--theme-highlight), 0 1px 2px rgb(63 52 32 / 0.06);
+  }
+
+  .btn-secondary:hover:not(:disabled) {
+    box-shadow: var(--theme-highlight), 0 6px 14px -8px rgb(63 52 32 / 0.28);
   }
 
   .btn-ghost {
@@ -235,6 +270,16 @@
     @apply transition-all duration-200;
     @apply focus:border-transparent focus:outline-none focus:ring-2 focus:ring-primary-500/30;
     @apply disabled:cursor-not-allowed disabled:bg-gray-100 dark:disabled:bg-dark-900;
+    box-shadow: inset 0 1px 2px rgb(63 52 32 / 0.06);
+  }
+
+  .input:hover:not(:disabled):not(:focus) {
+    background: color-mix(in srgb, var(--md-sys-color-surface-container) 82%, var(--md-sys-color-surface-container-high));
+  }
+
+  .input:focus {
+    background: var(--md-sys-color-surface);
+    box-shadow: inset 0 1px 2px rgb(63 52 32 / 0.04), 0 0 0 4px rgb(233 184 36 / 0.12);
   }
 
   .dark .input[type='date'],
@@ -300,12 +345,31 @@
   /* ============ 卡片样式 ============ */
   .card {
     background: var(--md-sys-color-surface);
-    @apply rounded-3xl border border-transparent shadow-none;
-    @apply transition-colors duration-200;
+    @apply rounded-3xl border border-transparent;
+    box-shadow: var(--theme-highlight), var(--theme-elevation-1);
+    transition:
+      background-color 200ms ease,
+      box-shadow 260ms var(--theme-ease-out),
+      transform 260ms var(--theme-ease-out);
   }
 
-  .card-hover {
-    @apply hover:bg-primary-50 hover:shadow-none dark:hover:bg-dark-800;
+  .card-hover:hover {
+    @apply bg-primary-50 dark:bg-dark-800;
+    transform: translateY(-2px);
+    box-shadow: var(--theme-highlight), var(--theme-elevation-2);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .card,
+    .btn {
+      transition-duration: 1ms;
+    }
+
+    .card-hover:hover,
+    .btn-primary:hover:not(:disabled),
+    .btn:active:not(:disabled) {
+      transform: none;
+    }
   }
 
   .card-glass {
@@ -477,6 +541,7 @@
     @apply rounded-3xl border border-transparent shadow-card-hover;
     @apply py-1;
     @apply origin-top-right animate-scale-in;
+    box-shadow: var(--theme-highlight), var(--theme-elevation-3);
   }
 
   .dropdown-item {
@@ -485,13 +550,19 @@
     @apply hover:bg-gray-100 dark:hover:bg-dark-700;
     @apply cursor-pointer transition-colors;
     @apply flex items-center gap-2;
+    margin: 0 0.375rem;
+    border-radius: 0.875rem;
+  }
+
+  .dropdown-item:hover {
+    background: color-mix(in srgb, var(--md-sys-color-primary) 18%, var(--md-sys-color-surface));
   }
 
   /* ============ 模态框 ============ */
   .modal-overlay {
     @apply fixed inset-0 z-50;
-    background: rgb(3 28 27 / 0.58);
-    backdrop-filter: blur(2px);
+    background: var(--theme-scrim);
+    backdrop-filter: blur(6px) saturate(1.05);
     @apply flex items-center justify-center p-2 sm:p-4;
   }
 
@@ -503,10 +574,15 @@
     @apply overflow-hidden rounded-4xl shadow-card-hover;
     @apply flex flex-col;
     min-width: 0;
-    box-shadow: 0 1.5rem 3rem rgb(63 52 32 / 0.16), 0 0.35rem 1rem rgb(63 52 32 / 0.08);
+    box-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 0.8),
+      0 0 0 1px rgb(215 193 106 / 0.18),
+      0 1.75rem 3.5rem -1rem rgb(63 52 32 / 0.32),
+      0 0.35rem 1rem rgb(63 52 32 / 0.08);
   }
 
   .modal-header {
+    position: relative;
     border-bottom: 1px solid transparent;
     @apply px-4 py-3;
     @apply sm:px-6 sm:py-4;
@@ -521,6 +597,19 @@
        widening the panel past the viewport on narrow screens. */
     min-width: 0;
     @apply break-words;
+  }
+
+  /* Hairline that fades out at both ends, separating title from content
+   * without reintroducing a hard border. */
+  .modal-header::after {
+    content: '';
+    position: absolute;
+    right: 1.5rem;
+    bottom: 0;
+    left: 1.5rem;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgb(215 193 106 / 0.5), transparent);
+    pointer-events: none;
   }
 
   .modal-close { color: var(--md-sys-color-on-surface-variant); }
@@ -592,7 +681,7 @@
   }
 
   .modal-enter-active .modal-content {
-    transition: transform 250ms ease-out, opacity 250ms ease-out;
+    transition: transform 320ms var(--theme-ease-out), opacity 250ms ease-out;
   }
 
   .modal-leave-active .modal-content {
@@ -601,7 +690,7 @@
 
   .modal-enter-from .modal-content,
   .modal-leave-to .modal-content {
-    transform: scale(0.95);
+    transform: translateY(8px) scale(0.96);
     opacity: 0;
   }
 
@@ -741,6 +830,34 @@
     background: color-mix(in srgb, var(--md-sys-color-primary) 31%, var(--md-sys-color-surface));
   }
 
+  /* Active marker: a short gold-to-garden pill on the leading edge. Drawn
+   * with a pseudo-element so link text and markup stay unchanged. */
+  .sidebar-link::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 0.3125rem;
+    width: 0.1875rem;
+    height: 1.125rem;
+    border-radius: 999px;
+    background: linear-gradient(180deg, var(--md-sys-color-primary), var(--theme-garden));
+    opacity: 0;
+    transform: translateY(-50%) scaleY(0.4);
+    transition:
+      opacity 180ms ease,
+      transform 260ms var(--theme-ease-out);
+    pointer-events: none;
+  }
+
+  .sidebar-link-active::before {
+    opacity: 1;
+    transform: translateY(-50%) scaleY(1);
+  }
+
+  .sidebar-link-active {
+    box-shadow: var(--theme-highlight), 0 4px 12px -8px rgb(151 104 0 / 0.45);
+  }
+
   .sidebar-link:active { opacity: 0.9; }
   @media (prefers-reduced-motion: reduce) {
     .sidebar-link { transition: none; }
@@ -795,7 +912,22 @@
   }
 
   .skeleton {
-    @apply animate-pulse rounded bg-gray-200 dark:bg-dark-700;
+    @apply rounded bg-gray-200 dark:bg-dark-700;
+    background-image: linear-gradient(
+      100deg,
+      rgb(238 229 201 / 0) 20%,
+      rgb(255 254 248 / 0.75) 50%,
+      rgb(238 229 201 / 0) 80%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 1.6s linear infinite;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .skeleton {
+      @apply animate-pulse;
+      background-image: none;
+    }
   }
 
   /* ============ 分隔线 ============ */
@@ -830,6 +962,9 @@
   .progress-bar {
     @apply h-full bg-primary-500;
     @apply transition-all duration-300;
+    background-image: linear-gradient(90deg, #f0c43d, #e9b824 60%, #c99a12);
+    border-radius: inherit;
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.35);
   }
 
   /* ============ 开关 ============ */
@@ -847,6 +982,7 @@
     @apply absolute left-0.5 top-0.5 h-5 w-5 rounded-full;
     @apply bg-white shadow-sm;
     @apply transition-transform duration-200;
+    box-shadow: 0 1px 2px rgb(63 52 32 / 0.2), 0 2px 6px -2px rgb(63 52 32 / 0.25);
   }
 
   .switch-active .switch-thumb {
@@ -912,7 +1048,7 @@
 
   /* 表头固定时添加底部阴影，增强视觉层次 */
   .table-wrapper thead.sticky {
-    box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1);
+    box-shadow: 0 1px 3px 0 rgb(63 52 32 / 0.1);
   }
 }
 

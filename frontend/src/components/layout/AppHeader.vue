@@ -408,13 +408,15 @@ onBeforeUnmount(() => {
   border: 1px solid transparent;
   border-radius: 1.375rem;
   background: color-mix(in srgb, var(--md-sys-color-surface) 88%, transparent);
-  box-shadow: 0 0.625rem 1.75rem rgb(15 23 42 / 0.08);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.75),
+    0 0.625rem 1.75rem -0.5rem rgb(63 52 32 / 0.16);
   backdrop-filter: blur(18px) saturate(1.08);
 }
 
 .user-menu-backdrop {
   border: 0;
-  background: rgb(3 28 27 / 0.62);
+  background: var(--theme-scrim);
   backdrop-filter: blur(2px);
 }
 
@@ -442,7 +444,8 @@ onBeforeUnmount(() => {
   left: 0;
   width: 0.25rem;
   border-radius: 999px;
-  background: var(--md-sys-color-primary);
+  background: linear-gradient(180deg, var(--md-sys-color-primary), var(--theme-garden));
+  box-shadow: 0 0 10px rgb(233 184 36 / 0.45);
   content: '';
 }
 

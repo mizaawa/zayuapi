@@ -36,7 +36,7 @@ func NormalizeDomain(value string) (string, error) {
 			return "", ErrInvalidDomain
 		}
 		for _, ch := range label {
-			if !(ch >= 'a' && ch <= 'z' || ch >= '0' && ch <= '9' || ch == '-') {
+			if (ch < 'a' || ch > 'z') && (ch < '0' || ch > '9') && ch != '-' {
 				return "", ErrInvalidDomain
 			}
 		}

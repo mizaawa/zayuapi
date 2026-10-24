@@ -224,7 +224,7 @@ func (r *CountryResolver) lookupProvider(ctx context.Context, endpoint, countryF
 		}
 		return "", countryFailure("network_error")
 	}
-	defer response.Body.Close()
+	defer func() { _ = response.Body.Close() }()
 	if response.StatusCode != http.StatusOK {
 		return "", countryFailure("provider_http_error")
 	}

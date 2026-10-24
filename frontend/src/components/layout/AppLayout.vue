@@ -56,7 +56,13 @@ defineExpose({ replayTour })
 
 <style scoped>
 .app-shell {
-  background: var(--md-sys-color-background);
+  background-color: var(--md-sys-color-background);
+  /* Soft gold and garden glows give the open canvas some depth without
+   * competing with content. Fixed so they stay put while pages scroll. */
+  background-image:
+    radial-gradient(42rem 28rem at 100% 0%, rgb(233 184 36 / 0.12), transparent 70%),
+    radial-gradient(36rem 26rem at 0% 100%, rgb(121 179 123 / 0.1), transparent 70%);
+  background-attachment: fixed;
   color: var(--md-sys-color-on-surface);
 }
 </style>

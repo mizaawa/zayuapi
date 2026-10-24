@@ -1058,8 +1058,8 @@ onBeforeUnmount(() => {
   border-radius: 1.25rem;
   background: color-mix(in srgb, var(--md-sys-color-primary) 14%, var(--md-sys-color-surface));
   box-shadow:
-    0 0.9rem 1.7rem rgb(15 23 42 / 0.1),
-    0 0.3rem 0.75rem rgb(15 23 42 / 0.06);
+    0 0.9rem 1.7rem rgb(63 52 32 / 0.12),
+    0 0.3rem 0.75rem rgb(63 52 32 / 0.06);
   backdrop-filter: blur(14px) saturate(135%);
 }
 
@@ -1074,8 +1074,8 @@ onBeforeUnmount(() => {
   border-radius: 1.25rem;
   background: color-mix(in srgb, var(--md-sys-color-primary) 14%, var(--md-sys-color-surface));
   box-shadow:
-    0 -0.9rem 1.7rem rgb(15 23 42 / 0.08),
-    0 -0.3rem 0.75rem rgb(15 23 42 / 0.05);
+    0 -0.9rem 1.7rem rgb(63 52 32 / 0.08),
+    0 -0.3rem 0.75rem rgb(63 52 32 / 0.05);
   backdrop-filter: blur(14px) saturate(135%);
 }
 
@@ -1099,7 +1099,7 @@ onBeforeUnmount(() => {
 
 .sidebar-submenu { border: 0; }
 .mobile-sidebar-backdrop {
-  background: rgb(3 28 27 / 0.58);
+  background: var(--theme-scrim);
   backdrop-filter: blur(2px);
 }
 
@@ -1108,7 +1108,7 @@ onBeforeUnmount(() => {
   min-width: 2.25rem;
   border: 1px solid transparent;
   background: var(--md-sys-color-surface);
-  box-shadow: 0 0.25rem 0.75rem rgb(15 23 42 / 0.08);
+  box-shadow: 0 0.25rem 0.75rem rgb(63 52 32 / 0.08);
 }
 
 .sidebar-header-collapsed {
@@ -1163,7 +1163,7 @@ onBeforeUnmount(() => {
 
 .sidebar-header :deep(.version-popover) {
   border-color: transparent;
-  box-shadow: 0 1rem 2.5rem rgb(15 23 42 / 0.12);
+  box-shadow: 0 1rem 2.5rem rgb(63 52 32 / 0.14);
 }
 
 .sidebar-link-collapsed {
@@ -1200,7 +1200,7 @@ onBeforeUnmount(() => {
   right: 0.75rem;
   top: 50%;
   height: 1px;
-  background: rgb(229 231 235);
+  background: rgb(215 193 106 / 0.55);
   opacity: 0;
   transform: translateY(-50%);
   transition: opacity 0.18s ease;
