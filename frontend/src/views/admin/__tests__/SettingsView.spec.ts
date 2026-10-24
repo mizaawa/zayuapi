@@ -7,6 +7,7 @@ import SettingsView from "../SettingsView.vue";
 const {
   getSettings,
   updateSettings,
+  checkUIAccess,
   getWebSearchEmulationConfig,
   updateWebSearchEmulationConfig,
   getAdminApiKey,
@@ -36,6 +37,7 @@ const {
 } = vi.hoisted(() => ({
   getSettings: vi.fn(),
   updateSettings: vi.fn(),
+  checkUIAccess: vi.fn(),
   getWebSearchEmulationConfig: vi.fn(),
   updateWebSearchEmulationConfig: vi.fn(),
   getAdminApiKey: vi.fn(),
@@ -84,6 +86,7 @@ vi.mock("@/api", () => ({
     settings: {
       getSettings,
       updateSettings,
+      checkUIAccess,
       getWebSearchEmulationConfig,
       updateWebSearchEmulationConfig,
       getAdminApiKey,
@@ -632,6 +635,7 @@ describe("admin SettingsView payment visible method controls", () => {
   beforeEach(() => {
     getSettings.mockReset();
     updateSettings.mockReset();
+    checkUIAccess.mockReset();
     getWebSearchEmulationConfig.mockReset();
     updateWebSearchEmulationConfig.mockReset();
     getAdminApiKey.mockReset();
@@ -1097,7 +1101,7 @@ describe("admin SettingsView payment visible method controls", () => {
     expect(card.text()).toContain("不影响 API、流式请求或支付回调");
     expect(wrapper.get('#ui-access-domain-hint').text()).toContain("HTTP/HTTPS");
     expect(wrapper.get('[data-testid="ui-accessibility-proxy-hint"]').text()).toContain("server.trusted_proxies");
-    expect(wrapper.get('[data-testid="ui-accessibility-proxy-hint"]').text()).toContain("GeoJS");
+    expect(wrapper.get('[data-testid="ui-accessibility-proxy-hint"]').text()).toContain("转发 IP 兼容开关及自定义 IP 头");
     expect(wrapper.get('[data-testid="ui-accessibility-proxy-hint"]').text()).toContain("重试页");
     expect((wrapper.get('[data-testid="ui-access-domain-enabled-toggle"]').element as HTMLInputElement).checked).toBe(false);
     expect((wrapper.get('[data-testid="ui-country-restriction-enabled-toggle"]').element as HTMLInputElement).checked).toBe(false);
@@ -1113,6 +1117,94 @@ describe("admin SettingsView payment visible method controls", () => {
     expect((input.element as HTMLInputElement).value).toBe("canonical.example.com");
     expect(fetchPublicSettings).toHaveBeenCalledWith(true);
     expect(window.location.href).toBe(originalLocation);
+    wrapper.unmount();
+  });
+
+  it("checks the current country only on demand and previews unsaved rule changes", async () => {
+    checkUIAccess.mockResolvedValue({ ip: "8.8.8.8", country: "US", provider: "geojs", cached: false, elapsed_ms: 42 });
+    const wrapper = mountView();
+    await flushPromises();
+    await openSecurityTab(wrapper);
+    expect(checkUIAccess).not.toHaveBeenCalled();
+    const button = wrapper.get('[data-testid="ui-access-check-button"]');
+    expect(button.attributes("type")).toBe("button");
+    await button.trigger("click");
+    await flushPromises();
+    expect(checkUIAccess).toHaveBeenCalledTimes(1);
+    expect(updateSettings).not.toHaveBeenCalled();
+    expect(wrapper.get('[data-testid="ui-access-check-ip"]').text()).toBe("8.8.8.8");
+    expect(wrapper.get('[data-testid="ui-access-check-country"]').text()).toBe("US");
+    expect(wrapper.get('[data-testid="ui-access-check-result"]').text()).toContain("geojs");
+    expect(wrapper.get('[data-testid="ui-access-check-result"]').text()).toContain("42 ms");
+    expect(wrapper.find('[data-testid="ui-access-check-error"]').exists()).toBe(false);
+    const preview = () => wrapper.get('[data-testid="ui-access-check-preview"]').text();
+    expect(preview()).toContain("地区限制开关已关闭");
+    await wrapper.get('[data-testid="ui-country-restriction-enabled-toggle"]').setValue(true);
+    await wrapper.get('[data-testid="ui-blocked-countries"]').setValue("CN, US");
+    expect(preview()).toContain("当前地区命中不可访问列表");
+    await wrapper.get('[data-testid="ui-blocked-countries"]').setValue("CN");
+    expect(preview()).toContain("当前地区未命中不可访问列表");
+    await wrapper.get('[data-testid="ui-blocked-countries"]').setValue("invalid");
+    expect(preview()).toContain("请先填写有效的国家/地区列表");
+    await wrapper.get('[data-testid="ui-access-domain-enabled-toggle"]').setValue(true);
+    expect(preview()).toContain("请先填写有效主域名");
+    await wrapper.get('[data-testid="ui-access-domain"]').setValue("different.example.com");
+    expect(preview()).toContain("当前访问域名不是填写的主域名");
+    expect(wrapper.get('[data-testid="ui-access-check-panel"]').text()).toContain("保存后请刷新网页或用新窗口验证");
+    expect(checkUIAccess).toHaveBeenCalledTimes(1);
+    expect(updateSettings).not.toHaveBeenCalled();
+    wrapper.unmount();
+  });
+
+  it.each([
+    ["invalid_ip", "无法识别有效访客 IP"],
+    ["non_public_ip", "当前识别到内网或本机 IP"],
+    ["lookup_failed", "地区查询暂时失败"],
+    ["providers_unavailable", "地区查询服务暂不可用"],
+    ["lookup_unavailable", "地区检测服务尚未就绪"],
+    ["timeout", "地区检测超时"],
+    ["cancelled", "本次地区检测已取消"],
+    ["busy", "地区检测服务繁忙"],
+    ["internal-secret-detail", "检测失败，请检查访客 IP 配置后重试"],
+  ])("explains country detection error %s without exposing raw errors", async (errorCode, expectedMessage) => {
+    checkUIAccess.mockResolvedValue({ ip: "172.18.0.1", country: "", provider: "", cached: false, elapsed_ms: 1, error_code: errorCode });
+    const wrapper = mountView();
+    await flushPromises();
+    await openSecurityTab(wrapper);
+    await wrapper.get('[data-testid="ui-country-restriction-enabled-toggle"]').setValue(true);
+    await wrapper.get('[data-testid="ui-blocked-countries"]').setValue("US");
+    await wrapper.get('[data-testid="ui-access-check-button"]').trigger("click");
+    await flushPromises();
+    expect(wrapper.get('[data-testid="ui-access-check-error"]').text()).toContain(expectedMessage);
+    expect(wrapper.get('[data-testid="ui-access-check-country"]').text()).toBe("未识别");
+    expect(wrapper.get('[data-testid="ui-access-check-preview"]').text()).toContain("尚未识别当前地区");
+    expect(wrapper.get('[data-testid="ui-access-check-panel"]').text()).not.toContain("internal-secret-detail");
+    wrapper.unmount();
+  });
+
+  it("disables duplicate country checks and clears an old result on failure", async () => {
+    checkUIAccess.mockResolvedValueOnce({ ip: "8.8.8.8", country: "US", provider: "geojs", cached: true, elapsed_ms: 0 });
+    const wrapper = mountView();
+    await flushPromises();
+    await openSecurityTab(wrapper);
+    const button = wrapper.get('[data-testid="ui-access-check-button"]');
+    await button.trigger("click");
+    await flushPromises();
+    expect(wrapper.get('[data-testid="ui-access-check-result"]').text()).toContain("（缓存）");
+    let rejectCheck!: (error: Error) => void;
+    checkUIAccess.mockImplementationOnce(() => new Promise((_resolve, reject) => { rejectCheck = reject; }));
+    await button.trigger("click");
+    expect(button.attributes("disabled")).toBeDefined();
+    expect(button.text()).toContain("检测中");
+    expect(wrapper.find('[data-testid="ui-access-check-result"]').exists()).toBe(false);
+    await button.trigger("click");
+    expect(checkUIAccess).toHaveBeenCalledTimes(2);
+    rejectCheck(new Error("private upstream secret"));
+    await flushPromises();
+    expect(button.attributes("disabled")).toBeUndefined();
+    expect(wrapper.get('[data-testid="ui-access-check-error"]').text()).toContain("检测失败，请检查访客 IP 配置后重试");
+    expect(wrapper.find('[data-testid="ui-access-check-ip"]').exists()).toBe(false);
+    expect(wrapper.text()).not.toContain("private upstream secret");
     wrapper.unmount();
   });
 

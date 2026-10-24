@@ -16,6 +16,23 @@ export interface DefaultSubscriptionSetting {
   validity_days: number;
 }
 
+export interface UIAccessCheckResult {
+  ip: string;
+  country: string;
+  provider: string;
+  cached: boolean;
+  error_code?: "invalid_ip" | "non_public_ip" | "lookup_failed" | "providers_unavailable" | "lookup_unavailable" | "timeout" | "cancelled" | "busy";
+  elapsed_ms: number;
+}
+
+/** Manually diagnose this administrator's visitor IP and country. */
+export async function checkUIAccess(): Promise<UIAccessCheckResult> {
+  const { data } = await apiClient.post<UIAccessCheckResult>(
+    "/admin/settings/ui-access-check",
+  );
+  return data;
+}
+
 // ── 平台限额类型 ──────────────────────────────────────────────────
 export type PlatformType = "anthropic" | "openai" | "gemini" | "antigravity" | "grok" | "custom"
 export type QuotaWindowType = "daily" | "weekly" | "monthly"
@@ -1589,6 +1606,7 @@ export async function resetWebSearchUsage(payload: {
 export const settingsAPI = {
   getSettings,
   updateSettings,
+  checkUIAccess,
   testSmtpConnection,
   sendTestEmail,
   getEmailTemplates,

@@ -15,6 +15,7 @@ import { getSetupStatus } from '@/api/setup'
 import { resolveCompletedSetupRedirectPath } from './setupRedirect'
 import { resolveRouteDocumentTitle } from './title'
 import { notFoundLocation } from './notFound'
+import { checkUIAccessNavigation, safeUIAccessPath } from './uiAccess'
 
 /**
  * Route definitions with lazy loading
@@ -830,7 +831,10 @@ function isBackendModePublicRouteAllowed(path: string, hasPendingAuthSession: bo
   return false
 }
 
+let uiAccessNavigationVersion = 0
+
 router.beforeEach(async (to, _from, next) => {
+  const uiAccessNavigation = ++uiAccessNavigationVersion
   // 开始导航加载状态
   navigationLoading.startNavigation()
 
@@ -844,6 +848,17 @@ router.beforeEach(async (to, _from, next) => {
 
   const appStore = useAppStore()
   const adminSettingsStore = useAdminSettingsStore()
+
+  const uiAccessAllowed = await checkUIAccessNavigation(to.fullPath, (_from.matched?.length ?? 0) > 0)
+  if (uiAccessNavigation !== uiAccessNavigationVersion) {
+    next(false)
+    return
+  }
+  if (!uiAccessAllowed) {
+    next(false)
+    window.location.assign(safeUIAccessPath(to.fullPath) ?? '/')
+    return
+  }
 
   // A denied payment URL resolves through this same record, so do not re-check its URL.
   if (to.name === 'NotFound') {

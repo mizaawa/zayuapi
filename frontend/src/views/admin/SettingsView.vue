@@ -126,8 +126,34 @@
                 </p>
               </div>
               <div class="space-y-2 rounded-lg bg-gray-50 p-3 text-xs text-gray-500 dark:bg-dark-800 dark:text-gray-400" data-testid="ui-accessibility-proxy-hint">
-                <p>{{ localText('仅限制网页；服务端通过 GeoJS 检测可信客户端 IP 所在国家/地区，检测暂不可用时显示重试页。CNAME 无法识别访客地区，也不会直接信任任意 CF-IPCountry 等请求头。', 'Only webpages are restricted. The server uses GeoJS to detect the country/region of the trusted client IP and shows a retry page if detection is temporarily unavailable. CNAME cannot identify visitor location, and arbitrary headers such as CF-IPCountry are not trusted directly.') }}</p>
-                <p>{{ localText('使用 CDN/反向代理时，请将可信代理地址或 CIDR 正确配置到 server.trusted_proxies，并保留原始 Host、传递真实客户端 IP。', 'When using a CDN/reverse proxy, configure trusted proxy addresses or CIDRs in server.trusted_proxies, preserve the original Host and forward the real client IP.') }}</p>
+                <p>{{ localText('服务端根据访客 IP 检测国家/地区，检测暂不可用时显示重试页。无需填写 CNAME，也不会直接信任任意 CF-IPCountry 等国家请求头。', 'The server detects the visitor country/region from the visitor IP and shows a retry page if detection is unavailable. No CNAME is required; arbitrary country headers such as CF-IPCountry are not trusted directly.') }}</p>
+                <p>{{ localText('访客 IP 沿用系统的转发 IP 兼容开关及自定义 IP 头设置；兼容开关关闭时，严格按 server.trusted_proxies 解析。CDN/反向代理须保留原始 Host 并正确传递访客 IP。', 'Visitor IP detection follows the system forwarded-IP compatibility switch and custom IP header settings. When compatibility is off, server.trusted_proxies is authoritative. CDN/reverse proxies must preserve the original Host and forward the visitor IP correctly.') }}</p>
+              </div>
+              <div class="rounded-xl border border-gray-200 bg-gray-50/60 p-4 dark:border-dark-700 dark:bg-dark-800/50" data-testid="ui-access-check-panel">
+                <div class="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <h3 class="text-sm font-medium text-gray-900 dark:text-gray-100">{{ localText('当前访问检测', 'Check this visit') }}</h3>
+                    <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ localText('手动检测当前访客 IP 和地区，不会保存设置或触发网页拦截。', 'Manually check this visitor IP and country/region without saving settings or blocking this page.') }}</p>
+                  </div>
+                  <button type="button" class="btn btn-secondary inline-flex items-center gap-2" :disabled="uiAccessChecking" :aria-busy="uiAccessChecking" data-testid="ui-access-check-button" @click="checkCurrentUIAccess">
+                    <Icon :name="uiAccessChecking ? 'refresh' : 'globe'" size="sm" :class="uiAccessChecking ? 'motion-safe:animate-spin' : ''" />
+                    {{ uiAccessChecking ? localText('检测中…', 'Checking…') : localText('检测当前访问地区', 'Check current country/region') }}
+                  </button>
+                </div>
+                <div v-if="uiAccessCheckResult || uiAccessCheckFailed" class="mt-4 space-y-3" role="status" aria-live="polite" data-testid="ui-access-check-result">
+                  <dl v-if="uiAccessCheckResult" class="grid grid-cols-2 gap-3 text-xs sm:grid-cols-4">
+                    <div><dt class="text-gray-500 dark:text-gray-400">{{ localText('访客 IP', 'Visitor IP') }}</dt><dd class="mt-1 break-all font-mono text-gray-900 dark:text-gray-100" data-testid="ui-access-check-ip">{{ uiAccessCheckResult.ip || '—' }}</dd></div>
+                    <div><dt class="text-gray-500 dark:text-gray-400">{{ localText('国家/地区代码', 'Country/region code') }}</dt><dd class="mt-1 font-medium text-gray-900 dark:text-gray-100" data-testid="ui-access-check-country">{{ uiAccessCheckCountry || localText('未识别', 'Unknown') }}</dd></div>
+                    <div><dt class="text-gray-500 dark:text-gray-400">{{ localText('检测来源', 'Detection source') }}</dt><dd class="mt-1 break-all text-gray-900 dark:text-gray-100">{{ uiAccessCheckResult.provider || '—' }}<span v-if="uiAccessCheckResult.cached" class="ml-1 text-gray-500 dark:text-gray-400">{{ localText('（缓存）', '(cached)') }}</span></dd></div>
+                    <div><dt class="text-gray-500 dark:text-gray-400">{{ localText('耗时', 'Elapsed') }}</dt><dd class="mt-1 text-gray-900 dark:text-gray-100">{{ uiAccessCheckResult.elapsed_ms }} ms</dd></div>
+                  </dl>
+                  <p v-if="uiAccessCheckError" class="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:bg-amber-900/20 dark:text-amber-300" data-testid="ui-access-check-error">{{ uiAccessCheckError }}</p>
+                  <div class="rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs dark:border-dark-700 dark:bg-dark-900">
+                    <p class="font-medium text-gray-900 dark:text-gray-100">{{ localText('当前输入规则预览', 'Preview the entered rules') }}</p>
+                    <p class="mt-1 text-gray-600 dark:text-gray-300" data-testid="ui-access-check-preview">{{ uiAccessCheckPreview }}</p>
+                  </div>
+                </div>
+                <p class="mt-3 text-xs text-gray-500 dark:text-gray-400">{{ localText('预览按当前输入计算，不代表已保存。保存后请刷新网页或用新窗口验证；此检测 API 不受网页访问限制。', 'The preview uses your current inputs, which may not be saved. Refresh the page or open a new window after saving to verify; this diagnostic API is not blocked by webpage access restrictions.') }}</p>
               </div>
             </div>
           </div>
@@ -9008,6 +9034,7 @@ import type {
   WebSearchEmulationConfig,
   WebSearchProviderConfig,
   WebSearchTestResult,
+  UIAccessCheckResult,
 } from "@/api/admin/settings";
 import type {
   AdminGroup,
@@ -9768,6 +9795,59 @@ const uiBlockedCountriesErrorMessage = computed(() => localText(
   "请输入有效的 ISO 两位国家/地区代码，以英文逗号分隔（例如 CN, US）；启用地区限制时至少填写一项。",
   "Enter valid ISO two-letter country/region codes separated by commas (for example CN, US); at least one code is required when the restriction is enabled.",
 ));
+
+const uiAccessChecking = ref(false);
+const uiAccessCheckResult = ref<UIAccessCheckResult | null>(null);
+const uiAccessCheckFailed = ref(false);
+const uiAccessCheckCountry = computed(() => {
+  const country = normalizeUiBlockedCountries(uiAccessCheckResult.value?.country ?? "");
+  return country && !country.includes(",") ? country : "";
+});
+const uiAccessCheckError = computed(() => {
+  if (uiAccessCheckCountry.value) return "";
+  const messages: Record<string, [string, string]> = {
+    invalid_ip: ["无法识别有效访客 IP，请检查转发 IP 配置。", "A valid visitor IP could not be identified. Check forwarded-IP settings."],
+    non_public_ip: ["当前识别到内网或本机 IP，请检查反向代理是否正确传递真实访客 IP。", "The detected IP is private or local. Check that your reverse proxy forwards the real visitor IP."],
+    lookup_failed: ["地区查询暂时失败，请稍后重试并检查服务器的外网连接。", "Country lookup failed. Retry later and check the server's internet connection."],
+    providers_unavailable: ["地区查询服务暂不可用，请稍后重试并检查服务器的外网连接。", "Country lookup services are unavailable. Retry later and check the server's internet connection."],
+    lookup_unavailable: ["地区检测服务尚未就绪，请稍后重试。", "Country detection is not ready. Please retry shortly."],
+    timeout: ["地区检测超时，请稍后重试。", "Country detection timed out. Please retry."],
+    cancelled: ["本次地区检测已取消，请重新检测。", "This country check was cancelled. Please run it again."],
+    busy: ["地区检测服务繁忙，请稍后重试。", "Country detection is busy. Please retry shortly."],
+  };
+  const message = messages[uiAccessCheckResult.value?.error_code ?? ""];
+  return message ? localText(...message) : localText("检测失败，请检查访客 IP 配置后重试。", "Detection failed. Check visitor-IP settings and retry.");
+});
+const uiAccessCheckPreview = computed(() => {
+  if (form.ui_access_domain_enabled) {
+    const domain = normalizeUiAccessDomain(form.ui_access_domain);
+    if (!domain) return localText("请先填写有效主域名，才能预览访问规则。", "Enter a valid main domain to preview the access rules.");
+    const currentHost = window.location.hostname.toLowerCase().replace(/\.$/, "");
+    if (currentHost !== domain) return localText("当前访问域名不是填写的主域名；保存后刷新网页将显示主域名访问提示，不执行地区判断。", "This hostname differs from the entered main domain. After saving and refreshing, the domain notice takes precedence over country checks.");
+  }
+  if (!form.ui_country_restriction_enabled) return localText("地区限制开关已关闭，当前规则不会按国家/地区拦截。", "Country restriction is off; these rules will not block by country/region.");
+  const countries = normalizeUiBlockedCountries(form.ui_blocked_countries);
+  if (!countries) return localText("请先填写有效的国家/地区列表，才能预览地区规则。", "Enter a valid country/region list to preview the country rules.");
+  if (!uiAccessCheckCountry.value) return localText("尚未识别当前地区，无法判断是否命中；网页检测失败时将显示重试页。", "The current country is unknown, so a match cannot be determined. Webpage detection failures show a retry page.");
+  return countries.split(",").includes(uiAccessCheckCountry.value)
+    ? localText("当前地区命中不可访问列表；保存后刷新网页将显示地区拦截页。", "This country matches the blocked list. After saving and refreshing, the country restriction page will appear.")
+    : localText("当前地区未命中不可访问列表，地区规则允许访问。", "This country does not match the blocked list; the country rules allow access.");
+});
+
+async function checkCurrentUIAccess() {
+  if (uiAccessChecking.value) return;
+  uiAccessChecking.value = true;
+  uiAccessCheckFailed.value = false;
+  uiAccessCheckResult.value = null;
+  try {
+    uiAccessCheckResult.value = await adminAPI.settings.checkUIAccess();
+  } catch {
+    // Do not expose raw upstream/network errors in the settings interface.
+    uiAccessCheckFailed.value = true;
+  } finally {
+    uiAccessChecking.value = false;
+  }
+}
 
 const form = reactive<SettingsForm>({
   ui_access_domain: "",

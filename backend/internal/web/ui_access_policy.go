@@ -5,11 +5,9 @@ package web
 import (
 	"context"
 	"encoding/json"
-	"html"
 	"mime"
 	"net/http"
 	"strings"
-	"time"
 
 	clientip "github.com/Wei-Shaw/sub2api/internal/pkg/ip"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/uiaccess"
@@ -51,7 +49,7 @@ func (s *FrontendServer) allowUIAccess(c *gin.Context, policy uiAccessPolicy) bo
 			serveUIUnavailable(c)
 			return false
 		}
-		if !allowUIHost(c, policy.Domain) {
+		if !allowUIHost(c, policy) {
 			return false
 		}
 	}
@@ -74,15 +72,16 @@ func (s *FrontendServer) allowUIAccess(c *gin.Context, policy uiAccessPolicy) bo
 		serveUIUnavailable(c)
 		return false
 	}
-	ctx, cancel := context.WithTimeout(c.Request.Context(), 2500*time.Millisecond)
+	ctx, cancel := context.WithTimeout(c.Request.Context(), uiaccess.CountryLookupTimeout)
 	defer cancel()
 	resolver := s.countryResolver
 	if resolver == nil {
 		serveUICountryNotice(c, policy, true)
 		return false
 	}
-	country, err := resolver.Country(ctx, clientip.GetTrustedClientIP(c), retry)
+	country, err := resolver.Country(ctx, clientip.GetSecurityClientIP(c, false), retry)
 	if err != nil || !uiaccess.ValidCountryCode(country) {
+		c.Header("X-UI-Access-Reason", uiaccess.CountryLookupErrorCode(err))
 		serveUICountryNotice(c, policy, true)
 		return false
 	}
@@ -127,14 +126,6 @@ func safeUIReturnPath(request *http.Request) string {
 }
 
 func serveUICountryNotice(c *gin.Context, policy uiAccessPolicy, unavailable bool) {
-	name := strings.TrimSpace(policy.SiteName)
-	if name == "" {
-		name = "Sub2API"
-	}
-	logo := safeImageURL(policy.SiteLogo)
-	if logo == "" {
-		logo = "/logo.svg"
-	}
 	title := "该地区不在服务范围内"
 	description := "基于不同国家和地区的政策要求及本站运营策略，当前所在地区暂不提供站点访问服务。感谢您的理解与支持。如您的网络环境已发生变化，请点击重试，我们将重新检测当前访问地区。"
 	status := http.StatusForbidden
@@ -144,7 +135,11 @@ func serveUICountryNotice(c *gin.Context, policy uiAccessPolicy, unavailable boo
 		status = http.StatusServiceUnavailable
 		c.Header("Retry-After", "5")
 	}
-	body := `<div class="brand"><img width="44" height="44" alt="站点图标" referrerpolicy="no-referrer" src="` + html.EscapeString(logo) + `"><span>` + html.EscapeString(name) + `</span></div><div class="notice-symbol" aria-hidden="true">◎</div><h1>` + title + `</h1><p>` + description + `</p><form method="post" action=""><input type="hidden" name="_ui_country_retry" value="1"><button type="submit">重试</button></form><small>重试将重新检测；允许访问后会返回您刚才打开的页面。</small>`
+	kind, eyebrow := "country", "服务范围说明"
+	if unavailable {
+		kind, eyebrow = "retry", "访问地区检测"
+	}
+	body := uiNoticeBrand(policy) + uiNoticeIllustration(kind) + `<div class="eyebrow">` + eyebrow + `</div><h1 id="notice-title">` + title + `</h1><p class="description">` + description + `</p><form method="post" action=""><input type="hidden" name="_ui_country_retry" value="1"><button class="primary-action" type="submit">` + uiNoticeRetryIcon + `<span>重试</span></button></form><p class="footnote">重新检测通过后，将自动返回您刚才访问的页面。</p>`
 	// This standalone document needs only its branding image and same-origin
 	// retry form. It loads no JavaScript, CSS bundle or external font.
 	serveUINoticeWithPolicy(c, status, body, "default-src 'none'; img-src 'self' https: http: data:; style-src 'unsafe-inline'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'")

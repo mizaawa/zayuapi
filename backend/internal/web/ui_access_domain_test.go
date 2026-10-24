@@ -48,10 +48,44 @@ func assertUIAccessDomainNotice(t *testing.T, response *httptest.ResponseRecorde
 	require.Equal(t, "Host", response.Header().Get("Vary"))
 	require.Equal(t, "no-referrer", response.Header().Get("Referrer-Policy"))
 	require.Empty(t, response.Header().Get("ETag"))
-	for _, forbidden := range []string{"<script", "<link", "<img", "<iframe", "window.__APP_CONFIG__", "secret-token", "<svg", "@import", "url("} {
+	for _, forbidden := range []string{"<script", "<link", "<iframe", "window.__APP_CONFIG__", "secret-token", "/assets/", "@import", "url("} {
 		require.NotContains(t, response.Body.String(), forbidden)
 	}
-	require.Less(t, response.Body.Len(), 2500)
+	require.Contains(t, response.Body.String(), `class="brand-logo"`)
+	require.Contains(t, response.Body.String(), `class="brand-name"`)
+	require.Contains(t, response.Body.String(), `class="primary-action"`)
+	require.Contains(t, response.Body.String(), `prefers-reduced-motion:reduce`)
+	require.Contains(t, response.Header().Get("Content-Security-Policy"), "default-src 'none'")
+	require.Contains(t, response.Header().Get("Content-Security-Policy"), "form-action 'none'")
+	require.Less(t, response.Body.Len(), 12000, "standalone notice must stay small and avoid the SPA payload")
+}
+
+func TestUIAccessDomainNoticeUsesConfiguredBrandAndProductTheme(t *testing.T) {
+	provider := &mockSettingsProvider{settings: map[string]any{
+		"ui_access_domain_enabled": true, "ui_access_domain": "example.com",
+		"site_name": `杂鱼 API <Site>`, "site_logo": `/brand/logo.png?name="safe"`,
+	}}
+	server, router := newUIAccessDomainRouter(t, provider)
+	response := requestUIAccessDomain(router, "/login?token=secret-token", "cdn.example.com", nil)
+	assertUIAccessDomainNotice(t, response)
+	body := response.Body.String()
+	require.Contains(t, body, `杂鱼 API &lt;Site&gt;`)
+	require.Contains(t, body, `src="/brand/logo.png?name=&#34;safe&#34;"`)
+	for _, token := range []string{"--background:#fffbe8", "--surface:#fffef8", "--primary:#e9b824", "--green:#477b54", "border-radius:28px", "@keyframes card-enter", "@keyframes symbol-float", "color-scheme:light"} {
+		require.Contains(t, body, token)
+	}
+	require.NotContains(t, body, "prefers-color-scheme:dark", "the product intentionally uses its light-only Monet theme")
+	require.NotContains(t, body, "#175cd3", "do not reintroduce the unrelated blue theme")
+	provider.settings = map[string]any{
+		"ui_access_domain_enabled": true, "ui_access_domain": "example.com",
+		"site_name": `"><script>alert(1)</script>`, "site_logo": "javascript:alert(1)",
+	}
+	server.InvalidateCache()
+	response = requestUIAccessDomain(router, "/", "cdn.example.com", nil)
+	require.Contains(t, response.Body.String(), `src="/logo.svg"`)
+	require.Contains(t, response.Body.String(), `&lt;script&gt;`)
+	require.NotContains(t, response.Body.String(), `<script>`)
+	require.NotContains(t, response.Body.String(), "javascript:")
 }
 
 func TestUIAccessDomainBlocksBeforeSPAAndConditionalCache(t *testing.T) {
