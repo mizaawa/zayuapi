@@ -952,7 +952,7 @@ func (a *Account) GetBaseURL() string {
 		return "https://api.anthropic.com"
 	}
 	if a.Platform == PlatformAntigravity {
-		return strings.TrimRight(baseURL, "/") + "/antigravity"
+		return antigravityAPIKeyBaseURL(baseURL)
 	}
 	return baseURL
 }
@@ -965,9 +965,17 @@ func (a *Account) GetGeminiBaseURL(defaultBaseURL string) string {
 		return defaultBaseURL
 	}
 	if a.Platform == PlatformAntigravity && a.Type == AccountTypeAPIKey {
-		return strings.TrimRight(baseURL, "/") + "/antigravity"
+		return antigravityAPIKeyBaseURL(baseURL)
 	}
 	return baseURL
+}
+
+func antigravityAPIKeyBaseURL(baseURL string) string {
+	baseURL = strings.TrimRight(strings.TrimSpace(baseURL), "/")
+	if strings.HasSuffix(strings.ToLower(baseURL), "/antigravity") {
+		return baseURL
+	}
+	return baseURL + "/antigravity"
 }
 
 func (a *Account) GetExtraString(key string) string {
@@ -1994,28 +2002,6 @@ func (a *Account) GetWebSearchEmulationMode() string {
 	default:
 		return WebSearchModeDefault
 	}
-}
-
-// IsCodexCLIOnlyEnabled 返回 OpenAI OAuth 账号是否启用"仅允许 Codex 官方客户端"。
-// 字段：accounts.extra.codex_cli_only。
-// 字段缺失或类型不正确时，按 false（关闭）处理。
-func (a *Account) IsCodexCLIOnlyEnabled() bool {
-	if a == nil || !a.IsOpenAIOAuth() || a.Extra == nil {
-		return false
-	}
-	enabled, ok := a.Extra["codex_cli_only"].(bool)
-	return ok && enabled
-}
-
-// IsCodexCLIOnlyAppServerAllowed 返回 codex_cli_only 账号是否额外放行 Codex app-server
-// 第三方客户端（运行时与全局 app_server 开关 OR）。字段：accounts.extra.codex_cli_only_allow_app_server。
-// 仅在 codex_cli_only 已启用时有意义；字段缺失或类型不符按 false（不放行）处理。
-func (a *Account) IsCodexCLIOnlyAppServerAllowed() bool {
-	if !a.IsCodexCLIOnlyEnabled() {
-		return false
-	}
-	v, ok := a.Extra["codex_cli_only_allow_app_server"].(bool)
-	return ok && v
 }
 
 // WindowCostSchedulability 窗口费用调度状态

@@ -425,24 +425,6 @@ func diffSettings(before *service.SystemSettings, after *service.SystemSettings,
 	if before.MaxClaudeCodeVersion != after.MaxClaudeCodeVersion {
 		changed = append(changed, "max_claude_code_version")
 	}
-	if before.MinCodexVersion != after.MinCodexVersion {
-		changed = append(changed, "min_codex_version")
-	}
-	if before.MaxCodexVersion != after.MaxCodexVersion {
-		changed = append(changed, "max_codex_version")
-	}
-	if before.CodexCLIOnlyAllowAppServerClients != after.CodexCLIOnlyAllowAppServerClients {
-		changed = append(changed, "codex_cli_only_allow_app_server_clients")
-	}
-	if before.CodexCLIOnlyEngineFingerprintSignals != after.CodexCLIOnlyEngineFingerprintSignals {
-		changed = append(changed, "codex_cli_only_engine_fingerprint_signals")
-	}
-	if before.CodexCLIOnlyBlacklist != after.CodexCLIOnlyBlacklist {
-		changed = append(changed, "codex_cli_only_blacklist")
-	}
-	if before.CodexCLIOnlyWhitelist != after.CodexCLIOnlyWhitelist {
-		changed = append(changed, "codex_cli_only_whitelist")
-	}
 	if before.AllowUngroupedKeyScheduling != after.AllowUngroupedKeyScheduling {
 		changed = append(changed, "allow_ungrouped_key_scheduling")
 	}
@@ -469,45 +451,6 @@ func diffSettings(before *service.SystemSettings, after *service.SystemSettings,
 	}
 	if before.CustomEndpoints != after.CustomEndpoints {
 		changed = append(changed, "custom_endpoints")
-	}
-	if before.EnableFingerprintUnification != after.EnableFingerprintUnification {
-		changed = append(changed, "enable_fingerprint_unification")
-	}
-	if before.EnableMetadataPassthrough != after.EnableMetadataPassthrough {
-		changed = append(changed, "enable_metadata_passthrough")
-	}
-	if before.EnableCCHSigning != after.EnableCCHSigning {
-		changed = append(changed, "enable_cch_signing")
-	}
-	if before.EnableClaudeOAuthSystemPromptInjection != after.EnableClaudeOAuthSystemPromptInjection {
-		changed = append(changed, "enable_claude_oauth_system_prompt_injection")
-	}
-	if before.ClaudeOAuthSystemPrompt != after.ClaudeOAuthSystemPrompt {
-		changed = append(changed, "claude_oauth_system_prompt")
-	}
-	if before.ClaudeOAuthSystemPromptBlocks != after.ClaudeOAuthSystemPromptBlocks {
-		changed = append(changed, "claude_oauth_system_prompt_blocks")
-	}
-	if before.EnableAnthropicCacheTTL1hInjection != after.EnableAnthropicCacheTTL1hInjection {
-		changed = append(changed, "enable_anthropic_cache_ttl_1h_injection")
-	}
-	if before.RewriteMessageCacheControl != after.RewriteMessageCacheControl {
-		changed = append(changed, "rewrite_message_cache_control")
-	}
-	if before.EnableClientDatelineNormalization != after.EnableClientDatelineNormalization {
-		changed = append(changed, "enable_client_dateline_normalization")
-	}
-	if before.AntigravityUserAgentVersion != after.AntigravityUserAgentVersion {
-		changed = append(changed, "antigravity_user_agent_version")
-	}
-	if before.OpenAICodexUserAgent != after.OpenAICodexUserAgent {
-		changed = append(changed, "openai_codex_user_agent")
-	}
-	if before.OpenAICodexClientVersion != after.OpenAICodexClientVersion {
-		changed = append(changed, "openai_codex_client_version")
-	}
-	if before.OpenAICodexVersionAutoSyncEnabled != after.OpenAICodexVersionAutoSyncEnabled {
-		changed = append(changed, "openai_codex_version_auto_sync_enabled")
 	}
 	if before.PaymentVisibleMethodAlipaySource != after.PaymentVisibleMethodAlipaySource {
 		changed = append(changed, "payment_visible_method_alipay_source")

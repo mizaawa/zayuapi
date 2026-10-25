@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"crypto/subtle"
 	"errors"
 	"net/http"
 	"strings"
@@ -15,79 +14,15 @@ import (
 const grokDefaultAccessTokenTTL = 6 * time.Hour
 
 type GrokOAuthService struct {
-	sessionStore *xai.SessionStore
-	proxyRepo    ProxyRepository
-	oauthClient  GrokOAuthClient
+	proxyRepo   ProxyRepository
+	oauthClient GrokOAuthClient
 }
 
 func NewGrokOAuthService(proxyRepo ProxyRepository, oauthClient GrokOAuthClient) *GrokOAuthService {
 	return &GrokOAuthService{
-		sessionStore: xai.NewSessionStore(),
-		proxyRepo:    proxyRepo,
-		oauthClient:  oauthClient,
+		proxyRepo:   proxyRepo,
+		oauthClient: oauthClient,
 	}
-}
-
-type GrokAuthURLResult struct {
-	AuthURL   string `json:"auth_url"`
-	SessionID string `json:"session_id"`
-	State     string `json:"state"`
-}
-
-func (s *GrokOAuthService) GenerateAuthURL(ctx context.Context, proxyID *int64, redirectURI string) (*GrokAuthURLResult, error) {
-	state, err := xai.GenerateState()
-	if err != nil {
-		return nil, infraerrors.Newf(http.StatusInternalServerError, "GROK_OAUTH_STATE_FAILED", "failed to generate state: %v", err)
-	}
-	nonce, err := xai.GenerateNonce()
-	if err != nil {
-		return nil, infraerrors.Newf(http.StatusInternalServerError, "GROK_OAUTH_NONCE_FAILED", "failed to generate nonce: %v", err)
-	}
-	codeVerifier, err := xai.GenerateCodeVerifier()
-	if err != nil {
-		return nil, infraerrors.Newf(http.StatusInternalServerError, "GROK_OAUTH_VERIFIER_FAILED", "failed to generate code verifier: %v", err)
-	}
-	sessionID, err := xai.GenerateSessionID()
-	if err != nil {
-		return nil, infraerrors.Newf(http.StatusInternalServerError, "GROK_OAUTH_SESSION_FAILED", "failed to generate session ID: %v", err)
-	}
-
-	proxyURL, err := s.proxyURL(ctx, proxyID)
-	if err != nil {
-		return nil, err
-	}
-	redirectURI = xai.EffectiveRedirectURI(redirectURI)
-	codeChallenge := xai.GenerateCodeChallenge(codeVerifier)
-
-	authURL, err := xai.BuildAuthorizationURL(state, codeChallenge, redirectURI, nonce)
-	if err != nil {
-		return nil, infraerrors.Newf(http.StatusBadRequest, "GROK_OAUTH_INVALID_AUTHORIZE_URL", "%v", err)
-	}
-
-	s.sessionStore.Set(sessionID, &xai.OAuthSession{
-		State:         state,
-		CodeVerifier:  codeVerifier,
-		CodeChallenge: codeChallenge,
-		ClientID:      xai.EffectiveClientID(),
-		Scope:         xai.EffectiveScope(),
-		ProxyURL:      proxyURL,
-		RedirectURI:   redirectURI,
-		CreatedAt:     time.Now(),
-	})
-
-	return &GrokAuthURLResult{
-		AuthURL:   authURL,
-		SessionID: sessionID,
-		State:     state,
-	}, nil
-}
-
-type GrokExchangeCodeInput struct {
-	SessionID   string
-	Code        string
-	State       string
-	RedirectURI string
-	ProxyID     *int64
 }
 
 type GrokTokenInfo struct {
@@ -106,52 +41,6 @@ type GrokTokenInfo struct {
 	EntitlementStatus string `json:"entitlement_status,omitempty"`
 }
 
-func (s *GrokOAuthService) ExchangeCode(ctx context.Context, input *GrokExchangeCodeInput) (*GrokTokenInfo, error) {
-	if input == nil {
-		return nil, infraerrors.New(http.StatusBadRequest, "GROK_OAUTH_INVALID_INPUT", "input is required")
-	}
-	session, ok := s.sessionStore.Get(input.SessionID)
-	if !ok {
-		return nil, infraerrors.New(http.StatusBadRequest, "GROK_OAUTH_SESSION_NOT_FOUND", "session not found or expired")
-	}
-	defer s.sessionStore.Delete(input.SessionID)
-
-	parsed := xai.ParseAuthorizationInput(input.Code)
-	code := strings.TrimSpace(parsed.Code)
-	if code == "" {
-		return nil, infraerrors.New(http.StatusBadRequest, "GROK_OAUTH_CODE_REQUIRED", "authorization code is required")
-	}
-	state := strings.TrimSpace(input.State)
-	if state == "" {
-		state = strings.TrimSpace(parsed.State)
-	}
-	if parsed.RequiresState && state == "" {
-		return nil, infraerrors.New(http.StatusBadRequest, "GROK_OAUTH_STATE_REQUIRED", "oauth state is required for callback URLs")
-	}
-	if state != "" && subtle.ConstantTimeCompare([]byte(state), []byte(session.State)) != 1 {
-		return nil, infraerrors.New(http.StatusBadRequest, "GROK_OAUTH_INVALID_STATE", "invalid oauth state")
-	}
-
-	proxyURL := session.ProxyURL
-	if input.ProxyID != nil {
-		var err error
-		proxyURL, err = s.proxyURL(ctx, input.ProxyID)
-		if err != nil {
-			return nil, err
-		}
-	}
-	redirectURI := session.RedirectURI
-	if strings.TrimSpace(input.RedirectURI) != "" {
-		redirectURI = input.RedirectURI
-	}
-
-	tokenResp, err := s.oauthClient.ExchangeCode(ctx, code, session.CodeVerifier, redirectURI, proxyURL, session.ClientID)
-	if err != nil {
-		return nil, err
-	}
-	return s.tokenInfoFromResponse(tokenResp, session.ClientID, nil), nil
-}
-
 func (s *GrokOAuthService) RefreshToken(ctx context.Context, refreshToken, proxyURL, clientID string) (*GrokTokenInfo, error) {
 	refreshToken = strings.TrimSpace(refreshToken)
 	if refreshToken == "" {
@@ -166,26 +55,6 @@ func (s *GrokOAuthService) RefreshToken(ctx context.Context, refreshToken, proxy
 		tokenInfo.RefreshToken = refreshToken
 	}
 	return tokenInfo, nil
-}
-
-func (s *GrokOAuthService) ValidateRefreshToken(ctx context.Context, refreshToken string, proxyID *int64) (*GrokTokenInfo, error) {
-	proxyURL, err := s.proxyURL(ctx, proxyID)
-	if err != nil {
-		return nil, err
-	}
-	return s.RefreshToken(ctx, refreshToken, proxyURL, xai.EffectiveClientID())
-}
-
-func (s *GrokOAuthService) ConvertFromSSO(ctx context.Context, ssoToken string, proxyID *int64) (*GrokTokenInfo, error) {
-	proxyURL, err := s.proxyURL(ctx, proxyID)
-	if err != nil {
-		return nil, err
-	}
-	tokenResp, err := s.oauthClient.ConvertSSOToBuild(ctx, ssoToken, proxyURL)
-	if err != nil {
-		return nil, err
-	}
-	return s.tokenInfoFromResponse(tokenResp, xai.DefaultClientID, nil), nil
 }
 
 func (s *GrokOAuthService) RefreshAccountToken(ctx context.Context, account *Account) (*GrokTokenInfo, error) {
@@ -256,10 +125,6 @@ func (s *GrokOAuthService) BuildAccountCredentials(tokenInfo *GrokTokenInfo) map
 	}
 	creds["base_url"] = xai.DefaultCLIBaseURL
 	return creds
-}
-
-func (s *GrokOAuthService) Stop() {
-	s.sessionStore.Stop()
 }
 
 func (s *GrokOAuthService) tokenInfoFromResponse(tokenResp *xai.TokenResponse, clientID string, existing map[string]any) *GrokTokenInfo {

@@ -595,28 +595,6 @@ export interface SystemSettings {
   // 分组隔离
   allow_ungrouped_key_scheduling: boolean;
 
-  // Gateway forwarding behavior
-  enable_fingerprint_unification: boolean;
-  enable_metadata_passthrough: boolean;
-  enable_cch_signing: boolean;
-  enable_claude_oauth_system_prompt_injection: boolean;
-  claude_oauth_system_prompt: string;
-  claude_oauth_system_prompt_blocks: string;
-  enable_anthropic_cache_ttl_1h_injection: boolean;
-  rewrite_message_cache_control: boolean;
-  enable_client_dateline_normalization: boolean;
-  antigravity_user_agent_version: string;
-  openai_codex_user_agent: string;
-  openai_codex_client_version: string;
-  openai_codex_client_version_synced: string;
-  openai_codex_version_auto_sync_enabled: boolean;
-  // codex_cli_only 加固
-  min_codex_version: string;
-  max_codex_version: string;
-  codex_cli_only_blacklist: string;
-  codex_cli_only_whitelist: string;
-  codex_cli_only_allow_app_server_clients: boolean;
-  codex_cli_only_engine_fingerprint_signals: string;
   web_search_emulation_enabled?: boolean;
 
   // Payment configuration
@@ -949,26 +927,6 @@ export interface UpdateSettingsRequest {
   min_claude_code_version?: string;
   max_claude_code_version?: string;
   allow_ungrouped_key_scheduling?: boolean;
-  enable_fingerprint_unification?: boolean;
-  enable_metadata_passthrough?: boolean;
-  enable_cch_signing?: boolean;
-  enable_claude_oauth_system_prompt_injection?: boolean;
-  claude_oauth_system_prompt?: string;
-  claude_oauth_system_prompt_blocks?: string;
-  enable_anthropic_cache_ttl_1h_injection?: boolean;
-  rewrite_message_cache_control?: boolean;
-  enable_client_dateline_normalization?: boolean;
-  antigravity_user_agent_version?: string;
-  openai_codex_user_agent?: string;
-  openai_codex_client_version?: string;
-  openai_codex_version_auto_sync_enabled?: boolean;
-  // codex_cli_only 加固
-  min_codex_version?: string;
-  max_codex_version?: string;
-  codex_cli_only_blacklist?: string;
-  codex_cli_only_whitelist?: string;
-  codex_cli_only_allow_app_server_clients?: boolean;
-  codex_cli_only_engine_fingerprint_signals?: string;
   // Payment configuration
   payment_enabled?: boolean;
   payment_exclusive_enabled?: boolean;

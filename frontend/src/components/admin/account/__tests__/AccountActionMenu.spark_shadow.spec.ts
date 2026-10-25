@@ -69,7 +69,7 @@ describe('AccountActionMenu — spark shadow 按钮可见性', () => {
     wrapper.unmount()
   })
 
-  it.each(['oauth', 'setup-token'] as const)('%s 账号隐藏「复制账号」按钮，避免共享可轮换令牌', (type) => {
+  it.each(['oauth', 'setup-token', 'bedrock', 'service_account', 'upstream'] as const)('%s 账号隐藏「复制账号」按钮，避免共享可轮换令牌', (type) => {
     const account = makeAccount({ platform: 'openai', type, parent_account_id: null })
     const wrapper = mount(AccountActionMenu, {
       props: { show: true, account, position },
@@ -98,13 +98,13 @@ describe('AccountActionMenu — spark shadow 按钮可见性', () => {
     wrapper.unmount()
   })
 
-  it('OpenAI OAuth 母账号（无 parent_account_id）显示「创建 spark 影子」按钮', () => {
+  it('历史 OpenAI OAuth 母账号不再显示创建影子入口', () => {
     const account = makeAccount({ platform: 'openai', type: 'oauth', parent_account_id: null })
     const wrapper = mount(AccountActionMenu, {
       props: { show: true, account, position },
       attachTo: document.body,
     })
-    expect(getBodyText()).toContain('admin.accounts.createSparkShadow')
+    expect(getBodyText()).not.toContain('admin.accounts.createSparkShadow')
     wrapper.unmount()
   })
 
@@ -148,29 +148,20 @@ describe('AccountActionMenu — spark shadow 按钮可见性', () => {
       attachTo: document.body,
     })
     const body = getBodyText()
-    expect(body).toContain('admin.accounts.reAuthorize')
+    expect(body).not.toContain('admin.accounts.reAuthorize')
+    expect(body).toContain('admin.accounts.refreshToken')
     expect(body).toContain('admin.accounts.setPrivacy')
     wrapper.unmount()
   })
 
-  it('点击按钮触发 create-spark-shadow 事件并携带 account', async () => {
-    const account = makeAccount({ platform: 'openai', type: 'oauth', parent_account_id: null })
+  it('does not offer any alternate onboarding actions for historical accounts', () => {
     const wrapper = mount(AccountActionMenu, {
-      props: { show: true, account, position },
+      props: { show: true, account: makeAccount({}), position },
       attachTo: document.body,
     })
-
-    // Content is teleported to body — find button by text there
-    const sparkBtn = getBodyButtons().find(b => b.textContent?.includes('admin.accounts.createSparkShadow'))
-    expect(sparkBtn).toBeDefined()
-
-    sparkBtn!.click()
-    await wrapper.vm.$nextTick()
-
-    const emitted = wrapper.emitted('create-spark-shadow')
-    expect(emitted).toBeTruthy()
-    expect(emitted![0][0]).toMatchObject({ id: account.id, platform: 'openai' })
-
+    expect(getBodyText()).not.toContain('admin.accounts.createSparkShadow')
+    expect(getBodyText()).not.toContain('admin.accounts.reAuthorize')
+    expect(wrapper.emitted('create-spark-shadow')).toBeUndefined()
     wrapper.unmount()
   })
 })

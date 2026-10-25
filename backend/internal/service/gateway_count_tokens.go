@@ -58,33 +58,6 @@ func (s *GatewayService) ForwardCountTokens(ctx context.Context, c *gin.Context,
 	isClaudeCodeCT := IsClaudeCodeClient(ctx) || isClaudeCodeClient(c.GetHeader("User-Agent"), parsed.MetadataUserID)
 	shouldMimicClaudeCode := account.IsOAuth() && !isClaudeCodeCT
 
-	if shouldMimicClaudeCode {
-		normalizeOpts := claudeOAuthNormalizeOptions{stripSystemCacheControl: true}
-		var normalizedBody []byte
-		normalizedBody, reqModel = normalizeClaudeOAuthRequestBody(body, reqModel, normalizeOpts)
-		if err := replaceBody(normalizedBody); err != nil {
-			return err
-		}
-
-		if err := replaceBody(s.rewriteMessageCacheControlIfEnabled(ctx, body)); err != nil {
-			return err
-		}
-		if rw := buildToolNameRewriteFromBody(body); rw != nil {
-			if err := replaceBody(applyToolNameRewriteToBody(body, rw)); err != nil {
-				return err
-			}
-		} else {
-			if err := replaceBody(applyToolsLastCacheBreakpoint(body)); err != nil {
-				return err
-			}
-		}
-		// Mimic-added tool breakpoints must satisfy the same count and TTL
-		// ordering constraints as regular message requests.
-		if err := replaceBody(enforceCacheControlLimit(body)); err != nil {
-			return err
-		}
-	}
-
 	// Antigravity 账户不支持 count_tokens，返回 404 让客户端 fallback 到本地估算。
 	// 返回 nil 避免 handler 层记录为错误，也不设置 ops 上游错误上下文。
 	if account.Platform == PlatformAntigravity {
@@ -462,34 +435,7 @@ func (s *GatewayService) buildCountTokensRequest(ctx context.Context, c *gin.Con
 		clientHeaders = c.Request.Header
 	}
 
-	// OAuth 账号：应用统一指纹和重写 userID（受设置开关控制）
-	// 如果启用了会话ID伪装，会在重写后替换 session 部分为固定值
-	ctEnableFP, ctEnableMPT := true, false
-	if s.settingService != nil {
-		ctEnableFP, ctEnableMPT, _ = s.settingService.GetGatewayForwardingSettings(ctx)
-	}
-	var ctFingerprint *Fingerprint
-	if account.IsOAuth() && s.identityService != nil {
-		fp, err := s.identityService.GetOrCreateFingerprint(ctx, account.ID, clientHeaders)
-		if err == nil {
-			ctFingerprint = fp
-			if !ctEnableMPT {
-				accountUUID := account.GetExtraString("account_uuid")
-				if accountUUID != "" && fp.ClientID != "" {
-					if newBody, err := s.identityService.RewriteUserIDWithMasking(ctx, body, account, accountUUID, fp.ClientID, fp.UserAgent); err == nil && len(newBody) > 0 {
-						body = newBody
-					}
-				}
-			}
-		}
-	}
-
-	// 同步 billing header cc_version 与实际发送的 User-Agent 版本
-	if ctFingerprint != nil && ctEnableFP {
-		body = syncBillingHeaderVersion(body, ctFingerprint.UserAgent)
-	}
-
-	// === 计算最终 anthropic-beta header（先于 body sanitize 与 CCH 签名）===
+	// 先计算最终 anthropic-beta，再按相同能力集合净化请求体。
 	// 顺序约束同 buildUpstreamRequest。
 	ctEffectiveDropSet := mergeDropSets(s.getBetaPolicyFilterSet(ctx, c, account, modelID))
 	finalBetaHeader, finalBetaShouldSet := s.computeFinalCountTokensAnthropicBeta(
@@ -529,11 +475,6 @@ func (s *GatewayService) buildCountTokensRequest(ctx context.Context, c *gin.Con
 				addHeaderRaw(req.Header, wireKey, v)
 			}
 		}
-	}
-
-	// OAuth 账号：应用指纹到请求头（受设置开关控制）
-	if ctEnableFP && ctFingerprint != nil {
-		s.identityService.ApplyFingerprint(req, ctFingerprint)
 	}
 
 	// 确保必要的 headers 存在（保持原始大小写）
@@ -590,8 +531,8 @@ func sanitizeCountTokensRequestBody(body []byte) []byte {
 		"stop_sequences",
 		"stop",
 		// Anthropic's /v1/messages/count_tokens accepts request-input fields only.
-		// max_tokens is a generation parameter; OAuth mimicry may inject it to
-		// resemble Claude Code messages requests, so it must never reach this endpoint.
+		// max_tokens is a generation parameter, so a client-supplied value must
+		// never reach the input-only count_tokens endpoint.
 		"max_tokens",
 	} {
 		if gjson.GetBytes(out, path).Exists() {

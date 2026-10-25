@@ -16,9 +16,6 @@ import type {
   TempUnschedulableStatus,
   AdminDataPayload,
   AdminDataImportResult,
-  CodexSessionImportRequest,
-  CodexSessionImportResult,
-  OpenAICodexPATCreateRequest,
   CheckMixedChannelRequest,
   CheckMixedChannelResponse,
   UpstreamBillingProbeResult,
@@ -256,30 +253,6 @@ export async function refreshCredentials(id: number): Promise<Account> {
 }
 
 /**
- * Apply OAuth credentials after re-authorization.
- *
- * Unlike `update()`, this endpoint:
- * - never overwrites the whole `extra` JSONB (merges incrementally instead),
- *   so persistent settings like `base_rpm`, `window_cost_limit`, `max_sessions`,
- *   `quota_*` and `privacy_mode` are preserved
- * - clears the account error and invalidates the token cache server-side
- */
-export async function applyOAuthCredentials(
-  id: number,
-  payload: {
-    type: 'oauth' | 'setup-token'
-    credentials: Record<string, unknown>
-    extra?: Record<string, unknown>
-  }
-): Promise<Account> {
-  const { data } = await apiClient.post<Account>(
-    `/admin/accounts/${id}/apply-oauth-credentials`,
-    payload
-  )
-  return data
-}
-
-/**
  * Get account usage statistics
  * @param id - Account ID
  * @param days - Number of days (default: 30)
@@ -372,34 +345,6 @@ export async function resetTempUnschedulable(id: number): Promise<{ message: str
   const { data } = await apiClient.delete<{ message: string }>(
     `/admin/accounts/${id}/temp-unschedulable`
   )
-  return data
-}
-
-/**
- * Generate OAuth authorization URL
- * @param endpoint - API endpoint path
- * @param config - Proxy configuration
- * @returns Auth URL and session ID
- */
-export async function generateAuthUrl(
-  endpoint: string,
-  config: { proxy_id?: number }
-): Promise<{ auth_url: string; session_id: string }> {
-  const { data } = await apiClient.post<{ auth_url: string; session_id: string }>(endpoint, config)
-  return data
-}
-
-/**
- * Exchange authorization code for tokens
- * @param endpoint - API endpoint path
- * @param exchangeData - Session ID, code, and optional proxy config
- * @returns Token information
- */
-export async function exchangeCode(
-  endpoint: string,
-  exchangeData: { session_id: string; code: string; state?: string; proxy_id?: number }
-): Promise<Record<string, unknown>> {
-  const { data } = await apiClient.post<Record<string, unknown>>(endpoint, exchangeData)
   return data
 }
 
@@ -556,65 +501,6 @@ export async function syncUpstreamModelsPreview(params: SyncUpstreamPreviewParam
   return data
 }
 
-export interface CRSPreviewAccount {
-  crs_account_id: string
-  kind: string
-  name: string
-  platform: string
-  type: string
-}
-
-export interface PreviewFromCRSResult {
-  new_accounts: CRSPreviewAccount[]
-  existing_accounts: CRSPreviewAccount[]
-}
-
-export async function previewFromCrs(params: {
-  base_url: string
-  username: string
-  password: string
-}): Promise<PreviewFromCRSResult> {
-  const { data } = await apiClient.post<PreviewFromCRSResult>('/admin/accounts/sync/crs/preview', params)
-  return data
-}
-
-export async function syncFromCrs(params: {
-  base_url: string
-  username: string
-  password: string
-  sync_proxies?: boolean
-  selected_account_ids?: string[]
-}): Promise<{
-  created: number
-  updated: number
-  skipped: number
-  failed: number
-  items: Array<{
-    crs_account_id: string
-    kind: string
-    name: string
-    action: string
-    error?: string
-  }>
-}> {
-  const { data } = await apiClient.post<{
-    created: number
-    updated: number
-    skipped: number
-    failed: number
-    items: Array<{
-      crs_account_id: string
-      kind: string
-      name: string
-      action: string
-      error?: string
-    }>
-  }>('/admin/accounts/sync/crs', params, {
-    timeout: 180000 // 180s timeout: sync refreshes each existing account's OAuth token serially
-  })
-  return data
-}
-
 export async function exportData(options?: {
   ids?: number[]
   filters?: {
@@ -661,18 +547,6 @@ export async function importData(payload: {
   return data
 }
 
-export async function importCodexSession(payload: CodexSessionImportRequest): Promise<CodexSessionImportResult> {
-  const { data } = await apiClient.post<CodexSessionImportResult>('/admin/accounts/import/codex-session', payload, {
-    timeout: 120000 // 120s timeout for large session imports
-  })
-  return data
-}
-
-export async function createOpenAICodexPAT(payload: OpenAICodexPATCreateRequest): Promise<Account> {
-  const { data } = await apiClient.post<Account>('/admin/openai/create-from-codex-pat', payload)
-  return data
-}
-
 /**
  * Get Antigravity default model mapping from backend
  * @returns Default model mapping (from -> to)
@@ -681,31 +555,6 @@ export async function getAntigravityDefaultModelMapping(): Promise<Record<string
   const { data } = await apiClient.get<Record<string, string>>(
     '/admin/accounts/antigravity/default-model-mapping'
   )
-  return data
-}
-
-/**
- * Refresh OpenAI token using refresh token
- * @param refreshToken - The refresh token
- * @param proxyId - Optional proxy ID
- * @returns Token information including access_token, email, etc.
- */
-export async function refreshOpenAIToken(
-  refreshToken: string,
-  proxyId?: number | null,
-  endpoint: string = '/admin/openai/refresh-token',
-  clientId?: string
-): Promise<Record<string, unknown>> {
-  const payload: { refresh_token: string; proxy_id?: number; client_id?: string } = {
-    refresh_token: refreshToken
-  }
-  if (proxyId) {
-    payload.proxy_id = proxyId
-  }
-  if (clientId) {
-    payload.client_id = clientId
-  }
-  const { data } = await apiClient.post<Record<string, unknown>>(endpoint, payload)
   return data
 }
 
@@ -883,18 +732,6 @@ export async function resetOpenAIQuota(id: number): Promise<OpenAIQuotaResetResu
   return data
 }
 
-export interface SparkShadowCreatePayload {
-  name?: string
-  priority?: number
-  concurrency?: number
-  group_ids?: number[]
-}
-
-export async function createSparkShadow(parentId: number, payload: SparkShadowCreatePayload): Promise<Account> {
-  const { data } = await apiClient.post<Account>(`/admin/accounts/${parentId}/shadow`, payload)
-  return data
-}
-
 export async function getUpstreamBillingProbeSettings(): Promise<UpstreamBillingProbeSettings> {
   const { data } = await apiClient.get<UpstreamBillingProbeSettings>('/admin/accounts/upstream-billing-probe/settings')
   return data
@@ -983,7 +820,6 @@ export const accountsAPI = {
   toggleStatus,
   testAccount,
   refreshCredentials,
-  applyOAuthCredentials,
   getStats,
   clearError,
   getUsage,
@@ -998,18 +834,11 @@ export const accountsAPI = {
   getAvailableModels,
   syncUpstreamModels,
   syncUpstreamModelsPreview,
-  generateAuthUrl,
-  exchangeCode,
-  refreshOpenAIToken,
   batchCreate,
   batchUpdateCredentials,
   bulkUpdate,
-  previewFromCrs,
-  syncFromCrs,
   exportData,
   importData,
-  importCodexSession,
-  createOpenAICodexPAT,
   getAntigravityDefaultModelMapping,
   batchDelete,
   batchClearError,
@@ -1018,7 +847,6 @@ export const accountsAPI = {
   revertProxyFallback,
   refreshOpenAIQuota,
   resetOpenAIQuota,
-  createSparkShadow,
   getUpstreamBillingProbeSettings,
   updateUpstreamBillingProbeSettings,
   setUpstreamBillingProbeEnabled,

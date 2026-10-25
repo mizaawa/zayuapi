@@ -21,7 +21,7 @@ const (
 	apiKeySystemPromptChat      apiKeySystemPromptProtocol = "chat"
 )
 
-// Apply at the wire boundary, after protocol conversion and OAuth mimicry.
+// Apply at the wire boundary after protocol conversion.
 // Raw JSON patches preserve provider extensions and integer tool arguments.
 func applyAPIKeySystemPrompt(c *gin.Context, body []byte, protocol apiKeySystemPromptProtocol) ([]byte, error) {
 	if c == nil || c.Request == nil || c.Request.URL == nil {

@@ -12,9 +12,7 @@ import (
 	"strings"
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
-	"github.com/Wei-Shaw/sub2api/internal/pkg/antigravity"
 	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
-	"github.com/Wei-Shaw/sub2api/internal/pkg/openai"
 )
 
 // InitializeDefaultSettings 初始化默认设置
@@ -247,26 +245,10 @@ func (s *SettingService) InitializeDefaultSettings(ctx context.Context) error {
 		SettingKeyMinClaudeCodeVersion: "",
 		SettingKeyMaxClaudeCodeVersion: "",
 
-		// codex_cli_only 加固（默认：版本不检查、名单空、默认种子指纹信号）
-		SettingKeyMinCodexVersion:                      "",
-		SettingKeyMaxCodexVersion:                      "",
-		SettingKeyCodexCLIOnlyBlacklist:                "",
-		SettingKeyCodexCLIOnlyWhitelist:                "",
-		SettingKeyCodexCLIOnlyAllowAppServerClients:    "false",
-		SettingKeyCodexCLIOnlyEngineFingerprintSignals: openai.DefaultEngineFingerprintSignalsJSON(),
-
 		// 分组隔离（默认不允许未分组 Key 调度）
 		SettingKeyAllowUngroupedKeyScheduling:                        "false",
 		SettingKeyOpenAILowUpstreamRatePriorityEnabled:               "false",
 		SettingKeyOpenAIOAuthSchedulingRateMultiplier:                "1",
-		SettingKeyEnableAnthropicCacheTTL1hInjection:                 "false",
-		SettingKeyRewriteMessageCacheControl:                         strconv.FormatBool(s.defaultRewriteMessageCacheControl()),
-		SettingKeyEnableClientDatelineNormalization:                  "true",
-		SettingKeyAntigravityUserAgentVersion:                        "",
-		SettingKeyOpenAICodexUserAgent:                               "",
-		SettingKeyOpenAICodexClientVersion:                           "",
-		SettingKeyOpenAICodexClientVersionSynced:                     "",
-		SettingKeyOpenAICodexVersionAutoSyncEnabled:                  "true",
 		SettingPaymentVisibleMethodAlipaySource:                      "",
 		SettingPaymentVisibleMethodWxpaySource:                       "",
 		SettingPaymentVisibleMethodAlipayEnabled:                     "false",
@@ -892,62 +874,6 @@ func (s *SettingService) parseSettings(settings map[string]string) *SystemSettin
 	// 分组隔离
 	result.AllowUngroupedKeyScheduling = settings[SettingKeyAllowUngroupedKeyScheduling] == "true"
 
-	// Gateway forwarding behavior (defaults: fingerprint=true, metadata_passthrough=false,
-	// cch_signing=false, claude_oauth_system_prompt_injection=true)
-	if v, ok := settings[SettingKeyEnableFingerprintUnification]; ok && v != "" {
-		result.EnableFingerprintUnification = v == "true"
-	} else {
-		result.EnableFingerprintUnification = true // default: enabled (current behavior)
-	}
-	result.EnableMetadataPassthrough = settings[SettingKeyEnableMetadataPassthrough] == "true"
-	result.EnableCCHSigning = settings[SettingKeyEnableCCHSigning] == "true"
-	if v, ok := settings[SettingKeyEnableClaudeOAuthSystemPromptInjection]; ok && v != "" {
-		result.EnableClaudeOAuthSystemPromptInjection = v == "true"
-	} else {
-		result.EnableClaudeOAuthSystemPromptInjection = true
-	}
-	result.ClaudeOAuthSystemPrompt = settings[SettingKeyClaudeOAuthSystemPrompt]
-	result.ClaudeOAuthSystemPromptBlocks = settings[SettingKeyClaudeOAuthSystemPromptBlocks]
-	result.EnableAnthropicCacheTTL1hInjection = settings[SettingKeyEnableAnthropicCacheTTL1hInjection] == "true"
-	if v, ok := settings[SettingKeyRewriteMessageCacheControl]; ok && v != "" {
-		result.RewriteMessageCacheControl = v == "true"
-	} else {
-		result.RewriteMessageCacheControl = s.defaultRewriteMessageCacheControl()
-	}
-	if v, ok := settings[SettingKeyEnableClientDatelineNormalization]; ok && v != "" {
-		result.EnableClientDatelineNormalization = v == "true"
-	} else {
-		result.EnableClientDatelineNormalization = true
-	}
-	result.AntigravityUserAgentVersion = antigravity.NormalizeUserAgentVersion(settings[SettingKeyAntigravityUserAgentVersion])
-	result.OpenAICodexUserAgent = strings.TrimSpace(settings[SettingKeyOpenAICodexUserAgent])
-	result.OpenAICodexClientVersion = NormalizeCodexClientVersion(settings[SettingKeyOpenAICodexClientVersion])
-	result.OpenAICodexClientVersionSynced = NormalizeCodexClientVersion(settings[SettingKeyOpenAICodexClientVersionSynced])
-	// 自动同步默认开启：缺失/空值一律视为开启，与 enable_client_dateline_normalization 同一惯例。
-	if v, ok := settings[SettingKeyOpenAICodexVersionAutoSyncEnabled]; ok && v != "" {
-		result.OpenAICodexVersionAutoSyncEnabled = v == "true"
-	} else {
-		result.OpenAICodexVersionAutoSyncEnabled = true
-	}
-	// codex_cli_only 加固
-	result.MinCodexVersion = settings[SettingKeyMinCodexVersion]
-	result.MaxCodexVersion = settings[SettingKeyMaxCodexVersion]
-	result.CodexCLIOnlyBlacklist = settings[SettingKeyCodexCLIOnlyBlacklist]
-	result.CodexCLIOnlyWhitelist = settings[SettingKeyCodexCLIOnlyWhitelist]
-	result.CodexCLIOnlyAllowAppServerClients = settings[SettingKeyCodexCLIOnlyAllowAppServerClients] == "true"
-	if raw := strings.TrimSpace(settings[SettingKeyCodexCLIOnlyEngineFingerprintSignals]); raw != "" {
-		result.CodexCLIOnlyEngineFingerprintSignals = raw
-	} else {
-		result.CodexCLIOnlyEngineFingerprintSignals = openai.DefaultEngineFingerprintSignalsJSON() // 缺失/空 → 展示默认种子
-	}
-
-	// Web search emulation: quick enabled check from the JSON config
-	if raw := settings[SettingKeyWebSearchEmulationConfig]; raw != "" {
-		var wsCfg WebSearchEmulationConfig
-		if err := json.Unmarshal([]byte(raw), &wsCfg); err == nil {
-			result.WebSearchEmulationEnabled = wsCfg.Enabled && len(wsCfg.Providers) > 0
-		}
-	}
 	result.PaymentVisibleMethodAlipaySource = NormalizeVisibleMethodSource("alipay", settings[SettingPaymentVisibleMethodAlipaySource])
 	result.PaymentVisibleMethodWxpaySource = NormalizeVisibleMethodSource("wxpay", settings[SettingPaymentVisibleMethodWxpaySource])
 	result.PaymentVisibleMethodAlipayEnabled = settings[SettingPaymentVisibleMethodAlipayEnabled] == "true"

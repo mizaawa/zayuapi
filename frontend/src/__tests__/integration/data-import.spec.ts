@@ -114,7 +114,7 @@ describe('ImportDataModal', () => {
 
     const valid = makeJsonFile(
       'valid.json',
-      JSON.stringify({ exported_at: '2026-07-05T00:00:00Z', proxies: [], accounts: [{ name: 'a' }] })
+      JSON.stringify({ exported_at: '2026-07-05T00:00:00Z', proxies: [], accounts: [{ name: 'a', platform: 'openai', type: 'apikey', credentials: { api_key: 'test-a' } }] })
     )
     setInputFiles(input.element, [valid])
     await input.trigger('change')
@@ -128,7 +128,7 @@ describe('ImportDataModal', () => {
 
     expect(adminAPI.accounts.importData).toHaveBeenCalledWith({
       data: expect.objectContaining({
-        accounts: [{ name: 'a' }]
+        accounts: [{ name: 'a', platform: 'openai', type: 'apikey', credentials: { api_key: 'test-a' } }]
       }),
       skip_default_group_bind: true
     })
@@ -149,14 +149,14 @@ describe('ImportDataModal', () => {
     const input = wrapper.find('input[type="file"]')
     const first = makeJsonFile(
       'first.json',
-      JSON.stringify({ exported_at: '2026-07-05T00:00:00Z', proxies: [], accounts: [{ name: 'a' }] })
+      JSON.stringify({ exported_at: '2026-07-05T00:00:00Z', proxies: [], accounts: [{ name: 'a', platform: 'openai', type: 'apikey', credentials: { api_key: 'test-a' } }] })
     )
     const second = makeJsonFile(
       'second.json',
       JSON.stringify({
         exported_at: '2026-07-05T00:00:01Z',
         proxies: [{ proxy_key: 'p' }],
-        accounts: [{ name: 'b' }]
+        accounts: [{ name: 'b', platform: 'grok', type: 'apikey', credentials: { api_key: 'test-b' } }]
       })
     )
     setInputFiles(input.element, [first, second])
@@ -168,7 +168,7 @@ describe('ImportDataModal', () => {
     expect(adminAPI.accounts.importData).toHaveBeenCalledWith({
       data: expect.objectContaining({
         proxies: [{ proxy_key: 'p' }],
-        accounts: [{ name: 'a' }, { name: 'b' }]
+        accounts: [{ name: 'a', platform: 'openai', type: 'apikey', credentials: { api_key: 'test-a' } }, { name: 'b', platform: 'grok', type: 'apikey', credentials: { api_key: 'test-b' } }]
       }),
       skip_default_group_bind: true
     })
@@ -193,7 +193,7 @@ describe('ImportDataModal', () => {
         JSON.stringify({
           exported_at: '2026-07-05T00:00:00Z',
           proxies: [],
-          accounts: [{ name: 'a' }, { name: 'b' }]
+          accounts: [{ name: 'a', platform: 'openai', type: 'apikey', credentials: { api_key: 'test-a' } }, { name: 'b', platform: 'grok', type: 'apikey', credentials: { api_key: 'test-b' } }]
         })
       )
     ])
@@ -211,4 +211,39 @@ describe('ImportDataModal', () => {
     expect(wrapper.emitted('imported')).toHaveLength(1)
     expect(wrapper.emitted('close')).toHaveLength(1)
   })
+
+  it.each([
+    { type: 'oauth' }, { type: 'setup-token' }, { type: 'service_account' },
+    { type: 'bedrock' }, { type: 'upstream' }, { type: 'unknown' },
+    { platform: 'unknown' }, { credentials: { api_key: '  ' } },
+    { platform: 'antigravity' }, { platform: 'custom' },
+  ])('rejects incomplete or non-API Key data before sending any file: %j', async (invalid) => {
+    const { adminAPI } = await import('@/api/admin')
+    const wrapper = mountModal()
+    const input = wrapper.find('input[type="file"]')
+    const valid = { name: 'test', platform: 'openai', type: 'apikey', credentials: { api_key: 'fixture-only' } }
+    setInputFiles(input.element, [
+      makeJsonFile('valid.json', JSON.stringify({ proxies: [], accounts: [valid] })),
+      makeJsonFile('invalid.json', JSON.stringify({ proxies: [], accounts: [{ ...valid, ...invalid }] })),
+    ])
+    await input.trigger('change')
+    await wrapper.find('form').trigger('submit')
+    await flushPromises()
+    expect(adminAPI.accounts.importData).not.toHaveBeenCalled()
+    expect(showError).toHaveBeenCalledWith('admin.accounts.dataImportApiKeyOnly')
+  })
+
+  it.each(['anthropic', 'openai', 'gemini', 'antigravity', 'grok', 'custom'])('accepts a complete %s API Key import', async (platform) => {
+    const { adminAPI } = await import('@/api/admin')
+    vi.mocked(adminAPI.accounts.importData).mockResolvedValue({ proxy_created: 0, proxy_reused: 0, proxy_failed: 0, account_created: 1, account_failed: 0 })
+    const wrapper = mountModal()
+    const input = wrapper.find('input[type="file"]')
+    const account = { name: 'test', platform, type: 'apikey', credentials: { api_key: 'fixture-only', base_url: 'https://relay.example/v1' } }
+    setInputFiles(input.element, [makeJsonFile('valid.json', JSON.stringify({ proxies: [], accounts: [account] }))])
+    await input.trigger('change')
+    await wrapper.find('form').trigger('submit')
+    await flushPromises()
+    expect(adminAPI.accounts.importData).toHaveBeenCalledWith({ data: { proxies: [], accounts: [account] }, skip_default_group_bind: true })
+  })
+
 })

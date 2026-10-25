@@ -271,7 +271,7 @@ func TestAccountService_CreateRejectsInvalidCustomCredentialType(t *testing.T) {
 	})
 
 	require.Nil(t, account)
-	require.Equal(t, "CUSTOM_ACCOUNT_TYPE_INVALID", infraerrors.Reason(err))
+	require.Equal(t, "ACCOUNT_TYPE_APIKEY_REQUIRED", infraerrors.Reason(err))
 	require.Nil(t, accountRepo.createAccount)
 }
 

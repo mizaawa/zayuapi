@@ -3043,7 +3043,6 @@ func TestOpenAIBuildUpstreamRequestPreservesCodexIdentityHeaders(t *testing.T) {
 	require.Equal(t, "window-http", req.Header.Get("X-Codex-Window-ID"))
 	require.Equal(t, "installation-http", req.Header.Get("X-Codex-Installation-ID"))
 	require.Empty(t, req.Header.Get("X-Test"))
-	require.True(t, openai.EvaluateEngineFingerprint(req.Header, body, openai.DefaultEngineFingerprintSignals))
 }
 
 func TestOpenAIBuildUpstreamRequestOAuthOfficialClientOriginatorCompatibility(t *testing.T) {

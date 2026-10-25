@@ -11,8 +11,6 @@ import (
 	"testing"
 	"time"
 
-	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
-	"github.com/Wei-Shaw/sub2api/internal/pkg/xai"
 	"github.com/Wei-Shaw/sub2api/internal/service"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
@@ -52,56 +50,11 @@ func (s *grokImportAdminService) CreateAccount(_ context.Context, input *service
 	}, nil
 }
 
-type grokImportOAuthClientStub struct{}
-
-func (grokImportOAuthClientStub) ExchangeCode(context.Context, string, string, string, string, string) (*xai.TokenResponse, error) {
-	return &xai.TokenResponse{AccessToken: "access-token", RefreshToken: "refresh-token", ExpiresIn: 3600}, nil
-}
-
-func (grokImportOAuthClientStub) RefreshToken(context.Context, string, string, string) (*xai.TokenResponse, error) {
-	return &xai.TokenResponse{AccessToken: "access-token", RefreshToken: "refresh-token", ExpiresIn: 3600}, nil
-}
-
-func (grokImportOAuthClientStub) ConvertSSOToBuild(context.Context, string, string) (*xai.TokenResponse, error) {
-	return &xai.TokenResponse{AccessToken: "access-token", RefreshToken: "refresh-token", ExpiresIn: 3600}, nil
-}
-
-func TestGrokSSOBatchImportKeepsCreatedAccountsWhenOneAutomaticProbeFails(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-	adminService := newGrokImportAdminService()
-	oauthService := service.NewGrokOAuthService(nil, grokImportOAuthClientStub{})
-	defer oauthService.Stop()
-	prober := newGrokImportProbeStub(3)
-	prober.failures[502] = infraerrors.New(502, "GROK_TEST_PROBE_FAILED", "sensitive-upstream-body")
-	handler := NewGrokOAuthHandler(oauthService, adminService, nil, nil)
-	handler.importProber = prober
-
-	router := gin.New()
-	router.POST("/api/v1/admin/grok/sso-to-oauth", handler.CreateAccountsFromSSO)
-	recorder := httptest.NewRecorder()
-	request := httptest.NewRequest(
-		http.MethodPost,
-		"/api/v1/admin/grok/sso-to-oauth",
-		strings.NewReader(`{"sso_tokens":["sso-one","sso-two","sso-three"]}`),
-	)
-	request.Header.Set("Content-Type", "application/json")
-	router.ServeHTTP(recorder, request)
-
-	require.Equal(t, http.StatusOK, recorder.Code)
-	require.Contains(t, recorder.Body.String(), `"created"`)
-	require.NotContains(t, recorder.Body.String(), `GROK_TEST_PROBE_FAILED`)
-	for i := 0; i < 3; i++ {
-		awaitGrokProbeSignal(t, prober.done)
-	}
-	calls, _, _ := prober.snapshot()
-	require.Equal(t, map[int64]int{501: 1, 502: 1, 503: 1}, calls)
-}
-
 func TestAccountCreateWithoutAutomaticGrokProbeServiceStillSucceeds(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	handler := NewAccountHandler(
 		newGrokImportAdminService(),
-		nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil,
+		nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil,
 	)
 
 	router := gin.New()
@@ -110,7 +63,7 @@ func TestAccountCreateWithoutAutomaticGrokProbeServiceStillSucceeds(t *testing.T
 	request := httptest.NewRequest(
 		http.MethodPost,
 		"/api/v1/admin/accounts",
-		strings.NewReader(`{"name":"grok-rt","platform":"grok","type":"oauth","credentials":{"refresh_token":"secret"}}`),
+		strings.NewReader(`{"name":"grok-rt","platform":"grok","type":"apikey","credentials":{"api_key":"secret"}}`),
 	)
 	request.Header.Set("Content-Type", "application/json")
 	router.ServeHTTP(recorder, request)

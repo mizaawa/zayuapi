@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -80,38 +79,9 @@ func TestNormalizeCacheControlTTLOrder_KeepsValidRequestsUnchanged(t *testing.T)
 	}
 }
 
-// A non-Claude Code client sends one 1h breakpoint. The mimic path adds 5m
-// breakpoints to the injected system block and the last tool, which come first
-// in Anthropic's processing order. The outbound body must still be accepted.
-func TestEnforceCacheControlLimit_MimicPathKeepsClient1hBreakpointValid(t *testing.T) {
-	cases := map[string]string{
-		"message 1h": `{"model":"claude-sonnet-4-6","messages":[{"role":"user","content":[` +
-			`{"type":"text","text":"Reply OK.","cache_control":{"type":"ephemeral","ttl":"1h"}}]}]}`,
-		"system 1h moved into messages": `{"model":"claude-sonnet-4-6",` +
-			`"system":[{"type":"text","text":"Be terse.","cache_control":{"type":"ephemeral","ttl":"1h"}}],` +
-			`"messages":[{"role":"user","content":"Reply OK."}]}`,
-		"tools and message 1h": `{"model":"claude-sonnet-4-6","tools":[{"name":"probe","input_schema":{"type":"object"}}],` +
-			`"messages":[{"role":"user","content":[` +
-			`{"type":"text","text":"Reply OK.","cache_control":{"type":"ephemeral","ttl":"1h"}}]}]}`,
-	}
-	for name, raw := range cases {
-		t.Run(name, func(t *testing.T) {
-			body := []byte(raw)
-			var system any
-			if sys := gjson.GetBytes(body, "system"); sys.Exists() {
-				require.NoError(t, json.Unmarshal([]byte(sys.Raw), &system))
-			}
-			body = rewriteSystemForNonClaudeCode(body, system)
-			body = applyToolsLastCacheBreakpoint(body)
-
-			out := enforceCacheControlLimit(body)
-
-			requireCacheTTLOrderAccepted(t, out)
-		})
-	}
-}
-
-func TestForwardCountTokens_MimicPathKeepsClient1hBreakpointValid(t *testing.T) {
+// Existing OAuth accounts retain the client's cache breakpoints without adding
+// system or tool breakpoints that could change the requested cache policy.
+func TestForwardCountTokens_PreservesClientCachePolicy(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	rec := httptest.NewRecorder()
@@ -119,7 +89,6 @@ func TestForwardCountTokens_MimicPathKeepsClient1hBreakpointValid(t *testing.T) 
 	c.Request = httptest.NewRequest(http.MethodPost, "/v1/messages/count_tokens", nil)
 	c.Request.Header.Set("User-Agent", "third-party-client/1.0")
 
-	// The mimic path adds a 5m breakpoint to tools[-1], ahead of the client's 1h one.
 	body := []byte(`{"model":"claude-sonnet-4-6",` +
 		`"tools":[{"name":"probe","description":"d","input_schema":{"type":"object"}}],` +
 		`"messages":[{"role":"user","content":[{"type":"text","text":"Reply OK.","cache_control":{"type":"ephemeral","ttl":"1h"}}]}]}`)
@@ -150,7 +119,10 @@ func TestForwardCountTokens_MimicPathKeepsClient1hBreakpointValid(t *testing.T) 
 
 	require.NoError(t, svc.ForwardCountTokens(context.Background(), c, account, parsed))
 
-	require.True(t, gjson.GetBytes(upstream.lastBody, "tools.0.cache_control").Exists(),
-		"the mimic tools breakpoint should still be present")
+	require.False(t, gjson.GetBytes(upstream.lastBody, "tools.0.cache_control").Exists(),
+		"the gateway must not inject a tool cache breakpoint")
+	require.False(t, gjson.GetBytes(upstream.lastBody, "system").Exists(),
+		"the gateway must not inject a system prompt")
+	require.Equal(t, gjson.GetBytes(body, "messages").Raw, gjson.GetBytes(upstream.lastBody, "messages").Raw)
 	requireCacheTTLOrderAccepted(t, upstream.lastBody)
 }

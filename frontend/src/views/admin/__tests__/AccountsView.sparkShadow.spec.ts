@@ -127,7 +127,7 @@ describe('admin AccountsView — 外审 F2:spark 影子创建接线', () => {
     const wrapper = mountView()
     await flushPromises()
 
-    wrapper.findComponent(AccountActionMenu).vm.$emit('duplicate', { id: 42, name: 'parent-acc' })
+    wrapper.findComponent(AccountActionMenu).vm.$emit('duplicate', { id: 42, name: 'parent-acc', type: 'apikey' })
     await flushPromises()
 
     expect(duplicateAccount).toHaveBeenCalledTimes(1)
@@ -144,8 +144,8 @@ describe('admin AccountsView — 外审 F2:spark 影子创建接线', () => {
     await flushPromises()
 
     const menu = wrapper.findComponent(AccountActionMenu)
-    menu.vm.$emit('duplicate', { id: 42, name: 'parent-acc' })
-    menu.vm.$emit('duplicate', { id: 42, name: 'parent-acc' })
+    menu.vm.$emit('duplicate', { id: 42, name: 'parent-acc', type: 'apikey' })
+    menu.vm.$emit('duplicate', { id: 42, name: 'parent-acc', type: 'apikey' })
     await flushPromises()
 
     expect(duplicateAccount).toHaveBeenCalledTimes(1)
@@ -160,7 +160,7 @@ describe('admin AccountsView — 外审 F2:spark 影子创建接线', () => {
     const wrapper = mountView()
     await flushPromises()
 
-    wrapper.findComponent(AccountActionMenu).vm.$emit('duplicate', { id: 42, name: 'parent-acc' })
+    wrapper.findComponent(AccountActionMenu).vm.$emit('duplicate', { id: 42, name: 'parent-acc', type: 'apikey' })
     await flushPromises()
 
     expect(showError).toHaveBeenCalledWith('duplicate failed')
@@ -168,42 +168,22 @@ describe('admin AccountsView — 外审 F2:spark 影子创建接线', () => {
     wrapper.unmount()
   })
 
-  it('AccountActionMenu 的 create-spark-shadow 事件触发 createSparkShadow API + 成功提示', async () => {
+  it('ignores removed shadow creation events without making requests', async () => {
     const wrapper = mountView()
     await flushPromises()
-
-    const menu = wrapper.findComponent(AccountActionMenu)
-    expect(menu.exists()).toBe(true)
-
-    menu.vm.$emit('create-spark-shadow', { id: 42, name: 'parent-acc' })
+    wrapper.findComponent(AccountActionMenu).vm.$emit('create-spark-shadow', { id: 42, name: 'historical', type: 'oauth' })
     await flushPromises()
-
-    // 不再用原生 confirm,改用应用内 ConfirmDialog:先弹出,点确认才调 API
-    const dialog = wrapper.findAllComponents(ConfirmDialog).find(d => d.props('show'))
-    expect(dialog).toBeTruthy()
-    dialog?.vm.$emit('confirm')
-    await flushPromises()
-
-    expect(createSparkShadow).toHaveBeenCalledTimes(1)
-    expect(createSparkShadow).toHaveBeenCalledWith(42, { name: 'parent-acc (Spark)' })
-    expect(showSuccess).toHaveBeenCalledWith('admin.accounts.createSparkShadowSuccess')
+    expect(wrapper.findAllComponents(ConfirmDialog).some(dialog => dialog.props('show'))).toBe(false)
+    expect(createSparkShadow).not.toHaveBeenCalled()
     wrapper.unmount()
   })
 
-  it('用户取消确认时不调用 API', async () => {
+  it.each(['oauth', 'setup-token', 'service_account', 'bedrock', 'upstream'])('refuses programmatic duplication of %s accounts', async (type) => {
     const wrapper = mountView()
     await flushPromises()
-
-    wrapper.findComponent(AccountActionMenu).vm.$emit('create-spark-shadow', { id: 42, name: 'parent-acc' })
+    wrapper.findComponent(AccountActionMenu).vm.$emit('duplicate', { id: 42, name: 'historical', type })
     await flushPromises()
-
-    // 弹出 ConfirmDialog 后点取消,不应调用 API
-    const dialog = wrapper.findAllComponents(ConfirmDialog).find(d => d.props('show'))
-    expect(dialog).toBeTruthy()
-    dialog?.vm.$emit('cancel')
-    await flushPromises()
-
-    expect(createSparkShadow).not.toHaveBeenCalled()
+    expect(duplicateAccount).not.toHaveBeenCalled()
     wrapper.unmount()
   })
 })

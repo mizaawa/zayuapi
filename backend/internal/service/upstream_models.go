@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"sort"
 	"strings"
 
@@ -312,11 +313,12 @@ func (s *AccountTestService) buildAntigravityAPIKeyModelsRequest(ctx context.Con
 	if baseURL == "" {
 		return nil, newUpstreamModelSyncConfigError("Antigravity API-key base URL is required for upstream model sync", nil)
 	}
-	if account.Type == AccountTypeAPIKey && !strings.HasSuffix(strings.ToLower(baseURL), "/antigravity") {
-		return nil, newUpstreamModelSyncUnsupportedError(
-			"Antigravity API-key upstream model sync requires a compatible gateway base URL ending in /antigravity; use Antigravity OAuth for official Cloud Code upstreams",
-			nil,
-		)
+	if account.Type == AccountTypeAPIKey {
+		parsed, _ := url.Parse(baseURL)
+		if parsed != nil && strings.HasSuffix(strings.ToLower(parsed.Hostname()), ".googleapis.com") {
+			return nil, newUpstreamModelSyncUnsupportedError("Antigravity API-key upstream model sync requires a compatible gateway; official Cloud Code upstreams do not accept API keys", nil)
+		}
+		baseURL = antigravityAPIKeyBaseURL(baseURL)
 	}
 	normalizedBaseURL, err := s.validateUpstreamBaseURL(baseURL)
 	if err != nil {

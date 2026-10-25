@@ -35,18 +35,6 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-// OAuthHandler handles OAuth-related operations for accounts
-type OAuthHandler struct {
-	oauthService *service.OAuthService
-}
-
-// NewOAuthHandler creates a new OAuth handler
-func NewOAuthHandler(oauthService *service.OAuthService) *OAuthHandler {
-	return &OAuthHandler{
-		oauthService: oauthService,
-	}
-}
-
 // AccountHandler handles admin account management
 type AccountHandler struct {
 	adminService            service.AdminService
@@ -59,7 +47,6 @@ type AccountHandler struct {
 	accountUsageService     *service.AccountUsageService
 	accountTestService      *service.AccountTestService
 	concurrencyService      *service.ConcurrencyService
-	crsSyncService          *service.CRSSyncService
 	sessionLimitCache       service.SessionLimitCache
 	rpmCache                service.RPMCache
 	tokenCacheInvalidator   service.TokenCacheInvalidator
@@ -89,7 +76,6 @@ func NewAccountHandler(
 	accountUsageService *service.AccountUsageService,
 	accountTestService *service.AccountTestService,
 	concurrencyService *service.ConcurrencyService,
-	crsSyncService *service.CRSSyncService,
 	sessionLimitCache service.SessionLimitCache,
 	rpmCache service.RPMCache,
 	tokenCacheInvalidator service.TokenCacheInvalidator,
@@ -105,7 +91,6 @@ func NewAccountHandler(
 		accountUsageService:     accountUsageService,
 		accountTestService:      accountTestService,
 		concurrencyService:      concurrencyService,
-		crsSyncService:          crsSyncService,
 		sessionLimitCache:       sessionLimitCache,
 		rpmCache:                rpmCache,
 		tokenCacheInvalidator:   tokenCacheInvalidator,
@@ -117,7 +102,7 @@ type CreateAccountRequest struct {
 	Name                    string         `json:"name" binding:"required"`
 	Notes                   *string        `json:"notes"`
 	Platform                string         `json:"platform" binding:"required"`
-	Type                    string         `json:"type" binding:"required,oneof=oauth setup-token apikey upstream bedrock service_account"`
+	Type                    string         `json:"type" binding:"required,oneof=apikey"`
 	Credentials             map[string]any `json:"credentials" binding:"required"`
 	Extra                   map[string]any `json:"extra"`
 	ProxyID                 *int64         `json:"proxy_id"`
@@ -829,6 +814,11 @@ func (h *AccountHandler) Create(c *gin.Context) {
 		response.BadRequest(c, "Invalid request: "+err.Error())
 		return
 	}
+	if err := service.ValidateNewAccountCredentials(req.Platform, req.Type, req.Credentials); err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+
 	if err := service.ValidateOpenAILongContextBillingExtra(req.Platform, req.Extra); err != nil {
 		response.ErrorFrom(c, err)
 		return
@@ -1069,20 +1059,6 @@ type TestAccountRequest struct {
 	Mode    string `json:"mode"`
 }
 
-type SyncFromCRSRequest struct {
-	BaseURL            string   `json:"base_url" binding:"required"`
-	Username           string   `json:"username" binding:"required"`
-	Password           string   `json:"password" binding:"required"`
-	SyncProxies        *bool    `json:"sync_proxies"`
-	SelectedAccountIDs []string `json:"selected_account_ids"`
-}
-
-type PreviewFromCRSRequest struct {
-	BaseURL  string `json:"base_url" binding:"required"`
-	Username string `json:"username" binding:"required"`
-	Password string `json:"password" binding:"required"`
-}
-
 // Test handles testing account connectivity with SSE streaming
 // POST /api/v1/admin/accounts/:id/test
 func (h *AccountHandler) Test(c *gin.Context) {
@@ -1137,59 +1113,6 @@ func (h *AccountHandler) RecoverState(c *gin.Context) {
 	}
 
 	response.Success(c, h.buildAccountResponseWithRuntime(c.Request.Context(), account))
-}
-
-// SyncFromCRS handles syncing accounts from claude-relay-service (CRS)
-// POST /api/v1/admin/accounts/sync/crs
-func (h *AccountHandler) SyncFromCRS(c *gin.Context) {
-	var req SyncFromCRSRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		response.BadRequest(c, "Invalid request: "+err.Error())
-		return
-	}
-
-	// Default to syncing proxies (can be disabled by explicitly setting false)
-	syncProxies := true
-	if req.SyncProxies != nil {
-		syncProxies = *req.SyncProxies
-	}
-
-	result, err := h.crsSyncService.SyncFromCRS(c.Request.Context(), service.SyncFromCRSInput{
-		BaseURL:            req.BaseURL,
-		Username:           req.Username,
-		Password:           req.Password,
-		SyncProxies:        syncProxies,
-		SelectedAccountIDs: req.SelectedAccountIDs,
-	})
-	if err != nil {
-		// Provide detailed error message for CRS sync failures
-		response.InternalError(c, "CRS sync failed: "+err.Error())
-		return
-	}
-
-	response.Success(c, result)
-}
-
-// PreviewFromCRS handles previewing accounts from CRS before sync
-// POST /api/v1/admin/accounts/sync/crs/preview
-func (h *AccountHandler) PreviewFromCRS(c *gin.Context) {
-	var req PreviewFromCRSRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		response.BadRequest(c, "Invalid request: "+err.Error())
-		return
-	}
-
-	result, err := h.crsSyncService.PreviewFromCRS(c.Request.Context(), service.SyncFromCRSInput{
-		BaseURL:  req.BaseURL,
-		Username: req.Username,
-		Password: req.Password,
-	})
-	if err != nil {
-		response.InternalError(c, "CRS preview failed: "+err.Error())
-		return
-	}
-
-	response.Success(c, result)
 }
 
 // refreshSingleAccount refreshes credentials for a single OAuth account.
@@ -1368,103 +1291,6 @@ func (h *AccountHandler) Refresh(c *gin.Context) {
 }
 
 // ApplyOAuthCredentialsRequest is the payload for persisting re-authorized OAuth credentials.
-type ApplyOAuthCredentialsRequest struct {
-	Type        string         `json:"type" binding:"required,oneof=oauth setup-token"`
-	Credentials map[string]any `json:"credentials" binding:"required"`
-	Extra       map[string]any `json:"extra"`
-}
-
-// ApplyOAuthCredentials 将"重新授权"得到的新凭据原子落库。
-// POST /api/v1/admin/accounts/:id/apply-oauth-credentials
-//
-// 与通用 PUT /:id (Update) 接口的关键区别：
-//   - 仅接收 type / credentials / extra 三个字段（不接受 concurrency / rpm / quota_* 等可能误传的字段）
-//   - Extra 走 UpdateAccountExtra(JSONB key 级合并)，**绝不**全量覆盖；
-//     避免 base_rpm / window_cost_limit / max_sessions / quota_* / privacy_mode
-//     等持久化配置在重新授权后丢失
-//   - 内置 ClearError + InvalidateToken，避免前端额外两次调用，
-//     并修复旧路径未失效 token 缓存导致重新授权后立即 401 的隐性 bug
-//
-// 与 /refresh 的区别：/refresh 用现有 refresh_token 换 access_token（无用户交互），
-// 本接口承接前端完成完整 OAuth 流程后的落库步骤。
-func (h *AccountHandler) ApplyOAuthCredentials(c *gin.Context) {
-	accountID, err := strconv.ParseInt(c.Param("id"), 10, 64)
-	if err != nil {
-		response.BadRequest(c, "Invalid account ID")
-		return
-	}
-
-	var req ApplyOAuthCredentialsRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		response.BadRequest(c, "Invalid request: "+err.Error())
-		return
-	}
-
-	ctx := c.Request.Context()
-
-	// 预检查账号存在 + OAuth 类型（与 Refresh handler 语义一致，提供更友好的错误信息）。
-	existing, err := h.adminService.GetAccount(ctx, accountID)
-	if err != nil {
-		response.NotFound(c, "Account not found")
-		return
-	}
-	if !existing.IsOAuth() {
-		response.ErrorFrom(c, infraerrors.BadRequest("NOT_OAUTH", "cannot apply oauth credentials to non-OAuth account"))
-		return
-	}
-	if err := service.ValidateOpenAILongContextBillingExtra(existing.Platform, req.Extra); err != nil {
-		response.ErrorFrom(c, err)
-		return
-	}
-
-	updatedAccount, err := h.adminService.UpdateAccount(ctx, accountID, &service.UpdateAccountInput{
-		Type:        req.Type,
-		Credentials: req.Credentials,
-	})
-	if err != nil {
-		response.ErrorFrom(c, err)
-		return
-	}
-
-	// 增量合并 Extra（JSONB key 级 merge，绝不覆盖 base_rpm / window_cost_limit /
-	// max_sessions / quota_* / privacy_mode 等持久化键）。
-	// best-effort：失败仅记日志；下方 ClearAccountError 会从 DB 重新读取最新 account，
-	// 因此响应里的 extra 始终以 DB 为准——这里不需要手动维护内存快照。
-	if len(req.Extra) > 0 {
-		if extraErr := h.adminService.UpdateAccountExtra(ctx, accountID, req.Extra); extraErr != nil {
-			extraKeys := make([]string, 0, len(req.Extra))
-			for k := range req.Extra {
-				extraKeys = append(extraKeys, k)
-			}
-			slog.Error("apply_oauth_credentials.update_extra_failed",
-				"account_id", accountID,
-				"extra_keys", extraKeys,
-				"err", extraErr,
-			)
-		}
-	}
-
-	if cleared, clearErr := h.adminService.ClearAccountError(ctx, accountID); clearErr != nil {
-		slog.Warn("apply_oauth_credentials.clear_error_failed",
-			"account_id", accountID,
-			"err", clearErr,
-		)
-	} else if cleared != nil {
-		updatedAccount = cleared
-	}
-
-	if h.tokenCacheInvalidator != nil && updatedAccount.IsOAuth() {
-		if invalidateErr := h.tokenCacheInvalidator.InvalidateToken(ctx, updatedAccount); invalidateErr != nil {
-			slog.Warn("apply_oauth_credentials.invalidate_token_failed",
-				"account_id", accountID,
-				"err", invalidateErr,
-			)
-		}
-	}
-
-	response.Success(c, h.buildAccountResponseWithRuntime(ctx, updatedAccount))
-}
-
 // GetStats handles getting account statistics
 // GET /api/v1/admin/accounts/:id/stats
 func (h *AccountHandler) GetStats(c *gin.Context) {
@@ -1845,6 +1671,10 @@ func (h *AccountHandler) BatchCreate(c *gin.Context) {
 		return
 	}
 	for _, item := range req.Accounts {
+		if err := service.ValidateNewAccountCredentials(item.Platform, item.Type, item.Credentials); err != nil {
+			response.ErrorFrom(c, err)
+			return
+		}
 		if err := service.ValidateOpenAILongContextBillingExtra(item.Platform, item.Extra); err != nil {
 			response.ErrorFrom(c, err)
 			return
@@ -1855,9 +1685,6 @@ func (h *AccountHandler) BatchCreate(c *gin.Context) {
 		success := 0
 		failed := 0
 		results := make([]gin.H, 0, len(req.Accounts))
-		// 收集需要异步设置隐私的 OAuth 账号
-		var antigravityPrivacyAccounts []*service.Account
-		var openaiPrivacyAccounts []*service.Account
 
 		for _, item := range req.Accounts {
 			if item.RateMultiplier != nil && *item.RateMultiplier < 0 {
@@ -1900,16 +1727,7 @@ func (h *AccountHandler) BatchCreate(c *gin.Context) {
 				})
 				continue
 			}
-			// 收集需要异步设置隐私的 OAuth 账号
-			if account.Type == service.AccountTypeOAuth {
-				switch account.Platform {
-				case service.PlatformAntigravity:
-					antigravityPrivacyAccounts = append(antigravityPrivacyAccounts, account)
-				case service.PlatformOpenAI:
-					openaiPrivacyAccounts = append(openaiPrivacyAccounts, account)
-				}
-			}
-			// OpenAI APIKey 账号异步探测 /v1/responses 能力。
+
 			h.scheduleOpenAIResponsesProbe(account)
 			h.scheduleGrokImportProbe(account)
 			success++
@@ -1918,37 +1736,6 @@ func (h *AccountHandler) BatchCreate(c *gin.Context) {
 				"id":      account.ID,
 				"success": true,
 			})
-		}
-
-		// 异步设置隐私，避免批量创建时阻塞请求
-		adminSvc := h.adminService
-		if len(antigravityPrivacyAccounts) > 0 {
-			accounts := antigravityPrivacyAccounts
-			go func() {
-				defer func() {
-					if r := recover(); r != nil {
-						slog.Error("batch_create_antigravity_privacy_panic", "recover", r)
-					}
-				}()
-				bgCtx := context.Background()
-				for _, acc := range accounts {
-					adminSvc.ForceAntigravityPrivacy(bgCtx, acc)
-				}
-			}()
-		}
-		if len(openaiPrivacyAccounts) > 0 {
-			accounts := openaiPrivacyAccounts
-			go func() {
-				defer func() {
-					if r := recover(); r != nil {
-						slog.Error("batch_create_openai_privacy_panic", "recover", r)
-					}
-				}()
-				bgCtx := context.Background()
-				for _, acc := range accounts {
-					adminSvc.ForceOpenAIPrivacy(bgCtx, acc)
-				}
-			}()
 		}
 
 		return gin.H{
@@ -2142,148 +1929,6 @@ func toServiceBulkUpdateAccountFilters(filters *BulkUpdateAccountFilters) *servi
 }
 
 // ========== OAuth Handlers ==========
-
-// GenerateAuthURLRequest represents the request for generating auth URL
-type GenerateAuthURLRequest struct {
-	ProxyID *int64 `json:"proxy_id"`
-}
-
-// GenerateAuthURL generates OAuth authorization URL with full scope
-// POST /api/v1/admin/accounts/generate-auth-url
-func (h *OAuthHandler) GenerateAuthURL(c *gin.Context) {
-	var req GenerateAuthURLRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		// Allow empty body
-		req = GenerateAuthURLRequest{}
-	}
-
-	result, err := h.oauthService.GenerateAuthURL(c.Request.Context(), req.ProxyID)
-	if err != nil {
-		response.ErrorFrom(c, err)
-		return
-	}
-
-	response.Success(c, result)
-}
-
-// GenerateSetupTokenURL generates OAuth authorization URL for setup token (inference only)
-// POST /api/v1/admin/accounts/generate-setup-token-url
-func (h *OAuthHandler) GenerateSetupTokenURL(c *gin.Context) {
-	var req GenerateAuthURLRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		// Allow empty body
-		req = GenerateAuthURLRequest{}
-	}
-
-	result, err := h.oauthService.GenerateSetupTokenURL(c.Request.Context(), req.ProxyID)
-	if err != nil {
-		response.ErrorFrom(c, err)
-		return
-	}
-
-	response.Success(c, result)
-}
-
-// ExchangeCodeRequest represents the request for exchanging auth code
-type ExchangeCodeRequest struct {
-	SessionID string `json:"session_id" binding:"required"`
-	Code      string `json:"code" binding:"required"`
-	ProxyID   *int64 `json:"proxy_id"`
-}
-
-// ExchangeCode exchanges authorization code for tokens
-// POST /api/v1/admin/accounts/exchange-code
-func (h *OAuthHandler) ExchangeCode(c *gin.Context) {
-	var req ExchangeCodeRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		response.BadRequest(c, "Invalid request: "+err.Error())
-		return
-	}
-
-	tokenInfo, err := h.oauthService.ExchangeCode(c.Request.Context(), &service.ExchangeCodeInput{
-		SessionID: req.SessionID,
-		Code:      req.Code,
-		ProxyID:   req.ProxyID,
-	})
-	if err != nil {
-		response.ErrorFrom(c, err)
-		return
-	}
-
-	response.Success(c, tokenInfo)
-}
-
-// ExchangeSetupTokenCode exchanges authorization code for setup token
-// POST /api/v1/admin/accounts/exchange-setup-token-code
-func (h *OAuthHandler) ExchangeSetupTokenCode(c *gin.Context) {
-	var req ExchangeCodeRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		response.BadRequest(c, "Invalid request: "+err.Error())
-		return
-	}
-
-	tokenInfo, err := h.oauthService.ExchangeCode(c.Request.Context(), &service.ExchangeCodeInput{
-		SessionID: req.SessionID,
-		Code:      req.Code,
-		ProxyID:   req.ProxyID,
-	})
-	if err != nil {
-		response.ErrorFrom(c, err)
-		return
-	}
-
-	response.Success(c, tokenInfo)
-}
-
-// CookieAuthRequest represents the request for cookie-based authentication
-type CookieAuthRequest struct {
-	SessionKey string `json:"code" binding:"required"` // Using 'code' field as sessionKey (frontend sends it this way)
-	ProxyID    *int64 `json:"proxy_id"`
-}
-
-// CookieAuth performs OAuth using sessionKey (cookie-based auto-auth)
-// POST /api/v1/admin/accounts/cookie-auth
-func (h *OAuthHandler) CookieAuth(c *gin.Context) {
-	var req CookieAuthRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		response.BadRequest(c, "Invalid request: "+err.Error())
-		return
-	}
-
-	tokenInfo, err := h.oauthService.CookieAuth(c.Request.Context(), &service.CookieAuthInput{
-		SessionKey: req.SessionKey,
-		ProxyID:    req.ProxyID,
-		Scope:      "full",
-	})
-	if err != nil {
-		response.ErrorFrom(c, err)
-		return
-	}
-
-	response.Success(c, tokenInfo)
-}
-
-// SetupTokenCookieAuth performs OAuth using sessionKey for setup token (inference only)
-// POST /api/v1/admin/accounts/setup-token-cookie-auth
-func (h *OAuthHandler) SetupTokenCookieAuth(c *gin.Context) {
-	var req CookieAuthRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		response.BadRequest(c, "Invalid request: "+err.Error())
-		return
-	}
-
-	tokenInfo, err := h.oauthService.CookieAuth(c.Request.Context(), &service.CookieAuthInput{
-		SessionKey: req.SessionKey,
-		ProxyID:    req.ProxyID,
-		Scope:      "inference",
-	})
-	if err != nil {
-		response.ErrorFrom(c, err)
-		return
-	}
-
-	response.Success(c, tokenInfo)
-}
 
 // GetUsage handles getting account usage information
 // GET /api/v1/admin/accounts/:id/usage?source=passive|active&force=true

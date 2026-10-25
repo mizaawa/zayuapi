@@ -158,13 +158,6 @@ func (h *AccountHandler) scheduleGrokImportProbe(account *service.Account) {
 	defaultGrokImportProbeScheduler.schedule(h.grokImportProber, account)
 }
 
-func (h *GrokOAuthHandler) scheduleGrokImportProbe(account *service.Account) {
-	if h == nil {
-		return
-	}
-	defaultGrokImportProbeScheduler.schedule(h.importProber, account)
-}
-
 // ProvideAccountHandler injects the Grok active prober for production while
 // keeping NewAccountHandler convenient for focused unit tests.
 func ProvideAccountHandler(
@@ -178,7 +171,6 @@ func ProvideAccountHandler(
 	accountUsageService *service.AccountUsageService,
 	accountTestService *service.AccountTestService,
 	concurrencyService *service.ConcurrencyService,
-	crsSyncService *service.CRSSyncService,
 	sessionLimitCache service.SessionLimitCache,
 	rpmCache service.RPMCache,
 	tokenCacheInvalidator service.TokenCacheInvalidator,
@@ -195,7 +187,6 @@ func ProvideAccountHandler(
 		accountUsageService,
 		accountTestService,
 		concurrencyService,
-		crsSyncService,
 		sessionLimitCache,
 		rpmCache,
 		tokenCacheInvalidator,

@@ -1077,7 +1077,7 @@ func (s *GatewayService) handleStreamingResponse(ctx context.Context, resp *http
 
 				for _, block := range outputBlocks {
 					if !clientDisconnected {
-						restored := reverseToolNamesIfPresent(c, []byte(block))
+						restored := []byte(block)
 						if _, werr := fmt.Fprint(w, string(restored)); werr != nil {
 							clientDisconnected = true
 							logger.LegacyPrintf("service.gateway", "Client disconnected during streaming, continuing to drain upstream for billing")
@@ -1446,9 +1446,6 @@ func (s *GatewayService) resolveCacheTTLUsageOverrideTarget(ctx context.Context,
 	if account.IsCacheTTLOverrideEnabled() {
 		return account.GetCacheTTLOverrideTarget(), true
 	}
-	if account.IsAnthropicOAuthOrSetupToken() && s != nil && s.settingService != nil && s.settingService.IsAnthropicCacheTTL1hInjectionEnabled(ctx) {
-		return cacheTTLTarget5m, true
-	}
 	return "", false
 }
 
@@ -1535,8 +1532,6 @@ func (s *GatewayService) handleNonStreamingResponse(ctx context.Context, resp *h
 			contentType = upstreamType
 		}
 	}
-
-	body = reverseToolNamesIfPresent(c, body)
 
 	// 写入响应
 	c.Data(resp.StatusCode, contentType, body)

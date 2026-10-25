@@ -5,7 +5,6 @@ package service
 import (
 	"context"
 	"fmt"
-	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -18,128 +17,6 @@ import (
 // =====================
 // 保留原有测试
 // =====================
-
-func TestGeminiOAuthService_GenerateAuthURL_RedirectURIStrategy(t *testing.T) {
-	// NOTE: This test sets process env; it must not run in parallel.
-	// The built-in Gemini CLI client secret is not embedded in this repository.
-	// Tests set a dummy secret via env to simulate operator-provided configuration.
-	t.Setenv(geminicli.GeminiCLIOAuthClientSecretEnv, "test-built-in-secret")
-
-	type testCase struct {
-		name          string
-		cfg           *config.Config
-		oauthType     string
-		projectID     string
-		wantClientID  string
-		wantRedirect  string
-		wantScope     string
-		wantProjectID string
-		wantErrSubstr string
-	}
-
-	tests := []testCase{
-		{
-			name: "google_one uses built-in client when not configured and redirects to upstream",
-			cfg: &config.Config{
-				Gemini: config.GeminiConfig{
-					OAuth: config.GeminiOAuthConfig{},
-				},
-			},
-			oauthType:     "google_one",
-			wantClientID:  geminicli.GeminiCLIOAuthClientID,
-			wantRedirect:  geminicli.GeminiCLIRedirectURI,
-			wantScope:     geminicli.DefaultCodeAssistScopes,
-			wantProjectID: "",
-		},
-		{
-			name: "google_one always forces built-in client even when custom client configured",
-			cfg: &config.Config{
-				Gemini: config.GeminiConfig{
-					OAuth: config.GeminiOAuthConfig{
-						ClientID:     "custom-client-id",
-						ClientSecret: "custom-client-secret",
-					},
-				},
-			},
-			oauthType:     "google_one",
-			wantClientID:  geminicli.GeminiCLIOAuthClientID,
-			wantRedirect:  geminicli.GeminiCLIRedirectURI,
-			wantScope:     geminicli.DefaultCodeAssistScopes,
-			wantProjectID: "",
-		},
-		{
-			name: "code_assist always forces built-in client even when custom client configured",
-			cfg: &config.Config{
-				Gemini: config.GeminiConfig{
-					OAuth: config.GeminiOAuthConfig{
-						ClientID:     "custom-client-id",
-						ClientSecret: "custom-client-secret",
-					},
-				},
-			},
-			oauthType:     "code_assist",
-			projectID:     "my-gcp-project",
-			wantClientID:  geminicli.GeminiCLIOAuthClientID,
-			wantRedirect:  geminicli.GeminiCLIRedirectURI,
-			wantScope:     geminicli.DefaultCodeAssistScopes,
-			wantProjectID: "my-gcp-project",
-		},
-		{
-			name: "ai_studio requires custom client",
-			cfg: &config.Config{
-				Gemini: config.GeminiConfig{
-					OAuth: config.GeminiOAuthConfig{},
-				},
-			},
-			oauthType:     "ai_studio",
-			wantErrSubstr: "AI Studio OAuth requires a custom OAuth Client",
-		},
-	}
-
-	for _, tt := range tests {
-		tt := tt
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
-			svc := NewGeminiOAuthService(nil, nil, nil, nil, tt.cfg)
-			got, err := svc.GenerateAuthURL(context.Background(), nil, "https://example.com/auth/callback", tt.projectID, tt.oauthType, "")
-			if tt.wantErrSubstr != "" {
-				if err == nil {
-					t.Fatalf("expected error containing %q, got nil", tt.wantErrSubstr)
-				}
-				if !strings.Contains(err.Error(), tt.wantErrSubstr) {
-					t.Fatalf("expected error containing %q, got: %v", tt.wantErrSubstr, err)
-				}
-				return
-			}
-			if err != nil {
-				t.Fatalf("GenerateAuthURL returned error: %v", err)
-			}
-
-			parsed, err := url.Parse(got.AuthURL)
-			if err != nil {
-				t.Fatalf("failed to parse auth_url: %v", err)
-			}
-			q := parsed.Query()
-
-			if gotState := q.Get("state"); gotState != got.State {
-				t.Fatalf("state mismatch: query=%q result=%q", gotState, got.State)
-			}
-			if gotClientID := q.Get("client_id"); gotClientID != tt.wantClientID {
-				t.Fatalf("client_id mismatch: got=%q want=%q", gotClientID, tt.wantClientID)
-			}
-			if gotRedirect := q.Get("redirect_uri"); gotRedirect != tt.wantRedirect {
-				t.Fatalf("redirect_uri mismatch: got=%q want=%q", gotRedirect, tt.wantRedirect)
-			}
-			if gotScope := q.Get("scope"); gotScope != tt.wantScope {
-				t.Fatalf("scope mismatch: got=%q want=%q", gotScope, tt.wantScope)
-			}
-			if gotProjectID := q.Get("project_id"); gotProjectID != tt.wantProjectID {
-				t.Fatalf("project_id mismatch: got=%q want=%q", gotProjectID, tt.wantProjectID)
-			}
-		})
-	}
-}
 
 // =====================
 // 新增测试：validateTierID
@@ -488,7 +365,6 @@ func TestGeminiOAuthService_BuildAccountCredentials(t *testing.T) {
 	t.Parallel()
 
 	svc := NewGeminiOAuthService(nil, nil, nil, nil, &config.Config{})
-	defer svc.Stop()
 
 	t.Run("完整字段", func(t *testing.T) {
 		t.Parallel()
@@ -688,7 +564,6 @@ func TestGeminiOAuthService_GetOAuthConfig(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			svc := NewGeminiOAuthService(nil, nil, nil, nil, tt.cfg)
-			defer svc.Stop()
 
 			result := svc.GetOAuthConfig()
 			if result.AIStudioOAuthEnabled != tt.wantEnabled {
@@ -705,17 +580,6 @@ func TestGeminiOAuthService_GetOAuthConfig(t *testing.T) {
 // =====================
 // 新增测试：GeminiOAuthService.Stop
 // =====================
-
-func TestGeminiOAuthService_Stop_NoPanic(t *testing.T) {
-	t.Parallel()
-
-	svc := NewGeminiOAuthService(nil, nil, nil, nil, &config.Config{})
-
-	// 调用 Stop 不应 panic
-	svc.Stop()
-	// 多次调用也不应 panic
-	svc.Stop()
-}
 
 // =====================
 // mock: GeminiOAuthClient
@@ -850,7 +714,6 @@ func TestGeminiOAuthService_RefreshToken_Success(t *testing.T) {
 	}
 
 	svc := NewGeminiOAuthService(nil, client, nil, nil, &config.Config{})
-	defer svc.Stop()
 
 	info, err := svc.RefreshToken(context.Background(), "code_assist", "old-refresh", "")
 	if err != nil {
@@ -877,7 +740,6 @@ func TestGeminiOAuthService_RefreshToken_NonRetryableError(t *testing.T) {
 	}
 
 	svc := NewGeminiOAuthService(nil, client, nil, nil, &config.Config{})
-	defer svc.Stop()
 
 	_, err := svc.RefreshToken(context.Background(), "code_assist", "revoked-token", "")
 	if err == nil {
@@ -906,7 +768,6 @@ func TestGeminiOAuthService_RefreshToken_RetryableError(t *testing.T) {
 	}
 
 	svc := NewGeminiOAuthService(nil, client, nil, nil, &config.Config{})
-	defer svc.Stop()
 
 	info, err := svc.RefreshToken(context.Background(), "code_assist", "rt", "")
 	if err != nil {
@@ -928,7 +789,6 @@ func TestGeminiOAuthService_RefreshAccountToken_NotGeminiOAuth(t *testing.T) {
 	t.Parallel()
 
 	svc := NewGeminiOAuthService(nil, nil, nil, nil, &config.Config{})
-	defer svc.Stop()
 
 	account := &Account{
 		Platform: PlatformAnthropic,
@@ -948,7 +808,6 @@ func TestGeminiOAuthService_RefreshAccountToken_NoRefreshToken(t *testing.T) {
 	t.Parallel()
 
 	svc := NewGeminiOAuthService(nil, nil, nil, nil, &config.Config{})
-	defer svc.Stop()
 
 	account := &Account{
 		Platform: PlatformGemini,
@@ -983,7 +842,6 @@ func TestGeminiOAuthService_RefreshAccountToken_AIStudio(t *testing.T) {
 	}
 
 	svc := NewGeminiOAuthService(&mockGeminiProxyRepo{}, client, nil, nil, &config.Config{})
-	defer svc.Stop()
 
 	account := &Account{
 		Platform: PlatformGemini,
@@ -1022,7 +880,6 @@ func TestGeminiOAuthService_RefreshAccountToken_CodeAssist_WithProjectID(t *test
 	}
 
 	svc := NewGeminiOAuthService(&mockGeminiProxyRepo{}, client, nil, nil, &config.Config{})
-	defer svc.Stop()
 
 	account := &Account{
 		Platform: PlatformGemini,
@@ -1067,7 +924,6 @@ func TestGeminiOAuthService_RefreshAccountToken_DefaultOAuthType(t *testing.T) {
 	}
 
 	svc := NewGeminiOAuthService(&mockGeminiProxyRepo{}, client, nil, nil, &config.Config{})
-	defer svc.Stop()
 
 	// 无 oauth_type 凭据的旧账号
 	account := &Account{
@@ -1115,7 +971,6 @@ func TestGeminiOAuthService_RefreshAccountToken_WithProxy(t *testing.T) {
 	}
 
 	svc := NewGeminiOAuthService(proxyRepo, client, nil, nil, &config.Config{})
-	defer svc.Stop()
 
 	proxyID := int64(5)
 	account := &Account{
@@ -1157,7 +1012,6 @@ func TestGeminiOAuthService_RefreshAccountToken_CodeAssist_NoProjectID_AutoDetec
 	}
 
 	svc := NewGeminiOAuthService(&mockGeminiProxyRepo{}, client, codeAssist, nil, &config.Config{})
-	defer svc.Stop()
 
 	account := &Account{
 		Platform: PlatformGemini,
@@ -1206,7 +1060,6 @@ func TestGeminiOAuthService_RefreshAccountToken_CodeAssist_NoProjectID_FailsEmpt
 	}
 
 	svc := NewGeminiOAuthService(&mockGeminiProxyRepo{}, client, codeAssist, nil, &config.Config{})
-	defer svc.Stop()
 
 	account := &Account{
 		Platform: PlatformGemini,
@@ -1239,7 +1092,6 @@ func TestGeminiOAuthService_RefreshAccountToken_GoogleOne_FreshCache(t *testing.
 	}
 
 	svc := NewGeminiOAuthService(&mockGeminiProxyRepo{}, client, nil, nil, &config.Config{})
-	defer svc.Stop()
 
 	account := &Account{
 		Platform: PlatformGemini,
@@ -1279,7 +1131,6 @@ func TestGeminiOAuthService_RefreshAccountToken_GoogleOne_NoTierID_DefaultsFree(
 	}
 
 	svc := NewGeminiOAuthService(&mockGeminiProxyRepo{}, client, nil, &mockDriveClient{}, &config.Config{})
-	defer svc.Stop()
 
 	account := &Account{
 		Platform: PlatformGemini,
@@ -1333,7 +1184,6 @@ func TestGeminiOAuthService_RefreshAccountToken_UnauthorizedClient_Fallback(t *t
 	}
 
 	svc := NewGeminiOAuthService(&mockGeminiProxyRepo{}, client, nil, nil, cfg)
-	defer svc.Stop()
 
 	account := &Account{
 		Platform: PlatformGemini,
@@ -1366,7 +1216,6 @@ func TestGeminiOAuthService_RefreshAccountToken_UnauthorizedClient_NoFallback(t 
 
 	// 无自定义 OAuth 客户端，无法 fallback
 	svc := NewGeminiOAuthService(&mockGeminiProxyRepo{}, client, nil, nil, &config.Config{})
-	defer svc.Stop()
 
 	account := &Account{
 		Platform: PlatformGemini,
@@ -1390,74 +1239,6 @@ func TestGeminiOAuthService_RefreshAccountToken_UnauthorizedClient_NoFallback(t 
 // =====================
 // 新增测试：GeminiOAuthService.ExchangeCode
 // =====================
-
-func TestGeminiOAuthService_ExchangeCode_SessionNotFound(t *testing.T) {
-	t.Parallel()
-
-	svc := NewGeminiOAuthService(nil, nil, nil, nil, &config.Config{})
-	defer svc.Stop()
-
-	_, err := svc.ExchangeCode(context.Background(), &GeminiExchangeCodeInput{
-		SessionID: "nonexistent",
-		State:     "some-state",
-		Code:      "some-code",
-	})
-	if err == nil {
-		t.Fatal("应返回错误（session 不存在）")
-	}
-	if !strings.Contains(err.Error(), "session not found") {
-		t.Fatalf("错误信息不匹配: got=%q", err.Error())
-	}
-}
-
-func TestGeminiOAuthService_ExchangeCode_InvalidState(t *testing.T) {
-	t.Parallel()
-
-	svc := NewGeminiOAuthService(nil, nil, nil, nil, &config.Config{})
-	defer svc.Stop()
-
-	// 手动创建 session（必须设置 CreatedAt，否则会因 TTL 过期被拒绝）
-	svc.sessionStore.Set("test-session", &geminicli.OAuthSession{
-		State:        "correct-state",
-		CodeVerifier: "verifier",
-		OAuthType:    "ai_studio",
-		CreatedAt:    time.Now(),
-	})
-
-	_, err := svc.ExchangeCode(context.Background(), &GeminiExchangeCodeInput{
-		SessionID: "test-session",
-		State:     "wrong-state",
-		Code:      "code",
-	})
-	if err == nil {
-		t.Fatal("应返回错误（state 不匹配）")
-	}
-	if !strings.Contains(err.Error(), "invalid state") {
-		t.Fatalf("错误信息不匹配: got=%q", err.Error())
-	}
-}
-
-func TestGeminiOAuthService_ExchangeCode_EmptyState(t *testing.T) {
-	t.Parallel()
-
-	svc := NewGeminiOAuthService(nil, nil, nil, nil, &config.Config{})
-	defer svc.Stop()
-
-	svc.sessionStore.Set("test-session", &geminicli.OAuthSession{
-		State:        "correct-state",
-		CodeVerifier: "verifier",
-		CreatedAt:    time.Now(),
-	})
-
-	_, err := svc.ExchangeCode(context.Background(), &GeminiExchangeCodeInput{
-		SessionID: "test-session",
-		State:     "",
-		Code:      "code",
-	})
-	if err == nil {
-		t.Fatal("应返回错误（空 state）")
-	}
-}
 
 // =====================
 // 辅助函数

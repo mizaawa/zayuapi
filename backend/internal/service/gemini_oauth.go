@@ -6,8 +6,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/pkg/geminicli"
 )
 
-// GeminiOAuthClient performs Google OAuth token exchange/refresh for Gemini integration.
+// GeminiOAuthClient refreshes credentials for existing Gemini accounts.
 type GeminiOAuthClient interface {
-	ExchangeCode(ctx context.Context, oauthType, code, codeVerifier, redirectURI, proxyURL string) (*geminicli.TokenResponse, error)
 	RefreshToken(ctx context.Context, oauthType, refreshToken, proxyURL string) (*geminicli.TokenResponse, error)
 }

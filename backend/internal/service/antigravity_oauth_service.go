@@ -11,73 +11,13 @@ import (
 )
 
 type AntigravityOAuthService struct {
-	sessionStore *antigravity.SessionStore
-	proxyRepo    ProxyRepository
+	proxyRepo ProxyRepository
 }
 
 func NewAntigravityOAuthService(proxyRepo ProxyRepository) *AntigravityOAuthService {
 	return &AntigravityOAuthService{
-		sessionStore: antigravity.NewSessionStore(),
-		proxyRepo:    proxyRepo,
+		proxyRepo: proxyRepo,
 	}
-}
-
-// AntigravityAuthURLResult is the result of generating an authorization URL
-type AntigravityAuthURLResult struct {
-	AuthURL   string `json:"auth_url"`
-	SessionID string `json:"session_id"`
-	State     string `json:"state"`
-}
-
-// GenerateAuthURL 生成 Google OAuth 授权链接
-func (s *AntigravityOAuthService) GenerateAuthURL(ctx context.Context, proxyID *int64) (*AntigravityAuthURLResult, error) {
-	state, err := antigravity.GenerateState()
-	if err != nil {
-		return nil, fmt.Errorf("生成 state 失败: %w", err)
-	}
-
-	codeVerifier, err := antigravity.GenerateCodeVerifier()
-	if err != nil {
-		return nil, fmt.Errorf("生成 code_verifier 失败: %w", err)
-	}
-
-	sessionID, err := antigravity.GenerateSessionID()
-	if err != nil {
-		return nil, fmt.Errorf("生成 session_id 失败: %w", err)
-	}
-
-	var proxyURL string
-	if proxyID != nil {
-		proxy, err := s.proxyRepo.GetByID(ctx, *proxyID)
-		if err == nil && proxy != nil {
-			proxyURL = proxy.URL()
-		}
-	}
-
-	session := &antigravity.OAuthSession{
-		State:        state,
-		CodeVerifier: codeVerifier,
-		ProxyURL:     proxyURL,
-		CreatedAt:    time.Now(),
-	}
-	s.sessionStore.Set(sessionID, session)
-
-	codeChallenge := antigravity.GenerateCodeChallenge(codeVerifier)
-	authURL := antigravity.BuildAuthorizationURL(state, codeChallenge)
-
-	return &AntigravityAuthURLResult{
-		AuthURL:   authURL,
-		SessionID: sessionID,
-		State:     state,
-	}, nil
-}
-
-// AntigravityExchangeCodeInput 交换 code 的输入
-type AntigravityExchangeCodeInput struct {
-	SessionID string
-	State     string
-	Code      string
-	ProxyID   *int64
 }
 
 // AntigravityTokenInfo token 信息
@@ -92,78 +32,6 @@ type AntigravityTokenInfo struct {
 	ProjectIDMissing bool   `json:"-"`
 	PlanType         string `json:"-"`
 	PrivacyMode      string `json:"-"`
-}
-
-// ExchangeCode 用 authorization code 交换 token
-func (s *AntigravityOAuthService) ExchangeCode(ctx context.Context, input *AntigravityExchangeCodeInput) (*AntigravityTokenInfo, error) {
-	session, ok := s.sessionStore.Get(input.SessionID)
-	if !ok {
-		return nil, fmt.Errorf("session 不存在或已过期")
-	}
-
-	if strings.TrimSpace(input.State) == "" || input.State != session.State {
-		return nil, fmt.Errorf("state 无效")
-	}
-
-	// 确定代理 URL
-	proxyURL := session.ProxyURL
-	if input.ProxyID != nil {
-		proxy, err := s.proxyRepo.GetByID(ctx, *input.ProxyID)
-		if err == nil && proxy != nil {
-			proxyURL = proxy.URL()
-		}
-	}
-
-	client, err := antigravity.NewClient(proxyURL)
-	if err != nil {
-		return nil, fmt.Errorf("create antigravity client failed: %w", err)
-	}
-
-	// 交换 token
-	tokenResp, err := client.ExchangeCode(ctx, input.Code, session.CodeVerifier)
-	if err != nil {
-		return nil, fmt.Errorf("token 交换失败: %w", err)
-	}
-
-	// 删除 session
-	s.sessionStore.Delete(input.SessionID)
-
-	// 计算过期时间（减去 5 分钟安全窗口）
-	expiresAt := time.Now().Unix() + tokenResp.ExpiresIn - 300
-
-	result := &AntigravityTokenInfo{
-		AccessToken:  tokenResp.AccessToken,
-		RefreshToken: tokenResp.RefreshToken,
-		ExpiresIn:    tokenResp.ExpiresIn,
-		ExpiresAt:    expiresAt,
-		TokenType:    tokenResp.TokenType,
-	}
-
-	// 获取用户信息
-	userInfo, err := client.GetUserInfo(ctx, tokenResp.AccessToken)
-	if err != nil {
-		fmt.Printf("[AntigravityOAuth] 警告: 获取用户信息失败: %v\n", err)
-	} else {
-		result.Email = userInfo.Email
-	}
-
-	// 获取 project_id + plan_type（部分账户类型可能没有），失败时重试
-	loadResult, loadErr := s.loadProjectIDWithRetry(ctx, tokenResp.AccessToken, proxyURL, 3)
-	if loadErr != nil {
-		fmt.Printf("[AntigravityOAuth] 警告: 获取 project_id 失败（重试后）: %v\n", loadErr)
-		result.ProjectIDMissing = true
-	}
-	if loadResult != nil {
-		result.ProjectID = loadResult.ProjectID
-		if loadResult.Subscription != nil {
-			result.PlanType = loadResult.Subscription.PlanType
-		}
-	}
-
-	// 令牌刚获取，立即设置隐私（不依赖后续账号创建流程）
-	result.PrivacyMode = setAntigravityPrivacy(ctx, result.AccessToken, result.ProjectID, proxyURL)
-
-	return result, nil
 }
 
 // RefreshToken 刷新 token
@@ -209,53 +77,6 @@ func (s *AntigravityOAuthService) RefreshToken(ctx context.Context, refreshToken
 	}
 
 	return nil, fmt.Errorf("token 刷新失败 (重试后): %w", lastErr)
-}
-
-// ValidateRefreshToken 用 refresh token 验证并获取完整的 token 信息（含 email 和 project_id）
-func (s *AntigravityOAuthService) ValidateRefreshToken(ctx context.Context, refreshToken string, proxyID *int64) (*AntigravityTokenInfo, error) {
-	var proxyURL string
-	if proxyID != nil {
-		proxy, err := s.proxyRepo.GetByID(ctx, *proxyID)
-		if err == nil && proxy != nil {
-			proxyURL = proxy.URL()
-		}
-	}
-
-	// 刷新 token
-	tokenInfo, err := s.RefreshToken(ctx, refreshToken, proxyURL)
-	if err != nil {
-		return nil, err
-	}
-
-	// 获取用户信息（email）
-	client, err := antigravity.NewClient(proxyURL)
-	if err != nil {
-		return nil, fmt.Errorf("create antigravity client failed: %w", err)
-	}
-	userInfo, err := client.GetUserInfo(ctx, tokenInfo.AccessToken)
-	if err != nil {
-		fmt.Printf("[AntigravityOAuth] 警告: 获取用户信息失败: %v\n", err)
-	} else {
-		tokenInfo.Email = userInfo.Email
-	}
-
-	// 获取 project_id + plan_type（容错，失败不阻塞）
-	loadResult, loadErr := s.loadProjectIDWithRetry(ctx, tokenInfo.AccessToken, proxyURL, 3)
-	if loadErr != nil {
-		fmt.Printf("[AntigravityOAuth] 警告: 获取 project_id 失败（重试后）: %v\n", loadErr)
-		tokenInfo.ProjectIDMissing = true
-	}
-	if loadResult != nil {
-		tokenInfo.ProjectID = loadResult.ProjectID
-		if loadResult.Subscription != nil {
-			tokenInfo.PlanType = loadResult.Subscription.PlanType
-		}
-	}
-
-	// 令牌刚获取，立即设置隐私
-	tokenInfo.PrivacyMode = setAntigravityPrivacy(ctx, tokenInfo.AccessToken, tokenInfo.ProjectID, proxyURL)
-
-	return tokenInfo, nil
 }
 
 func isNonRetryableAntigravityOAuthError(err error) bool {
@@ -477,9 +298,4 @@ func (s *AntigravityOAuthService) BuildAccountCredentials(tokenInfo *Antigravity
 		creds["plan_type"] = tokenInfo.PlanType
 	}
 	return creds
-}
-
-// Stop 停止服务
-func (s *AntigravityOAuthService) Stop() {
-	s.sessionStore.Stop()
 }

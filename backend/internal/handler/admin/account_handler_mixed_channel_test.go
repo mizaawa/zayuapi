@@ -15,7 +15,7 @@ import (
 func setupAccountMixedChannelRouter(adminSvc *stubAdminService) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
-	accountHandler := NewAccountHandler(adminSvc, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	accountHandler := NewAccountHandler(adminSvc, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 	router.POST("/api/v1/admin/accounts/check-mixed-channel", accountHandler.CheckMixedChannel)
 	router.POST("/api/v1/admin/accounts", accountHandler.Create)
 	router.PUT("/api/v1/admin/accounts/:id", accountHandler.Update)
@@ -96,10 +96,10 @@ func TestAccountHandlerCreateMixedChannelConflictSimplifiedResponse(t *testing.T
 	router := setupAccountMixedChannelRouter(adminSvc)
 
 	body, _ := json.Marshal(map[string]any{
-		"name":        "ag-oauth-1",
+		"name":        "ag-apikey-1",
 		"platform":    "antigravity",
-		"type":        "oauth",
-		"credentials": map[string]any{"refresh_token": "rt"},
+		"type":        "apikey",
+		"credentials": map[string]any{"api_key": "test-key", "base_url": "https://gateway.example.com"},
 		"group_ids":   []int64{27},
 	})
 	rec := httptest.NewRecorder()

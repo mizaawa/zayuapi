@@ -28,7 +28,8 @@ export default {
       dataExportedSkippedShadows: 'Data exported. Skipped {count} spark shadow account(s): their scheduling config is not included in the backup; recreate and re-tune them after restore.',
       dataExportFailed: 'Failed to export data',
       dataImportTitle: 'Import Data',
-      dataImportHint: 'Upload the exported JSON file to import accounts and proxies.',
+      dataImportHint: 'Import API Key accounts and proxies from exported JSON files. All six platforms are supported. Every account requires an API Key; Antigravity and Custom also require an upstream URL.',
+      dataImportApiKeyOnly: '{name} contains unsupported or incomplete accounts. Only API Key accounts are supported; check the platform, key, and required upstream URL.',
       dataImportWarning: 'Import will create new accounts/proxies; groups must be bound manually. Ensure existing data does not conflict.',
       dataImportFile: 'Data file',
       dataImportButton: 'Start Import',
@@ -570,18 +571,6 @@ export default {
         planTypeDesc:
           "Manually correct this account's ChatGPT plan tier (Plus / Pro / Free). Note: a token refresh near expiry or a 429 rate-limit response will auto-overwrite this with the real tier.",
         planTypeClear: 'Clear (auto-detect)',
-        codexCLIOnly: 'Codex official clients only',
-        codexCLIOnlyDesc:
-          'Only applies to OpenAI OAuth. When enabled, only Codex official client families are allowed; when disabled, the gateway bypasses this restriction and keeps existing behavior.',
-        codexCLIOnlyAppServer: 'Allow Codex app-server clients',
-        codexCLIOnlyAppServerDesc:
-          "Effective only when the switch above is on. When enabled, this account also allows third-party clients that embed the Codex engine over the app-server protocol (e.g. Claude Code's codex plugin); they still pass the global engine-fingerprint gate. OR-combined with the global app-server toggle.",
-        codexFingerprintMode: 'Codex fingerprint convergence',
-        codexFingerprintModeDesc: 'When multiple users share the same OAuth account, converge device/session identifiers to account-level stable values to reduce upstream-visible device and session count. Off by default (client identifiers pass through as-is); opt in explicitly when needed. Some accounts reported quota shrinkage after enabling convergence, so choose based on your own measurements.',
-        codexFingerprintOff: 'Off (passthrough, default)',
-        codexFingerprintDevice: 'Device only',
-        codexFingerprintSession: 'Device + Session',
-        codexFingerprintFull: 'Full convergence',
         codexImageTool: 'Codex image bridge policy',
         codexImageToolDesc:
           'Controls the hosted image_generation bridge and client-declared image tools on Codex /responses text requests. Hosted auto-injection applies only to non-Responses Lite requests. Account policy takes precedence over channel and global settings; standalone image-generation endpoints are unaffected.',

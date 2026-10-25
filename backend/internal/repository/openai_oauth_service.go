@@ -23,50 +23,6 @@ type openaiOAuthService struct {
 	tokenURL string
 }
 
-func (s *openaiOAuthService) ExchangeCode(ctx context.Context, code, codeVerifier, redirectURI, proxyURL, clientID string) (*openai.TokenResponse, error) {
-	client, err := createOpenAIReqClient(proxyURL)
-	if err != nil {
-		return nil, infraerrors.Newf(http.StatusBadGateway, "OPENAI_OAUTH_CLIENT_INIT_FAILED", "create HTTP client: %v", err)
-	}
-
-	if redirectURI == "" {
-		redirectURI = openai.DefaultRedirectURI
-	}
-	clientID = strings.TrimSpace(clientID)
-	if clientID == "" {
-		clientID = openai.ClientID
-	}
-
-	formData := url.Values{}
-	formData.Set("grant_type", "authorization_code")
-	formData.Set("client_id", clientID)
-	formData.Set("code", code)
-	formData.Set("redirect_uri", redirectURI)
-	formData.Set("code_verifier", codeVerifier)
-
-	var tokenResp openai.TokenResponse
-
-	resp, err := client.R().
-		SetContext(ctx).
-		SetHeader("User-Agent", "codex-cli/0.91.0").
-		SetFormDataFromValues(formData).
-		SetSuccessResult(&tokenResp).
-		Post(s.tokenURL)
-
-	if err != nil {
-		if shouldReturnOpenAINoProxyHint(ctx, proxyURL, err) {
-			return nil, newOpenAINoProxyHintError(err)
-		}
-		return nil, infraerrors.Newf(http.StatusBadGateway, "OPENAI_OAUTH_REQUEST_FAILED", "request failed: %v", err)
-	}
-
-	if !resp.IsSuccessState() {
-		return nil, infraerrors.Newf(http.StatusBadGateway, "OPENAI_OAUTH_TOKEN_EXCHANGE_FAILED", "token exchange failed: status %d, body: %s", resp.StatusCode, resp.String())
-	}
-
-	return &tokenResp, nil
-}
-
 func (s *openaiOAuthService) RefreshToken(ctx context.Context, refreshToken, proxyURL string) (*openai.TokenResponse, error) {
 	return s.RefreshTokenWithClientID(ctx, refreshToken, proxyURL, "")
 }

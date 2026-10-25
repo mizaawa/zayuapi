@@ -1,37 +1,27 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const { post } = vi.hoisted(() => ({
-  post: vi.fn(),
-}))
+const { get, post } = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn() }))
+vi.mock('@/api/client', () => ({ apiClient: { get, post } }))
+import grokAPI, { queryQuota, resetQuota } from '@/api/admin/grok'
 
-vi.mock('@/api/client', () => ({
-  apiClient: { post },
-}))
+describe('admin Grok existing-account maintenance API', () => {
+  beforeEach(() => { get.mockReset(); post.mockReset() })
 
-import { createFromSSO, getGrokSSOImportTimeout } from '@/api/admin/grok'
-
-describe('admin Grok SSO import API', () => {
-  beforeEach(() => {
-    post.mockReset()
-    post.mockResolvedValue({ data: { created: [], failed: [] } })
+  it('queries quota for an existing account', async () => {
+    const quota = { source: 'active_probe', headers_observed: true, reset_supported: true, fetched_at: 1 }
+    get.mockResolvedValue({ data: quota })
+    expect(await queryQuota(42)).toEqual(quota)
+    expect(get).toHaveBeenCalledWith('/admin/grok/accounts/42/quota')
   })
 
-  it.each([
-    [1, 180_000],
-    [3, 180_000],
-    [4, 270_000],
-    [7, 360_000],
-  ])('uses a timeout sized for %i keys', async (keyCount, expectedTimeout) => {
-    expect(getGrokSSOImportTimeout(keyCount)).toBe(expectedTimeout)
+  it('resets quota for an existing account', async () => {
+    const result = { supported: true, code: 'ok', message: 'reset' }
+    post.mockResolvedValue({ data: result })
+    expect(await resetQuota(42)).toEqual(result)
+    expect(post).toHaveBeenCalledWith('/admin/grok/accounts/42/reset-quota')
+  })
 
-    await createFromSSO({
-      sso_tokens: Array.from({ length: keyCount }, (_, index) => `sso-${index + 1}`),
-    })
-
-    expect(post).toHaveBeenCalledWith(
-      '/admin/grok/sso-to-oauth',
-      expect.objectContaining({ sso_tokens: expect.any(Array) }),
-      { timeout: expectedTimeout },
-    )
+  it('exports no OAuth or SSO onboarding methods', () => {
+    expect(Object.keys(grokAPI).sort()).toEqual(['queryQuota', 'resetQuota'])
   })
 })

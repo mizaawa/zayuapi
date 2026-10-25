@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"testing"
 
+	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/xai"
 	"github.com/stretchr/testify/require"
 )
@@ -158,7 +159,7 @@ func TestCreateAccountAcceptsDedicatedUpstreamBillingProbeSetting(t *testing.T) 
 		ProbeEnabled:         &enabled,
 		SkipDefaultGroupBind: true,
 	})
-	require.ErrorIs(t, err, ErrUpstreamBillingProbeAccountInvalid)
+	require.Equal(t, "ACCOUNT_TYPE_APIKEY_REQUIRED", infraerrors.Reason(err))
 }
 
 func TestCreateCustomAccountAcceptsDefaultUpstreamBillingProbeSetting(t *testing.T) {
@@ -323,6 +324,12 @@ func TestUpdateAccountInvalidatesProbeSnapshotWhenUpstreamIdentityChanges(t *tes
 
 			updated, err := (&adminServiceImpl{accountRepo: repo}).UpdateAccount(context.Background(), accountID, tt.input)
 
+			if tt.input.Type == AccountTypeOAuth {
+				require.Equal(t, "ACCOUNT_TYPE_APIKEY_REQUIRED", infraerrors.Reason(err))
+				require.Nil(t, updated)
+				require.Contains(t, repo.accounts[accountID].Extra, UpstreamBillingProbeExtraKey)
+				return
+			}
 			require.NoError(t, err)
 			require.NotContains(t, updated.Extra, UpstreamBillingProbeExtraKey)
 			if tt.wantEnabled {

@@ -916,27 +916,11 @@ func TestAPIContracts(t *testing.T) {
 						"table_page_size_options": [10, 20, 50, 100],
 					"min_claude_code_version": "",
 					"max_claude_code_version": "",
-					"min_codex_version": "",
-					"max_codex_version": "",
-					"codex_cli_only_blacklist": "",
-					"codex_cli_only_whitelist": "",
 					"compact_home_enabled": false,
-					"codex_cli_only_allow_app_server_clients": false,
-					"codex_cli_only_engine_fingerprint_signals": "[{\"type\":\"header_prefix\",\"match\":[\"x-codex-\"],\"required\":true},{\"type\":\"header_exact\",\"match\":[\"session-id\",\"session_id\"],\"required\":false},{\"type\":\"header_exact\",\"match\":[\"thread-id\",\"thread_id\"],\"required\":false},{\"type\":\"body_path\",\"match\":[\"client_metadata.x-codex-window-id\",\"client_metadata.x-codex-installation-id\"],\"required\":false}]",
 					"allow_ungrouped_key_scheduling": false,
 					"backend_mode_enabled": false,
-					"enable_cch_signing": false,
-					"enable_claude_oauth_system_prompt_injection": true,
-					"claude_oauth_system_prompt": "",
-					"claude_oauth_system_prompt_blocks": "",
-					"enable_anthropic_cache_ttl_1h_injection": false,
 					"response_model_audit_bypass_enabled": false,
 					"disable_temp_unschedulable": false,
-					"rewrite_message_cache_control": false,
-					"enable_client_dateline_normalization": true,
-					"antigravity_user_agent_version": "",
-					"enable_fingerprint_unification": true,
-					"enable_metadata_passthrough": false,
 					"web_search_emulation_enabled": false,
 					"payment_visible_method_alipay_source": "easypay_alipay",
 					"payment_visible_method_wxpay_source": "official_wxpay",
@@ -969,10 +953,6 @@ func TestAPIContracts(t *testing.T) {
 					"openai_advanced_scheduler_effective_weight_upstream_cost": "0",
 					"openai_advanced_scheduler_effective_weight_previous_response": "5",
 					"openai_advanced_scheduler_effective_weight_session_sticky": "3",
-					"openai_codex_user_agent":           "",
-					"openai_codex_client_version":       "",
-					"openai_codex_client_version_synced": "",
-					"openai_codex_version_auto_sync_enabled": true,
 					"openai_fast_policy_settings": {
 						"rules": []
 					},
@@ -1260,25 +1240,9 @@ func TestAPIContracts(t *testing.T) {
 					"max_claude_code_version": "",
 					"allow_ungrouped_key_scheduling": false,
 					"backend_mode_enabled": false,
-					"enable_fingerprint_unification": true,
-					"enable_metadata_passthrough": false,
-					"enable_cch_signing": false,
-					"enable_claude_oauth_system_prompt_injection": true,
-					"claude_oauth_system_prompt": "",
-					"claude_oauth_system_prompt_blocks": "",
-					"enable_anthropic_cache_ttl_1h_injection": false,
 					"response_model_audit_bypass_enabled": false,
 					"disable_temp_unschedulable": false,
-					"rewrite_message_cache_control": false,
-					"enable_client_dateline_normalization": true,
-					"antigravity_user_agent_version": "",
-					"min_codex_version": "",
-					"max_codex_version": "",
-					"codex_cli_only_blacklist": "",
-					"codex_cli_only_whitelist": "",
 					"compact_home_enabled": false,
-					"codex_cli_only_allow_app_server_clients": false,
-					"codex_cli_only_engine_fingerprint_signals": "[{\"type\":\"header_prefix\",\"match\":[\"x-codex-\"],\"required\":true},{\"type\":\"header_exact\",\"match\":[\"session-id\",\"session_id\"],\"required\":false},{\"type\":\"header_exact\",\"match\":[\"thread-id\",\"thread_id\"],\"required\":false},{\"type\":\"body_path\",\"match\":[\"client_metadata.x-codex-window-id\",\"client_metadata.x-codex-installation-id\"],\"required\":false}]",
 					"web_search_emulation_enabled": false,
 					"payment_visible_method_alipay_source": "",
 					"payment_visible_method_wxpay_source": "",
@@ -1311,10 +1275,6 @@ func TestAPIContracts(t *testing.T) {
 					"openai_advanced_scheduler_effective_weight_upstream_cost": "0",
 					"openai_advanced_scheduler_effective_weight_previous_response": "5",
 					"openai_advanced_scheduler_effective_weight_session_sticky": "3",
-					"openai_codex_user_agent":           "",
-					"openai_codex_client_version":       "",
-					"openai_codex_client_version_synced": "",
-					"openai_codex_version_auto_sync_enabled": true,
 					"openai_fast_policy_settings": {
 						"rules": []
 					},
@@ -1549,7 +1509,7 @@ func newContractDeps(t *testing.T) *contractDeps {
 	apiKeyHandler := handler.NewAPIKeyHandler(apiKeyService)
 	usageHandler := handler.NewUsageHandler(usageService, apiKeyService, nil, nil)
 	adminSettingHandler := adminhandler.NewSettingHandler(settingService, nil, nil, nil, nil, nil, nil)
-	adminAccountHandler := adminhandler.NewAccountHandler(adminService, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	adminAccountHandler := adminhandler.NewAccountHandler(adminService, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 
 	jwtAuth := func(c *gin.Context) {
 		c.Set(string(middleware.ContextKeyUser), middleware.AuthSubject{

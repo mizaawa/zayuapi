@@ -621,24 +621,6 @@ func TestOllamaCloudUsageManagedExtraCannotBeImported(t *testing.T) {
 	require.NotContains(t, created.Extra, OllamaCloudUsageAutoRefreshExtraKey)
 	require.NotContains(t, created.Extra, OllamaCloudUsageSnapshotExtraKey)
 
-	existing := ollamaUsageAccount(6)
-	existing.Extra = map[string]any{
-		OllamaCloudUsageSessionExtraKey:     "local-ciphertext",
-		OllamaCloudUsageAutoRefreshExtraKey: false,
-		OllamaCloudUsageSnapshotExtraKey:    map[string]any{"status": OllamaCloudUsageStatusOK},
-	}
-	targetExtra := mergeMap(existing.Extra, remoteExtra)
-	reconcileCRSUpstreamBillingProbeExtra(existing, existing.Platform, existing.Type, mergeMap(existing.Credentials, nil), targetExtra)
-	require.Equal(t, "local-ciphertext", targetExtra[OllamaCloudUsageSessionExtraKey])
-	require.Equal(t, false, targetExtra[OllamaCloudUsageAutoRefreshExtraKey])
-	require.Equal(t, map[string]any{"status": OllamaCloudUsageStatusOK}, targetExtra[OllamaCloudUsageSnapshotExtraKey])
-
-	changedCredentials := mergeMap(existing.Credentials, map[string]any{"api_key": "rotated"})
-	targetExtra = mergeMap(existing.Extra, remoteExtra)
-	reconcileCRSUpstreamBillingProbeExtra(existing, existing.Platform, existing.Type, changedCredentials, targetExtra)
-	require.NotContains(t, targetExtra, OllamaCloudUsageSessionExtraKey)
-	require.NotContains(t, targetExtra, OllamaCloudUsageAutoRefreshExtraKey)
-	require.NotContains(t, targetExtra, OllamaCloudUsageSnapshotExtraKey)
 }
 
 func TestAccountServiceUpdateStripsOllamaManagedExtra(t *testing.T) {

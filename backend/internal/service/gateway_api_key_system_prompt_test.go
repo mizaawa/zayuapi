@@ -139,31 +139,53 @@ func TestAPIKeySystemPromptForcedCodexPassthroughSatisfiesInstructionsCheck(t *t
 	require.Equal(t, "  Answer in Chinese.\n", gjson.GetBytes(upstream.lastBody, "instructions").String())
 }
 
-func TestAPIKeySystemPromptWireBuildersAfterOAuthMimicry(t *testing.T) {
-	for _, force := range []bool{false, true} {
-		t.Run(fmt.Sprintf("force=%v", force), func(t *testing.T) {
-			c := apiKeyPromptTestContext("/v1/responses", force)
-			body := []byte(`{"model":"claude-sonnet-4-5","system":"original agent tool guidance","messages":[{"role":"user","content":"question"}]}`)
-			body = rewriteSystemForNonClaudeCodeWithPromptBlocks(body, "original agent tool guidance", "", "")
-			svc := &GatewayService{}
-			account := &Account{Platform: PlatformAnthropic, Type: AccountTypeOAuth}
-			req, wire, err := svc.buildUpstreamRequest(context.Background(), c, account, body, "token", "oauth", "claude-sonnet-4-5", true, true)
-			require.NoError(t, err)
-			read, err := io.ReadAll(req.Body)
-			require.NoError(t, err)
-			require.Equal(t, wire, read)
-			require.Contains(t, string(wire), "original agent tool guidance")
-			require.Contains(t, string(wire), "Answer in Chinese.")
-			if force {
-				system := gjson.GetBytes(wire, "system").Array()
-				require.Equal(t, "  Answer in Chinese.\n", system[len(system)-1].Get("text").String())
-			} else {
-				require.NotContains(t, gjson.GetBytes(wire, "system").Raw, "Answer in Chinese.")
-			}
-			_, retried, err := svc.buildUpstreamRequest(context.Background(), c, account, wire, "token", "oauth", "claude-sonnet-4-5", true, true)
-			require.NoError(t, err)
-			require.Equal(t, wire, retried)
-		})
+func TestAPIKeySystemPromptWireBuildersPreserveAPIKeyGuidance(t *testing.T) {
+	systems := []struct {
+		name string
+		raw  string
+	}{
+		{"string", `"original agent tool guidance"`},
+		{"array", `[{"type":"text","text":"original agent tool guidance","cache_control":{"type":"ephemeral"}}]`},
+	}
+	for _, systemInput := range systems {
+		for _, force := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s/force=%v", systemInput.name, force), func(t *testing.T) {
+				c := apiKeyPromptTestContext("/v1/messages", force)
+				body := []byte(`{"model":"claude-sonnet-4-5","system":` + systemInput.raw + `,"messages":[{"role":"user","content":"question"}]}`)
+				prompt := getAPIKeyFromContext(c).CustomSystemPrompt
+				svc := &GatewayService{cfg: apiKeyPromptTestConfig()}
+				account := &Account{Platform: PlatformAnthropic, Type: AccountTypeAPIKey}
+				req, wire, err := svc.buildUpstreamRequest(context.Background(), c, account, body, "token", "apikey", "claude-sonnet-4-5", true, false)
+				require.NoError(t, err)
+				read, err := io.ReadAll(req.Body)
+				require.NoError(t, err)
+				require.Equal(t, wire, read)
+				require.Contains(t, string(wire), "original agent tool guidance")
+				require.Contains(t, string(wire), "Answer in Chinese.")
+				system := gjson.GetBytes(wire, "system")
+				if force {
+					if systemInput.name == "string" {
+						require.Equal(t, gjson.String, system.Type)
+						require.Equal(t, "original agent tool guidance\n\n"+prompt, system.String())
+					} else {
+						require.True(t, system.IsArray())
+						blocks := system.Array()
+						require.Len(t, blocks, 2)
+						require.Equal(t, gjson.GetBytes(body, "system.0").Raw, blocks[0].Raw)
+						require.Equal(t, "text", blocks[1].Get("type").String())
+						require.Equal(t, prompt, blocks[1].Get("text").String())
+					}
+					require.Equal(t, gjson.GetBytes(body, "messages").Raw, gjson.GetBytes(wire, "messages").Raw)
+				} else {
+					require.Equal(t, gjson.GetBytes(body, "system").Raw, system.Raw)
+					require.NotContains(t, system.Raw, "Answer in Chinese.")
+					require.Contains(t, gjson.GetBytes(wire, "messages.0.content").String(), prompt)
+				}
+				_, retried, err := svc.buildUpstreamRequest(context.Background(), c, account, wire, "token", "apikey", "claude-sonnet-4-5", true, false)
+				require.NoError(t, err)
+				require.Equal(t, wire, retried)
+			})
+		}
 	}
 }
 

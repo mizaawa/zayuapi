@@ -107,9 +107,6 @@ type AdminService interface {
 	// RevertAccountProxyFallback 将账号的 proxy_id 切回 proxy_fallback_origin_id，并清空 origin 字段。
 	// 若账号不存在返回 ErrAccountNotFound；若账号存在但不在 fallback 状态，返回 ErrAccountNotInFallback。
 	RevertAccountProxyFallback(ctx context.Context, id int64) error
-	// CreateShadow 为指定 OpenAI OAuth 母账号创建 spark 维度影子账号（一母一影）。
-	// 影子账号不持凭据（Credentials 恒为空），透传母账号凭据；继承母账号的 ProxyID。
-	CreateShadow(ctx context.Context, parentID int64, opts ShadowOptions) (*Account, error)
 
 	// Proxy management
 	ListProxies(ctx context.Context, page, pageSize int, protocol, status, search string, sortBy, sortOrder string) ([]Proxy, int64, error)
@@ -366,15 +363,6 @@ type CreateAccountInput struct {
 	// SkipMixedChannelCheck skips the mixed channel risk check when binding groups.
 	// This should only be set when the caller has explicitly confirmed the risk.
 	SkipMixedChannelCheck bool
-}
-
-// ShadowOptions is the input for CreateShadow.
-// The shadow holds no credentials — the scheduler transparently delegates to the parent account's tokens.
-type ShadowOptions struct {
-	Name        string
-	Priority    int
-	Concurrency int
-	GroupIDs    []int64
 }
 
 type UpdateAccountInput struct {

@@ -51,12 +51,6 @@ func RegisterAdminRoutes(
 		// OpenAI OAuth
 		registerOpenAIOAuthRoutes(admin, h)
 
-		// Gemini OAuth
-		registerGeminiOAuthRoutes(admin, h)
-
-		// Antigravity OAuth
-		registerAntigravityOAuthRoutes(admin, h)
-
 		// Grok OAuth
 		registerGrokOAuthRoutes(admin, h)
 
@@ -359,9 +353,6 @@ func registerAccountRoutes(admin *gin.RouterGroup, h *handler.Handlers, stepUpAu
 		accounts.POST("", h.Admin.Account.Create)
 		accounts.POST("/:id/duplicate", h.Admin.Account.Duplicate)
 		accounts.POST("/check-mixed-channel", h.Admin.Account.CheckMixedChannel)
-		accounts.POST("/import/codex-session", h.Admin.Account.ImportCodexSession)
-		accounts.POST("/sync/crs", h.Admin.Account.SyncFromCRS)
-		accounts.POST("/sync/crs/preview", h.Admin.Account.PreviewFromCRS)
 		accounts.PUT("/:id", h.Admin.Account.Update)
 		accounts.PUT("/:id/upstream-billing-probe", h.Admin.Account.SetUpstreamBillingProbeEnabled)
 		accounts.POST("/:id/upstream-billing-probe", h.Admin.Account.ProbeUpstreamBilling)
@@ -374,7 +365,6 @@ func registerAccountRoutes(admin *gin.RouterGroup, h *handler.Handlers, stepUpAu
 		accounts.POST("/:id/test", h.Admin.Account.Test)
 		accounts.POST("/:id/recover-state", h.Admin.Account.RecoverState)
 		accounts.POST("/:id/refresh", h.Admin.Account.Refresh)
-		accounts.POST("/:id/apply-oauth-credentials", h.Admin.Account.ApplyOAuthCredentials)
 		accounts.POST("/:id/set-privacy", h.Admin.Account.SetPrivacy)
 		accounts.POST("/:id/refresh-tier", h.Admin.Account.RefreshTier)
 		accounts.GET("/:id/stats", h.Admin.Account.GetStats)
@@ -405,16 +395,6 @@ func registerAccountRoutes(admin *gin.RouterGroup, h *handler.Handlers, stepUpAu
 		// Antigravity 默认模型映射
 		accounts.GET("/antigravity/default-model-mapping", h.Admin.Account.GetAntigravityDefaultModelMapping)
 
-		// Spark 影子账号
-		accounts.POST("/:id/shadow", h.Admin.OpenAIOAuth.CreateShadow)
-
-		// Claude OAuth routes
-		accounts.POST("/generate-auth-url", h.Admin.OAuth.GenerateAuthURL)
-		accounts.POST("/generate-setup-token-url", h.Admin.OAuth.GenerateSetupTokenURL)
-		accounts.POST("/exchange-code", h.Admin.OAuth.ExchangeCode)
-		accounts.POST("/exchange-setup-token-code", h.Admin.OAuth.ExchangeSetupTokenCode)
-		accounts.POST("/cookie-auth", h.Admin.OAuth.CookieAuth)
-		accounts.POST("/setup-token-cookie-auth", h.Admin.OAuth.SetupTokenCookieAuth)
 	}
 }
 
@@ -449,44 +429,16 @@ func registerAnnouncementRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 func registerOpenAIOAuthRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 	openai := admin.Group("/openai")
 	{
-		openai.POST("/generate-auth-url", h.Admin.OpenAIOAuth.GenerateAuthURL)
-		openai.POST("/exchange-code", h.Admin.OpenAIOAuth.ExchangeCode)
-		openai.POST("/refresh-token", h.Admin.OpenAIOAuth.RefreshToken)
 		openai.POST("/accounts/:id/refresh", h.Admin.OpenAIOAuth.RefreshAccountToken)
-		openai.POST("/create-from-oauth", h.Admin.OpenAIOAuth.CreateAccountFromOAuth)
-		openai.POST("/create-from-codex-pat", h.Admin.OpenAIOAuth.CreateAccountFromCodexPAT)
 		openai.GET("/accounts/:id/quota", h.Admin.OpenAIOAuth.QueryQuota)
 		openai.POST("/accounts/:id/quota/refresh", h.Admin.OpenAIOAuth.RefreshQuota)
 		openai.POST("/accounts/:id/reset-quota", h.Admin.OpenAIOAuth.ResetQuota)
 	}
 }
 
-func registerGeminiOAuthRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
-	gemini := admin.Group("/gemini")
-	{
-		gemini.POST("/oauth/auth-url", h.Admin.GeminiOAuth.GenerateAuthURL)
-		gemini.POST("/oauth/exchange-code", h.Admin.GeminiOAuth.ExchangeCode)
-		gemini.GET("/oauth/capabilities", h.Admin.GeminiOAuth.GetCapabilities)
-	}
-}
-
-func registerAntigravityOAuthRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
-	antigravity := admin.Group("/antigravity")
-	{
-		antigravity.POST("/oauth/auth-url", h.Admin.AntigravityOAuth.GenerateAuthURL)
-		antigravity.POST("/oauth/exchange-code", h.Admin.AntigravityOAuth.ExchangeCode)
-		antigravity.POST("/oauth/refresh-token", h.Admin.AntigravityOAuth.RefreshToken)
-	}
-}
-
 func registerGrokOAuthRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 	grok := admin.Group("/grok")
 	{
-		grok.POST("/oauth/auth-url", h.Admin.GrokOAuth.GenerateAuthURL)
-		grok.POST("/oauth/exchange-code", h.Admin.GrokOAuth.ExchangeCode)
-		grok.POST("/oauth/refresh-token", h.Admin.GrokOAuth.RefreshToken)
-		grok.POST("/oauth/create-from-oauth", h.Admin.GrokOAuth.CreateAccountFromOAuth)
-		grok.POST("/sso-to-oauth", h.Admin.GrokOAuth.CreateAccountsFromSSO)
 		grok.POST("/oauth/reconcile", h.Admin.GrokOAuth.ReconcileOAuthAccounts)
 		grok.POST("/accounts/:id/refresh", h.Admin.GrokOAuth.RefreshAccountToken)
 		grok.GET("/accounts/:id/quota", h.Admin.GrokOAuth.QueryQuota)

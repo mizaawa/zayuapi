@@ -1,15 +1,11 @@
 package openai
 
 import (
-	"crypto/rand"
-	"crypto/sha256"
 	"encoding/base64"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net/url"
 	"strings"
-	"sync"
 	"time"
 )
 
@@ -38,187 +34,6 @@ const (
 	// OAuthPlatformOpenAI uses OpenAI Codex-compatible OAuth client.
 	OAuthPlatformOpenAI = "openai"
 )
-
-// OAuthSession stores OAuth flow state for OpenAI
-type OAuthSession struct {
-	State        string    `json:"state"`
-	CodeVerifier string    `json:"code_verifier"`
-	ClientID     string    `json:"client_id,omitempty"`
-	ProxyURL     string    `json:"proxy_url,omitempty"`
-	RedirectURI  string    `json:"redirect_uri"`
-	CreatedAt    time.Time `json:"created_at"`
-}
-
-// SessionStore manages OAuth sessions in memory
-type SessionStore struct {
-	mu       sync.RWMutex
-	sessions map[string]*OAuthSession
-	stopOnce sync.Once
-	stopCh   chan struct{}
-}
-
-// NewSessionStore creates a new session store
-func NewSessionStore() *SessionStore {
-	store := &SessionStore{
-		sessions: make(map[string]*OAuthSession),
-		stopCh:   make(chan struct{}),
-	}
-	// Start cleanup goroutine
-	go store.cleanup()
-	return store
-}
-
-// Set stores a session
-func (s *SessionStore) Set(sessionID string, session *OAuthSession) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.sessions[sessionID] = session
-}
-
-// Get retrieves a session
-func (s *SessionStore) Get(sessionID string) (*OAuthSession, bool) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	session, ok := s.sessions[sessionID]
-	if !ok {
-		return nil, false
-	}
-	// Check if expired
-	if time.Since(session.CreatedAt) > SessionTTL {
-		return nil, false
-	}
-	return session, true
-}
-
-// Delete removes a session
-func (s *SessionStore) Delete(sessionID string) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	delete(s.sessions, sessionID)
-}
-
-// Stop stops the cleanup goroutine
-func (s *SessionStore) Stop() {
-	s.stopOnce.Do(func() {
-		close(s.stopCh)
-	})
-}
-
-// cleanup removes expired sessions periodically
-func (s *SessionStore) cleanup() {
-	ticker := time.NewTicker(5 * time.Minute)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-s.stopCh:
-			return
-		case <-ticker.C:
-			s.mu.Lock()
-			for id, session := range s.sessions {
-				if time.Since(session.CreatedAt) > SessionTTL {
-					delete(s.sessions, id)
-				}
-			}
-			s.mu.Unlock()
-		}
-	}
-}
-
-// GenerateRandomBytes generates cryptographically secure random bytes
-func GenerateRandomBytes(n int) ([]byte, error) {
-	b := make([]byte, n)
-	_, err := rand.Read(b)
-	if err != nil {
-		return nil, err
-	}
-	return b, nil
-}
-
-// GenerateState generates a random state string for OAuth
-func GenerateState() (string, error) {
-	bytes, err := GenerateRandomBytes(32)
-	if err != nil {
-		return "", err
-	}
-	return hex.EncodeToString(bytes), nil
-}
-
-// GenerateSessionID generates a unique session ID
-func GenerateSessionID() (string, error) {
-	bytes, err := GenerateRandomBytes(16)
-	if err != nil {
-		return "", err
-	}
-	return hex.EncodeToString(bytes), nil
-}
-
-// GenerateCodeVerifier generates a PKCE code verifier (64 bytes -> hex for OpenAI)
-// OpenAI uses hex encoding instead of base64url
-func GenerateCodeVerifier() (string, error) {
-	bytes, err := GenerateRandomBytes(64)
-	if err != nil {
-		return "", err
-	}
-	return hex.EncodeToString(bytes), nil
-}
-
-// GenerateCodeChallenge generates a PKCE code challenge using S256 method
-// Uses base64url encoding as per RFC 7636
-func GenerateCodeChallenge(verifier string) string {
-	hash := sha256.Sum256([]byte(verifier))
-	return base64URLEncode(hash[:])
-}
-
-// base64URLEncode encodes bytes to base64url without padding
-func base64URLEncode(data []byte) string {
-	encoded := base64.URLEncoding.EncodeToString(data)
-	// Remove padding
-	return strings.TrimRight(encoded, "=")
-}
-
-// BuildAuthorizationURL builds the OpenAI OAuth authorization URL
-func BuildAuthorizationURL(state, codeChallenge, redirectURI string) string {
-	return BuildAuthorizationURLForPlatform(state, codeChallenge, redirectURI, OAuthPlatformOpenAI)
-}
-
-// BuildAuthorizationURLForPlatform builds authorization URL by platform.
-func BuildAuthorizationURLForPlatform(state, codeChallenge, redirectURI, platform string) string {
-	if redirectURI == "" {
-		redirectURI = DefaultRedirectURI
-	}
-
-	clientID, codexFlow := OAuthClientConfigByPlatform(platform)
-
-	params := url.Values{}
-	params.Set("response_type", "code")
-	params.Set("client_id", clientID)
-	params.Set("redirect_uri", redirectURI)
-	params.Set("scope", DefaultScopes)
-	params.Set("state", state)
-	params.Set("code_challenge", codeChallenge)
-	params.Set("code_challenge_method", "S256")
-	// OpenAI specific parameters
-	params.Set("id_token_add_organizations", "true")
-	if codexFlow {
-		params.Set("codex_cli_simplified_flow", "true")
-	}
-
-	return fmt.Sprintf("%s?%s", AuthorizeURL, params.Encode())
-}
-
-// OAuthClientConfigByPlatform returns oauth client_id and whether codex simplified flow should be enabled.
-func OAuthClientConfigByPlatform(platform string) (clientID string, codexFlow bool) {
-	return ClientID, true
-}
-
-// TokenRequest represents the token exchange request body
-type TokenRequest struct {
-	GrantType    string `json:"grant_type"`
-	ClientID     string `json:"client_id"`
-	Code         string `json:"code"`
-	RedirectURI  string `json:"redirect_uri"`
-	CodeVerifier string `json:"code_verifier"`
-}
 
 // TokenResponse represents the token response from OpenAI OAuth
 type TokenResponse struct {
@@ -271,20 +86,6 @@ type OrganizationClaim struct {
 	IsDefault bool   `json:"is_default"`
 }
 
-// BuildTokenRequest creates a token exchange request for OpenAI
-func BuildTokenRequest(code, codeVerifier, redirectURI string) *TokenRequest {
-	if redirectURI == "" {
-		redirectURI = DefaultRedirectURI
-	}
-	return &TokenRequest{
-		GrantType:    "authorization_code",
-		ClientID:     ClientID,
-		Code:         code,
-		RedirectURI:  redirectURI,
-		CodeVerifier: codeVerifier,
-	}
-}
-
 // BuildRefreshTokenRequest creates a refresh token request for OpenAI
 func BuildRefreshTokenRequest(refreshToken string) *RefreshTokenRequest {
 	return &RefreshTokenRequest{
@@ -293,17 +94,6 @@ func BuildRefreshTokenRequest(refreshToken string) *RefreshTokenRequest {
 		ClientID:     ClientID,
 		Scope:        RefreshScopes,
 	}
-}
-
-// ToFormData converts TokenRequest to URL-encoded form data
-func (r *TokenRequest) ToFormData() string {
-	params := url.Values{}
-	params.Set("grant_type", r.GrantType)
-	params.Set("client_id", r.ClientID)
-	params.Set("code", r.Code)
-	params.Set("redirect_uri", r.RedirectURI)
-	params.Set("code_verifier", r.CodeVerifier)
-	return params.Encode()
 }
 
 // ToFormData converts RefreshTokenRequest to URL-encoded form data

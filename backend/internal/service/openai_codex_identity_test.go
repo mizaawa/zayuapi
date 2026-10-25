@@ -162,61 +162,16 @@ func TestEnforceCodexIdentityHeadersWithAccountOverrideUA(t *testing.T) {
 		require.NotContains(t, h.Get("user-agent"), "0.125.0")
 	})
 
-	// 陈旧覆写 UA 同样跟随自动同步到的新版本，无需管理员重新编辑那条 UA。
-	t.Run("陈旧覆写 UA 跟随同步版本", func(t *testing.T) {
-		SetCodexCanonicalUserAgentResolver(func() string {
-			return "codex_cli_rs/0.200.1" + codexCLIUserAgentSuffix
-		})
-		t.Cleanup(func() { SetCodexCanonicalUserAgentResolver(nil) })
-
-		h := make(http.Header)
-		h.Set("originator", "codex_cli_rs")
-
-		enforceCodexIdentityHeadersWithUA(h, "codex-tui/0.125.0 (Mac OS X 14.0; arm64) iTerm")
-
-		require.Equal(t, "codex-tui", h.Get("originator"))
-		require.Equal(t, "codex-tui/0.200.1 (Mac OS X 14.0; arm64) iTerm", h.Get("user-agent"))
-		require.Equal(t, "0.200.1", h.Get("version"))
-	})
 }
 
 // 规范身份跟随注入的解析器（后台面板 UA / 自动同步版本号），无需重启或发版。
 //
 // 不得给本用例加 t.Parallel()：它改写进程级解析器。
-func TestEnforceCodexIdentityHeadersFollowsCanonicalResolver(t *testing.T) {
-	SetCodexCanonicalUserAgentResolver(func() string {
-		return "codex_cli_rs/0.200.1 (Ubuntu 22.4.0; x86_64) xterm-256color"
-	})
-	t.Cleanup(func() { SetCodexCanonicalUserAgentResolver(nil) })
-
-	h := make(http.Header)
-	h.Set("originator", "codex-tui")
-	h.Set("user-agent", "codex-tui/0.140.2 (Mac OS X 14.0; arm64) iTerm (codex-tui; 0.140.2)")
-
-	enforceCodexIdentityHeaders(h)
-
-	require.Equal(t, "codex_cli_rs", h.Get("originator"))
-	require.Equal(t, "codex_cli_rs/0.200.1 (Ubuntu 22.4.0; x86_64) xterm-256color", h.Get("user-agent"))
-	require.Equal(t, "0.200.1", h.Get("version"))
-}
 
 // 解析器返回非法值（配置被写坏、同步到异常内容）时必须回退到内置身份，
 // 绝不能把不可控内容拼进出站身份。
 //
 // 不得给本用例加 t.Parallel()：它改写进程级解析器。
-func TestEnforceCodexIdentityHeadersRejectsInvalidCanonicalUA(t *testing.T) {
-	SetCodexCanonicalUserAgentResolver(func() string { return "not-a-codex-client" })
-	t.Cleanup(func() { SetCodexCanonicalUserAgentResolver(nil) })
-
-	h := make(http.Header)
-	h.Set("originator", "codex_cli_rs")
-
-	enforceCodexIdentityHeaders(h)
-
-	require.Equal(t, openai.CodexDefaultOriginator, h.Get("originator"))
-	require.Equal(t, codexCLIUserAgent, h.Get("user-agent"))
-	require.Equal(t, codexCLIVersion, h.Get("version"))
-}
 
 // 开关是进程级快照，零值 Config（测试 / 工具手工构造，不经 viper）必须落在「强制统一开启」
 // 一侧，否则任意一处零值构造都会静默关掉全局保护。
@@ -314,11 +269,4 @@ func TestNormalizeCodexClientVersion(t *testing.T) {
 	require.Empty(t, NormalizeCodexClientVersion("0.146.0 (Ubuntu)"))
 	require.Empty(t, NormalizeCodexClientVersion("0.146.0\r\nX-Injected: 1"))
 	require.Empty(t, NormalizeCodexClientVersion("latest"))
-}
-
-func TestBuildCodexCLIUserAgent(t *testing.T) {
-	require.Equal(t, openai.CodexDefaultOriginator+"/0.200.1"+codexCLIUserAgentSuffix, buildCodexCLIUserAgent("0.200.1"))
-	// 非法版本号必须回退到内置 UA，不能拼出畸形身份。
-	require.Equal(t, codexCLIUserAgent, buildCodexCLIUserAgent("bogus version"))
-	require.Equal(t, codexCLIUserAgent, buildCodexCLIUserAgent(""))
 }

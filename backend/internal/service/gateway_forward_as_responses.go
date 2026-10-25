@@ -94,17 +94,9 @@ func (s *GatewayService) ForwardAsResponses(
 		return nil, fmt.Errorf("marshal anthropic request: %w", err)
 	}
 
-	// 6. Apply Claude Code mimicry for OAuth accounts (non-Claude-Code endpoints).
-	// OpenAI Responses 协议进来的请求永远不是 Claude Code 客户端，所以对 OAuth 账号
-	// 必须完整执行 /v1/messages 主路径上的伪装链路（system 重写 + normalize + metadata 注入），
-	// 否则会被 Anthropic 判为第三方应用并扣 extra usage。
-	// 见 applyClaudeCodeOAuthMimicryToBody 的 godoc。
+	// 6. Select compatibility headers for existing OAuth accounts.
 	isClaudeCode := false
 	shouldMimicClaudeCode := account.IsOAuth() && !isClaudeCode
-
-	if shouldMimicClaudeCode {
-		anthropicBody = s.applyClaudeCodeOAuthMimicryToBody(ctx, c, account, anthropicBody, anthropicReq.System, mappedModel)
-	}
 
 	// 7. Enforce cache_control block limit
 	anthropicBody = enforceCacheControlLimit(anthropicBody)
@@ -499,7 +491,6 @@ func (s *GatewayService) handleResponsesBufferedStreamingResponse(
 	// （如 new-api）按 Content-Type 误判为流式。
 	c.Writer.Header().Set("Content-Type", "application/json; charset=utf-8")
 	if respBytes, err := json.Marshal(responsesResp); err == nil {
-		respBytes = reverseToolNamesIfPresent(c, respBytes)
 		respBytes, _, err = apicompat.RestoreResponsesClientToolPayload(respBytes, clientToolMapping)
 		if err != nil {
 			return nil, fmt.Errorf("restore responses client tools: %w", err)
@@ -611,7 +602,6 @@ func (s *GatewayService) handleResponsesStreamingResponse(
 				)
 				continue
 			}
-			payload = reverseToolNamesIfPresent(c, payload)
 			payloads, _, err := clientToolRestorer.RestoreEvent(payload)
 			if err != nil {
 				logger.L().Warn("forward_as_responses stream: failed to restore client tools",
@@ -643,7 +633,7 @@ func (s *GatewayService) handleResponsesStreamingResponse(
 				if err != nil {
 					continue
 				}
-				out := string(reverseToolNamesIfPresent(c, []byte(sse)))
+				out := sse
 				fmt.Fprint(c.Writer, out) //nolint:errcheck
 			}
 			c.Writer.Flush()

@@ -121,188 +121,6 @@ func (s *sparkShadowRepoStub) ListWithFilters(_ context.Context, _ pagination.Pa
 //
 // Test 1 — 基本生成: ParentAccountID / QuotaDimension / 默认 spark model_mapping / 无 auth token / ProxyID 継承
 // Test 2 — 一母一影: 二度目の生成はエラー
-func TestCreateShadow(t *testing.T) {
-	ctx := context.Background()
-	repo := newSparkShadowRepoStub()
-	svc := &adminServiceImpl{accountRepo: repo}
-
-	proxyID := int64(7)
-	parent := &Account{
-		Name:     "p",
-		Platform: PlatformOpenAI,
-		Type:     AccountTypeOAuth,
-		Status:   StatusActive,
-		ProxyID:  &proxyID,
-		Credentials: map[string]any{
-			"refresh_token":      "RT",
-			"chatgpt_account_id": "org-x",
-		},
-	}
-	require.NoError(t, repo.Create(ctx, parent))
-
-	// Test 1: 基本生成
-	shadow, err := svc.CreateShadow(ctx, parent.ID, ShadowOptions{Name: "p-spark", Priority: 50})
-	require.NoError(t, err)
-	require.NotNil(t, shadow)
-	require.Equal(t, parent.ID, *shadow.ParentAccountID)
-	require.Equal(t, QuotaDimensionSpark, shadow.QuotaDimension)
-	require.Equal(t, defaultSparkShadowModelMapping(), shadow.Credentials["model_mapping"],
-		"影子默认带 spark 恒等变体映射")
-	require.Nil(t, shadow.Credentials["refresh_token"], "影子不得持有 auth token")
-	require.Nil(t, shadow.Credentials["access_token"], "影子不得持有 auth token")
-	require.Equal(t, parent.ProxyID, shadow.ProxyID)
-
-	// Test 2: 一母一影 — 再作成は拒否
-	_, err = svc.CreateShadow(ctx, parent.ID, ShadowOptions{Name: "dup"})
-	require.Error(t, err)
-}
-
-func TestCreateShadowInheritsParentEffectiveOpenAILongContextBillingValue(t *testing.T) {
-	tests := []struct {
-		name        string
-		parentExtra map[string]any
-		want        bool
-	}{
-		{name: "missing parent value defaults disabled", want: false},
-		{name: "explicit parent opt-out is inherited", parentExtra: map[string]any{openAILongContextBillingEnabledKey: false}, want: false},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			repo := newSparkShadowRepoStub()
-			svc := &adminServiceImpl{accountRepo: repo}
-			parent := &Account{
-				Name:        "parent",
-				Platform:    PlatformOpenAI,
-				Type:        AccountTypeOAuth,
-				Status:      StatusActive,
-				Credentials: map[string]any{"access_token": "token"},
-				Extra:       tt.parentExtra,
-			}
-			require.NoError(t, repo.Create(context.Background(), parent))
-
-			shadow, err := svc.CreateShadow(context.Background(), parent.ID, ShadowOptions{Name: "shadow"})
-
-			require.NoError(t, err)
-			require.Equal(t, tt.want, shadow.Extra[openAILongContextBillingEnabledKey])
-			require.Equal(t, tt.want, shadow.IsOpenAILongContextBillingEnabled())
-		})
-	}
-}
-
-// TestCreateShadow_BindGroups は BindGroups の後置呼び出しを検証する。
-// 影子账号が指定グループに属し、ListSchedulableByGroupID で取得可能であること。
-func TestCreateShadow_BindGroups(t *testing.T) {
-	ctx := context.Background()
-	repo := newSparkShadowRepoStub()
-	svc := &adminServiceImpl{accountRepo: repo}
-
-	parent := &Account{
-		Name:     "parent",
-		Platform: PlatformOpenAI,
-		Type:     AccountTypeOAuth,
-		Status:   StatusActive,
-		Credentials: map[string]any{
-			"chatgpt_account_id": "org-y",
-		},
-	}
-	require.NoError(t, repo.Create(ctx, parent))
-
-	const testGroupID = int64(42)
-	shadow, err := svc.CreateShadow(ctx, parent.ID, ShadowOptions{
-		Name:     "p-spark",
-		GroupIDs: []int64{testGroupID},
-	})
-	require.NoError(t, err)
-	require.NotNil(t, shadow)
-	require.Equal(t, []int64{testGroupID}, shadow.GroupIDs, "CreateShadow should backfill GroupIDs into the returned shadow")
-
-	accounts, err := repo.ListSchedulableByGroupID(ctx, testGroupID)
-	require.NoError(t, err)
-	require.Len(t, accounts, 1)
-	require.Equal(t, shadow.ID, accounts[0].ID)
-}
-
-// TestDeleteAccount_CascadeToShadow verifies that deleting a parent account also
-// deletes its spark shadow account.
-// TestCreateShadow_InheritsParentConcurrency 验证外审 F3:未指定并发时
-// 影子继承母账号并发,避免 Concurrency=0 被限流器当作"无限并发"。
-func TestCreateShadow_InheritsParentConcurrency(t *testing.T) {
-	ctx := context.Background()
-
-	t.Run("unspecified_inherits_parent", func(t *testing.T) {
-		repo := newSparkShadowRepoStub()
-		svc := &adminServiceImpl{accountRepo: repo}
-		parent := &Account{
-			Name: "conc-parent", Platform: PlatformOpenAI, Type: AccountTypeOAuth,
-			Status: StatusActive, Concurrency: 3,
-			Credentials: map[string]any{"chatgpt_account_id": "org-c"},
-		}
-		require.NoError(t, repo.Create(ctx, parent))
-
-		shadow, err := svc.CreateShadow(ctx, parent.ID, ShadowOptions{Name: "conc-shadow"})
-		require.NoError(t, err)
-		require.Equal(t, 3, shadow.Concurrency, "未指定并发应继承母账号(非 0=无限)")
-		require.Equal(t, 3, repo.accounts[shadow.ID].Concurrency)
-	})
-
-	t.Run("explicit_positive_kept", func(t *testing.T) {
-		repo := newSparkShadowRepoStub()
-		svc := &adminServiceImpl{accountRepo: repo}
-		parent := &Account{
-			Name: "conc-parent2", Platform: PlatformOpenAI, Type: AccountTypeOAuth,
-			Status: StatusActive, Concurrency: 3,
-			Credentials: map[string]any{"chatgpt_account_id": "org-c2"},
-		}
-		require.NoError(t, repo.Create(ctx, parent))
-
-		shadow, err := svc.CreateShadow(ctx, parent.ID, ShadowOptions{Name: "conc-shadow2", Concurrency: 2})
-		require.NoError(t, err)
-		require.Equal(t, 2, shadow.Concurrency, "显式正并发应保留")
-	})
-}
-
-// TestCreateShadow_InheritsParentPriorityWhenOmitted 验证外审第5轮 P1:未指定优先级时
-// 影子继承母账号 priority,而非直写 0 抢到最高调度优先级(repo SetPriority 绕过 ent 默认 50,
-// 调度比较数值越小越优先;前端一键创建只传 name 即触发该路径)。
-func TestCreateShadow_InheritsParentPriorityWhenOmitted(t *testing.T) {
-	ctx := context.Background()
-
-	t.Run("unspecified_inherits_parent", func(t *testing.T) {
-		repo := newSparkShadowRepoStub()
-		svc := &adminServiceImpl{accountRepo: repo}
-		parent := &Account{
-			Name: "prio-parent", Platform: PlatformOpenAI, Type: AccountTypeOAuth,
-			Status: StatusActive, Priority: 30,
-			Credentials: map[string]any{"chatgpt_account_id": "org-p"},
-		}
-		require.NoError(t, repo.Create(ctx, parent))
-
-		// 模拟前端一键创建:只传 name,priority 省略=0。
-		shadow, err := svc.CreateShadow(ctx, parent.ID, ShadowOptions{Name: "prio-shadow"})
-		require.NoError(t, err)
-		require.Equal(t, 30, shadow.Priority, "未指定优先级应继承母账号(而非 0=最高优先级)")
-		require.Equal(t, 30, repo.accounts[shadow.ID].Priority)
-	})
-
-	t.Run("explicit_positive_kept", func(t *testing.T) {
-		repo := newSparkShadowRepoStub()
-		svc := &adminServiceImpl{accountRepo: repo}
-		parent := &Account{
-			Name: "prio-parent2", Platform: PlatformOpenAI, Type: AccountTypeOAuth,
-			Status: StatusActive, Priority: 30,
-			Credentials: map[string]any{"chatgpt_account_id": "org-p2"},
-		}
-		require.NoError(t, repo.Create(ctx, parent))
-
-		shadow, err := svc.CreateShadow(ctx, parent.ID, ShadowOptions{Name: "prio-shadow2", Priority: 7})
-		require.NoError(t, err)
-		require.Equal(t, 7, shadow.Priority, "显式正优先级应保留")
-	})
-}
-
-// TestPersistAccountCredentials_SkipsShadow 验证外审第6轮 P1:凭据写入唯一汇聚点
-// persistAccountCredentials 对 spark 影子早返 no-op,任何上游路径都无法把凭据落到影子行。
 func TestPersistAccountCredentials_SkipsShadow(t *testing.T) {
 	ctx := context.Background()
 	repo := newSparkShadowRepoStub()
@@ -415,7 +233,7 @@ func TestResetAccountQuota_RejectsShadow(t *testing.T) {
 		Credentials: map[string]any{"chatgpt_account_id": "o"},
 	}
 	require.NoError(t, repo.Create(ctx, parent))
-	shadow, err := svc.CreateShadow(ctx, parent.ID, ShadowOptions{Name: "rq-shadow"})
+	shadow, err := svc.seedLegacyShadow(ctx, parent.ID, ShadowOptions{Name: "rq-shadow"})
 	require.NoError(t, err)
 
 	err = svc.ResetAccountQuota(ctx, shadow.ID)
@@ -438,97 +256,6 @@ func (s *sparkShadowGroupRepoStub) ListActiveByPlatform(_ context.Context, _ str
 
 // TestCreateShadow_DefaultGroupBinding 验证外审 F4:未指定 group_ids 时
 // 影子回落绑定 openai-default 组(否则无组、组内路由选不到)。
-func TestCreateShadow_DefaultGroupBinding(t *testing.T) {
-	ctx := context.Background()
-	repo := newSparkShadowRepoStub()
-	groupRepo := &sparkShadowGroupRepoStub{
-		groups: []Group{
-			{ID: 99, Name: PlatformOpenAI + "-default"},
-			{ID: 7, Name: "some-other-group"},
-		},
-	}
-	svc := &adminServiceImpl{accountRepo: repo, groupRepo: groupRepo}
-
-	parent := &Account{
-		Name: "grp-parent", Platform: PlatformOpenAI, Type: AccountTypeOAuth,
-		Status: StatusActive, Credentials: map[string]any{"chatgpt_account_id": "org-g"},
-	}
-	require.NoError(t, repo.Create(ctx, parent))
-
-	shadow, err := svc.CreateShadow(ctx, parent.ID, ShadowOptions{Name: "grp-shadow"})
-	require.NoError(t, err)
-	require.Equal(t, []int64{99}, repo.groupsOf[shadow.ID], "未指定分组应回落绑定 openai-default(id=99)")
-}
-
-// TestCreateShadow_InheritsParentGroups 验证外审 G1:未指定 group_ids 时
-// 影子继承母账号当前分组(而非仅 openai-default),以便母在自定义组时影子也可路由。
-func TestCreateShadow_InheritsParentGroups(t *testing.T) {
-	ctx := context.Background()
-	repo := newSparkShadowRepoStub()
-	// groupRepo 故意提供 openai-default,以证明「继承母分组」优先于「回落 openai-default」。
-	groupRepo := &sparkShadowGroupRepoStub{groups: []Group{{ID: 99, Name: PlatformOpenAI + "-default"}}}
-	svc := &adminServiceImpl{accountRepo: repo, groupRepo: groupRepo}
-
-	parent := &Account{
-		Name: "grp-parent", Platform: PlatformOpenAI, Type: AccountTypeOAuth,
-		Status: StatusActive, GroupIDs: []int64{11, 22},
-		Credentials: map[string]any{"chatgpt_account_id": "org-grp"},
-	}
-	require.NoError(t, repo.Create(ctx, parent))
-
-	shadow, err := svc.CreateShadow(ctx, parent.ID, ShadowOptions{Name: "grp-shadow"})
-	require.NoError(t, err)
-	require.Equal(t, []int64{11, 22}, repo.groupsOf[shadow.ID], "未指定分组应继承母账号分组,而非 openai-default")
-}
-
-// TestCreateShadow_RejectsShadowAsParent 验证外审 G6:不允许把影子当母创建二级影子。
-func TestCreateShadow_RejectsShadowAsParent(t *testing.T) {
-	ctx := context.Background()
-	repo := newSparkShadowRepoStub()
-	svc := &adminServiceImpl{accountRepo: repo}
-
-	parent := &Account{
-		Name: "real-parent", Platform: PlatformOpenAI, Type: AccountTypeOAuth,
-		Status: StatusActive, Credentials: map[string]any{"chatgpt_account_id": "org-x"},
-	}
-	require.NoError(t, repo.Create(ctx, parent))
-	firstShadow, err := svc.CreateShadow(ctx, parent.ID, ShadowOptions{Name: "first-shadow"})
-	require.NoError(t, err)
-
-	// 把一级影子当母 → 必须被拒(400)。
-	_, err = svc.CreateShadow(ctx, firstShadow.ID, ShadowOptions{Name: "second-shadow"})
-	require.Error(t, err)
-	require.Equal(t, http.StatusBadRequest, infraerrors.Code(err), "影子当母应返回 400")
-}
-
-// TestCreateShadow_StructuredErrors 验证外审 G3:可预期业务错误返回结构化 4xx 而非 500。
-func TestCreateShadow_StructuredErrors(t *testing.T) {
-	ctx := context.Background()
-
-	t.Run("non_oauth_parent_400", func(t *testing.T) {
-		repo := newSparkShadowRepoStub()
-		svc := &adminServiceImpl{accountRepo: repo}
-		parent := &Account{Name: "apikey-parent", Platform: PlatformOpenAI, Type: AccountTypeAPIKey, Status: StatusActive}
-		require.NoError(t, repo.Create(ctx, parent))
-		_, err := svc.CreateShadow(ctx, parent.ID, ShadowOptions{Name: "s"})
-		require.Error(t, err)
-		require.Equal(t, http.StatusBadRequest, infraerrors.Code(err), "非 OAuth 母账号应 400")
-	})
-
-	t.Run("duplicate_409", func(t *testing.T) {
-		repo := newSparkShadowRepoStub()
-		svc := &adminServiceImpl{accountRepo: repo}
-		parent := &Account{Name: "p", Platform: PlatformOpenAI, Type: AccountTypeOAuth, Status: StatusActive, Credentials: map[string]any{"chatgpt_account_id": "o"}}
-		require.NoError(t, repo.Create(ctx, parent))
-		_, err := svc.CreateShadow(ctx, parent.ID, ShadowOptions{Name: "s1"})
-		require.NoError(t, err)
-		_, err = svc.CreateShadow(ctx, parent.ID, ShadowOptions{Name: "s2"})
-		require.Error(t, err)
-		require.Equal(t, http.StatusConflict, infraerrors.Code(err), "重复创建应 409")
-	})
-}
-
-// TestUpdateAccount_RejectsTypeChangeOnShadow 验证外审 G7:影子 type 不可被普通更新改坏。
 func TestUpdateAccount_RejectsTypeChangeOnShadow(t *testing.T) {
 	ctx := context.Background()
 	repo := newSparkShadowRepoStub()
@@ -538,7 +265,7 @@ func TestUpdateAccount_RejectsTypeChangeOnShadow(t *testing.T) {
 		Status: StatusActive, Credentials: map[string]any{"chatgpt_account_id": "org-t"},
 	}
 	require.NoError(t, repo.Create(ctx, parent))
-	shadow, err := svc.CreateShadow(ctx, parent.ID, ShadowOptions{Name: "type-shadow"})
+	shadow, err := svc.seedLegacyShadow(ctx, parent.ID, ShadowOptions{Name: "type-shadow"})
 	require.NoError(t, err)
 
 	// 试图把影子 type 改成 apikey → 必须被拒(400)。
@@ -563,7 +290,7 @@ func TestBulkUpdateAccounts_RejectsCredentialWriteToShadow(t *testing.T) {
 		Status: StatusActive, Credentials: map[string]any{"chatgpt_account_id": "org-b", "access_token": "t"},
 	}
 	require.NoError(t, repo.Create(ctx, parent))
-	shadow, err := svc.CreateShadow(ctx, parent.ID, ShadowOptions{Name: "bulk-shadow"})
+	shadow, err := svc.seedLegacyShadow(ctx, parent.ID, ShadowOptions{Name: "bulk-shadow"})
 	require.NoError(t, err)
 
 	_, err = svc.BulkUpdateAccounts(ctx, &BulkUpdateAccountsInput{
@@ -591,7 +318,7 @@ func TestDeleteAccount_CascadeToShadow(t *testing.T) {
 	}
 	require.NoError(t, repo.Create(ctx, parent))
 
-	shadow, err := svc.CreateShadow(ctx, parent.ID, ShadowOptions{Name: "cascade-shadow"})
+	shadow, err := svc.seedLegacyShadow(ctx, parent.ID, ShadowOptions{Name: "cascade-shadow"})
 	require.NoError(t, err)
 	shadowID := shadow.ID
 
@@ -629,7 +356,7 @@ func TestUpdateAccount_PropagatesProxyToShadow(t *testing.T) {
 	}
 	require.NoError(t, repo.Create(ctx, parent))
 
-	shadow, err := svc.CreateShadow(ctx, parent.ID, ShadowOptions{Name: "proxy-shadow"})
+	shadow, err := svc.seedLegacyShadow(ctx, parent.ID, ShadowOptions{Name: "proxy-shadow"})
 	require.NoError(t, err)
 	shadowID := shadow.ID
 
@@ -663,7 +390,7 @@ func TestUpdateAccount_RejectsCredentialWriteToShadow(t *testing.T) {
 	}
 	require.NoError(t, repo.Create(ctx, parent))
 
-	shadow, err := svc.CreateShadow(ctx, parent.ID, ShadowOptions{Name: "cred-shadow"})
+	shadow, err := svc.seedLegacyShadow(ctx, parent.ID, ShadowOptions{Name: "cred-shadow"})
 	require.NoError(t, err)
 	require.Empty(t, shadow.GetOpenAIAccessToken(), "前提:影子创建后不持有 access_token")
 	require.Empty(t, shadow.GetOpenAIRefreshToken(), "前提:影子创建后不持有 refresh_token")
@@ -707,7 +434,7 @@ func TestBulkUpdateAccounts_PropagatesProxyToShadow(t *testing.T) {
 	}
 	require.NoError(t, repo.Create(ctx, parent))
 
-	shadow, err := svc.CreateShadow(ctx, parent.ID, ShadowOptions{Name: "bulk-shadow"})
+	shadow, err := svc.seedLegacyShadow(ctx, parent.ID, ShadowOptions{Name: "bulk-shadow"})
 	require.NoError(t, err)
 	shadowID := shadow.ID
 
@@ -779,84 +506,6 @@ func (s *sparkShadowValidatingGroupRepoStub) ExistsByIDs(_ context.Context, ids 
 
 // TestCreateShadow_DefaultsNameFromParent 验证外审 E/P2:空 name 不应 500,
 // 而是默认 "<母账号名> (Spark)"。
-func TestCreateShadow_DefaultsNameFromParent(t *testing.T) {
-	ctx := context.Background()
-	repo := newSparkShadowRepoStub()
-	svc := &adminServiceImpl{accountRepo: repo}
-	parent := &Account{
-		Name: "mum", Platform: PlatformOpenAI, Type: AccountTypeOAuth,
-		Status: StatusActive, Credentials: map[string]any{"chatgpt_account_id": "o"},
-	}
-	require.NoError(t, repo.Create(ctx, parent))
-
-	shadow, err := svc.CreateShadow(ctx, parent.ID, ShadowOptions{Name: "   "})
-	require.NoError(t, err, "空/空白 name 不应 500,应默认命名")
-	require.Equal(t, "mum (Spark)", shadow.Name)
-}
-
-// TestCreateShadow_ConcurrentCreateReturns409 验证外审 A/P1:并发竞态下预查放行后
-// Create 撞唯一索引,应映射结构化 409 而非裸 500。
-func TestCreateShadow_ConcurrentCreateReturns409(t *testing.T) {
-	ctx := context.Background()
-	base := newSparkShadowRepoStub()
-	repo := &raceCreateRepoStub{sparkShadowRepoStub: base}
-	svc := &adminServiceImpl{accountRepo: repo}
-	parent := &Account{
-		Name: "p", Platform: PlatformOpenAI, Type: AccountTypeOAuth,
-		Status: StatusActive, Credentials: map[string]any{"chatgpt_account_id": "o"},
-	}
-	require.NoError(t, base.Create(ctx, parent))
-
-	_, err := svc.CreateShadow(ctx, parent.ID, ShadowOptions{Name: "s"})
-	require.Error(t, err)
-	require.Equal(t, http.StatusConflict, infraerrors.Code(err), "并发竞态撞唯一索引应映射 409 而非 500")
-}
-
-// TestCreateShadow_InvalidGroupRejectedNoOrphan 验证外审 C/P1:显式无效分组应在
-// 创建前被拒,不留孤儿影子。
-func TestCreateShadow_InvalidGroupRejectedNoOrphan(t *testing.T) {
-	ctx := context.Background()
-	repo := newSparkShadowRepoStub()
-	groupRepo := &sparkShadowValidatingGroupRepoStub{existing: map[int64]bool{7: true}}
-	svc := &adminServiceImpl{accountRepo: repo, groupRepo: groupRepo}
-	parent := &Account{
-		Name: "p", Platform: PlatformOpenAI, Type: AccountTypeOAuth,
-		Status: StatusActive, Credentials: map[string]any{"chatgpt_account_id": "o"},
-	}
-	require.NoError(t, repo.Create(ctx, parent))
-
-	_, err := svc.CreateShadow(ctx, parent.ID, ShadowOptions{Name: "s", GroupIDs: []int64{999}})
-	require.Error(t, err, "无效分组应在创建前被拒")
-
-	shadows, qerr := repo.ListShadowsByParent(ctx, parent.ID)
-	require.NoError(t, qerr)
-	require.Empty(t, shadows, "无效分组应在创建前被拒,不应建出影子")
-}
-
-// TestCreateShadow_BindFailureRollsBackShadow 验证外审 C/P1:绑组失败时补偿删除
-// 刚建的影子,不留孤儿(否则一母一影唯一索引会挡住重试)。
-func TestCreateShadow_BindFailureRollsBackShadow(t *testing.T) {
-	ctx := context.Background()
-	base := newSparkShadowRepoStub()
-	repo := &bindFailRepoStub{sparkShadowRepoStub: base}
-	groupRepo := &sparkShadowValidatingGroupRepoStub{existing: map[int64]bool{7: true}}
-	svc := &adminServiceImpl{accountRepo: repo, groupRepo: groupRepo}
-	parent := &Account{
-		Name: "p", Platform: PlatformOpenAI, Type: AccountTypeOAuth,
-		Status: StatusActive, Credentials: map[string]any{"chatgpt_account_id": "o"},
-	}
-	require.NoError(t, base.Create(ctx, parent))
-
-	_, err := svc.CreateShadow(ctx, parent.ID, ShadowOptions{Name: "s", GroupIDs: []int64{7}})
-	require.Error(t, err, "绑组失败应返回错误")
-
-	shadows, qerr := base.ListShadowsByParent(ctx, parent.ID)
-	require.NoError(t, qerr)
-	require.Empty(t, shadows, "绑组失败后应补偿删除影子,不留孤儿")
-}
-
-// TestUpdateAccount_RejectsParentTypeChangeWithShadow 验证外审 D/P1:母账号有 spark 影子时,
-// 不能把 type 改出 OpenAI OAuth(否则影子被调度后透传凭据解析必失败)。
 func TestUpdateAccount_RejectsParentTypeChangeWithShadow(t *testing.T) {
 	ctx := context.Background()
 	repo := newSparkShadowRepoStub()
@@ -866,7 +515,7 @@ func TestUpdateAccount_RejectsParentTypeChangeWithShadow(t *testing.T) {
 		Status: StatusActive, Credentials: map[string]any{"chatgpt_account_id": "o"},
 	}
 	require.NoError(t, repo.Create(ctx, parent))
-	_, err := svc.CreateShadow(ctx, parent.ID, ShadowOptions{Name: "s"})
+	_, err := svc.seedLegacyShadow(ctx, parent.ID, ShadowOptions{Name: "s"})
 	require.NoError(t, err)
 
 	_, err = svc.UpdateAccount(ctx, parent.ID, &UpdateAccountInput{Type: AccountTypeAPIKey})
@@ -892,7 +541,7 @@ func TestUpdateAccount_IgnoresProxyChangeOnShadow(t *testing.T) {
 		Credentials: map[string]any{"chatgpt_account_id": "o"},
 	}
 	require.NoError(t, repo.Create(ctx, parent))
-	shadow, err := svc.CreateShadow(ctx, parent.ID, ShadowOptions{Name: "s"})
+	shadow, err := svc.seedLegacyShadow(ctx, parent.ID, ShadowOptions{Name: "s"})
 	require.NoError(t, err)
 	require.NotNil(t, repo.accounts[shadow.ID].ProxyID)
 	require.Equal(t, parentProxy, *repo.accounts[shadow.ID].ProxyID, "前提:影子继承母 proxy=7")
@@ -1016,7 +665,7 @@ func TestBulkUpdateAccounts_RejectsProxyChangeOnShadow(t *testing.T) {
 		Credentials: map[string]any{"chatgpt_account_id": "o"},
 	}
 	require.NoError(t, repo.Create(ctx, parent))
-	shadow, err := svc.CreateShadow(ctx, parent.ID, ShadowOptions{Name: "s"})
+	shadow, err := svc.seedLegacyShadow(ctx, parent.ID, ShadowOptions{Name: "s"})
 	require.NoError(t, err)
 
 	newProxy := int64(42)

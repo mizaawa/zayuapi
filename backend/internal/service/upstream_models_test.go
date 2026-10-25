@@ -299,6 +299,23 @@ func TestBuildAntigravityAPIKeyModelsRequestRejectsOfficialCloudCodeBase(t *test
 	require.Contains(t, syncErr.SafeMessage(), "compatible gateway")
 }
 
+func TestAntigravityAPIKeyEndpointsUseOnePrefix(t *testing.T) {
+	for _, base := range []string{"https://gateway.example.com", "https://gateway.example.com/", "https://gateway.example.com/antigravity", "https://gateway.example.com/antigravity/"} {
+		t.Run(base, func(t *testing.T) {
+			account := &Account{Platform: PlatformAntigravity, Type: AccountTypeAPIKey, Credentials: map[string]any{"base_url": base, "api_key": "fixture-key"}}
+			require.Equal(t, "https://gateway.example.com/antigravity", account.GetBaseURL())
+			require.Equal(t, "https://gateway.example.com/antigravity", account.GetGeminiBaseURL("unused"))
+			svc := &AccountTestService{cfg: upstreamModelSyncTestConfig()}
+			req, err := svc.buildAntigravityAPIKeyModelsRequest(context.Background(), account)
+			require.NoError(t, err)
+			require.Equal(t, "https://gateway.example.com/antigravity/v1/models", req.URL.String())
+			gemini, err := svc.buildGeminiAPIKeyRequest(context.Background(), account, "gemini-test", []byte("{}"))
+			require.NoError(t, err)
+			require.Equal(t, "/antigravity/v1beta/models/gemini-test:streamGenerateContent", gemini.URL.Path)
+		})
+	}
+}
+
 func TestFetchUpstreamSupportedModelsAntigravityRelayUsesConfiguredEndpoint(t *testing.T) {
 	t.Parallel()
 

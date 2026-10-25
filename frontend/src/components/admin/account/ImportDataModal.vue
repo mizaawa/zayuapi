@@ -249,6 +249,22 @@ const isValidDataPayload = (payload: unknown): payload is AdminDataPayload => {
   return Array.isArray(candidate.proxies) && Array.isArray(candidate.accounts)
 }
 
+const API_KEY_PLATFORMS = ['anthropic', 'openai', 'gemini', 'antigravity', 'grok', 'custom']
+
+const isValidApiKeyAccount = (value: unknown): boolean => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false
+  const account = value as Record<string, unknown>
+  if (account.type !== 'apikey' || !API_KEY_PLATFORMS.includes(account.platform as string)) return false
+  const credentials = account.credentials
+  if (!credentials || typeof credentials !== 'object' || Array.isArray(credentials)) return false
+  const fields = credentials as Record<string, unknown>
+  if (typeof fields.api_key !== 'string' || !fields.api_key.trim()) return false
+  if (account.platform === 'antigravity' || account.platform === 'custom') {
+    return typeof fields.base_url === 'string' && !!fields.base_url.trim()
+  }
+  return true
+}
+
 const mergeDataPayloads = (payloads: AdminDataPayload[]): AdminDataPayload => {
   const [firstPayload] = payloads
   if (payloads.length === 1 && firstPayload) return firstPayload
@@ -287,6 +303,10 @@ const handleImport = async () => {
       }
       if (!isValidDataPayload(parsed)) {
         appStore.showError(t('admin.accounts.dataImportInvalidFile', { name: sourceFile.name }))
+        return
+      }
+      if (!parsed.accounts.every(isValidApiKeyAccount)) {
+        appStore.showError(t('admin.accounts.dataImportApiKeyOnly', { name: sourceFile.name }))
         return
       }
       dataPayloads.push(parsed)

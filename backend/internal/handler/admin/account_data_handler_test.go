@@ -66,7 +66,6 @@ func setupAccountDataRouter() (*gin.Engine, *stubAdminService) {
 		nil,
 		nil,
 		nil,
-		nil,
 	)
 
 	router.GET("/api/v1/admin/accounts/data", h.ExportData)
@@ -295,8 +294,8 @@ func TestImportDataReusesProxyAndSkipsDefaultGroup(t *testing.T) {
 				{
 					"name":        "acc",
 					"platform":    service.PlatformOpenAI,
-					"type":        service.AccountTypeOAuth,
-					"credentials": map[string]any{"token": "x"},
+					"type":        service.AccountTypeAPIKey,
+					"credentials": map[string]any{"api_key": "x"},
 					"proxy_key":   "socks5|1.2.3.4|1080|u|p",
 					"concurrency": 3,
 					"priority":    50,

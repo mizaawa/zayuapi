@@ -320,50 +320,6 @@ func shouldFallbackToNextURL(err error, statusCode int) bool {
 		statusCode >= 500
 }
 
-// ExchangeCode 用 authorization code 交换 token
-func (c *Client) ExchangeCode(ctx context.Context, code, codeVerifier string) (*TokenResponse, error) {
-	clientSecret, err := getClientSecret()
-	if err != nil {
-		return nil, err
-	}
-
-	params := url.Values{}
-	params.Set("client_id", ClientID)
-	params.Set("client_secret", clientSecret)
-	params.Set("code", code)
-	params.Set("redirect_uri", RedirectURI)
-	params.Set("grant_type", "authorization_code")
-	params.Set("code_verifier", codeVerifier)
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, TokenURL, strings.NewReader(params.Encode()))
-	if err != nil {
-		return nil, fmt.Errorf("创建请求失败: %w", err)
-	}
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-
-	resp, err := servertiming.Do(c.httpClient, req)
-	if err != nil {
-		return nil, fmt.Errorf("token 交换请求失败: %w", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	bodyBytes, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("读取响应失败: %w", err)
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("token 交换失败 (HTTP %d): %s", resp.StatusCode, string(bodyBytes))
-	}
-
-	var tokenResp TokenResponse
-	if err := json.Unmarshal(bodyBytes, &tokenResp); err != nil {
-		return nil, fmt.Errorf("token 解析失败: %w", err)
-	}
-
-	return &tokenResp, nil
-}
-
 // RefreshToken 刷新 access_token
 func (c *Client) RefreshToken(ctx context.Context, refreshToken string) (*TokenResponse, error) {
 	clientSecret, err := getClientSecret()
@@ -442,7 +398,7 @@ func (c *Client) GetUserInfo(ctx context.Context, accessToken string) (*UserInfo
 func (c *Client) LoadCodeAssist(ctx context.Context, accessToken string) (*LoadCodeAssistResponse, map[string]any, error) {
 	reqBody := LoadCodeAssistRequest{}
 	reqBody.Metadata.IDEType = "ANTIGRAVITY"
-	reqBody.Metadata.IDEVersion = GetUserAgentVersionForContext(ctx)
+	reqBody.Metadata.IDEVersion = GetDefaultUserAgentVersion()
 	reqBody.Metadata.IDEName = "antigravity"
 
 	bodyBytes, err := json.Marshal(reqBody)

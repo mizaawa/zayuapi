@@ -992,7 +992,7 @@ func TestOpenAIGatewayService_OAuthLegacy_CompositeCodexUAUsesCodexOriginator(t 
 	require.NotNil(t, upstream.lastReq)
 	// 浏览器型复合 UA 被替换为默认 Codex TUI UA，
 	// originator 随最终 UA 配套（issue #3901）。
-	require.Equal(t, DefaultOpenAICodexUserAgent, upstream.lastReq.Header.Get("User-Agent"))
+	require.Equal(t, codexCLIUserAgent, upstream.lastReq.Header.Get("User-Agent"))
 	require.Equal(t, openai.CodexDefaultOriginator, upstream.lastReq.Header.Get("originator"))
 	require.NotEqual(t, "opencode", upstream.lastReq.Header.Get("originator"))
 }
@@ -1878,102 +1878,6 @@ func TestOpenAIGatewayService_OAuthPassthrough_CodexTuiIdentityUnified(t *testin
 	require.Equal(t, codexCLIUserAgent, upstream.lastReq.Header.Get("User-Agent"))
 	require.Equal(t, openai.CodexDefaultOriginator, upstream.lastReq.Header.Get("originator"))
 	require.Equal(t, codexCLIVersion, upstream.lastReq.Header.Get("version"))
-}
-
-func TestOpenAIGatewayService_CodexCLIOnly_RejectsNonCodexClient(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-
-	rec := httptest.NewRecorder()
-	c, _ := gin.CreateTestContext(rec)
-	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", bytes.NewReader(nil))
-	c.Request.Header.Set("User-Agent", "curl/8.0")
-
-	inputBody := []byte(`{"model":"gpt-5.2","stream":false,"store":true,"input":[{"type":"text","text":"hi"}]}`)
-
-	svc := &OpenAIGatewayService{
-		cfg: &config.Config{Gateway: config.GatewayConfig{ForceCodexCLI: false}},
-	}
-
-	account := &Account{
-		ID:             123,
-		Name:           "acc",
-		Platform:       PlatformOpenAI,
-		Type:           AccountTypeOAuth,
-		Concurrency:    1,
-		Credentials:    map[string]any{"access_token": "oauth-token", "chatgpt_account_id": "chatgpt-acc"},
-		Extra:          map[string]any{"openai_passthrough": true, "codex_cli_only": true},
-		Status:         StatusActive,
-		Schedulable:    true,
-		RateMultiplier: f64p(1),
-	}
-
-	_, err := svc.Forward(context.Background(), c, account, inputBody)
-	require.Error(t, err)
-	require.Equal(t, http.StatusForbidden, rec.Code)
-	require.Contains(t, rec.Body.String(), "Codex official clients")
-}
-
-func TestOpenAIGatewayService_CodexCLIOnly_AllowOfficialClientFamilies(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-
-	tests := []struct {
-		name       string
-		ua         string
-		originator string
-	}{
-		{name: "codex_cli_rs", ua: "codex_cli_rs/0.99.0", originator: ""},
-		{name: "codex_vscode", ua: "codex_vscode/1.0.0", originator: ""},
-		{name: "codex_app", ua: "codex_app/2.1.0", originator: ""},
-		// req②：codex_cli_only 下 UA 须能解析出引擎版本；originator 命中路径用可解析的非官方前缀 UA。
-		{name: "originator_codex_chatgpt_desktop", ua: "myterm/0.141.0", originator: "codex_chatgpt_desktop"},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			rec := httptest.NewRecorder()
-			c, _ := gin.CreateTestContext(rec)
-			c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", bytes.NewReader(nil))
-			c.Request.Header.Set("User-Agent", tt.ua)
-			if tt.originator != "" {
-				c.Request.Header.Set("originator", tt.originator)
-			}
-			// 引擎指纹头：真实官方客户端必带。本测试用 nil settingService 构造 gateway，
-			// detectCodexClientRestriction 会兜底默认种子指纹信号（只勾 x-codex-），与生产默认策略一致，
-			// 故官方家族也须携带 x-codex-* 才能过门（对齐 TestDetect_EngineFingerprintSignals）。
-			c.Request.Header.Set("x-codex-window-id", "1")
-
-			inputBody := []byte(`{"model":"gpt-5.2","stream":false,"store":true,"input":[{"type":"text","text":"hi"}]}`)
-
-			resp := &http.Response{
-				StatusCode: http.StatusOK,
-				Header:     http.Header{"Content-Type": []string{"text/event-stream"}, "x-request-id": []string{"rid"}},
-				Body:       io.NopCloser(strings.NewReader("data: [DONE]\n\n")),
-			}
-			upstream := &httpUpstreamRecorder{resp: resp}
-
-			svc := &OpenAIGatewayService{
-				cfg:          &config.Config{Gateway: config.GatewayConfig{ForceCodexCLI: false}},
-				httpUpstream: upstream,
-			}
-
-			account := &Account{
-				ID:             123,
-				Name:           "acc",
-				Platform:       PlatformOpenAI,
-				Type:           AccountTypeOAuth,
-				Concurrency:    1,
-				Credentials:    map[string]any{"access_token": "oauth-token", "chatgpt_account_id": "chatgpt-acc"},
-				Extra:          map[string]any{"openai_passthrough": true, "codex_cli_only": true},
-				Status:         StatusActive,
-				Schedulable:    true,
-				RateMultiplier: f64p(1),
-			}
-
-			_, err := svc.Forward(context.Background(), c, account, inputBody)
-			require.NoError(t, err)
-			require.NotNil(t, upstream.lastReq)
-		})
-	}
 }
 
 func TestOpenAIGatewayService_OAuthPassthrough_StreamingSetsFirstTokenMs(t *testing.T) {

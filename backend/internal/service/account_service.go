@@ -219,6 +219,9 @@ func NewAccountService(accountRepo AccountRepository, groupRepo GroupRepository)
 
 // Create 创建账号
 func (s *AccountService) Create(ctx context.Context, req CreateAccountRequest) (*Account, error) {
+	if err := ValidateNewAccountCredentials(req.Platform, req.Type, req.Credentials); err != nil {
+		return nil, err
+	}
 	if err := validateCustomAccountCredentials(req.Platform, req.Type, req.Credentials); err != nil {
 		return nil, err
 	}

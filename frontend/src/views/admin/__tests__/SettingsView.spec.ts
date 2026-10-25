@@ -1932,100 +1932,44 @@ describe("admin SettingsView payment visible method controls", () => {
     );
   });
 
-  it("submits Anthropic cache TTL injection gateway setting", async () => {
-    getSettings.mockResolvedValueOnce({
-      ...baseSettingsResponse,
+  it("removes OAuth-only gateway panels and never submits legacy settings", async () => {
+    const legacySettings = {
+      enable_fingerprint_unification: true,
+      enable_metadata_passthrough: true,
+      enable_cch_signing: true,
+      enable_claude_oauth_system_prompt_injection: true,
+      claude_oauth_system_prompt: "legacy",
+      claude_oauth_system_prompt_blocks: "[]",
       enable_anthropic_cache_ttl_1h_injection: true,
-    });
-
-    const wrapper = mountView();
-
-    await flushPromises();
-    await wrapper.find("form").trigger("submit.prevent");
-    await flushPromises();
-
-    expect(updateSettings).toHaveBeenCalledTimes(1);
-    expect(updateSettings).toHaveBeenCalledWith(
-      expect.objectContaining({
-        enable_anthropic_cache_ttl_1h_injection: true,
-      }),
-    );
-  });
-
-  it("submits message cache_control rewrite gateway setting", async () => {
-    getSettings.mockResolvedValueOnce({
-      ...baseSettingsResponse,
       rewrite_message_cache_control: true,
-    });
-
-    const wrapper = mountView();
-
-    await flushPromises();
-    await wrapper.find("form").trigger("submit.prevent");
-    await flushPromises();
-
-    expect(updateSettings).toHaveBeenCalledTimes(1);
-    expect(updateSettings).toHaveBeenCalledWith(
-      expect.objectContaining({
-        rewrite_message_cache_control: true,
-      }),
-    );
-  });
-
-  it("submits Claude OAuth system prompt injection gateway settings", async () => {
-    const blocks = `[{"type":"text","text":"custom block","cache_control":true}]`;
-    getSettings.mockResolvedValueOnce({
-      ...baseSettingsResponse,
-      enable_claude_oauth_system_prompt_injection: false,
-      claude_oauth_system_prompt_blocks: blocks,
-    });
-
-    const wrapper = mountView();
-
-    await flushPromises();
-    await wrapper.find("form").trigger("submit.prevent");
-    await flushPromises();
-
-    expect(updateSettings).toHaveBeenCalledTimes(1);
-    expect(updateSettings).toHaveBeenCalledWith(
-      expect.objectContaining({
-        enable_claude_oauth_system_prompt_injection: false,
-      }),
-    );
-    const payload = updateSettings.mock.calls[0][0] as {
-      claude_oauth_system_prompt_blocks: string;
-    };
-    expect(JSON.parse(payload.claude_oauth_system_prompt_blocks)).toEqual([
-      {
-        enabled: true,
-        type: "text",
-        text: "custom block",
-        cache_control: {
-          type: "ephemeral",
-          ttl: "5m",
-        },
-      },
-    ]);
-  });
-
-  it("submits Antigravity user agent version gateway setting", async () => {
-    getSettings.mockResolvedValueOnce({
-      ...baseSettingsResponse,
+      enable_client_dateline_normalization: true,
       antigravity_user_agent_version: "1.23.2",
-    });
-
+      openai_codex_user_agent: "legacy",
+      openai_codex_client_version: "0.146.0",
+      openai_codex_client_version_synced: "0.146.0",
+      openai_codex_version_auto_sync_enabled: true,
+      min_codex_version: "0.100.0",
+      max_codex_version: "0.200.0",
+      codex_cli_only_blacklist: "[]",
+      codex_cli_only_whitelist: "[]",
+      codex_cli_only_allow_app_server_clients: true,
+      codex_cli_only_engine_fingerprint_signals: "[]",
+    };
+    getSettings.mockResolvedValueOnce({ ...baseSettingsResponse, ...legacySettings });
     const wrapper = mountView();
-
     await flushPromises();
+    await openGatewayTab(wrapper);
+    expect(wrapper.text()).not.toContain("admin.settings.gatewayForwarding");
+    expect(wrapper.find('[data-testid="upstream-billing-probe-settings"]').exists()).toBe(true);
+    expect(wrapper.text()).toContain("admin.settings.webSearchEmulation.title");
     await wrapper.find("form").trigger("submit.prevent");
     await flushPromises();
-
     expect(updateSettings).toHaveBeenCalledTimes(1);
-    expect(updateSettings).toHaveBeenCalledWith(
-      expect.objectContaining({
-        antigravity_user_agent_version: "1.23.2",
-      }),
-    );
+    const payload = updateSettings.mock.calls[0][0];
+    for (const key of Object.keys(legacySettings)) {
+      expect(payload).not.toHaveProperty(key);
+    }
+    expect(payload).toHaveProperty("min_claude_code_version");
   });
 
   it("updates provider enablement immediately and reloads providers", async () => {

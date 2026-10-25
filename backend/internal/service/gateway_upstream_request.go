@@ -10,7 +10,6 @@ import (
 	"strings"
 
 	"github.com/Wei-Shaw/sub2api/internal/pkg/claude"
-	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
 	"github.com/Wei-Shaw/sub2api/internal/util/urlvalidator"
 	"github.com/google/uuid"
 	"github.com/tidwall/gjson"
@@ -57,53 +56,15 @@ func (s *GatewayService) buildUpstreamRequest(ctx context.Context, c *gin.Contex
 		clientHeaders = c.Request.Header
 	}
 
-	// OAuth账号：应用统一指纹和metadata重写（受设置开关控制）
-	var fingerprint *Fingerprint
-	enableFP, enableMPT := true, false
-	if s.settingService != nil {
-		enableFP, enableMPT, _ = s.settingService.GetGatewayForwardingSettings(ctx)
-	}
-	if account.IsOAuth() && s.identityService != nil {
-		// 1. 获取或创建指纹（包含随机生成的ClientID）
-		fp, err := s.identityService.GetOrCreateFingerprint(ctx, account.ID, clientHeaders)
-		if err != nil {
-			logger.LegacyPrintf("service.gateway", "Warning: failed to get fingerprint for account %d: %v", account.ID, err)
-			// 失败时降级为透传原始headers
-		} else {
-			if enableFP {
-				fingerprint = fp
-			}
-
-			// 2. 重写metadata.user_id（需要指纹中的ClientID和账号的account_uuid）
-			// 如果启用了会话ID伪装，会在重写后替换 session 部分为固定值
-			// 当 metadata 透传开启时跳过重写
-			if !enableMPT {
-				accountUUID := account.GetExtraString("account_uuid")
-				if accountUUID != "" && fp.ClientID != "" {
-					if newBody, err := s.identityService.RewriteUserIDWithMasking(ctx, body, account, accountUUID, fp.ClientID, fp.UserAgent); err == nil && len(newBody) > 0 {
-						body = newBody
-					}
-				}
-			}
-		}
-	}
-
-	// 同步 billing header cc_version 与实际发送的 User-Agent 版本
-	if fingerprint != nil {
-		body = syncBillingHeaderVersion(body, fingerprint.UserAgent)
-	}
-
-	// === 计算最终 anthropic-beta header（先于 body sanitize 与 CCH 签名）===
+	// 先计算最终 anthropic-beta，再按相同能力集合净化请求体。
 	//
 	// 顺序约束：
 	//   1) 算 finalBeta（纯函数，不依赖 req.Header；mimicry 路径会忽略客户端 beta，
 	//      与原“OAuth + mimicClaudeCode 跳过白名单透传”行为对齐）
 	//   2) 按 finalBeta 做能力维度 body sanitize（如 context-management beta 缺失 →
 	//      strip body.context_management，与 Bedrock 路径对称）
-	//   3) CCH 签名（必须使用 strip 后的 body，否则 hash 与最终 body 不一致 →
-	//      被 Anthropic 判 third-party）
-	//   4) NewRequest（body 至此最终敲定）
-	//   5) 透传白名单 / fingerprint / mimic header / 写入 finalBeta
+	//   3) NewRequest（body 至此最终敲定）
+	//   4) 写入允许透传的 header、现存 OAuth 账户兼容 header 和 finalBeta
 	policyFilterSet := s.getBetaPolicyFilterSet(ctx, c, account, modelID)
 	effectiveDropSet := mergeDropSets(policyFilterSet)
 	finalBetaHeader, finalBetaShouldSet := s.computeFinalAnthropicBeta(
@@ -150,11 +111,6 @@ func (s *GatewayService) buildUpstreamRequest(ctx context.Context, c *gin.Contex
 		}
 	}
 
-	// OAuth账号：应用缓存的指纹到请求头（覆盖白名单透传的头）
-	if fingerprint != nil {
-		s.identityService.ApplyFingerprint(req, fingerprint)
-	}
-
 	// 确保必要的headers存在（保持原始大小写）
 	if getHeaderRaw(req.Header, "content-type") == "" {
 		setHeaderRaw(req.Header, "content-type", "application/json")
@@ -195,12 +151,9 @@ func (s *GatewayService) buildUpstreamRequest(ctx context.Context, c *gin.Contex
 
 	// === DEBUG: 打印上游转发请求（headers + body 摘要），与 CLIENT_ORIGINAL 对比 ===
 	s.debugLogGatewaySnapshot("UPSTREAM_FORWARD", req.Header, body, map[string]string{
-		"url":                 req.URL.String(),
-		"token_type":          tokenType,
-		"mimic_claude_code":   strconv.FormatBool(mimicClaudeCode),
-		"fingerprint_applied": strconv.FormatBool(fingerprint != nil),
-		"enable_fp":           strconv.FormatBool(enableFP),
-		"enable_mpt":          strconv.FormatBool(enableMPT),
+		"url":               req.URL.String(),
+		"token_type":        tokenType,
+		"mimic_claude_code": strconv.FormatBool(mimicClaudeCode),
 	})
 
 	// Always capture a compact fingerprint line for later error diagnostics.
@@ -472,9 +425,7 @@ func mergeAnthropicBetaDropping(required []string, incoming string, drop map[str
 //
 // 设计动机：将原本在 buildUpstreamRequest 内联在一起、依赖 req.Header 的
 // anthropic-beta 计算逻辑抽成纯函数。这样调用方可以在 NewRequest 之前
-// 就提前拿到最终 beta header，进而能按它对 body 做能力维度 sanitize 后再做
-// CCH 签名——一举修复了以下之前由顺序依赖导致的能力维度 sanitize
-// 无法部署的问题（签名与最终 body 不一致可以被判 third-party）。
+// 就提前拿到最终 beta header，确保请求体能力净化与发往上游的 header 一致。
 //
 // 返回 (value, shouldSet)：
 //   - shouldSet=false 意为“不主动设置 anthropic-beta header”，与原代码“
@@ -484,8 +435,7 @@ func mergeAnthropicBetaDropping(required []string, incoming string, drop map[str
 //     全部过滤掉），这与原代码中 setHeaderRaw 的结果一致。
 //
 // clientHeaders 是客户端原始 HTTP header（通常为 c.Request.Header）；nil 时按“客户端
-// 未传”处理。body 是已经 metadata 重写 / billing version sync 之后但未 sanitize 上游
-// 不兼容字段之前的版本。
+// 未传”处理。body 是尚未净化上游不兼容字段的当前请求体。
 func (s *GatewayService) computeFinalAnthropicBeta(
 	tokenType string,
 	mimicClaudeCode bool,

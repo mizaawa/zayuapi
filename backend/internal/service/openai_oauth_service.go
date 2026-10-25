@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"crypto/subtle"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -14,7 +13,6 @@ import (
 
 // OpenAIOAuthService handles OpenAI OAuth authentication flows
 type OpenAIOAuthService struct {
-	sessionStore         *openai.SessionStore
 	proxyRepo            ProxyRepository
 	oauthClient          OpenAIOAuthClient
 	privacyClientFactory PrivacyClientFactory // 用于调用 chatgpt.com/backend-api（ImpersonateChrome）
@@ -23,9 +21,8 @@ type OpenAIOAuthService struct {
 // NewOpenAIOAuthService creates a new OpenAI OAuth service
 func NewOpenAIOAuthService(proxyRepo ProxyRepository, oauthClient OpenAIOAuthClient) *OpenAIOAuthService {
 	return &OpenAIOAuthService{
-		sessionStore: openai.NewSessionStore(),
-		proxyRepo:    proxyRepo,
-		oauthClient:  oauthClient,
+		proxyRepo:   proxyRepo,
+		oauthClient: oauthClient,
 	}
 }
 
@@ -33,81 +30,6 @@ func NewOpenAIOAuthService(proxyRepo ProxyRepository, oauthClient OpenAIOAuthCli
 // 用于调用 chatgpt.com/backend-api 获取账号信息（plan_type 等）。
 func (s *OpenAIOAuthService) SetPrivacyClientFactory(factory PrivacyClientFactory) {
 	s.privacyClientFactory = factory
-}
-
-// OpenAIAuthURLResult contains the authorization URL and session info
-type OpenAIAuthURLResult struct {
-	AuthURL   string `json:"auth_url"`
-	SessionID string `json:"session_id"`
-}
-
-// GenerateAuthURL generates an OpenAI OAuth authorization URL
-func (s *OpenAIOAuthService) GenerateAuthURL(ctx context.Context, proxyID *int64, redirectURI, platform string) (*OpenAIAuthURLResult, error) {
-	// Generate PKCE values
-	state, err := openai.GenerateState()
-	if err != nil {
-		return nil, infraerrors.Newf(http.StatusInternalServerError, "OPENAI_OAUTH_STATE_FAILED", "failed to generate state: %v", err)
-	}
-
-	codeVerifier, err := openai.GenerateCodeVerifier()
-	if err != nil {
-		return nil, infraerrors.Newf(http.StatusInternalServerError, "OPENAI_OAUTH_VERIFIER_FAILED", "failed to generate code verifier: %v", err)
-	}
-
-	codeChallenge := openai.GenerateCodeChallenge(codeVerifier)
-
-	// Generate session ID
-	sessionID, err := openai.GenerateSessionID()
-	if err != nil {
-		return nil, infraerrors.Newf(http.StatusInternalServerError, "OPENAI_OAUTH_SESSION_FAILED", "failed to generate session ID: %v", err)
-	}
-
-	// Get proxy URL if specified
-	var proxyURL string
-	if proxyID != nil {
-		proxy, err := s.proxyRepo.GetByID(ctx, *proxyID)
-		if err != nil {
-			return nil, infraerrors.Newf(http.StatusBadRequest, "OPENAI_OAUTH_PROXY_NOT_FOUND", "proxy not found: %v", err)
-		}
-		if proxy != nil {
-			proxyURL = proxy.URL()
-		}
-	}
-
-	// Use default redirect URI if not specified
-	if redirectURI == "" {
-		redirectURI = openai.DefaultRedirectURI
-	}
-	normalizedPlatform := normalizeOpenAIOAuthPlatform(platform)
-	clientID, _ := openai.OAuthClientConfigByPlatform(normalizedPlatform)
-
-	// Store session
-	session := &openai.OAuthSession{
-		State:        state,
-		CodeVerifier: codeVerifier,
-		ClientID:     clientID,
-		RedirectURI:  redirectURI,
-		ProxyURL:     proxyURL,
-		CreatedAt:    time.Now(),
-	}
-	s.sessionStore.Set(sessionID, session)
-
-	// Build authorization URL
-	authURL := openai.BuildAuthorizationURLForPlatform(state, codeChallenge, redirectURI, normalizedPlatform)
-
-	return &OpenAIAuthURLResult{
-		AuthURL:   authURL,
-		SessionID: sessionID,
-	}, nil
-}
-
-// OpenAIExchangeCodeInput represents the input for code exchange
-type OpenAIExchangeCodeInput struct {
-	SessionID   string
-	Code        string
-	State       string
-	RedirectURI string
-	ProxyID     *int64
 }
 
 // OpenAITokenInfo represents the token information for OpenAI
@@ -127,84 +49,6 @@ type OpenAITokenInfo struct {
 	PlanType              string `json:"plan_type,omitempty"`
 	SubscriptionExpiresAt string `json:"subscription_expires_at,omitempty"`
 	PrivacyMode           string `json:"privacy_mode,omitempty"`
-}
-
-// ExchangeCode exchanges authorization code for tokens
-func (s *OpenAIOAuthService) ExchangeCode(ctx context.Context, input *OpenAIExchangeCodeInput) (*OpenAITokenInfo, error) {
-	// Get session
-	session, ok := s.sessionStore.Get(input.SessionID)
-	if !ok {
-		return nil, infraerrors.New(http.StatusBadRequest, "OPENAI_OAUTH_SESSION_NOT_FOUND", "session not found or expired")
-	}
-	if input.State == "" {
-		return nil, infraerrors.New(http.StatusBadRequest, "OPENAI_OAUTH_STATE_REQUIRED", "oauth state is required")
-	}
-	if subtle.ConstantTimeCompare([]byte(input.State), []byte(session.State)) != 1 {
-		return nil, infraerrors.New(http.StatusBadRequest, "OPENAI_OAUTH_INVALID_STATE", "invalid oauth state")
-	}
-
-	// Get proxy URL: prefer input.ProxyID, fallback to session.ProxyURL
-	proxyURL := session.ProxyURL
-	if input.ProxyID != nil {
-		proxy, err := s.proxyRepo.GetByID(ctx, *input.ProxyID)
-		if err != nil {
-			return nil, infraerrors.Newf(http.StatusBadRequest, "OPENAI_OAUTH_PROXY_NOT_FOUND", "proxy not found: %v", err)
-		}
-		if proxy != nil {
-			proxyURL = proxy.URL()
-		}
-	}
-
-	// Use redirect URI from session or input
-	redirectURI := session.RedirectURI
-	if input.RedirectURI != "" {
-		redirectURI = input.RedirectURI
-	}
-	clientID := strings.TrimSpace(session.ClientID)
-	if clientID == "" {
-		clientID = openai.ClientID
-	}
-
-	// Exchange code for token
-	tokenResp, err := s.oauthClient.ExchangeCode(ctx, input.Code, session.CodeVerifier, redirectURI, proxyURL, clientID)
-	if err != nil {
-		return nil, err
-	}
-
-	// Parse ID token to get user info
-	var userInfo *openai.UserInfo
-	if tokenResp.IDToken != "" {
-		claims, parseErr := openai.ParseIDToken(tokenResp.IDToken)
-		if parseErr != nil {
-			slog.Warn("openai_oauth_id_token_parse_failed", "error", parseErr)
-		} else {
-			userInfo = claims.GetUserInfo()
-		}
-	}
-
-	// Delete session after successful exchange
-	s.sessionStore.Delete(input.SessionID)
-
-	tokenInfo := &OpenAITokenInfo{
-		AccessToken:  tokenResp.AccessToken,
-		RefreshToken: tokenResp.RefreshToken,
-		IDToken:      tokenResp.IDToken,
-		ExpiresIn:    int64(tokenResp.ExpiresIn),
-		ExpiresAt:    time.Now().Unix() + int64(tokenResp.ExpiresIn),
-		ClientID:     clientID,
-	}
-
-	if userInfo != nil {
-		tokenInfo.Email = userInfo.Email
-		tokenInfo.ChatGPTAccountID = userInfo.ChatGPTAccountID
-		tokenInfo.ChatGPTUserID = userInfo.ChatGPTUserID
-		tokenInfo.OrganizationID = userInfo.OrganizationID
-		tokenInfo.PlanType = userInfo.PlanType
-	}
-
-	s.enrichTokenInfo(ctx, tokenInfo, proxyURL)
-
-	return tokenInfo, nil
 }
 
 // RefreshToken refreshes an OpenAI OAuth token
@@ -412,13 +256,4 @@ func (s *OpenAIOAuthService) BuildAccountCredentials(tokenInfo *OpenAITokenInfo)
 	}
 
 	return NormalizeOpenAIPersonalAccessTokenCredentials(nil, tokenInfo, creds)
-}
-
-// Stop stops the session store cleanup goroutine
-func (s *OpenAIOAuthService) Stop() {
-	s.sessionStore.Stop()
-}
-
-func normalizeOpenAIOAuthPlatform(platform string) string {
-	return openai.OAuthPlatformOpenAI
 }

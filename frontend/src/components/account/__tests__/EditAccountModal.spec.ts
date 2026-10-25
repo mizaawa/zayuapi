@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { defineComponent } from 'vue'
-import { mount } from '@vue/test-utils'
+import { flushPromises, mount } from '@vue/test-utils'
 
 const { updateAccountMock, checkMixedChannelRiskMock, authIsSimpleMode } = vi.hoisted(() => ({
   updateAccountMock: vi.fn(),
@@ -312,6 +312,31 @@ function mountModal(account = buildAccount()) {
 }
 
 describe('EditAccountModal', () => {
+  it('requires an explicit upstream URL when editing Antigravity API Key accounts', async () => {
+    const account = { ...buildAccount(), platform: 'antigravity', credentials: { api_key: 'fixture-key', model_mapping: { 'client-model': 'upstream-model' } } }
+    updateAccountMock.mockReset().mockResolvedValue(account)
+    checkMixedChannelRiskMock.mockReset().mockResolvedValue({ has_risk: false })
+    const wrapper = mountModal(account)
+    const urlInput = wrapper.get('input[placeholder="https://cloudcode-pa.googleapis.com"]')
+    expect((urlInput.element as HTMLInputElement).value).toBe('')
+    await wrapper.get('form#edit-account-form').trigger('submit.prevent')
+    await flushPromises()
+    expect(updateAccountMock).not.toHaveBeenCalled()
+    await urlInput.setValue('https://relay.example/antigravity')
+    await wrapper.get('form#edit-account-form').trigger('submit.prevent')
+    await flushPromises()
+    expect(updateAccountMock).toHaveBeenCalledWith(account.id, expect.objectContaining({ credentials: expect.objectContaining({ base_url: 'https://relay.example/antigravity', model_mapping: { 'client-model': 'upstream-model' } }) }))
+    wrapper.unmount()
+  })
+
+  it.each(['oauth', 'setup-token'])('does not expose retired Codex restriction controls for %s accounts', (type) => {
+    const wrapper = mountModal({ ...buildAccount(), type })
+    expect(wrapper.text()).not.toContain('admin.accounts.openai.codexCLIOnly')
+    expect(wrapper.text()).not.toContain('admin.accounts.openai.codexCLIOnlyAppServer')
+    expect(wrapper.find('[data-testid="edit-codex-fingerprint-mode-select"]').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
   beforeEach(() => {
     authIsSimpleMode.value = true
   })

@@ -60,19 +60,6 @@ func (s *OpenAIGatewayService) ForwardAsChatCompletions(
 ) (*OpenAIForwardResult, error) {
 	beginUpstreamResponseModelObservation(c)
 
-	restrictionResult := s.detectCodexClientRestriction(c, account, body)
-	logCodexCLIOnlyDetection(ctx, c, account, getAPIKeyIDFromContext(c), restrictionResult, body)
-	if restrictionResult.Enabled && !restrictionResult.Matched {
-		MarkOpsClientBusinessLimited(c, OpsClientBusinessLimitedReasonLocalPolicyDenied)
-		c.JSON(http.StatusForbidden, gin.H{
-			"error": gin.H{
-				"type":    "forbidden_error",
-				"message": "This account only allows Codex official clients",
-			},
-		})
-		return nil, errors.New("codex_cli_only restriction: only codex official clients are allowed")
-	}
-
 	// Custom is an API-key-only transparent OpenAI-compatible route. Do this
 	// before the normal CC->Responses bridge and raw-CC compatibility logic,
 	// both of which may rewrite the body or inject provider-specific fields.

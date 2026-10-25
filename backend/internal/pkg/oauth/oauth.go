@@ -5,11 +5,7 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
-	"encoding/hex"
-	"fmt"
-	"net/url"
 	"strings"
-	"sync"
 	"time"
 )
 
@@ -34,90 +30,6 @@ const (
 	SessionTTL = 30 * time.Minute
 )
 
-// OAuthSession stores OAuth flow state
-
-type OAuthSession struct {
-	State        string    `json:"state"`
-	CodeVerifier string    `json:"code_verifier"`
-	Scope        string    `json:"scope"`
-	ProxyURL     string    `json:"proxy_url,omitempty"`
-	CreatedAt    time.Time `json:"created_at"`
-}
-
-// SessionStore manages OAuth sessions in memory
-type SessionStore struct {
-	mu       sync.RWMutex
-	sessions map[string]*OAuthSession
-	stopOnce sync.Once
-	stopCh   chan struct{}
-}
-
-// NewSessionStore creates a new session store
-func NewSessionStore() *SessionStore {
-	store := &SessionStore{
-		sessions: make(map[string]*OAuthSession),
-		stopCh:   make(chan struct{}),
-	}
-	go store.cleanup()
-	return store
-}
-
-// Stop stops the cleanup goroutine
-func (s *SessionStore) Stop() {
-	s.stopOnce.Do(func() {
-		close(s.stopCh)
-	})
-}
-
-// Set stores a session
-func (s *SessionStore) Set(sessionID string, session *OAuthSession) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.sessions[sessionID] = session
-}
-
-// Get retrieves a session
-func (s *SessionStore) Get(sessionID string) (*OAuthSession, bool) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	session, ok := s.sessions[sessionID]
-	if !ok {
-		return nil, false
-	}
-	if time.Since(session.CreatedAt) > SessionTTL {
-		return nil, false
-	}
-	return session, true
-}
-
-// Delete removes a session
-func (s *SessionStore) Delete(sessionID string) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	delete(s.sessions, sessionID)
-}
-
-// cleanup removes expired sessions periodically
-func (s *SessionStore) cleanup() {
-	ticker := time.NewTicker(5 * time.Minute)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-s.stopCh:
-			return
-		case <-ticker.C:
-			s.mu.Lock()
-			for id, session := range s.sessions {
-				if time.Since(session.CreatedAt) > SessionTTL {
-					delete(s.sessions, id)
-				}
-			}
-			s.mu.Unlock()
-		}
-	}
-}
-
-// GenerateRandomBytes generates cryptographically secure random bytes
 func GenerateRandomBytes(n int) ([]byte, error) {
 	b := make([]byte, n)
 	_, err := rand.Read(b)
@@ -134,15 +46,6 @@ func GenerateState() (string, error) {
 		return "", err
 	}
 	return base64URLEncode(bytes), nil
-}
-
-// GenerateSessionID generates a unique session ID
-func GenerateSessionID() (string, error) {
-	bytes, err := GenerateRandomBytes(16)
-	if err != nil {
-		return "", err
-	}
-	return hex.EncodeToString(bytes), nil
 }
 
 // GenerateCodeVerifier generates a PKCE code verifier (RFC 7636).
@@ -165,21 +68,6 @@ func GenerateCodeChallenge(verifier string) string {
 func base64URLEncode(data []byte) string {
 	encoded := base64.URLEncoding.EncodeToString(data)
 	return strings.TrimRight(encoded, "=")
-}
-
-// BuildAuthorizationURL builds the OAuth authorization URL with correct parameter order
-func BuildAuthorizationURL(state, codeChallenge, scope string) string {
-	encodedRedirectURI := url.QueryEscape(RedirectURI)
-	encodedScope := strings.ReplaceAll(url.QueryEscape(scope), "%20", "+")
-
-	return fmt.Sprintf("%s?code=true&client_id=%s&response_type=code&redirect_uri=%s&scope=%s&code_challenge=%s&code_challenge_method=S256&state=%s",
-		AuthorizeURL,
-		ClientID,
-		encodedRedirectURI,
-		encodedScope,
-		codeChallenge,
-		state,
-	)
 }
 
 // TokenResponse represents the token response from OAuth provider

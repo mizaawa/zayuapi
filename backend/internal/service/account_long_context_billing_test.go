@@ -138,8 +138,10 @@ func TestAdminServiceCreateAccountRejectsMalformedOpenAILongContextBillingValue(
 	svc := &adminServiceImpl{accountRepo: repo}
 
 	account, err := svc.CreateAccount(context.Background(), &CreateAccountInput{
-		Platform: PlatformOpenAI,
-		Extra:    map[string]any{openAILongContextBillingEnabledKey: "false"},
+		Platform:    PlatformOpenAI,
+		Type:        AccountTypeAPIKey,
+		Credentials: map[string]any{"api_key": "fixture-key"},
+		Extra:       map[string]any{openAILongContextBillingEnabledKey: "false"},
 	})
 
 	require.Nil(t, account)

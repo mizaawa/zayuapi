@@ -4,7 +4,6 @@ import (
 	"net/http"
 	"regexp"
 	"strings"
-	"sync"
 	"sync/atomic"
 
 	"github.com/Wei-Shaw/sub2api/internal/pkg/openai"
@@ -34,12 +33,6 @@ func NormalizeCodexClientVersion(version string) string {
 
 // buildCodexCLIUserAgent 按版本号拼出规范 Codex TUI User-Agent。
 // UA 形态只在 codexCLIUserAgentSuffix 一处定义，避免多处拼装漂移。
-func buildCodexCLIUserAgent(version string) string {
-	if version = NormalizeCodexClientVersion(version); version == "" {
-		return codexCLIUserAgent
-	}
-	return openai.CodexDefaultOriginator + "/" + version + codexCLIUserAgentSuffix
-}
 
 // codexIdentityEnforcement 控制 enforceCodexIdentityHeaders 是否强制统一出站身份，
 // 由 gateway.disable_codex_identity_enforcement 在服务构造时取反发布。
@@ -59,36 +52,6 @@ func SetCodexIdentityEnforcementEnabled(enabled bool) {
 	codexIdentityEnforcement.Store(enabled)
 }
 
-// codexCanonicalUserAgentResolver 返回当前生效的规范 Codex User-Agent（后台设置 / 自动同步版本号）。
-// 由 SettingService 在装配时注入；解析器内部自带 TTL 缓存，热路径不触库。
-type codexCanonicalUserAgentResolver func() string
-
-var (
-	codexCanonicalUAMu       sync.RWMutex
-	codexCanonicalUAResolver codexCanonicalUserAgentResolver
-)
-
-// SetCodexCanonicalUserAgentResolver 注入规范 User-Agent 解析器。
-// 未注入或解析结果非法时回退到编译期常量 codexCLIUserAgent。
-func SetCodexCanonicalUserAgentResolver(resolver func() string) {
-	codexCanonicalUAMu.Lock()
-	defer codexCanonicalUAMu.Unlock()
-	codexCanonicalUAResolver = resolver
-}
-
-// codexCanonicalUserAgent 返回出站规范 User-Agent。
-func codexCanonicalUserAgent() string {
-	codexCanonicalUAMu.RLock()
-	resolver := codexCanonicalUAResolver
-	codexCanonicalUAMu.RUnlock()
-	if resolver != nil {
-		if ua := strings.TrimSpace(resolver()); ua != "" {
-			return ua
-		}
-	}
-	return codexCLIUserAgent
-}
-
 // codexOutboundIdentity 出站身份三元组，三者必须同源自洽：
 // originator 与 User-Agent 首段配套（否则上游 404，issue #3901），
 // version 等于 User-Agent 的版本段且不低于上游门槛。
@@ -101,12 +64,9 @@ type codexOutboundIdentity struct {
 // resolveCodexOutboundIdentity 由候选 User-Agent 推导自洽的出站身份。
 // candidateUA 为空时使用规范 User-Agent；推导不出官方身份时整体回退为规范 TUI 身份。
 //
-// 候选 UA（面板 / 账号级的管理员显式配置）只贡献客户端名与 OS / 架构 / 终端指纹，
-// 其自带的版本段一律用当前生效版本重建：一条填写于某个历史版本的 UA 否则会把出站身份
-// 永久钉死在陈旧版本上，绕过版本自动同步，落回上游优先降载的那一侧。
-// 需要固定版本请填「Codex 客户端版本号」并关闭自动同步。
+// 候选 UA 只贡献客户端名与 OS / 架构 / 终端标识，版本段与内置协议版本保持一致。
 func resolveCodexOutboundIdentity(candidateUA string) codexOutboundIdentity {
-	canonical := codexCanonicalUserAgent()
+	canonical := codexCLIUserAgent
 	ua := strings.TrimSpace(candidateUA)
 	if ua == "" {
 		ua = canonical
@@ -117,8 +77,7 @@ func resolveCodexOutboundIdentity(candidateUA string) codexOutboundIdentity {
 			originator, pairedUA = openai.CodexDefaultOriginator, codexCLIUserAgent
 		}
 	}
-	// 生效版本只有一个来源：规范身份（面板版本号 → 自动同步值 → 内置常量，见
-	// SettingService.GetOpenAICodexClientVersion）。UA 与 version 头由此同源派生。
+	// UA 与 version 头由内置协议身份同源派生。
 	version := codexClientVersionFromUA(canonical)
 	if rebuilt := openai.SetCodexUserAgentVersion(pairedUA, version); rebuilt != "" {
 		pairedUA = rebuilt
