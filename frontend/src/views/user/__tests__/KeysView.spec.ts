@@ -328,6 +328,86 @@ describe('user KeysView column settings', () => {
     vi.useRealTimers()
   })
 
+  it('recovers a temporary list failure before showing an error', async () => {
+    vi.useFakeTimers()
+    listKeys.mockRejectedValueOnce({ status: 503 })
+    const wrapper = await mountView()
+
+    expect(showError).not.toHaveBeenCalled()
+    await vi.advanceTimersByTimeAsync(500)
+    await flushPromises()
+
+    expect(listKeys).toHaveBeenCalledTimes(2)
+    expect(wrapper.text()).toContain('test-key')
+    expect(showError).not.toHaveBeenCalled()
+    expect(wrapper.get('button[title="Refresh"]').element).toHaveProperty('disabled', false)
+  })
+
+  it('reports a persistent list failure after bounded retries', async () => {
+    vi.useFakeTimers()
+    listKeys.mockRejectedValue({ status: 503 })
+    const wrapper = await mountView()
+    await vi.advanceTimersByTimeAsync(1500)
+    await flushPromises()
+
+    expect(listKeys).toHaveBeenCalledTimes(3)
+    expect(showError).toHaveBeenCalledExactlyOnceWith('keys.failedToLoad')
+    expect(wrapper.get('button[title="Refresh"]').element).toHaveProperty('disabled', false)
+  })
+
+  it('keeps non-transient list errors visible without retrying them', async () => {
+    listKeys.mockRejectedValueOnce({ status: 400 })
+    await mountView()
+
+    expect(listKeys).toHaveBeenCalledTimes(1)
+    expect(showError).toHaveBeenCalledExactlyOnceWith('keys.failedToLoad')
+  })
+
+  it('ignores a superseded request that rejects after the replacement succeeds', async () => {
+    let rejectOld!: (error: unknown) => void
+    listKeys.mockReturnValueOnce(new Promise((_, reject) => { rejectOld = reject }))
+    const wrapper = await mountView()
+    const oldSignal = listKeys.mock.calls[0]![3].signal as AbortSignal
+
+    await wrapper.get('[data-test="sort-current-concurrency"]').trigger('click')
+    await flushPromises()
+    expect(oldSignal.aborted).toBe(true)
+    expect(wrapper.text()).toContain('test-key')
+
+    rejectOld({ status: 500 })
+    await flushPromises()
+    expect(showError).not.toHaveBeenCalled()
+    expect(listKeys).toHaveBeenCalledTimes(2)
+  })
+
+  it('ignores a pending request error after leaving the page', async () => {
+    let rejectPending!: (error: unknown) => void
+    listKeys.mockReturnValueOnce(new Promise((_, reject) => { rejectPending = reject }))
+    const wrapper = await mountView()
+    const signal = listKeys.mock.calls[0]![3].signal as AbortSignal
+
+    wrapper.unmount()
+    expect(signal.aborted).toBe(true)
+    rejectPending({ status: 500 })
+    await flushPromises()
+
+    expect(showError).not.toHaveBeenCalled()
+    expect(listKeys).toHaveBeenCalledTimes(1)
+  })
+
+  it('cancels a scheduled list retry when leaving the page', async () => {
+    vi.useFakeTimers()
+    listKeys.mockRejectedValueOnce({ status: 503 })
+    const wrapper = await mountView()
+
+    wrapper.unmount()
+    await vi.advanceTimersByTimeAsync(1500)
+    await flushPromises()
+
+    expect(listKeys).toHaveBeenCalledTimes(1)
+    expect(showError).not.toHaveBeenCalled()
+  })
+
   it('shows authenticated custom endpoints when the public settings omit them', async () => {
     const customEndpoints = [{ name: 'Relay', endpoint: 'https://relay.example.test/v1', description: 'For signed-in users' }]
     getUserEndpointSettings.mockResolvedValue({ custom_endpoints: customEndpoints })

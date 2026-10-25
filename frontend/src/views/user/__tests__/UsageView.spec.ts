@@ -299,7 +299,7 @@ describe('user UsageView', () => {
         include_group_stats: key === 'include_group_stats',
       }), expect.objectContaining({ signal: expect.any(AbortSignal) }))
     }
-    expect(list).toHaveBeenCalledWith(1, 100)
+    expect(list).toHaveBeenCalledWith(1, 100, undefined, { signal: expect.any(AbortSignal) })
     expect(getAvailable).toHaveBeenCalled()
     wrapper.unmount()
   })
@@ -608,6 +608,41 @@ describe('user UsageView', () => {
     expect(vm.apiKeys).toHaveLength(1)
     expect(wrapper.find('[data-usage-error="filters"]').exists()).toBe(false)
     wrapper.unmount()
+  })
+
+  it.each(['keys', 'groups'])('recovers transient %s filter failures without reloading logs', async (failed) => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    const request = failed === 'keys' ? list : getAvailable
+    request.mockRejectedValueOnce({ status: 503 })
+    const wrapper = mountUsageView()
+    await flushPromises()
+    expect((wrapper.vm as any).usageLogs).toEqual([usageLog])
+    await vi.advanceTimersByTimeAsync(500)
+    await flushPromises()
+    expect(request).toHaveBeenCalledTimes(2)
+    expect((wrapper.vm as any).apiKeys).toHaveLength(1)
+    expect((wrapper.vm as any).groups).toHaveLength(1)
+    expect(wrapper.find('[data-usage-error="filters"]').exists()).toBe(false)
+    expect(query).toHaveBeenCalledTimes(1)
+    expect(showError).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it('aborts filter requests and pending retries when leaving the page', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    list.mockRejectedValue({ status: 503 })
+    const wrapper = mountUsageView()
+    await flushPromises()
+    const keySignal = list.mock.calls[0][3]?.signal as AbortSignal
+    const groupSignal = getAvailable.mock.calls[0][0]?.signal as AbortSignal
+    expect(keySignal).toBeInstanceOf(AbortSignal)
+    expect(groupSignal).toBeInstanceOf(AbortSignal)
+    wrapper.unmount()
+    expect(keySignal.aborted).toBe(true)
+    expect(groupSignal.aborted).toBe(true)
+    await vi.advanceTimersByTimeAsync(5000)
+    expect(list).toHaveBeenCalledTimes(1)
+    expect(showError).not.toHaveBeenCalled()
   })
 
   it('preserves existing chart data after a refresh failure', async () => {

@@ -1118,31 +1118,41 @@ router.afterEach((to, _from, failure) => {
  * Navigation guard: Error handling
  * Handles dynamic import failures caused by deployment updates
  */
-router.onError((error) => {
+let lastChunkReloadAttempt = 0
+router.onError((error, to) => {
+  navigationLoading.endNavigation()
   console.error('Router error:', error)
 
-  // Check if this is a dynamic import failure (chunk loading error)
+  // Browsers use different messages when an old deployment's lazy chunk is gone.
   const isChunkLoadError =
-    error.message?.includes('Failed to fetch dynamically imported module') ||
-    error.message?.includes('Loading chunk') ||
-    error.message?.includes('Loading CSS chunk') ||
+    /Failed to fetch dynamically imported module|error loading dynamically imported module|Importing a module script failed|Loading (?:CSS )?chunk/i.test(error.message ?? '') ||
     error.name === 'ChunkLoadError'
+  const target = safeUIAccessPath(to.fullPath)
+  if (!isChunkLoadError || target === null) return
 
-  if (isChunkLoadError) {
-    // Avoid infinite reload loop by checking sessionStorage
-    const reloadKey = 'chunk_reload_attempted'
-    const lastReload = sessionStorage.getItem(reloadKey)
-    const now = Date.now()
-
-    // Allow reload if never attempted or more than 10 seconds ago
-    if (!lastReload || now - parseInt(lastReload) > 10000) {
-      sessionStorage.setItem(reloadKey, now.toString())
-      console.warn('Chunk load error detected, reloading page to fetch latest version...')
-      window.location.reload()
-    } else {
-      console.error('Chunk load error persists after reload. Please clear browser cache.')
-    }
+  const reloadKey = 'chunk_reload_attempted'
+  const now = Date.now()
+  try {
+    const stored = Number(sessionStorage.getItem(reloadKey))
+    if (Number.isFinite(stored)) lastChunkReloadAttempt = Math.max(lastChunkReloadAttempt, stored)
+  } catch {
+    // Storage may be disabled by the browser's privacy settings.
   }
+
+  if (lastChunkReloadAttempt > 0 && now - lastChunkReloadAttempt <= 10000) {
+    console.error('Chunk load error persists after reload. Please clear browser cache.')
+    return
+  }
+  lastChunkReloadAttempt = now
+  try {
+    sessionStorage.setItem(reloadKey, now.toString())
+  } catch {
+    // Without a persistent marker a failed chunk could cause an endless reload.
+    console.warn('Automatic chunk recovery unavailable because session storage is blocked.')
+    return
+  }
+  console.warn('Chunk load error detected, loading the requested page with the latest version...')
+  window.location.replace(router.resolve(target).href)
 })
 
 export default router

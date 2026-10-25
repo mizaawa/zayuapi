@@ -364,23 +364,36 @@ export async function getDashboardApiKeysUsage(
     signal?: AbortSignal
   }
 ): Promise<BatchApiKeysUsageResponse> {
+  const throwIfCanceled = () => {
+    if (options?.signal?.aborted) {
+      throw new DOMException('API key usage request canceled', 'AbortError')
+    }
+  }
+  throwIfCanceled()
   let timezone = 'UTC'
   try {
     timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || timezone
   } catch {
     // Keep UTC when the runtime does not expose an IANA timezone.
   }
-  const { data } = await apiClient.post<BatchApiKeysUsageResponse>(
-    '/usage/dashboard/api-keys-usage',
-    {
-      api_key_ids: apiKeyIds,
-      timezone,
-    },
-    {
-      signal: options?.signal
-    }
-  )
-  return data
+  const stats: Record<string, BatchApiKeyUsageStats> = {}
+  // Match the backend's 100-ID limit even when the table page contains more keys.
+  for (let offset = 0; offset < apiKeyIds.length; offset += 100) {
+    throwIfCanceled()
+    const { data } = await apiClient.post<BatchApiKeysUsageResponse>(
+      '/usage/dashboard/api-keys-usage',
+      {
+        api_key_ids: apiKeyIds.slice(offset, offset + 100),
+        timezone,
+      },
+      {
+        signal: options?.signal
+      }
+    )
+    throwIfCanceled()
+    Object.assign(stats, data.stats)
+  }
+  return { stats }
 }
 
 export async function listMyErrorRequests(

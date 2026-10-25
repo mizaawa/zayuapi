@@ -1250,6 +1250,7 @@ import type { Column } from '@/components/common/types'
 import type { BatchApiKeyUsageStats } from '@/api/usage'
 import { formatDateTime } from '@/utils/format'
 import { maskApiKey } from '@/utils/maskApiKey'
+import { fetchUsageWithRetry } from '@/utils/usageRequest'
 import {
   buildCcSwitchImportDeeplink,
   type CcSwitchClientType
@@ -1631,6 +1632,7 @@ const loadApiKeys = async () => {
   const controller = new AbortController()
   abortController = controller
   const { signal } = controller
+  const isCurrentRequest = () => abortController === controller && !signal.aborted
   loading.value = true
   try {
     // Build filters
@@ -1647,10 +1649,12 @@ const loadApiKeys = async () => {
     filters.sort_by = sortState.value.sort_by
     filters.sort_order = sortState.value.sort_order
 
-    const response = await keysAPI.list(pagination.value.page, pagination.value.page_size, filters, {
-      signal
-    })
-    if (signal.aborted) return
+    const { page, page_size } = pagination.value
+    const response = await fetchUsageWithRetry(
+      () => keysAPI.list(page, page_size, filters, { signal }),
+      signal,
+    )
+    if (!isCurrentRequest()) return
     apiKeys.value = response.items
     pagination.value.total = response.total
     pagination.value.pages = response.pages
@@ -1660,16 +1664,16 @@ const loadApiKeys = async () => {
       const keyIds = response.items.map((k) => k.id)
       try {
         const usageResponse = await usageAPI.getDashboardApiKeysUsage(keyIds, { signal })
-        if (signal.aborted) return
+        if (!isCurrentRequest()) return
         usageStats.value = usageResponse.stats
       } catch (e) {
-        if (!isAbortError(e)) {
+        if (isCurrentRequest() && !isAbortError(e)) {
           console.error('Failed to load usage stats:', e)
         }
       }
     }
   } catch (error) {
-    if (isAbortError(error)) {
+    if (!isCurrentRequest() || isAbortError(error)) {
       return
     }
     appStore.showError(t('keys.failedToLoad'))

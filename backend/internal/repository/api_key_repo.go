@@ -16,10 +16,12 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/service"
 	"github.com/lib/pq"
 
+	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/pagination"
 
 	"entgo.io/ent/dialect"
 	entsql "entgo.io/ent/dialect/sql"
+	"go.uber.org/zap"
 )
 
 type apiKeyRepository struct {
@@ -584,9 +586,20 @@ func (r *apiKeyRepository) attachLastUsedIPs(ctx context.Context, keys []service
 		apiKeyIDs = append(apiKeyIDs, keys[i].ID)
 	}
 
-	lastUsedIPs, err := r.latestUsageLogIPs(ctx, apiKeyIDs)
+	// Recent IPs are optional display metadata. A slow or unavailable usage
+	// query must not prevent users from managing their successfully loaded keys.
+	lookupCtx, cancel := context.WithTimeout(ctx, time.Second)
+	defer cancel()
+	lastUsedIPs, err := r.latestUsageLogIPs(lookupCtx, apiKeyIDs)
 	if err != nil {
-		return err
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		logger.FromContext(ctx).Warn("Last-used IP lookup failed; returning API keys without IP metadata",
+			zap.String("component", "repository.api_key"),
+			zap.Int("api_key_count", len(keys)),
+			zap.Error(err))
+		return nil
 	}
 	for i := range keys {
 		if ip, ok := lastUsedIPs[keys[i].ID]; ok {

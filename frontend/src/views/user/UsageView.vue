@@ -346,11 +346,10 @@ const applyErrorFilters = () => {
   void loadErrors()
 }
 
-type RequestKey = 'logs' | 'stats' | 'totals' | 'models' | 'groups' | 'trend' | 'errors'
+type RequestKey = 'logs' | 'stats' | 'totals' | 'models' | 'groups' | 'trend' | 'errors' | 'filters'
 const requests = new Map<RequestKey, AbortController>()
 const queueAggregateRequest = createUsageRequestQueue()
 let disposed = false
-let filterReqSeq = 0
 
 const startRequest = (key: RequestKey) => {
   requests.get(key)?.abort()
@@ -974,13 +973,19 @@ const handleColumnClickOutside = (event: MouseEvent) => {
 }
 
 const loadFilterOptions = async () => {
-  const seq = ++filterReqSeq
+  const controller = startRequest('filters')
   sectionErrors.filters = false
   const [keys, availableGroups] = await Promise.allSettled([
-    keysAPI.list(1, 100),
-    userGroupsAPI.getAvailable(),
+    fetchUsageWithRetry(
+      () => keysAPI.list(1, 100, undefined, { signal: controller.signal }),
+      controller.signal,
+    ),
+    fetchUsageWithRetry(
+      () => userGroupsAPI.getAvailable({ signal: controller.signal }),
+      controller.signal,
+    ),
   ])
-  if (disposed || seq !== filterReqSeq) return
+  if (!isCurrentRequest('filters', controller)) return
   if (keys.status === 'fulfilled') apiKeys.value = keys.value.items
   if (availableGroups.status === 'fulfilled') groups.value = availableGroups.value
   sectionErrors.filters = keys.status === 'rejected' || availableGroups.status === 'rejected'
