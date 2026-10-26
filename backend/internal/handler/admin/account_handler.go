@@ -37,6 +37,8 @@ import (
 
 // AccountHandler handles admin account management
 type AccountHandler struct {
+	providerSettings        *service.SettingService
+	providerEncryptor       service.SecretEncryptor
 	adminService            service.AdminService
 	oauthService            *service.OAuthService
 	openaiOAuthService      *service.OpenAIOAuthService
@@ -53,6 +55,13 @@ type AccountHandler struct {
 	grokImportProber        grokImportProber
 	upstreamBillingProbe    *service.UpstreamBillingProbeService
 	ollamaCloudUsage        *service.OllamaCloudUsageService
+}
+
+// SetProviderDependencies attaches the settings store and secret cipher used
+// by the provider-management panel. Credentials never leave the server.
+func (h *AccountHandler) SetProviderDependencies(settings *service.SettingService, encryptor service.SecretEncryptor) {
+	h.providerSettings = settings
+	h.providerEncryptor = encryptor
 }
 
 // SetUpstreamBillingProbeService attaches the optional remote billing probe service.

@@ -41,6 +41,7 @@ func RegisterAdminRoutes(
 
 		// 账号管理
 		registerAccountRoutes(admin, h, stepUpAuth)
+		registerProviderRoutes(admin, h)
 
 		// 资源库（工作台生成内容监管与存档）
 		registerResourceLibraryRoutes(admin, h)
@@ -345,7 +346,6 @@ func registerAccountRoutes(admin *gin.RouterGroup, h *handler.Handlers, stepUpAu
 	accounts := admin.Group("/accounts")
 	{
 		accounts.GET("", h.Admin.Account.List)
-		accounts.GET("/upstream-balances", h.Admin.Account.GetUpstreamBalanceSummary)
 		accounts.GET("/upstream-billing-probe/settings", h.Admin.Account.GetUpstreamBillingProbeSettings)
 		accounts.PUT("/upstream-billing-probe/settings", h.Admin.Account.UpdateUpstreamBillingProbeSettings)
 		accounts.POST("/upstream-billing-probe/batch", h.Admin.Account.ProbeUpstreamBillingBatch)
@@ -356,7 +356,6 @@ func registerAccountRoutes(admin *gin.RouterGroup, h *handler.Handlers, stepUpAu
 		accounts.POST("/:id/duplicate", h.Admin.Account.Duplicate)
 		accounts.POST("/check-mixed-channel", h.Admin.Account.CheckMixedChannel)
 		accounts.PUT("/:id", h.Admin.Account.Update)
-		accounts.PUT("/:id/upstream-balance", h.Admin.Account.SetUpstreamBalance)
 		accounts.PUT("/:id/upstream-billing-probe", h.Admin.Account.SetUpstreamBillingProbeEnabled)
 		accounts.POST("/:id/upstream-billing-probe", h.Admin.Account.ProbeUpstreamBilling)
 		accounts.GET("/:id/ollama-cloud-usage", h.Admin.Account.GetOllamaCloudUsage)
@@ -399,6 +398,16 @@ func registerAccountRoutes(admin *gin.RouterGroup, h *handler.Handlers, stepUpAu
 		accounts.GET("/antigravity/default-model-mapping", h.Admin.Account.GetAntigravityDefaultModelMapping)
 
 	}
+}
+
+func registerProviderRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
+	providers := admin.Group("/providers")
+	providers.GET("", h.Admin.Account.ListProviders)
+	providers.POST("/probe", h.Admin.Account.ProbeProvider)
+	providers.POST("", h.Admin.Account.CreateProvider)
+	providers.PUT("/:id", h.Admin.Account.UpdateProvider)
+	providers.POST("/:id/refresh", h.Admin.Account.RefreshProvider)
+	providers.DELETE("/:id", h.Admin.Account.DeleteProvider)
 }
 
 func registerResourceLibraryRoutes(admin *gin.RouterGroup, h *handler.Handlers) {

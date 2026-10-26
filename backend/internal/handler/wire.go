@@ -45,9 +45,12 @@ func ProvideAdminHandlers(
 	resourceLibraryHandler *admin.ResourceLibraryHandler,
 	upstreamBillingProbe *service.UpstreamBillingProbeService,
 	ollamaCloudUsage *service.OllamaCloudUsageService,
+	providerSettings *service.SettingService,
+	providerEncryptor service.SecretEncryptor,
 ) *AdminHandlers {
 	accountHandler.SetUpstreamBillingProbeService(upstreamBillingProbe)
 	accountHandler.SetOllamaCloudUsageService(ollamaCloudUsage)
+	accountHandler.SetProviderDependencies(providerSettings, providerEncryptor)
 	return &AdminHandlers{
 		Dashboard:              dashboardHandler,
 		User:                   userHandler,
