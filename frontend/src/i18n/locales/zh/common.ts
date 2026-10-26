@@ -167,6 +167,7 @@ export default {
     affiliateTransferRecords: '提取记录',
     profile: '个人资料',
     users: '用户管理',
+    upstream: '上游管理',
     groups: '分组管理',
     channels: '渠道管理',
     availableChannels: '可用渠道',

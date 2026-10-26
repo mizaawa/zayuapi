@@ -7,6 +7,7 @@ import settings from './settings'
 import audit from './audit'
 import promptAudit from './promptAudit'
 import resourceLibrary from './resourceLibrary'
+import upstream from './upstream'
 
 export default {
   ...overview,
@@ -18,4 +19,5 @@ export default {
   ...audit,
   ...promptAudit,
   ...resourceLibrary,
+  ...upstream,
 }

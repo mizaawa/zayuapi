@@ -512,6 +512,17 @@ const routes: RouteRecordRaw[] = [
     }
   },
   {
+    path: '/admin/upstream',
+    name: 'AdminUpstream',
+    component: () => import('@/views/admin/UpstreamView.vue'),
+    meta: {
+      requiresAuth: true,
+      requiresAdmin: true,
+      title: 'Upstream Management',
+      titleKey: 'nav.upstream'
+    }
+  },
+  {
     path: '/admin/channels',
     redirect: '/admin/channels/pricing'
   },
@@ -1070,6 +1081,7 @@ router.beforeEach(async (to, _from, next) => {
   // 简易模式下限制访问某些页面
   if (authStore.isSimpleMode) {
     const restrictedPaths = [
+      '/admin/upstream',
       '/admin/groups',
       '/admin/subscriptions',
       '/admin/redeem',

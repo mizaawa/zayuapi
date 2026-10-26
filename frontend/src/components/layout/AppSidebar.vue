@@ -343,6 +343,12 @@ const OperationsIcon = {
     )
 }
 
+const UpstreamIcon = {
+  render: () => h('svg', { fill: 'none', viewBox: '0 0 24 24', stroke: 'currentColor', 'stroke-width': '1.5' }, [
+    h('path', { 'stroke-linecap': 'round', 'stroke-linejoin': 'round', d: 'M3.75 7.5h6m4.5 0h6M3.75 16.5h6m4.5 0h6M9.75 5.25v4.5m4.5 4.5v4.5M3.75 3.75h16.5a1.5 1.5 0 011.5 1.5v13.5a1.5 1.5 0 01-1.5 1.5H3.75a1.5 1.5 0 01-1.5-1.5V5.25a1.5 1.5 0 011.5-1.5z' })
+  ])
+}
+
 const KeyIcon = {
   render: () =>
     h(
@@ -868,6 +874,7 @@ const adminNavItems = computed((): NavItem[] => {
     { path: '/admin/operations', label: t('nav.operations'), icon: OperationsIcon },
     { path: '/admin/ops', label: t('nav.ops'), icon: ChartIcon, featureFlag: flagOpsMonitoring },
     { path: '/admin/users', label: t('nav.users'), icon: UsersIcon, hideInSimpleMode: true },
+    { path: '/admin/upstream', label: t('nav.upstream'), icon: UpstreamIcon, hideInSimpleMode: true },
     { path: '/admin/groups', label: t('nav.groups'), icon: FolderIcon, hideInSimpleMode: true },
     {
       path: '/admin/channels',

@@ -168,6 +168,7 @@ export default {
     affiliateTransferRecords: 'Transfer Records',
     profile: 'Profile',
     users: 'Users',
+    upstream: 'Upstream',
     groups: 'Groups',
     channels: 'Channels',
     availableChannels: 'Available Channels',
