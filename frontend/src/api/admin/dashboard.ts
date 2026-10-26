@@ -25,6 +25,64 @@ export async function getStats(): Promise<DashboardStats> {
   return data
 }
 
+export interface OperationsDashboardParams {
+  start_date: string
+  end_date: string
+  timezone: string
+  trend_days: 7 | 15
+  /** 0 means all groups; -1 selects unassigned usage. */
+  group_id: number
+}
+
+export interface OperationsDashboardMetrics {
+  today_user_consumption: number
+  today_user_recharge: number
+  today_monitor_consumption: number
+  /** Cash receipts are reported separately by ISO currency. */
+  today_revenue: Record<string, number>
+  total_user_consumption: number
+  total_user_balance: number
+  total_monitor_consumption: number
+  admin_balance: number
+}
+
+export interface OperationsProfitTrendPoint {
+  date: string
+  upstream_cost: number
+  user_cost: number
+  profit: number
+}
+
+export interface OperationsGroupProfitStat {
+  group_id: number
+  group_name: string
+  rate_multiplier: number
+  user_cost: number
+  upstream_cost: number
+}
+
+export interface OperationsModelProfitStat {
+  model: string
+  user_cost: number
+  upstream_cost: number
+}
+
+export interface OperationsDashboardResponse {
+  metrics: OperationsDashboardMetrics
+  trend: OperationsProfitTrendPoint[]
+  groups: OperationsGroupProfitStat[]
+  models: OperationsModelProfitStat[]
+}
+
+export async function getOperationsDashboard(
+  params: OperationsDashboardParams
+): Promise<OperationsDashboardResponse> {
+  const { data } = await apiClient.get<OperationsDashboardResponse>('/admin/dashboard/operations', {
+    params
+  })
+  return data
+}
+
 /**
  * Get real-time metrics
  * @returns Real-time system metrics
@@ -332,6 +390,7 @@ export async function getBatchApiKeysUsage(
 
 export const dashboardAPI = {
   getStats,
+  getOperationsDashboard,
   getRealtimeMetrics,
   getUsageTrend,
   getModelStats,

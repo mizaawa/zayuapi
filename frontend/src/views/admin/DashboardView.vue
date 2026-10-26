@@ -216,8 +216,6 @@
           </div>
         </div>
 
-        <DashboardFinancialStats :stats="stats" />
-
         <!-- Quick Actions -->
         <div class="card p-4">
           <div class="mb-3 flex items-center justify-between">
@@ -364,7 +362,6 @@ import DateRangePicker from '@/components/common/DateRangePicker.vue'
 import Select from '@/components/common/Select.vue'
 import ModelDistributionChart from '@/components/charts/ModelDistributionChart.vue'
 import TokenUsageTrend from '@/components/charts/TokenUsageTrend.vue'
-import DashboardFinancialStats from '@/components/admin/dashboard/DashboardFinancialStats.vue'
 import { useBatchImageAccess } from '@/composables/useBatchImageAccess'
 
 import {

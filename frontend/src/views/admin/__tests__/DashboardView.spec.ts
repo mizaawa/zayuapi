@@ -152,7 +152,7 @@ describe('admin DashboardView', () => {
     wrapper.unmount()
   })
 
-  it('shows actual daily spending and all-time financial totals from the snapshot', async () => {
+  it('keeps financial cards off the dashboard after moving them to operations', async () => {
     getSnapshotV2.mockResolvedValueOnce({
       stats: {
         ...createDashboardStats(),
@@ -169,32 +169,21 @@ describe('admin DashboardView', () => {
     const wrapper = mountDashboard()
     await flushPromises()
 
-    const finances = wrapper.get('[data-testid="dashboard-financial-stats"]')
-    const expected = [
-      ['today_actual_cost', 'todayCost', '$12.34', '$12.34'],
-      ['total_consumption', 'totalCost', '$225.01K', '$225,012.34'],
-      ['total_balance', 'totalBalance', '-$42.50', '-$42.50'],
-      ['total_recharged', 'totalRecharged', '$1.00M', '$1,000,000.00']
-    ]
-    for (const [key, label, amount, fullAmount] of expected) {
-      const card = finances.get(`[data-metric="${key}"]`)
-      expect(card.text()).toContain(`admin.dashboard.${label}`)
-      expect(card.get('p[title]').text()).toBe(amount)
-      expect(card.get('p[title]').attributes('title')).toBe(fullAmount)
-      expect(card.get('svg path').attributes('d')).toBeTruthy()
-    }
+    expect(wrapper.find('[data-testid="dashboard-financial-stats"]').exists()).toBe(false)
+    expect(wrapper.text()).not.toContain('admin.dashboard.totalRecharged')
+    expect(wrapper.text()).not.toContain('admin.dashboard.totalBalance')
     wrapper.unmount()
   })
 
-  it('distinguishes zero amounts from fields missing in an older server response', async () => {
+  it('renders the dashboard without legacy financial totals', async () => {
     const stats: Partial<DashboardStats> = createDashboardStats()
     delete stats.total_recharged
     getSnapshotV2.mockResolvedValueOnce({ stats, trend: [], models: [] })
     const wrapper = mountDashboard()
     await flushPromises()
 
-    expect(wrapper.get('[data-metric="total_balance"] p[title]').text()).toBe('$0.00')
-    expect(wrapper.get('[data-metric="total_recharged"] p[title]').text()).toBe('--')
+    expect(wrapper.text()).toContain('admin.dashboard.todayRequests')
+    expect(wrapper.find('[data-metric="total_recharged"]').exists()).toBe(false)
     wrapper.unmount()
   })
 })

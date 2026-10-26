@@ -73,7 +73,7 @@ func parseTimeRange(c *gin.Context) (time.Time, time.Time) {
 
 	if endDate != "" {
 		if t, err := timezone.ParseInUserLocation("2006-01-02", endDate, userTZ); err == nil {
-			endTime = t.Add(24 * time.Hour) // Include the end date
+			endTime = t.AddDate(0, 0, 1) // Include the end date across timezone changes
 		} else {
 			endTime = timezone.StartOfDayInUserLocation(now.AddDate(0, 0, 1), userTZ)
 		}
@@ -161,6 +161,48 @@ func (h *DashboardHandler) GetStats(c *gin.Context) {
 		"stats_updated_at":    stats.StatsUpdatedAt,
 		"stats_stale":         stats.StatsStale,
 	})
+}
+
+// GetOperationsDashboard returns role-aware operational revenue and usage data.
+// GET /api/v1/admin/dashboard/operations
+func (h *DashboardHandler) GetOperationsDashboard(c *gin.Context) {
+	startTime, endTime := parseTimeRange(c)
+	userTimezone := strings.TrimSpace(c.Query("timezone"))
+	if _, err := time.LoadLocation(userTimezone); err != nil {
+		userTimezone = timezone.Name()
+		if userTimezone == "Local" {
+			userTimezone = time.Local.String()
+		}
+	}
+	now := timezone.NowInUserLocation(userTimezone)
+	todayStart := timezone.StartOfDayInUserLocation(now, userTimezone)
+	todayEnd := todayStart.AddDate(0, 0, 1)
+	trendDays := 15
+	if raw := strings.TrimSpace(c.Query("trend_days")); raw != "" {
+		parsed, err := strconv.Atoi(raw)
+		if err != nil || (parsed != 7 && parsed != 15) {
+			response.BadRequest(c, "Invalid trend_days value, use 7 or 15")
+			return
+		}
+		trendDays = parsed
+	}
+	groupID := int64(0)
+	if raw := strings.TrimSpace(c.Query("group_id")); raw != "" {
+		parsed, err := strconv.ParseInt(raw, 10, 64)
+		if err != nil || parsed < -1 {
+			response.BadRequest(c, "Invalid group_id")
+			return
+		}
+		groupID = parsed
+	}
+	trendStart := todayStart.AddDate(0, 0, -(trendDays - 1))
+
+	data, err := h.dashboardService.GetOperationsDashboardData(c.Request.Context(), todayStart, todayEnd, startTime, endTime, trendStart, todayEnd, userTimezone, groupID)
+	if err != nil {
+		response.Error(c, 500, "Failed to get operations dashboard data")
+		return
+	}
+	response.Success(c, data)
 }
 
 type DashboardAggregationBackfillRequest struct {
