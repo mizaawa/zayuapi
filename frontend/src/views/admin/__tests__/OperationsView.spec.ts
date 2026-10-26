@@ -14,10 +14,10 @@ const fixture = (): OperationsDashboardResponse => ({
   metrics: { today_user_consumption: 20, today_user_recharge: 30, today_monitor_consumption: 1, today_revenue: { CNY: 42, USD: 7 }, total_user_consumption: 100, total_user_balance: 1000, total_monitor_consumption: 6, admin_balance: 50 },
   trend: [],
   groups: [
-    { group_id: 1, group_name: 'Small profit', rate_multiplier: 1.2, user_cost: 11, upstream_cost: 10 },
-    { group_id: 2, group_name: 'Large loss', rate_multiplier: 0.5, user_cost: 3, upstream_cost: 20 },
-    { group_id: 3, group_name: 'Large profit', rate_multiplier: 2, user_cost: 30, upstream_cost: 10 },
-    { group_id: 0, group_name: 'Unassigned', rate_multiplier: 1, user_cost: 8, upstream_cost: 10 }
+    { group_id: 1, group_name: 'Small profit', platform: 'openai', rate_multiplier: 1.2, user_cost: 11, upstream_cost: 10 },
+    { group_id: 2, group_name: 'Large loss', platform: 'anthropic', rate_multiplier: 0.5, user_cost: 3, upstream_cost: 20 },
+    { group_id: 3, group_name: 'Large profit', platform: 'gemini', rate_multiplier: 2, user_cost: 30, upstream_cost: 10 },
+    { group_id: 0, group_name: 'Unassigned', platform: 'custom', rate_multiplier: 1, user_cost: 8, upstream_cost: 10 }
   ],
   models: [
     { model: 'profit-small', user_cost: 11, upstream_cost: 10 },
@@ -50,6 +50,10 @@ describe('OperationsView', () => {
     const wrapper = mountPage()
     await flushPromises()
     expect(wrapper.findAll('[data-group]').map(row => row.attributes('data-group'))).toEqual(['all', '2', '0', '3', '1'])
+    expect(wrapper.get('[data-group="2"] [data-platform]').attributes('data-platform')).toBe('anthropic')
+    expect(wrapper.get('[data-group="3"] [data-platform]').attributes('data-platform')).toBe('gemini')
+    expect(wrapper.get('[data-testid="groups-scroll-region"]').classes()).toContain('overflow-y-auto')
+    expect(wrapper.get('[data-testid="models-scroll-region"]').classes()).toContain('overflow-y-auto')
     expect(wrapper.findAll('[data-model]').map(row => row.attributes('data-model'))).toEqual(['loss-large', 'profit-large', 'profit-small'])
     expect(wrapper.get('[data-group="all"]').text()).toContain('$52.00')
     expect(wrapper.get('[data-group="all"]').text()).toContain('$50.00')

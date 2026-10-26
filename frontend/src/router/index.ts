@@ -472,8 +472,7 @@ const routes: RouteRecordRaw[] = [
       requiresAuth: true,
       requiresAdmin: true,
       title: 'Operations Panel',
-      titleKey: 'admin.operations.title',
-      descriptionKey: 'admin.operations.description'
+      titleKey: 'admin.operations.title'
     }
   },
   {

@@ -29,6 +29,7 @@ type OperationsProfitTrendPoint struct {
 type OperationsGroupProfitStat struct {
 	GroupID        int64   `json:"group_id"`
 	GroupName      string  `json:"group_name"`
+	Platform       string  `json:"platform"`
 	RateMultiplier float64 `json:"rate_multiplier"`
 	UserCost       float64 `json:"user_cost"`
 	UpstreamCost   float64 `json:"upstream_cost"`

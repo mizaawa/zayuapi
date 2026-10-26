@@ -88,7 +88,6 @@ export default {
 
     operations: {
       title: '运营面板',
-      description: '查看收支概览、分组与模型盈利情况',
       metrics: '收支概览',
       todayUserConsumption: '今日用户消费',
       todayUserRecharge: '今日用户充值',

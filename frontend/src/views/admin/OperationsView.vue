@@ -1,80 +1,81 @@
 <template>
   <AppLayout>
     <div class="space-y-6">
-      <div class="flex items-center justify-between gap-3">
-        <p class="text-sm text-gray-500 dark:text-gray-400">{{ t('admin.operations.description') }}</p>
-        <button type="button" class="btn btn-secondary shrink-0" :disabled="loading" @click="loadData">
-          <Icon name="refresh" size="sm" :class="{ 'animate-spin': loading }" />
-          <span class="hidden sm:inline">{{ t('admin.operations.refresh') }}</span>
-        </button>
-      </div>
       <div v-if="error" role="alert" class="flex items-center justify-between gap-3 rounded-xl bg-red-50 p-4 text-sm text-red-600 dark:bg-red-900/20 dark:text-red-400">
         {{ t('admin.operations.failedToLoad') }}
         <button type="button" class="font-medium underline" @click="loadData">{{ t('admin.operations.retry') }}</button>
       </div>
       <div v-if="loading && !data" class="flex justify-center py-20"><LoadingSpinner /></div>
       <template v-if="data">
-        <section class="grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-4" :aria-label="t('admin.operations.metrics')" data-testid="operations-metrics">
+        <section class="grid grid-cols-2 gap-4 lg:grid-cols-4" :aria-label="t('admin.operations.metrics')" data-testid="operations-metrics">
           <article v-for="metric in metrics" :key="metric.key" class="card min-w-0 p-4" :data-metric="metric.key">
-            <div class="mb-3 flex items-center justify-between gap-2">
-              <p class="text-xs font-medium text-gray-500 dark:text-gray-400">{{ t(metric.label) }}</p>
-              <span class="hidden shrink-0 rounded-lg p-1.5 sm:flex" :class="metric.color"><Icon :name="metric.icon" size="sm" /></span>
+            <div class="flex items-center gap-3">
+              <span class="flex shrink-0 rounded-lg p-2" :class="metric.color"><Icon :name="metric.icon" size="md" :stroke-width="2" /></span>
+              <div class="min-w-0">
+                <p class="text-xs font-medium text-gray-500 dark:text-gray-400">{{ t(metric.label) }}</p>
+                <div v-if="metric.key === 'today_revenue'" class="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                  <p v-for="revenue in revenues" :key="revenue.currency" class="break-all text-xl font-bold tabular-nums text-gray-900 dark:text-white" :title="revenue.currency">{{ formatMoney(revenue.amount, revenue.currency) }}</p>
+                </div>
+                <p v-else class="break-all text-xl font-bold tabular-nums text-gray-900 dark:text-white">{{ formatMoney(data.metrics[metric.key]) }}</p>
+              </div>
             </div>
-            <div v-if="metric.key === 'today_revenue'" class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-              <p v-for="revenue in revenues" :key="revenue.currency" class="break-all text-lg font-bold tabular-nums text-gray-900 dark:text-white sm:text-xl" :title="revenue.currency">{{ formatMoney(revenue.amount, revenue.currency) }}</p>
-            </div>
-            <p v-else class="break-all text-lg font-bold tabular-nums text-gray-900 dark:text-white sm:text-xl">{{ formatMoney(data.metrics[metric.key]) }}</p>
           </article>
         </section>
 
-        <section class="space-y-4" :aria-busy="loading">
-          <div class="flex flex-wrap items-center justify-between gap-3">
+        <section class="space-y-6" :aria-busy="loading">
+          <div class="card flex flex-wrap items-center justify-between gap-4 p-4">
             <div>
-              <h2 class="text-base font-semibold text-gray-900 dark:text-white">{{ t('admin.operations.consumptionPanel') }}</h2>
+              <h2 class="text-sm font-semibold text-gray-900 dark:text-white">{{ t('admin.operations.consumptionPanel') }}</h2>
               <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ consumptionRange.start }} — {{ consumptionRange.end }} · USD</p>
             </div>
-            <div class="inline-flex rounded-lg bg-gray-100 p-1 dark:bg-dark-800" :aria-label="t('admin.dashboard.timeRange')">
-              <button v-for="period in periods" :key="period.days" type="button" class="rounded-md px-3 py-1.5 text-xs font-medium transition-colors"
-                :class="selectedDays === period.days ? 'bg-white text-primary-600 shadow-sm dark:bg-dark-700 dark:text-primary-400' : 'text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200'"
-                :aria-pressed="selectedDays === period.days" :data-period="period.days" @click="selectedDays = period.days">{{ t(period.label) }}</button>
+            <div class="flex flex-wrap items-center gap-2">
+              <div class="inline-flex rounded-lg bg-gray-100 p-1 dark:bg-dark-800" :aria-label="t('admin.dashboard.timeRange')">
+                <button v-for="period in periods" :key="period.days" type="button" class="rounded-md px-3 py-1.5 text-xs font-medium transition-colors"
+                  :class="selectedDays === period.days ? 'bg-white text-primary-600 shadow-sm dark:bg-dark-700 dark:text-primary-400' : 'text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200'"
+                  :aria-pressed="selectedDays === period.days" :data-period="period.days" @click="selectedDays = period.days">{{ t(period.label) }}</button>
+              </div>
+              <button type="button" class="btn btn-secondary shrink-0" :disabled="loading" @click="loadData">
+                <Icon name="refresh" size="sm" :class="{ 'animate-spin': loading }" />
+                <span class="hidden sm:inline">{{ t('admin.operations.refresh') }}</span>
+              </button>
             </div>
           </div>
-          <div class="grid grid-cols-1 items-start gap-4 xl:grid-cols-2">
-            <div class="card min-w-0 overflow-hidden">
+          <div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
+            <div class="card min-w-0 overflow-hidden p-0">
               <div class="border-b border-gray-100 px-4 py-4 dark:border-dark-700"><h3 class="text-sm font-semibold text-gray-900 dark:text-white">{{ t('admin.operations.groups') }} <span class="ml-1 text-xs font-normal text-gray-400">{{ groups.length }}</span></h3></div>
-              <div class="operations-grid border-b border-gray-100 bg-gray-50/80 px-4 py-2.5 text-[11px] font-medium text-gray-500 dark:border-dark-700 dark:bg-dark-800/40 dark:text-gray-400">
+              <div class="operations-grid border-b border-gray-100 bg-gray-50/80 px-4 py-2.5 text-xs font-medium text-gray-500 dark:border-dark-700 dark:bg-dark-800/40 dark:text-gray-400">
                 <span>{{ t('admin.operations.groups') }}</span><span class="text-right">{{ t('admin.operations.profit') }}</span><span class="text-right">{{ t('admin.operations.userCost') }}</span><span class="text-right">{{ t('admin.operations.upstreamCost') }}</span>
               </div>
-              <button type="button" data-group="all" class="operations-grid w-full border-b border-gray-100 px-4 py-4 text-left transition-colors dark:border-dark-700"
+              <button type="button" data-group="all" class="operations-grid w-full border-b border-gray-100 px-4 py-3 text-left transition-colors dark:border-dark-700"
                 :class="selectedGroup === null ? 'bg-primary-50/70 dark:bg-primary-900/15' : 'hover:bg-gray-50 dark:hover:bg-dark-800/50'" :aria-pressed="selectedGroup === null" @click="selectedGroup = null">
-                <span class="flex min-w-0 items-center gap-2 text-sm font-semibold text-gray-900 dark:text-white"><Icon name="grid" size="sm" class="shrink-0 text-primary-500" /><span>{{ t('admin.operations.allGroups') }}</span></span>
-                <span class="money-cell font-semibold" :class="profitClass(profitOf(totals))">{{ formatMoney(profitOf(totals)) }}</span>
+                <span class="flex min-w-0 items-center gap-2 text-sm font-bold text-gray-900 dark:text-white"><span class="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-primary-100 text-primary-600 dark:bg-primary-900/30 dark:text-primary-400"><Icon name="grid" size="sm" /></span><span>{{ t('admin.operations.allGroups') }}</span></span>
+                <span class="money-cell" :class="profitClass(profitOf(totals))">{{ formatMoney(profitOf(totals)) }}</span>
                 <span class="money-cell text-gray-700 dark:text-gray-300">{{ formatMoney(totals.user_cost) }}</span>
-                <span class="money-cell text-gray-500 dark:text-gray-400">{{ formatMoney(totals.upstream_cost) }}</span>
+                <span class="money-cell text-gray-700 dark:text-gray-300">{{ formatMoney(totals.upstream_cost) }}</span>
               </button>
-              <div class="max-h-[450px] overflow-y-auto">
-                <button v-for="group in groups" :key="group.group_id" type="button" class="operations-grid w-full border-b border-gray-100 px-4 py-4 text-left transition-colors last:border-b-0 dark:border-dark-700/70"
+              <div class="max-h-[360px] overflow-y-auto overscroll-contain" data-testid="groups-scroll-region">
+                <button v-for="group in groups" :key="group.group_id" type="button" class="operations-grid w-full border-b border-gray-100 px-4 py-3 text-left transition-colors last:border-b-0 dark:border-dark-700/70"
                   :data-group="group.group_id" :aria-pressed="selectedGroup === group.group_id" :class="selectedGroup === group.group_id ? 'bg-primary-50/70 dark:bg-primary-900/15' : 'hover:bg-gray-50 dark:hover:bg-dark-800/50'" @click="selectedGroup = group.group_id">
-                  <span class="min-w-0"><span class="block break-words text-sm font-medium text-gray-900 dark:text-white">{{ groupName(group) }}</span><span class="mt-1 inline-flex rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium tabular-nums text-gray-500 dark:bg-dark-700 dark:text-gray-400">{{ group.rate_multiplier }}×</span></span>
-                  <span class="money-cell font-semibold" :class="profitClass(profitOf(group))">{{ formatMoney(profitOf(group)) }}</span>
+                  <span class="flex min-w-0 items-center gap-2"><span class="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-gray-100 dark:bg-dark-700" :data-platform="group.platform"><PlatformIcon :platform="group.platform" size="md" :class="platformTextClass(group.platform)" /></span><span class="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1"><span class="break-words text-sm font-bold text-gray-900 dark:text-white">{{ groupName(group) }}</span><span class="inline-flex shrink-0 rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium tabular-nums text-gray-500 dark:bg-dark-700 dark:text-gray-400">{{ group.rate_multiplier }}×</span></span></span>
+                  <span class="money-cell" :class="profitClass(profitOf(group))">{{ formatMoney(profitOf(group)) }}</span>
                   <span class="money-cell text-gray-700 dark:text-gray-300">{{ formatMoney(group.user_cost) }}</span>
-                  <span class="money-cell text-gray-500 dark:text-gray-400">{{ formatMoney(group.upstream_cost) }}</span>
+                  <span class="money-cell text-gray-700 dark:text-gray-300">{{ formatMoney(group.upstream_cost) }}</span>
                 </button>
                 <p v-if="!groups.length" class="px-4 py-10 text-center text-sm text-gray-400">{{ t('admin.operations.noGroups') }}</p>
               </div>
             </div>
-            <div class="card min-w-0 overflow-hidden">
+            <div class="card min-w-0 overflow-hidden p-0">
               <div class="flex items-center justify-between gap-3 border-b border-gray-100 px-4 py-4 dark:border-dark-700"><h3 class="shrink-0 text-sm font-semibold text-gray-900 dark:text-white">{{ t('admin.operations.models') }} <span class="ml-1 text-xs font-normal text-gray-400">{{ models.length }}</span></h3><span class="truncate rounded-full bg-primary-50 px-2.5 py-0.5 text-xs text-primary-600 dark:bg-primary-900/20 dark:text-primary-400">{{ selectedGroupName }}</span></div>
-              <div class="operations-grid border-b border-gray-100 bg-gray-50/80 px-4 py-2.5 text-[11px] font-medium text-gray-500 dark:border-dark-700 dark:bg-dark-800/40 dark:text-gray-400">
+              <div class="operations-grid border-b border-gray-100 bg-gray-50/80 px-4 py-2.5 text-xs font-medium text-gray-500 dark:border-dark-700 dark:bg-dark-800/40 dark:text-gray-400">
                 <span>Model ID</span><span class="text-right">{{ t('admin.operations.profit') }}</span><span class="text-right">{{ t('admin.operations.userCost') }}</span><span class="text-right">{{ t('admin.operations.upstreamCost') }}</span>
               </div>
-              <div v-if="loading" class="flex min-h-40 justify-center py-16"><LoadingSpinner size="md" /></div>
-              <div v-else class="max-h-[518px] overflow-y-auto">
-                <div v-for="model in models" :key="model.model" :data-model="model.model" class="operations-grid border-b border-gray-100 px-4 py-4 last:border-b-0 dark:border-dark-700/70">
-                  <span class="break-all font-mono text-xs font-medium leading-5 text-gray-800 dark:text-gray-200">{{ model.model }}</span>
-                  <span class="money-cell font-semibold" :class="profitClass(profitOf(model))">{{ formatMoney(profitOf(model)) }}</span>
+              <div v-if="loading" class="flex min-h-40 items-center justify-center"><LoadingSpinner size="md" /></div>
+              <div v-else class="max-h-[410px] overflow-y-auto overscroll-contain" data-testid="models-scroll-region">
+                <div v-for="model in models" :key="model.model" :data-model="model.model" class="operations-grid border-b border-gray-100 px-4 py-3 last:border-b-0 dark:border-dark-700/70">
+                  <span class="break-all text-sm font-medium leading-5 text-gray-800 dark:text-gray-200">{{ model.model }}</span>
+                  <span class="money-cell" :class="profitClass(profitOf(model))">{{ formatMoney(profitOf(model)) }}</span>
                   <span class="money-cell text-gray-700 dark:text-gray-300">{{ formatMoney(model.user_cost) }}</span>
-                  <span class="money-cell text-gray-500 dark:text-gray-400">{{ formatMoney(model.upstream_cost) }}</span>
+                  <span class="money-cell text-gray-700 dark:text-gray-300">{{ formatMoney(model.upstream_cost) }}</span>
                 </div>
                 <p v-if="!models.length" class="px-4 py-16 text-center text-sm text-gray-400">{{ t('admin.operations.noModels') }}</p>
               </div>
@@ -94,8 +95,10 @@ import { adminAPI } from '@/api/admin'
 import type { OperationsDashboardResponse, OperationsGroupProfitStat } from '@/api/admin/dashboard'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import Icon from '@/components/icons/Icon.vue'
+import PlatformIcon from '@/components/common/PlatformIcon.vue'
 import LoadingSpinner from '@/components/common/LoadingSpinner.vue'
 import OperationsTrendChart from '@/components/admin/dashboard/OperationsTrendChart.vue'
+import { platformTextClass } from '@/utils/platformColors'
 import { compareProfit, dateRange, formatMoney, profitOf } from './operationsUtils'
 
 const { t } = useI18n()
@@ -160,6 +163,6 @@ onUnmounted(() => { requestSequence++; window.removeEventListener('resize', onRe
 
 <style scoped>
 .operations-grid { display: grid; grid-template-columns: minmax(0, 1.45fr) repeat(3, minmax(0, 1fr)); gap: 0.5rem; align-items: center; }
-.money-cell { text-align: right; font-size: 0.75rem; line-height: 1.4; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
-@media (min-width: 1536px) { .operations-grid { gap: 1rem; } .money-cell { font-size: 0.8125rem; } }
+.money-cell { text-align: right; font-size: 0.75rem; font-weight: 500; line-height: 1.4; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+@media (min-width: 1536px) { .operations-grid { gap: 1rem; } }
 </style>

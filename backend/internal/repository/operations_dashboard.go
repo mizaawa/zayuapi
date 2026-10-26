@@ -130,11 +130,11 @@ func (r *usageLogRepository) GetOperationsDashboardData(
 			  AND NOT EXISTS (SELECT 1 FROM api_keys mk WHERE mk.id = ul.api_key_id AND mk.purpose = 'channel_monitor')
 			GROUP BY COALESCE(ul.group_id, 0)
 		)
-		SELECT g.id, g.name, g.rate_multiplier::double precision,
+		SELECT g.id, g.name, g.platform, g.rate_multiplier::double precision,
 			COALESCE(ug.user_cost, 0), COALESCE(ug.upstream_cost, 0)
 		FROM groups g LEFT JOIN usage_by_group ug ON ug.group_id = g.id
 		UNION ALL
-		SELECT 0, 'Unassigned', 1::double precision, COALESCE(ug.user_cost, 0), COALESCE(ug.upstream_cost, 0)
+		SELECT 0, 'Unassigned', 'custom', 1::double precision, COALESCE(ug.user_cost, 0), COALESCE(ug.upstream_cost, 0)
 		FROM usage_by_group ug WHERE ug.group_id = 0
 		ORDER BY 1 ASC
 	`
@@ -144,7 +144,7 @@ func (r *usageLogRepository) GetOperationsDashboardData(
 	}
 	for rows.Next() {
 		var row service.OperationsGroupProfitStat
-		if err := rows.Scan(&row.GroupID, &row.GroupName, &row.RateMultiplier, &row.UserCost, &row.UpstreamCost); err != nil {
+		if err := rows.Scan(&row.GroupID, &row.GroupName, &row.Platform, &row.RateMultiplier, &row.UserCost, &row.UpstreamCost); err != nil {
 			_ = rows.Close()
 			return nil, err
 		}

@@ -9,6 +9,7 @@ import type {
   TrendDataPoint,
   ModelStat,
   GroupStat,
+  GroupPlatform,
   ApiKeyUsageTrendPoint,
   UserUsageTrendPoint,
   UserSpendingRankingResponse,
@@ -56,6 +57,7 @@ export interface OperationsProfitTrendPoint {
 export interface OperationsGroupProfitStat {
   group_id: number
   group_name: string
+  platform: GroupPlatform
   rate_multiplier: number
   user_cost: number
   upstream_cost: number

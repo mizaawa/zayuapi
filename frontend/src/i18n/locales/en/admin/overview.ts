@@ -88,7 +88,6 @@ export default {
 
     operations: {
       title: 'Operations Panel',
-      description: 'Review revenue, spending, and profitability by group and model',
       metrics: 'Financial overview',
       todayUserConsumption: "Today's user spend",
       todayUserRecharge: "Today's user top-ups",

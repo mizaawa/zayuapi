@@ -33,7 +33,7 @@ func TestOperationsDashboardDataQueriesAndScans(t *testing.T) {
 		WillReturnRows(sqlmock.NewRows([]string{"date", "upstream", "user", "profit"}).AddRow("2026-10-26", 3.0, 8.0, 5.0))
 	mock.ExpectQuery(`WITH usage_by_group AS .*FROM groups g LEFT JOIN usage_by_group ug.*UNION ALL.*ORDER BY 1 ASC`).
 		WithArgs(rangeStart, tomorrow).
-		WillReturnRows(sqlmock.NewRows([]string{"id", "name", "rate", "user", "upstream"}).AddRow(2, "标准", 1.25, 8.0, 3.0))
+		WillReturnRows(sqlmock.NewRows([]string{"id", "name", "platform", "rate", "user", "upstream"}).AddRow(2, "标准", "openai", 1.25, 8.0, 3.0))
 	mock.ExpectQuery(`SELECT COALESCE\(NULLIF\(TRIM\(ul\.requested_model\).*GROUP BY 1 ORDER BY 1`).
 		WithArgs(rangeStart, tomorrow, int64(2)).
 		WillReturnRows(sqlmock.NewRows([]string{"model", "user", "upstream"}).AddRow("gpt-5", 8.0, 3.0))
@@ -50,6 +50,7 @@ func TestOperationsDashboardDataQueriesAndScans(t *testing.T) {
 	require.Equal(t, map[string]float64{"CNY": 68.5, "USD": 10.0}, data.Metrics.TodayRevenue)
 	require.Len(t, data.Trend, 1)
 	require.Len(t, data.Groups, 1)
+	require.Equal(t, "openai", data.Groups[0].Platform)
 	require.Len(t, data.Models, 1)
 	require.Equal(t, "gpt-5", data.Models[0].Model)
 	require.NoError(t, mock.ExpectationsWereMet())
