@@ -30,6 +30,7 @@ type providerRecord struct {
 	BaseURL         string          `json:"base_url"`
 	AuthMode        string          `json:"auth_mode"`
 	Account         string          `json:"account,omitempty"`
+	UserID          string          `json:"user_id,omitempty"`
 	ExchangeRate    float64         `json:"exchange_rate"`
 	Notes           string          `json:"notes,omitempty"`
 	SecretEncrypted string          `json:"secret_encrypted"`
@@ -46,6 +47,7 @@ type providerView struct {
 	BaseURL      string          `json:"base_url"`
 	AuthMode     string          `json:"auth_mode"`
 	Account      string          `json:"account,omitempty"`
+	UserID       string          `json:"user_id,omitempty"`
 	ExchangeRate float64         `json:"exchange_rate"`
 	Notes        string          `json:"notes,omitempty"`
 	Status       string          `json:"status"`
@@ -55,21 +57,29 @@ type providerView struct {
 }
 
 func (r providerRecord) view() providerView {
-	return providerView{r.ID, r.Name, r.SiteType, r.BaseURL, r.AuthMode, r.Account,
-		r.ExchangeRate, r.Notes, r.Status, r.Metrics, r.UpdatedAt, r.LastError}
+	mode := r.AuthMode
+	if mode == "api_key" {
+		mode = "token"
+	}
+	return providerView{r.ID, r.Name, r.SiteType, r.BaseURL, mode, r.Account,
+		r.UserID, r.ExchangeRate, r.Notes, r.Status, r.Metrics, r.UpdatedAt, r.LastError}
 }
 
 type providerInput struct {
-	ID           string  `json:"id"`
-	Name         string  `json:"name"`
-	SiteType     string  `json:"site_type"`
-	BaseURL      string  `json:"base_url"`
-	AuthMode     string  `json:"auth_mode"`
-	Account      string  `json:"account"`
-	Password     string  `json:"password"`
-	APIKey       string  `json:"api_key"`
-	ExchangeRate float64 `json:"exchange_rate"`
-	Notes        string  `json:"notes"`
+	ID                string  `json:"id"`
+	Name              string  `json:"name"`
+	SiteType          string  `json:"site_type"`
+	BaseURL           string  `json:"base_url"`
+	AuthMode          string  `json:"auth_mode"`
+	Account           string  `json:"account"`
+	Password          string  `json:"password"`
+	AccessToken       string  `json:"access_token"`
+	RefreshToken      string  `json:"refresh_token"`
+	TokenType         string  `json:"token_type"`
+	UserID            string  `json:"user_id"`
+	SystemAccessToken string  `json:"system_access_token"`
+	ExchangeRate      float64 `json:"exchange_rate"`
+	Notes             string  `json:"notes"`
 }
 
 var providerWriteMu sync.Mutex
@@ -103,11 +113,21 @@ func validateProviderInput(input *providerInput, previous *providerRecord) (prov
 	if input.SiteType != "sub2api" && input.SiteType != "newapi" {
 		return providerRecord{}, "", errors.New("unsupported provider type")
 	}
-	if input.AuthMode != "password" && input.AuthMode != "api_key" {
+	if input.AuthMode == "api_key" {
+		input.AuthMode = "token"
+	}
+	if input.AuthMode != "password" && input.AuthMode != "token" {
 		return providerRecord{}, "", errors.New("unsupported login mode")
 	}
 	if input.AuthMode == "password" && strings.TrimSpace(input.Account) == "" {
 		return providerRecord{}, "", errors.New("login account is required")
+	}
+	userID := strings.TrimSpace(input.UserID)
+	if input.SiteType == "newapi" && input.AuthMode == "token" {
+		id, err := strconv.ParseUint(userID, 10, 64)
+		if err != nil || id == 0 {
+			return providerRecord{}, "", errors.New("New API user ID must be a positive integer")
+		}
 	}
 	if math.IsNaN(input.ExchangeRate) || math.IsInf(input.ExchangeRate, 0) || input.ExchangeRate < 0 || input.ExchangeRate > 1e6 {
 		return providerRecord{}, "", errors.New("invalid exchange rate")
@@ -118,15 +138,42 @@ func validateProviderInput(input *providerInput, previous *providerRecord) (prov
 	}
 	record := providerRecord{Name: name, SiteType: input.SiteType, BaseURL: base,
 		AuthMode: input.AuthMode, Account: strings.TrimSpace(input.Account), ExchangeRate: rate,
-		Notes: strings.TrimSpace(input.Notes)}
+		UserID: userID, Notes: strings.TrimSpace(input.Notes)}
 	secret := input.Password
-	if input.AuthMode == "api_key" {
-		secret = input.APIKey
+	if input.AuthMode == "token" {
+		if input.SiteType == "sub2api" {
+			if input.AccessToken != "" {
+				secret, err = encodeProviderToken(input.AccessToken, input.RefreshToken, input.TokenType)
+				if err != nil {
+					return providerRecord{}, "", err
+				}
+			} else if input.RefreshToken != "" {
+				return providerRecord{}, "", errors.New("Access Token is required when updating Refresh Token")
+			} else {
+				secret = ""
+			}
+		} else {
+			if input.SystemAccessToken != "" {
+				if strings.HasPrefix(strings.ToLower(strings.TrimSpace(input.SystemAccessToken)), "sk-") {
+					return providerRecord{}, "", errors.New("New API requires the user system access token, not an sk- model API key")
+				}
+				secret, err = encodeProviderToken(input.SystemAccessToken, "", "Bearer")
+				if err != nil {
+					return providerRecord{}, "", err
+				}
+			} else {
+				secret = ""
+			}
+		}
 	}
 	if previous != nil {
 		record.ID = previous.ID
 		// Never send a saved credential to a different origin during an edit/probe.
-		if secret == "" && base == previous.BaseURL && input.SiteType == previous.SiteType && input.AuthMode == previous.AuthMode && strings.TrimSpace(input.Account) == previous.Account {
+		oldMode := previous.AuthMode
+		if oldMode == "api_key" {
+			oldMode = "token"
+		}
+		if secret == "" && base == previous.BaseURL && input.SiteType == previous.SiteType && input.AuthMode == oldMode && strings.TrimSpace(input.Account) == previous.Account && userID == previous.UserID {
 			record.SecretEncrypted = previous.SecretEncrypted
 		}
 	}
@@ -150,9 +197,22 @@ func (h *AccountHandler) probeRecord(c *gin.Context, record *providerRecord, sec
 			return errors.New("stored provider login is unavailable")
 		}
 	}
-	metrics, err := probeProvider(c.Request.Context(), *record, secret)
+	metrics, effectiveSecret, err := probeProvider(c.Request.Context(), *record, secret)
 	if err != nil {
 		return err
+	}
+	if effectiveSecret == "" {
+		effectiveSecret = secret
+	}
+	if effectiveSecret != "" {
+		if h.providerEncryptor == nil {
+			return errors.New("provider encryption unavailable")
+		}
+		ciphertext, err := h.providerEncryptor.Encrypt(effectiveSecret)
+		if err != nil {
+			return errors.New("could not protect provider login")
+		}
+		record.SecretEncrypted = ciphertext
 	}
 	record.Metrics = metrics
 	record.Status = "connected"
@@ -243,7 +303,7 @@ func (h *AccountHandler) ProbeProvider(c *gin.Context) {
 		return
 	}
 	if err := h.probeRecord(c, &record, secret); err != nil {
-		response.Error(c, http.StatusBadGateway, "Provider login or statistics request failed")
+		response.Error(c, http.StatusBadGateway, providerPublicError(err))
 		return
 	}
 	response.Success(c, record.view())
@@ -265,12 +325,7 @@ func (h *AccountHandler) CreateProvider(c *gin.Context) {
 		return
 	}
 	if err := h.probeRecord(c, &record, secret); err != nil {
-		response.Error(c, http.StatusBadGateway, "Provider login or statistics request failed")
-		return
-	}
-	record.SecretEncrypted, err = h.providerEncryptor.Encrypt(secret)
-	if err != nil {
-		response.Error(c, http.StatusInternalServerError, "Could not protect provider login")
+		response.Error(c, http.StatusBadGateway, providerPublicError(err))
 		return
 	}
 	record.ID, err = newProviderID()
@@ -315,19 +370,8 @@ func (h *AccountHandler) UpdateProvider(c *gin.Context) {
 			return
 		}
 		if err := h.probeRecord(c, &record, secret); err != nil {
-			response.Error(c, http.StatusBadGateway, "Provider login or statistics request failed")
+			response.Error(c, http.StatusBadGateway, providerPublicError(err))
 			return
-		}
-		if secret != "" {
-			if h.providerEncryptor == nil {
-				response.Error(c, http.StatusServiceUnavailable, "Provider encryption unavailable")
-				return
-			}
-			record.SecretEncrypted, err = h.providerEncryptor.Encrypt(secret)
-			if err != nil {
-				response.Error(c, http.StatusInternalServerError, "Could not protect provider login")
-				return
-			}
 		}
 		records[index] = record
 		if err := h.providerSettings.SaveProviderRecords(c.Request.Context(), records); err != nil {
@@ -355,14 +399,14 @@ func (h *AccountHandler) RefreshProvider(c *gin.Context) {
 		probeErr := h.probeRecord(c, &records[index], "")
 		if probeErr != nil {
 			records[index].Status = "disconnected"
-			records[index].LastError = "Login or statistics request failed"
+			records[index].LastError = providerPublicError(probeErr)
 		}
 		if err := h.providerSettings.SaveProviderRecords(c.Request.Context(), records); err != nil {
 			response.Error(c, http.StatusInternalServerError, "Could not save provider")
 			return
 		}
 		if probeErr != nil {
-			response.Error(c, http.StatusBadGateway, "Provider login or statistics request failed")
+			response.Error(c, http.StatusBadGateway, providerPublicError(probeErr))
 			return
 		}
 		response.Success(c, records[index].view())

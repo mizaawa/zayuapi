@@ -1,7 +1,7 @@
 import { apiClient } from '../client'
 
 export type ProviderKind = 'sub2api' | 'newapi'
-export type ProviderAuthMode = 'password' | 'api_key'
+export type ProviderAuthMode = 'password' | 'token'
 
 export interface ProviderInput {
   id?: string
@@ -11,7 +11,13 @@ export interface ProviderInput {
   auth_mode: ProviderAuthMode
   account?: string
   password?: string
-  api_key?: string
+  /** Sub2API dashboard session token, never a model API key. */
+  access_token?: string
+  refresh_token?: string
+  token_type?: string
+  /** New API dashboard account id and system access token. */
+  user_id?: string
+  system_access_token?: string
   exchange_rate: number
   notes?: string
 }
@@ -31,6 +37,8 @@ export interface Provider {
   base_url: string
   auth_mode: ProviderAuthMode
   account?: string
+  user_id?: string
+  token_type?: string
   exchange_rate: number
   notes?: string
   status: 'connected' | 'disconnected'

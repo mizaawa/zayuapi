@@ -41,6 +41,13 @@ export interface OperationsDashboardMetrics {
   today_monitor_consumption: number
   /** Cash receipts are reported separately by ISO currency. */
   today_revenue: Record<string, number>
+  yesterday_user_consumption: number
+  yesterday_user_recharge: number
+  yesterday_monitor_consumption: number
+  yesterday_revenue: Record<string, number>
+  /** Null when historical balance changes are unavailable. */
+  yesterday_user_balance_change: number | null
+  yesterday_admin_consumption: number
   total_user_consumption: number
   total_user_balance: number
   total_monitor_consumption: number
@@ -65,8 +72,34 @@ export interface OperationsGroupProfitStat {
 
 export interface OperationsModelProfitStat {
   model: string
+  platforms?: GroupPlatform[]
   user_cost: number
   upstream_cost: number
+}
+
+export interface OperationsUserSpendStat {
+  user_id: number
+  email: string
+  user_cost: number
+  upstream_cost: number
+}
+
+export interface OperationsUserSpendResponse {
+  users: OperationsUserSpendStat[]
+  detail: {
+    user_id: number
+    email: string
+    groups: OperationsGroupProfitStat[]
+    models: OperationsModelProfitStat[]
+  } | null
+}
+
+export interface OperationsUserSpendParams {
+  start_date: string
+  end_date: string
+  timezone: string
+  search?: string
+  user_id?: number
 }
 
 export interface OperationsDashboardResponse {
@@ -82,6 +115,16 @@ export async function getOperationsDashboard(
   const { data } = await apiClient.get<OperationsDashboardResponse>('/admin/dashboard/operations', {
     params
   })
+  return data
+}
+
+export async function getOperationsUserSpend(params: OperationsUserSpendParams): Promise<OperationsUserSpendResponse> {
+  const { data } = await apiClient.get<OperationsUserSpendResponse>('/admin/dashboard/operations/users', { params })
+  return data
+}
+
+export async function getOperationsUserSuggestions(q: string): Promise<Array<{ user_id: number; email: string }>> {
+  const { data } = await apiClient.get<Array<{ user_id: number; email: string }>>('/admin/dashboard/operations/users/suggest', { params: { q } })
   return data
 }
 
@@ -393,6 +436,8 @@ export async function getBatchApiKeysUsage(
 export const dashboardAPI = {
   getStats,
   getOperationsDashboard,
+  getOperationsUserSpend,
+  getOperationsUserSuggestions,
   getRealtimeMetrics,
   getUsageTrend,
   getModelStats,

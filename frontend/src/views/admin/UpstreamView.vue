@@ -122,6 +122,10 @@ const refreshingId = ref<string | null>(null)
 const editing = ref<Provider | null>(null)
 const showDialog = ref(false)
 let searchTimer: ReturnType<typeof setTimeout> | undefined
+let balanceTimer: ReturnType<typeof setInterval> | undefined
+let balanceRefreshRunning = false
+let disposed = false
+const balanceRefreshInterval = 60_000
 const money = (amount: number) => new Intl.NumberFormat(undefined, { style: 'currency', currency: 'USD', maximumFractionDigits: 2 }).format(amount)
 const yuan = (amount: number) => new Intl.NumberFormat('zh-CN', { style: 'currency', currency: 'CNY', maximumFractionDigits: 2 }).format(amount)
 const visibleProviders = computed(() => providers.value)
@@ -170,8 +174,34 @@ async function refresh(provider: Provider) {
   catch (reason) { appStore.showError(t('admin.upstream.refreshFailed')); console.error('Provider refresh failed:', reason) }
   finally { refreshingId.value = null }
 }
+async function refreshBalances() {
+  if (disposed || document.hidden || balanceRefreshRunning || loading.value || refreshingId.value) return
+  balanceRefreshRunning = true
+  try {
+    // Listing returns the last saved metrics. Probe the visible page to fetch
+    // current upstream balances, then reload the overview and user balance.
+    for (const provider of providers.value) {
+      if (disposed || document.hidden) break
+      try { await refreshProvider(provider.id) }
+      catch (reason) { console.error('Automatic provider refresh failed:', reason) }
+    }
+    if (!disposed && !document.hidden) await load()
+  } finally { balanceRefreshRunning = false }
+}
+function handleVisibilityChange() {
+  if (!document.hidden) void refreshBalances()
+}
 function afterSave() { showDialog.value = false; void load() }
 function debouncedLoad() { if (searchTimer) clearTimeout(searchTimer); searchTimer = setTimeout(() => { page.value = 1; void load() }, 250) }
-onMounted(() => { void load() })
-onUnmounted(() => { if (searchTimer) clearTimeout(searchTimer) })
+onMounted(() => {
+  void load().then(() => { void refreshBalances() })
+  balanceTimer = setInterval(() => { void refreshBalances() }, balanceRefreshInterval)
+  document.addEventListener('visibilitychange', handleVisibilityChange)
+})
+onUnmounted(() => {
+  disposed = true
+  if (searchTimer) clearTimeout(searchTimer)
+  if (balanceTimer) clearInterval(balanceTimer)
+  document.removeEventListener('visibilitychange', handleVisibilityChange)
+})
 </script>

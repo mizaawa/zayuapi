@@ -4,7 +4,7 @@ const { get } = vi.hoisted(() => ({ get: vi.fn() }))
 
 vi.mock('@/api/client', () => ({ apiClient: { get } }))
 
-import { getOperationsDashboard } from '@/api/admin/dashboard'
+import { getOperationsDashboard, getOperationsUserSpend, getOperationsUserSuggestions } from '@/api/admin/dashboard'
 
 describe('admin operations dashboard API', () => {
   beforeEach(() => {
@@ -26,5 +26,13 @@ describe('admin operations dashboard API', () => {
     await getOperationsDashboard(params)
 
     expect(get).toHaveBeenCalledWith('/admin/dashboard/operations', { params })
+  })
+
+  it('requests ranked users, optional details, and email suggestions', async () => {
+    const params = { start_date: '2026-10-20', end_date: '2026-10-26', timezone: 'Asia/Shanghai', search: 'alice', user_id: 7 }
+    await getOperationsUserSpend(params)
+    expect(get).toHaveBeenCalledWith('/admin/dashboard/operations/users', { params })
+    await getOperationsUserSuggestions('alice')
+    expect(get).toHaveBeenCalledWith('/admin/dashboard/operations/users/suggest', { params: { q: 'alice' } })
   })
 })

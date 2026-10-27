@@ -21,6 +21,94 @@ import (
 
 var errProviderAuthentication = errors.New("provider authentication failed")
 var errProviderResponse = errors.New("provider returned an unsupported response")
+var errProviderTurnstile = errors.New("provider requires Turnstile verification; use an existing dashboard Access Token or complete verification on the provider site")
+var errProviderTwoFactor = errors.New("provider requires two-factor verification; use an existing dashboard Access Token")
+
+type providerToken struct {
+	AccessToken  string `json:"access_token"`
+	RefreshToken string `json:"refresh_token,omitempty"`
+	TokenType    string `json:"token_type"`
+}
+
+func validProviderTokenType(value string) bool {
+	if len(value) == 0 || len(value) > 32 {
+		return false
+	}
+	for index := 0; index < len(value); index++ {
+		char := value[index]
+		letter := char >= 'A' && char <= 'Z' || char >= 'a' && char <= 'z'
+		if index == 0 && !letter {
+			return false
+		}
+		if !letter && !(char >= '0' && char <= '9') && char != '-' {
+			return false
+		}
+	}
+	return true
+}
+
+func encodeProviderToken(accessToken, refreshToken, tokenType string) (string, error) {
+	accessToken = strings.TrimSpace(accessToken)
+	refreshToken = strings.TrimSpace(refreshToken)
+	tokenType = strings.TrimSpace(tokenType)
+	if accessToken == "" {
+		return "", errors.New("dashboard Access Token is required")
+	}
+	if tokenType == "" {
+		tokenType = "Bearer"
+	}
+	if !validProviderTokenType(tokenType) {
+		return "", errors.New("invalid dashboard Token Type")
+	}
+	if len(accessToken) > 8192 || len(refreshToken) > 8192 {
+		return "", errors.New("login credential is too long")
+	}
+	data, err := json.Marshal(providerToken{AccessToken: accessToken, RefreshToken: refreshToken, TokenType: tokenType})
+	return string(data), err
+}
+
+func decodeProviderToken(secret string) (providerToken, error) {
+	if strings.HasPrefix(secret, "{") {
+		var token providerToken
+		if err := json.Unmarshal([]byte(secret), &token); err != nil || token.AccessToken == "" {
+			return providerToken{}, errors.New("stored dashboard token is invalid")
+		}
+		if !validProviderTokenType(token.TokenType) {
+			return providerToken{}, errors.New("stored dashboard token type is unsupported")
+		}
+		return token, nil
+	}
+	// Existing manually entered dashboard tokens from the earlier version.
+	return providerToken{AccessToken: secret, TokenType: "Bearer"}, nil
+}
+
+func providerPublicError(err error) string {
+	switch {
+	case errors.Is(err, errProviderTurnstile):
+		return errProviderTurnstile.Error()
+	case errors.Is(err, errProviderTwoFactor):
+		return errProviderTwoFactor.Error()
+	case errors.Is(err, errProviderAuthentication):
+		return "Provider login failed: invalid or expired dashboard credential"
+	case errors.Is(err, errProviderResponse):
+		return "Provider returned an unsupported response; check the provider type and site address"
+	default:
+		var remote *providerRemoteError
+		if errors.As(err, &remote) {
+			return fmt.Sprintf("Provider %s returned HTTP %d", remote.operation, remote.status)
+		}
+		return "Could not connect to the provider; check its HTTPS address and availability"
+	}
+}
+
+type providerRemoteError struct {
+	operation string
+	status    int
+}
+
+func (e *providerRemoteError) Error() string {
+	return fmt.Sprintf("provider %s returned HTTP %d", e.operation, e.status)
+}
 
 func normalizeProviderURL(raw string) (string, error) {
 	base, err := urlvalidator.ValidateHTTPSURL(raw, urlvalidator.ValidationOptions{})
@@ -87,9 +175,11 @@ func allowedProviderIP(ip netip.Addr) bool {
 }
 
 type providerRemote struct {
-	client *http.Client
-	base   string
-	token  string
+	client    *http.Client
+	base      string
+	token     string
+	tokenType string
+	userID    string
 }
 
 func (r *providerRemote) request(ctx context.Context, method, path string, body any) (map[string]any, error) {
@@ -109,23 +199,40 @@ func (r *providerRemote) request(ctx context.Context, method, path string, body 
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
-	if r.token != "" {
-		req.Header.Set("Authorization", "Bearer "+r.token)
+	if r.token != "" && path != "/api/v1/auth/refresh" {
+		tokenType := r.tokenType
+		if tokenType == "" {
+			tokenType = "Bearer"
+		}
+		req.Header.Set("Authorization", tokenType+" "+r.token)
+	}
+	if r.userID != "" {
+		req.Header.Set("New-Api-User", r.userID)
 	}
 	res, err := r.client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("provider request failed: %w", err)
 	}
 	defer res.Body.Close()
+	var envelope map[string]any
+	if err := json.NewDecoder(io.LimitReader(res.Body, 1<<20)).Decode(&envelope); err != nil {
+		if res.StatusCode == http.StatusUnauthorized || res.StatusCode == http.StatusForbidden {
+			return nil, errProviderAuthentication
+		}
+		if res.StatusCode < 200 || res.StatusCode >= 300 {
+			return nil, &providerRemoteError{operation: path, status: res.StatusCode}
+		}
+		return nil, errProviderResponse
+	}
+	message, _ := envelope["message"].(string)
+	if envelope["reason"] == "TURNSTILE_VERIFICATION_FAILED" || envelope["code"] == "TURNSTILE_VERIFICATION_FAILED" || strings.Contains(strings.ToLower(message), "turnstile") {
+		return nil, errProviderTurnstile
+	}
 	if res.StatusCode == http.StatusUnauthorized || res.StatusCode == http.StatusForbidden {
 		return nil, errProviderAuthentication
 	}
 	if res.StatusCode < 200 || res.StatusCode >= 300 {
-		return nil, fmt.Errorf("provider returned HTTP %d", res.StatusCode)
-	}
-	var envelope map[string]any
-	if err := json.NewDecoder(io.LimitReader(res.Body, 1<<20)).Decode(&envelope); err != nil {
-		return nil, errProviderResponse
+		return nil, &providerRemoteError{operation: path, status: res.StatusCode}
 	}
 	if success, ok := envelope["success"].(bool); ok && !success {
 		return nil, errProviderAuthentication
@@ -174,39 +281,92 @@ func divide(value *float64, factor float64) *float64 {
 	return &converted
 }
 
-func probeProvider(ctx context.Context, provider providerRecord, secret string) (providerMetrics, error) {
+func probeProvider(ctx context.Context, provider providerRecord, secret string) (providerMetrics, string, error) {
 	client, err := providerHTTPClient()
 	if err != nil {
-		return providerMetrics{}, err
+		return providerMetrics{}, "", err
 	}
-	return probeProviderWithClient(ctx, provider, secret, client)
+	return probeProviderWithClientAndSecret(ctx, provider, secret, client)
 }
 
 func probeProviderWithClient(ctx context.Context, provider providerRecord, secret string, client *http.Client) (providerMetrics, error) {
+	metrics, _, err := probeProviderWithClientAndSecret(ctx, provider, secret, client)
+	return metrics, err
+}
+
+func probeProviderWithClientAndSecret(ctx context.Context, provider providerRecord, secret string, client *http.Client) (providerMetrics, string, error) {
 	r := providerRemote{client: client, base: provider.BaseURL}
 	switch provider.SiteType {
 	case "sub2api":
+		var credential providerToken
+		var rotatedSecret string
 		if provider.AuthMode == "password" {
 			login, err := r.request(ctx, http.MethodPost, "/api/v1/auth/login", map[string]string{"email": provider.Account, "password": secret})
 			if err != nil {
-				return providerMetrics{}, err
+				return providerMetrics{}, "", err
 			}
 			r.token, _ = login["access_token"].(string)
 			if r.token == "" {
-				return providerMetrics{}, errProviderResponse
+				if required, _ := login["requires_2fa"].(bool); required {
+					return providerMetrics{}, "", errProviderTwoFactor
+				}
+				return providerMetrics{}, "", errProviderResponse
 			}
 		} else {
-			// Accept an existing dashboard access token. A model API key will
-			// fail the authenticated profile check below and is never saved.
-			r.token = secret
+			token, err := decodeProviderToken(secret)
+			if err != nil {
+				return providerMetrics{}, "", err
+			}
+			credential = token
+			r.token = token.AccessToken
+			r.tokenType = token.TokenType
+		}
+		renew := func() error {
+			if credential.RefreshToken == "" {
+				return errProviderAuthentication
+			}
+			fresh, err := r.request(ctx, http.MethodPost, "/api/v1/auth/refresh", map[string]string{"refresh_token": credential.RefreshToken})
+			if err != nil {
+				return err
+			}
+			access, _ := fresh["access_token"].(string)
+			if access == "" {
+				return errProviderResponse
+			}
+			refresh, _ := fresh["refresh_token"].(string)
+			if refresh == "" {
+				refresh = credential.RefreshToken
+			}
+			freshType, _ := fresh["token_type"].(string)
+			if freshType == "" {
+				freshType = credential.TokenType
+			}
+			rotatedSecret, err = encodeProviderToken(access, refresh, freshType)
+			if err != nil {
+				return err
+			}
+			credential.AccessToken, credential.RefreshToken = access, refresh
+			r.token = access
+			r.tokenType = freshType
+			return nil
 		}
 		profile, err := r.request(ctx, http.MethodGet, "/api/v1/user/profile", nil)
+		if errors.Is(err, errProviderAuthentication) && credential.RefreshToken != "" {
+			if err = renew(); err == nil {
+				profile, err = r.request(ctx, http.MethodGet, "/api/v1/user/profile", nil)
+			}
+		}
 		if err != nil {
-			return providerMetrics{}, err
+			return providerMetrics{}, "", err
 		}
 		stats, err := r.request(ctx, http.MethodGet, "/api/v1/usage/dashboard/stats", nil)
+		if errors.Is(err, errProviderAuthentication) && credential.RefreshToken != "" {
+			if err = renew(); err == nil {
+				stats, err = r.request(ctx, http.MethodGet, "/api/v1/usage/dashboard/stats", nil)
+			}
+		}
 		if err != nil {
-			return providerMetrics{}, err
+			return providerMetrics{}, "", err
 		}
 		return providerMetrics{
 			Balance:       field(profile, "balance"),
@@ -214,27 +374,36 @@ func probeProviderWithClient(ctx context.Context, provider providerRecord, secre
 			TotalRecharge: field(profile, "total_recharged"),
 			TotalSpend:    field(stats, "total_actual_cost", "total_cost"),
 			Currency:      "USD",
-		}, nil
+		}, rotatedSecret, nil
 	case "newapi":
 		if provider.AuthMode == "password" {
-			_, err := r.request(ctx, http.MethodPost, "/api/user/login", map[string]string{"username": provider.Account, "password": secret})
+			login, err := r.request(ctx, http.MethodPost, "/api/user/login", map[string]string{"username": provider.Account, "password": secret})
 			if err != nil {
-				return providerMetrics{}, err
+				return providerMetrics{}, "", err
 			}
+			// Current New API uses an in-memory dashboard JWT after login;
+			// older installations keep a session cookie instead.
+			r.token, _ = login["access_token"].(string)
 		} else {
-			r.token = secret
+			token, err := decodeProviderToken(secret)
+			if err != nil {
+				return providerMetrics{}, "", err
+			}
+			r.token = token.AccessToken
+			r.tokenType = token.TokenType
+			r.userID = provider.UserID
 		}
 		profile, err := r.request(ctx, http.MethodGet, "/api/user/self", nil)
 		if err != nil {
-			return providerMetrics{}, err
+			return providerMetrics{}, "", err
 		}
 		status, err := r.request(ctx, http.MethodGet, "/api/status", nil)
 		if err != nil {
-			return providerMetrics{}, err
+			return providerMetrics{}, "", err
 		}
 		quotaPerUnit, ok := number(status["quota_per_unit"])
 		if !ok || quotaPerUnit <= 0 {
-			return providerMetrics{}, errors.New("New API quota conversion is unavailable")
+			return providerMetrics{}, "", errors.New("New API quota conversion is unavailable")
 		}
 		metrics := providerMetrics{
 			Balance:    divide(field(profile, "quota"), quotaPerUnit),
@@ -250,8 +419,8 @@ func probeProviderWithClient(ctx context.Context, provider providerRecord, secre
 		}
 		// New API self/profile has no canonical cumulative recharge field.
 		// Leave it unknown instead of presenting quota + spend as payments.
-		return metrics, nil
+		return metrics, "", nil
 	default:
-		return providerMetrics{}, errors.New("unsupported provider type")
+		return providerMetrics{}, "", errors.New("unsupported provider type")
 	}
 }

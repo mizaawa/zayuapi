@@ -1,17 +1,17 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import OperationsView from '../OperationsView.vue'
-import type { OperationsDashboardResponse } from '@/api/admin/dashboard'
+import type { OperationsDashboardResponse, OperationsUserSpendResponse } from '@/api/admin/dashboard'
 
-const { getOperationsDashboard } = vi.hoisted(() => ({ getOperationsDashboard: vi.fn() }))
-vi.mock('@/api/admin', () => ({ adminAPI: { dashboard: { getOperationsDashboard } } }))
+const { getOperationsDashboard, getOperationsUserSpend, getOperationsUserSuggestions } = vi.hoisted(() => ({ getOperationsDashboard: vi.fn(), getOperationsUserSpend: vi.fn(), getOperationsUserSuggestions: vi.fn() }))
+vi.mock('@/api/admin', () => ({ adminAPI: { dashboard: { getOperationsDashboard, getOperationsUserSpend, getOperationsUserSuggestions } } }))
 vi.mock('vue-i18n', async () => ({
   ...(await vi.importActual<typeof import('vue-i18n')>('vue-i18n')),
   useI18n: () => ({ t: (key: string) => key })
 }))
 
 const fixture = (): OperationsDashboardResponse => ({
-  metrics: { today_user_consumption: 20, today_user_recharge: 30, today_monitor_consumption: 1, today_revenue: { CNY: 42, USD: 7 }, total_user_consumption: 100, total_user_balance: 1000, total_monitor_consumption: 6, admin_balance: 50 },
+  metrics: { today_user_consumption: 20, today_user_recharge: 30, today_monitor_consumption: 1, today_revenue: { CNY: 42, USD: 7 }, yesterday_user_consumption: 10, yesterday_user_recharge: 40, yesterday_monitor_consumption: 2, yesterday_revenue: { CNY: 40, USD: 9 }, yesterday_user_balance_change: null, yesterday_admin_consumption: 4, total_user_consumption: 100, total_user_balance: 1000, total_monitor_consumption: 6, admin_balance: 50 },
   trend: [],
   groups: [
     { group_id: 1, group_name: 'Small profit', platform: 'openai', rate_multiplier: 1.2, user_cost: 11, upstream_cost: 10 },
@@ -21,15 +21,29 @@ const fixture = (): OperationsDashboardResponse => ({
   ],
   models: [
     { model: 'profit-small', user_cost: 11, upstream_cost: 10 },
-    { model: 'loss-large', user_cost: 3, upstream_cost: 20 },
+    { model: 'loss-large', platforms: ['anthropic'], user_cost: 3, upstream_cost: 20 },
     { model: 'profit-large', user_cost: 30, upstream_cost: 10 }
   ]
+})
+const userSpendFixture = (search = '', userId?: number): OperationsUserSpendResponse => ({
+  users: [
+    { user_id: 1, email: 'alice@example.com', user_cost: 20, upstream_cost: 10 },
+    { user_id: 2, email: 'bob@example.com', user_cost: 12, upstream_cost: 8 }
+  ].filter(user => user.email.includes(search)),
+  detail: userId ? {
+    user_id: userId,
+    email: userId === 1 ? 'alice@example.com' : 'bob@example.com',
+    groups: [{ group_id: 2, group_name: 'Team', platform: 'anthropic', rate_multiplier: 1.2, user_cost: 12, upstream_cost: 8 }],
+    models: [{ model: 'claude-sonnet', platforms: ['anthropic'], user_cost: 12, upstream_cost: 8 }]
+  } : null
 })
 const mountPage = () => mount(OperationsView, { global: { stubs: { AppLayout: { template: '<div><slot /></div>' }, Icon: true, LoadingSpinner: true, OperationsTrendChart: { props: ['points', 'days'], template: '<div data-testid="trend-stub" :data-days="days" />' } } } })
 
 describe('OperationsView', () => {
   beforeEach(() => {
     getOperationsDashboard.mockReset().mockResolvedValue(fixture())
+    getOperationsUserSpend.mockReset().mockImplementation(({ search, user_id }) => Promise.resolve(userSpendFixture(search, user_id)))
+    getOperationsUserSuggestions.mockReset().mockResolvedValue([{ user_id: 1, email: 'alice@example.com' }])
     Object.defineProperty(window, 'innerWidth', { configurable: true, writable: true, value: 1280 })
   })
 
@@ -39,10 +53,75 @@ describe('OperationsView', () => {
     expect(wrapper.findAll('[data-metric]')).toHaveLength(8)
     expect(wrapper.get('[data-metric="today_revenue"]').text()).toContain('42.00')
     expect(wrapper.get('[data-metric="today_revenue"]').text()).toContain('$7.00')
+    expect(wrapper.get('[data-metric="today_user_consumption"]').text()).toContain('+$10.00')
+    expect(wrapper.get('[data-metric="today_user_consumption"] .text-rose-500').exists()).toBe(true)
+    expect(wrapper.get('[data-metric="today_user_recharge"]').text()).toContain('-$10.00')
+    expect(wrapper.get('[data-metric="today_user_recharge"] .text-emerald-600').exists()).toBe(true)
+    expect(wrapper.get('[data-metric="today_revenue"]').text()).toContain('-$2.00')
+    expect(wrapper.get('[data-metric="total_user_balance"]').text()).toContain('—')
+    expect(wrapper.get('[data-metric="admin_balance"]').text()).toContain('$4.00')
     expect(getOperationsDashboard.mock.calls[0][0].start_date).toBe(getOperationsDashboard.mock.calls[0][0].end_date)
     expect(getOperationsDashboard.mock.calls[0][0].group_id).toBe(0)
     expect(wrapper.get('[data-group="all"]').attributes('aria-pressed')).toBe('true')
+    expect(wrapper.findAll('[data-user]')).toHaveLength(2)
+    expect(wrapper.get('[data-user="1"]').attributes('aria-pressed')).toBe('true')
+    expect(wrapper.get('[data-testid="user-detail"]').text()).toContain('alice@example.com')
+    expect(getOperationsUserSpend.mock.lastCall?.[0].user_id).toBe(1)
     expect(wrapper.get('[data-testid="trend-stub"]').attributes('data-days')).toBe('15')
+    wrapper.unmount()
+  })
+
+  it('shows the selected user breakdown with group and model tabs', async () => {
+    const wrapper = mountPage()
+    await flushPromises()
+    await wrapper.get('[data-user="2"]').trigger('click')
+    await flushPromises()
+    expect(getOperationsUserSpend.mock.lastCall?.[0].user_id).toBe(2)
+    expect(wrapper.get('[data-testid="user-detail"]').text()).toContain('bob@example.com')
+    expect(wrapper.get('[data-user-group="2"]').text()).toContain('$4.00')
+    await wrapper.get('[data-detail-tab="models"]').trigger('click')
+    expect(wrapper.get('[data-user-model="claude-sonnet"]').text()).toContain('$12.00')
+    expect(wrapper.get('[data-user-model="claude-sonnet"] .text-orange-600').exists()).toBe(true)
+    expect(wrapper.get('[data-user="2"]').attributes('aria-pressed')).toBe('true')
+    await wrapper.get('[data-period="7"]').trigger('click')
+    await flushPromises()
+    expect(getOperationsUserSpend.mock.lastCall?.[0].user_id).toBe(2)
+    expect(wrapper.get('[data-user="2"]').attributes('aria-pressed')).toBe('true')
+    wrapper.unmount()
+  })
+
+  it('follows the new top spender on refresh until a user is chosen manually', async () => {
+    let topUserId = 1
+    getOperationsUserSpend.mockImplementation(({ search, user_id }) => {
+      const result = userSpendFixture(search, user_id)
+      if (topUserId === 2) result.users.reverse()
+      return Promise.resolve(result)
+    })
+    const wrapper = mountPage()
+    await flushPromises()
+    expect(wrapper.get('[data-user="1"]').attributes('aria-pressed')).toBe('true')
+    topUserId = 2
+    await wrapper.get('.btn-secondary').trigger('click')
+    await flushPromises()
+    expect(wrapper.get('[data-user="2"]').attributes('aria-pressed')).toBe('true')
+    expect(getOperationsUserSpend.mock.lastCall?.[0].user_id).toBe(2)
+    wrapper.unmount()
+  })
+
+  it('suggests user emails while typing and filters the ranking', async () => {
+    const wrapper = mountPage()
+    await flushPromises()
+    await wrapper.get('[data-testid="user-search"]').setValue('alice')
+    await new Promise(resolve => setTimeout(resolve, 300))
+    await flushPromises()
+    expect(getOperationsUserSuggestions).toHaveBeenCalledWith('alice')
+    expect(getOperationsUserSpend.mock.lastCall?.[0].search).toBe('alice')
+    expect(wrapper.findAll('[data-user]')).toHaveLength(1)
+    expect(wrapper.get('[data-user="1"]').attributes('aria-pressed')).toBe('true')
+    expect(wrapper.get('[data-testid="user-suggestions"]').text()).toContain('alice@example.com')
+    await wrapper.get('[data-testid="user-suggestions"] [role="option"]').trigger('click')
+    await flushPromises()
+    expect(getOperationsUserSpend.mock.lastCall?.[0].user_id).toBe(1)
     wrapper.unmount()
   })
 
@@ -55,6 +134,7 @@ describe('OperationsView', () => {
     expect(wrapper.get('[data-testid="groups-scroll-region"]').classes()).toContain('overflow-y-auto')
     expect(wrapper.get('[data-testid="models-scroll-region"]').classes()).toContain('overflow-y-auto')
     expect(wrapper.findAll('[data-model]').map(row => row.attributes('data-model'))).toEqual(['loss-large', 'profit-large', 'profit-small'])
+    expect(wrapper.get('[data-model="loss-large"] .text-orange-600').exists()).toBe(true)
     expect(wrapper.get('[data-group="all"]').text()).toContain('$52.00')
     expect(wrapper.get('[data-group="all"]').text()).toContain('$50.00')
     wrapper.unmount()
@@ -86,12 +166,15 @@ describe('OperationsView', () => {
     let resolveFirst!: (value: OperationsDashboardResponse) => void
     getOperationsDashboard.mockImplementationOnce(() => new Promise(resolve => { resolveFirst = resolve }))
     await wrapper.get('[data-group="1"]').trigger('click')
+    expect(wrapper.get('[data-testid="groups-loading"]').attributes('role')).toBe('status')
+    expect(wrapper.get('[data-testid="models-loading"]').attributes('role')).toBe('status')
     getOperationsDashboard.mockResolvedValueOnce({ ...fixture(), models: [{ model: 'latest', user_cost: 1, upstream_cost: 0 }] })
     await wrapper.get('[data-group="2"]').trigger('click')
     await flushPromises()
     resolveFirst(fixture())
     await flushPromises()
     expect(wrapper.findAll('[data-model]').map(row => row.attributes('data-model'))).toEqual(['latest'])
+    expect(wrapper.find('[data-testid="groups-loading"]').exists()).toBe(false)
     wrapper.unmount()
   })
 })

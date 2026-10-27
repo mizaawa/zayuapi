@@ -75,4 +75,67 @@ describe('UpstreamView provider management', () => {
     expect(mocks.list).toHaveBeenLastCalledWith(1, '', 'connected')
     wrapper.unmount()
   })
+
+  it('automatically refreshes balances while visible and stops after unmount', async () => {
+    vi.useFakeTimers()
+    try {
+      const wrapper = mountPage()
+      await flushPromises()
+      await vi.waitFor(() => expect(mocks.refresh).toHaveBeenCalledWith('provider-1'))
+      await flushPromises()
+      const initialLoads = mocks.list.mock.calls.length
+      expect(initialLoads).toBeGreaterThan(1)
+
+      await vi.advanceTimersByTimeAsync(60_000)
+      await flushPromises()
+      expect(mocks.list.mock.calls.length).toBeGreaterThan(initialLoads)
+
+      const beforeUnmount = mocks.refresh.mock.calls.length
+      wrapper.unmount()
+      await vi.advanceTimersByTimeAsync(60_000)
+      expect(mocks.refresh.mock.calls.length).toBe(beforeUnmount)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('replaces the displayed provider and user balances after a live probe', async () => {
+    let balance = 15.79
+    let userBalance = 1054.28
+    mocks.list.mockImplementation(async () => ({
+      items: [{ ...provider, metrics: { ...provider.metrics, balance } }],
+      total: 1, page: 1, pages: 1,
+      overview: { provider_count: 1, connected_count: 1, upstream_total_balance: balance }
+    }))
+    mocks.dashboard.mockImplementation(async () => ({ metrics: { total_user_balance: userBalance } }))
+    mocks.refresh.mockImplementation(async () => {
+      balance = 20.5
+      userBalance = 1070
+      return provider
+    })
+    const wrapper = mountPage()
+    await flushPromises()
+    expect(wrapper.text()).toContain('$20.50')
+    expect(wrapper.text()).toContain('$1,070.00')
+    wrapper.unmount()
+  })
+
+  it('pauses balance probes in a hidden tab and refreshes on return', async () => {
+    vi.useFakeTimers()
+    const hidden = vi.spyOn(document, 'hidden', 'get').mockReturnValue(true)
+    try {
+      const wrapper = mountPage()
+      await flushPromises()
+      await vi.advanceTimersByTimeAsync(60_000)
+      expect(mocks.refresh).not.toHaveBeenCalled()
+      hidden.mockReturnValue(false)
+      document.dispatchEvent(new Event('visibilitychange'))
+      await flushPromises()
+      expect(mocks.refresh).toHaveBeenCalledWith('provider-1')
+      wrapper.unmount()
+    } finally {
+      hidden.mockRestore()
+      vi.useRealTimers()
+    }
+  })
 })

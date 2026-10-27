@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/service"
@@ -20,6 +21,8 @@ func (r *usageLogRepository) GetOperationsDashboardData(
 		Models: make([]service.OperationsModelProfitStat, 0),
 	}
 	data.Metrics.TodayRevenue = make(map[string]float64)
+	data.Metrics.YesterdayRevenue = make(map[string]float64)
+	yesterdayStart := todayStart.AddDate(0, 0, -1)
 
 	const metricsQuery = `
 		SELECT
@@ -50,10 +53,34 @@ func (r *usageLogRepository) GetOperationsDashboardData(
 			COALESCE((SELECT SUM(uc.account_cost)::double precision FROM usage_counters uc
 				JOIN users u ON u.id = uc.user_id
 				WHERE u.role = 'user' AND uc.bucket_date = $1::date
-				  AND NOT EXISTS (SELECT 1 FROM api_keys mk WHERE mk.id = uc.api_key_id AND mk.purpose = 'channel_monitor')), 0)
+				  AND NOT EXISTS (SELECT 1 FROM api_keys mk WHERE mk.id = uc.api_key_id AND mk.purpose = 'channel_monitor')), 0),
+			COALESCE((SELECT SUM(uc.actual_cost)::double precision
+				FROM usage_counters uc JOIN users u ON u.id = uc.user_id
+				WHERE u.role = 'user' AND uc.bucket_date = $4::date
+				  AND NOT EXISTS (SELECT 1 FROM api_keys mk WHERE mk.id = uc.api_key_id AND mk.purpose = 'channel_monitor')), 0),
+			COALESCE((SELECT SUM(po.amount)::double precision FROM payment_orders po JOIN users u ON u.id = po.user_id
+				WHERE u.role = 'user' AND po.order_type = 'balance'
+				  AND po.status IN ('PAID', 'RECHARGING', 'COMPLETED') AND po.paid_at >= $5 AND po.paid_at < $2), 0) +
+			COALESCE((SELECT SUM(rc.value)::double precision FROM redeem_codes rc JOIN users u ON u.id = rc.used_by
+				WHERE u.role = 'user' AND rc.status = 'used' AND rc.type IN ('balance', 'admin_balance')
+				  AND rc.value > 0 AND rc.used_at >= $5 AND rc.used_at < $2), 0),
+			COALESCE((SELECT SUM(uc.account_cost)::double precision
+				FROM usage_counters uc JOIN api_keys mk ON mk.id = uc.api_key_id AND mk.purpose = 'channel_monitor'
+				WHERE uc.bucket_date = $4::date), 0),
+			COALESCE((SELECT SUM(uc.account_cost)::double precision
+				FROM usage_counters uc JOIN users u ON u.id = uc.user_id
+				WHERE u.role = 'user' AND uc.bucket_date = $4::date
+				  AND NOT EXISTS (SELECT 1 FROM api_keys mk WHERE mk.id = uc.api_key_id AND mk.purpose = 'channel_monitor')), 0),
+			(SELECT CASE WHEN $4::date >= t.started_on THEN
+				COALESCE((SELECT SUM(d.amount)::double precision FROM dashboard_balance_daily_changes d
+					WHERE d.bucket_date = $4::date AND d.role = 'user'), 0)
+				ELSE NULL END FROM dashboard_balance_tracking t WHERE t.singleton),
+			COALESCE((SELECT SUM(uc.actual_cost)::double precision
+				FROM usage_counters uc JOIN users u ON u.id = uc.user_id
+				WHERE u.role = 'admin' AND uc.bucket_date = $4::date), 0)
 	`
-	var todayUserUpstreamCost float64
-	if err := scanSingleRow(ctx, r.sql, metricsQuery, []any{todayStart.Format("2006-01-02"), todayStart, todayEnd},
+	var todayUserUpstreamCost, yesterdayUserUpstreamCost float64
+	if err := scanSingleRow(ctx, r.sql, metricsQuery, []any{todayStart.Format("2006-01-02"), todayStart, todayEnd, yesterdayStart.Format("2006-01-02"), yesterdayStart},
 		&data.Metrics.TodayUserConsumption,
 		&data.Metrics.TodayUserRecharge,
 		&data.Metrics.TodayMonitorConsumption,
@@ -62,11 +89,18 @@ func (r *usageLogRepository) GetOperationsDashboardData(
 		&data.Metrics.TotalMonitorConsumption,
 		&data.Metrics.AdminBalance,
 		&todayUserUpstreamCost,
+		&data.Metrics.YesterdayUserConsumption,
+		&data.Metrics.YesterdayUserRecharge,
+		&data.Metrics.YesterdayMonitorConsumption,
+		&yesterdayUserUpstreamCost,
+		&data.Metrics.YesterdayUserBalanceChange,
+		&data.Metrics.YesterdayAdminConsumption,
 	); err != nil {
 		return nil, fmt.Errorf("query operations dashboard metrics: %w", err)
 	}
 	// Monitor probes are free for site users but still spend upstream quota.
 	data.Metrics.TodayRevenue["USD"] = data.Metrics.TodayUserConsumption - todayUserUpstreamCost - data.Metrics.TodayMonitorConsumption
+	data.Metrics.YesterdayRevenue["USD"] = data.Metrics.YesterdayUserConsumption - yesterdayUserUpstreamCost - data.Metrics.YesterdayMonitorConsumption
 
 	trendQuery := `
 		SELECT TO_CHAR(ul.created_at AT TIME ZONE $3, 'YYYY-MM-DD') AS date,
@@ -139,8 +173,10 @@ func (r *usageLogRepository) GetOperationsDashboardData(
 	modelQuery := `
 		SELECT COALESCE(NULLIF(TRIM(ul.requested_model), ''), ul.model) AS model,
 			COALESCE(SUM(ul.actual_cost), 0)::double precision AS user_cost,
-			COALESCE(SUM(COALESCE(ul.account_stats_cost, ul.total_cost) * COALESCE(ul.account_rate_multiplier, 1)), 0)::double precision AS upstream_cost
+			COALESCE(SUM(COALESCE(ul.account_stats_cost, ul.total_cost) * COALESCE(ul.account_rate_multiplier, 1)), 0)::double precision AS upstream_cost,
+			STRING_AGG(DISTINCT COALESCE(g.platform, 'custom'), ',' ORDER BY COALESCE(g.platform, 'custom')) AS platforms
 		FROM usage_logs ul JOIN users u ON u.id = ul.user_id
+		LEFT JOIN groups g ON g.id = ul.group_id
 		WHERE u.role = 'user' AND ul.created_at >= $1 AND ul.created_at < $2
 		  AND (($3 = 0) OR ($3 = -1 AND COALESCE(ul.group_id, 0) = 0) OR COALESCE(ul.group_id, 0) = $3)
 		  AND NOT EXISTS (SELECT 1 FROM api_keys mk WHERE mk.id = ul.api_key_id AND mk.purpose = 'channel_monitor')
@@ -152,10 +188,12 @@ func (r *usageLogRepository) GetOperationsDashboardData(
 	}
 	for rows.Next() {
 		var row service.OperationsModelProfitStat
-		if err := rows.Scan(&row.Model, &row.UserCost, &row.UpstreamCost); err != nil {
+		var platforms string
+		if err := rows.Scan(&row.Model, &row.UserCost, &row.UpstreamCost, &platforms); err != nil {
 			_ = rows.Close()
 			return nil, err
 		}
+		row.Platforms = strings.Split(platforms, ",")
 		data.Models = append(data.Models, row)
 	}
 	if err := rows.Err(); err != nil {
