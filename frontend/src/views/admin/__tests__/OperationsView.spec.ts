@@ -140,6 +140,52 @@ describe('OperationsView', () => {
     wrapper.unmount()
   })
 
+  it('keeps site groups and models on the first row, then users and detail on the second', async () => {
+    const wrapper = mountPage()
+    await flushPromises()
+    const site = wrapper.get('[data-testid="site-spend-grid"]')
+    const users = wrapper.get('[data-testid="user-spend-grid"]')
+    expect(site.element.compareDocumentPosition(users.element) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(site.element.children[0]?.textContent).toContain('admin.operations.siteGroupSpend')
+    expect(site.element.children[1]?.textContent).toContain('admin.operations.siteModelSpend')
+    expect(users.element.children[0]?.textContent).toContain('admin.operations.userRanking')
+    expect(users.element.children[1]?.textContent).toContain('admin.operations.userDetails')
+    for (const region of ['groups-scroll-region', 'models-scroll-region', 'users-scroll-region', 'user-detail-groups']) {
+      expect(wrapper.get(`[data-testid="${region}"]`).classes()).toContain('overflow-y-auto')
+      expect(wrapper.get(`[data-testid="${region}"]`).classes().some(name => name.startsWith('max-h-'))).toBe(true)
+    }
+    wrapper.unmount()
+  })
+
+  it('shows progress next to the selected group, user and period during delayed requests', async () => {
+    const wrapper = mountPage()
+    await flushPromises()
+    let resolveDashboard!: (value: OperationsDashboardResponse) => void
+    getOperationsDashboard.mockImplementationOnce(() => new Promise(resolve => { resolveDashboard = resolve }))
+    await wrapper.get('[data-group="2"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.get('[data-group="2"] [data-testid="group-selection-loading"]').exists()).toBe(true)
+    expect(wrapper.get('[data-testid="model-filter-loading"]').exists()).toBe(true)
+    resolveDashboard(fixture())
+    await flushPromises()
+
+    let resolveUsers!: (value: OperationsUserSpendResponse) => void
+    getOperationsUserSpend.mockImplementationOnce(() => new Promise(resolve => { resolveUsers = resolve }))
+    await wrapper.get('[data-user="2"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.get('[data-user="2"] [data-testid="selected-user-loading"]').exists()).toBe(true)
+    expect(wrapper.get('[data-detail-tab="groups"] [data-testid="detail-tab-loading"]').exists()).toBe(true)
+    resolveUsers(userSpendFixture('', 2))
+    await flushPromises()
+    getOperationsDashboard.mockImplementationOnce(() => new Promise(resolve => { resolveDashboard = resolve }))
+    await wrapper.get('[data-period="7"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.get('[data-period="7"] [data-testid="period-loading"]').exists()).toBe(true)
+    resolveDashboard(fixture())
+    await flushPromises()
+    wrapper.unmount()
+  })
+
   it('filters models by group, uses -1 for unassigned, and updates the period', async () => {
     const wrapper = mountPage()
     await flushPromises()

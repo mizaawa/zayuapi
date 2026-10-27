@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 
 	"github.com/Wei-Shaw/sub2api/internal/pkg/response"
 	"github.com/gin-gonic/gin"
@@ -124,9 +125,8 @@ func validateProviderInput(input *providerInput, previous *providerRecord) (prov
 	}
 	userID := strings.TrimSpace(input.UserID)
 	if input.SiteType == "newapi" && input.AuthMode == "token" {
-		id, err := strconv.ParseUint(userID, 10, 64)
-		if err != nil || id == 0 {
-			return providerRecord{}, "", errors.New("New API user ID must be a positive integer")
+		if userID == "" || len(userID) > 128 || strings.IndexFunc(userID, unicode.IsControl) >= 0 {
+			return providerRecord{}, "", errors.New("New API user ID must be a nonempty identifier without control characters (up to 128 bytes)")
 		}
 	}
 	if math.IsNaN(input.ExchangeRate) || math.IsInf(input.ExchangeRate, 0) || input.ExchangeRate < 0 || input.ExchangeRate > 1e6 {
@@ -142,13 +142,11 @@ func validateProviderInput(input *providerInput, previous *providerRecord) (prov
 	secret := input.Password
 	if input.AuthMode == "token" {
 		if input.SiteType == "sub2api" {
-			if input.AccessToken != "" {
+			if input.AccessToken != "" || input.RefreshToken != "" {
 				secret, err = encodeProviderToken(input.AccessToken, input.RefreshToken, input.TokenType)
 				if err != nil {
 					return providerRecord{}, "", err
 				}
-			} else if input.RefreshToken != "" {
-				return providerRecord{}, "", errors.New("Access Token is required when updating Refresh Token")
 			} else {
 				secret = ""
 			}
@@ -219,6 +217,26 @@ func (h *AccountHandler) probeRecord(c *gin.Context, record *providerRecord, sec
 	record.LastError = ""
 	now := time.Now().UTC()
 	record.UpdatedAt = &now
+	return nil
+}
+
+// Protect the submitted credential before contacting a remote site. A failed
+// probe must still leave a usable, encrypted login in the saved record.
+func (h *AccountHandler) protectProviderCredential(record *providerRecord, secret string) error {
+	if h.providerEncryptor == nil {
+		return errors.New("provider encryption unavailable")
+	}
+	if secret == "" {
+		if record.SecretEncrypted == "" {
+			return errors.New("provider login is unavailable")
+		}
+		return nil
+	}
+	ciphertext, err := h.providerEncryptor.Encrypt(secret)
+	if err != nil {
+		return errors.New("could not protect provider login")
+	}
+	record.SecretEncrypted = ciphertext
 	return nil
 }
 
@@ -320,13 +338,13 @@ func (h *AccountHandler) CreateProvider(c *gin.Context) {
 		response.BadRequest(c, err.Error())
 		return
 	}
-	if h.providerEncryptor == nil {
-		response.Error(c, http.StatusServiceUnavailable, "Provider encryption unavailable")
+	if err := h.protectProviderCredential(&record, secret); err != nil {
+		response.Error(c, http.StatusServiceUnavailable, err.Error())
 		return
 	}
 	if err := h.probeRecord(c, &record, secret); err != nil {
-		response.Error(c, http.StatusBadGateway, providerPublicError(err))
-		return
+		record.Status = "disconnected"
+		record.LastError = providerPublicError(err)
 	}
 	record.ID, err = newProviderID()
 	if err != nil {
@@ -369,9 +387,13 @@ func (h *AccountHandler) UpdateProvider(c *gin.Context) {
 			response.BadRequest(c, err.Error())
 			return
 		}
-		if err := h.probeRecord(c, &record, secret); err != nil {
-			response.Error(c, http.StatusBadGateway, providerPublicError(err))
+		if err := h.protectProviderCredential(&record, secret); err != nil {
+			response.Error(c, http.StatusServiceUnavailable, err.Error())
 			return
+		}
+		if err := h.probeRecord(c, &record, secret); err != nil {
+			record.Status = "disconnected"
+			record.LastError = providerPublicError(err)
 		}
 		records[index] = record
 		if err := h.providerSettings.SaveProviderRecords(c.Request.Context(), records); err != nil {

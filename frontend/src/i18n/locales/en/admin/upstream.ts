@@ -16,14 +16,14 @@ export default { upstream: {
   loginAccount: 'Login account', loginPassword: 'Password', newapiAccountPlaceholder: 'Enter site username',
   keepSecret: 'Leave blank to keep the saved credential', passwordPlaceholder: 'Enter password', showSecret: 'Show credential', hideSecret: 'Hide credential',
   sub2TokenGuideTitle: 'Connect with a dashboard login session', sub2TokenGuide: 'Sign in at the provider site, then enter this account’s Access Token or Refresh Token. This is a dashboard login token, not a model API key.',
-  sub2TokenGuideLocation: 'Open the provider site to obtain the token.', sub2TokenGuideRefresh: 'Add a Refresh Token to extend the session; with only an Access Token, sign in again after expiry.',
-  accessTokenPlaceholder: 'Paste Access Token', accessTokenHint: 'Use the site login token; a Refresh Token can also be supplied.',
-  refreshTokenPlaceholder: 'Paste Refresh Token', refreshTokenHint: 'Refreshes login when the access token expires.',
-  userId: 'User ID', userIdHint: 'Find it in New API personal settings.', systemAccessToken: 'System access token',
+  sub2TokenGuideLocation: 'Open the provider site to obtain the token.', sub2TokenGuideRefresh: 'Enter either an Access Token or a Refresh Token; a Refresh Token is exchanged for a new login token first.',
+  accessTokenPlaceholder: 'Paste Access Token', accessTokenHint: 'Can be used alone; sign in again when it expires.',
+  refreshTokenPlaceholder: 'Paste Refresh Token', refreshTokenHint: 'Refreshes login when the access token expires.', tokenEitherHint: 'Enter at least one token. Supplying both allows automatic renewal.',
+  userId: 'User ID', userIdPlaceholder: 'e.g. 123 or user-abc', userIdHint: 'Find it in New API personal settings; letters and symbols are accepted.', systemAccessToken: 'System access token',
   systemTokenPlaceholder: 'Paste system access token', systemTokenHint: 'Created in personal settings, not an sk- model API key.',
-  optional: 'Optional', loginAndAdd: 'Log in and add',
+  optional: 'Optional', loginAndAdd: 'Add',
   exchangeRate: 'Recharge multiplier', exchangeRateHint: 'Local display amount = USD amount × recharge multiplier.', notes: 'Notes', notesPlaceholder: 'Identify the site or leave a note',
   probe: 'Test login', probing: 'Testing…', probeHint: 'Verifies login and retrieves the balance without adding the site.',
   probeSuccess: 'Login succeeded; provider data loaded', probeFailed: 'Login failed; check the URL and credentials',
-  savingProvider: 'Saving…', providerSaved: 'Provider saved', providerSaveFailed: 'Could not save provider'
+  savingProvider: 'Saving…', providerSaved: 'Provider saved', providerSavedDisconnected: 'Provider saved, but connection failed', providerSaveFailed: 'Could not save provider'
 } }

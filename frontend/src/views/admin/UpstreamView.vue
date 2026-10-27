@@ -15,7 +15,11 @@
             <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg" :class="metric.iconClass"><Icon :name="metric.icon" size="sm" /></span>
             <div class="min-w-0">
               <p class="text-xs font-medium text-gray-500 dark:text-gray-400">{{ t(metric.label) }}</p>
-              <p class="mt-1 break-all text-lg font-bold tabular-nums text-gray-900 dark:text-white sm:text-xl">{{ metric.value }}</p>
+              <div class="mt-1 flex min-h-7 items-center gap-2 text-lg font-bold tabular-nums text-gray-900 dark:text-white sm:text-xl">
+                <span v-if="!metric.loading" class="break-all">{{ metric.value }}</span>
+                <span v-else-if="metric.key === 'upstream'" class="break-all">{{ metric.value }}</span>
+                <LoadingSpinner v-if="metric.loading" size="sm" :data-testid="`${metric.key}-balance-loading`" />
+              </div>
             </div>
           </div>
         </article>
@@ -63,11 +67,15 @@
           <div class="grid grid-cols-1 divide-y divide-gray-100 p-4 dark:divide-dark-700 sm:grid-cols-3 sm:divide-x sm:divide-y-0 sm:px-5">
             <div v-for="amount in providerAmounts(provider)" :key="amount.key" class="min-w-0 py-2 first:pt-0 last:pb-0 sm:px-4 sm:py-0 sm:first:pl-0 sm:last:pr-0">
               <p class="text-xs font-medium text-gray-500 dark:text-gray-400">{{ t(amount.label) }}</p>
-              <p class="mt-1 break-all text-xl font-bold tabular-nums" :class="amount.key === 'balance' ? 'text-primary-600 dark:text-primary-400' : 'text-gray-900 dark:text-white'">{{ amount.value === null ? '—' : yuan(amount.value * provider.exchange_rate) }}</p>
-              <p class="mt-0.5 text-[11px] text-gray-400">{{ amount.value === null ? t('admin.upstream.unknown') : money(amount.value) + ' USD' }}</p>
+              <div class="mt-1 flex min-h-7 items-center text-xl font-bold tabular-nums" :class="amount.key === 'balance' ? 'text-primary-600 dark:text-primary-400' : 'text-gray-900 dark:text-white'">
+                <LoadingSpinner v-if="pendingProviderIds.has(provider.id)" size="sm" :data-testid="`provider-${provider.id}-${amount.key}-loading`" />
+                <span v-else class="break-all">{{ amount.value === null ? '—' : yuan(amount.value * provider.exchange_rate) }}</span>
+              </div>
+              <p class="mt-0.5 text-[11px] text-gray-400">{{ pendingProviderIds.has(provider.id) ? t('admin.upstream.loading') : amount.value === null ? t('admin.upstream.unknown') : money(amount.value) + ' USD' }}</p>
             </div>
           </div>
-          <p class="px-4 pb-3 text-right text-xs text-gray-500 dark:text-gray-400 sm:px-5">{{ t('admin.upstream.totalConsumption') }} <strong class="ml-1 tabular-nums text-gray-700 dark:text-gray-200">{{ provider.metrics.total_spend === null ? '—' : money(provider.metrics.total_spend) }}</strong></p>
+          <p class="flex items-center justify-end gap-1 px-4 pb-3 text-right text-xs text-gray-500 dark:text-gray-400 sm:px-5">{{ t('admin.upstream.totalConsumption') }} <LoadingSpinner v-if="pendingProviderIds.has(provider.id)" size="sm" :data-testid="`provider-${provider.id}-total-loading`" /><strong v-else class="tabular-nums text-gray-700 dark:text-gray-200">{{ provider.metrics.total_spend === null ? '—' : money(provider.metrics.total_spend) }}</strong></p>
+          <p v-if="provider.status === 'disconnected' && provider.last_error" class="mx-4 mb-3 rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700 dark:bg-red-900/20 dark:text-red-300 sm:mx-5" role="status">{{ provider.last_error }}</p>
           <div class="flex flex-wrap items-center justify-between gap-2 border-t border-gray-100 bg-gray-50/60 px-4 py-3 text-xs text-gray-500 dark:border-dark-700 dark:bg-dark-800/40 dark:text-gray-400 sm:px-5">
             <span>{{ t('admin.upstream.updated') }} {{ formattedTime(provider.updated_at) }}</span>
             <div class="flex items-center gap-3">
@@ -95,6 +103,7 @@ import { listProviders, refreshProvider, type Provider } from '@/api/admin/upstr
 import { useAppStore } from '@/stores/app'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import Icon from '@/components/icons/Icon.vue'
+import LoadingSpinner from '@/components/common/LoadingSpinner.vue'
 import Select from '@/components/common/Select.vue'
 import ProviderDialog from '@/components/admin/provider/ProviderDialog.vue'
 import { dateRange } from './operationsUtils'
@@ -106,7 +115,11 @@ const total = ref(0)
 const providerCount = ref(0)
 const connectedCount = ref(0)
 const totalBalance = ref(0)
-const userBalance = ref(0)
+const userBalance = ref<number | null>(null)
+const userBalanceLoading = ref(true)
+const upstreamBalanceLoading = ref(true)
+const pendingProviderIds = ref<Set<string>>(new Set())
+const cachedTotalBalance = ref(0)
 const page = ref(1)
 const pages = ref(1)
 const search = ref('')
@@ -130,10 +143,10 @@ const money = (amount: number) => new Intl.NumberFormat(undefined, { style: 'cur
 const yuan = (amount: number) => new Intl.NumberFormat('zh-CN', { style: 'currency', currency: 'CNY', maximumFractionDigits: 2 }).format(amount)
 const visibleProviders = computed(() => providers.value)
 const metrics = computed(() => [
-  { key: 'count', label: 'admin.upstream.providerCount', icon: 'server' as const, iconClass: 'bg-primary-100 text-primary-600 dark:bg-primary-900/30 dark:text-primary-400', value: String(providerCount.value) },
-  { key: 'connected', label: 'admin.upstream.connectedCount', icon: 'check' as const, iconClass: 'bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400', value: String(connectedCount.value) },
-  { key: 'upstream', label: 'admin.upstream.totalBalance', icon: 'creditCard' as const, iconClass: 'bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400', value: money(totalBalance.value) },
-  { key: 'users', label: 'admin.upstream.userBalance', icon: 'users' as const, iconClass: 'bg-violet-100 text-violet-600 dark:bg-violet-900/30 dark:text-violet-400', value: money(userBalance.value) }
+  { key: 'count', label: 'admin.upstream.providerCount', icon: 'server' as const, iconClass: 'bg-primary-100 text-primary-600 dark:bg-primary-900/30 dark:text-primary-400', value: String(providerCount.value), loading: false },
+  { key: 'connected', label: 'admin.upstream.connectedCount', icon: 'check' as const, iconClass: 'bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400', value: String(connectedCount.value), loading: false },
+  { key: 'upstream', label: 'admin.upstream.totalBalance', icon: 'creditCard' as const, iconClass: 'bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400', value: money(totalBalance.value), loading: upstreamBalanceLoading.value },
+  { key: 'users', label: 'admin.upstream.userBalance', icon: 'users' as const, iconClass: 'bg-violet-100 text-violet-600 dark:bg-violet-900/30 dark:text-violet-400', value: userBalance.value === null ? '—' : money(userBalance.value), loading: userBalanceLoading.value }
 ])
 function providerAmounts(provider: Provider) {
   return [
@@ -151,22 +164,30 @@ async function load() {
   loading.value = true
   error.value = false
   try {
-    const today = dateRange(1)
-    const [list, operations] = await Promise.all([
-      listProviders(page.value, search.value, status.value === 'all' ? '' : status.value),
-      adminAPI.dashboard.getOperationsDashboard({ start_date: today.start, end_date: today.end, trend_days: 7, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC', group_id: 0 })
-    ])
+    const list = await listProviders(page.value, search.value, status.value === 'all' ? '' : status.value)
+    if (disposed) return
     providers.value = list.items ?? []
+    if (upstreamBalanceLoading.value && !balanceRefreshRunning) pendingProviderIds.value = new Set(providers.value.map(provider => provider.id))
     total.value = list.total
     pages.value = Math.max(1, list.pages)
     providerCount.value = list.overview.provider_count
     connectedCount.value = list.overview.connected_count
-    totalBalance.value = list.overview.upstream_total_balance
-    userBalance.value = operations.metrics.total_user_balance
+    cachedTotalBalance.value = list.overview.upstream_total_balance
+    if (!upstreamBalanceLoading.value && !balanceRefreshRunning) totalBalance.value = cachedTotalBalance.value
   } catch (reason) {
     error.value = true
     console.error('Provider list failed:', reason)
   } finally { loading.value = false }
+}
+async function loadUserBalance() {
+  userBalanceLoading.value = true
+  try {
+    const today = dateRange(1)
+    const operations = await adminAPI.dashboard.getOperationsDashboard({ start_date: today.start, end_date: today.end, trend_days: 7, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC', group_id: 0 })
+    if (!disposed) userBalance.value = operations.metrics.total_user_balance
+  } catch (reason) {
+    console.error('User balance load failed:', reason)
+  } finally { if (!disposed) userBalanceLoading.value = false }
 }
 async function refresh(provider: Provider) {
   refreshingId.value = provider.id
@@ -174,27 +195,59 @@ async function refresh(provider: Provider) {
   catch (reason) { appStore.showError(t('admin.upstream.refreshFailed')); console.error('Provider refresh failed:', reason) }
   finally { refreshingId.value = null }
 }
-async function refreshBalances() {
+async function refreshBalances(refreshUserBalance = true) {
   if (disposed || document.hidden || balanceRefreshRunning || loading.value || refreshingId.value) return
   balanceRefreshRunning = true
+  upstreamBalanceLoading.value = true
+  totalBalance.value = 0
+  if (refreshUserBalance) void loadUserBalance()
   try {
-    // Listing returns the last saved metrics. Probe the visible page to fetch
-    // current upstream balances, then reload the overview and user balance.
-    for (const provider of providers.value) {
+    // The list endpoint serves ten items per page. Fetch identities from all
+    // pages so the global total grows as each independent provider finishes.
+    const first = await listProviders(1)
+    const all = [...(first.items ?? [])]
+    for (let nextPage = 2; nextPage <= first.pages; nextPage++) {
       if (disposed || document.hidden) break
-      try { await refreshProvider(provider.id) }
-      catch (reason) { console.error('Automatic provider refresh failed:', reason) }
+      const next = await listProviders(nextPage)
+      all.push(...(next.items ?? []))
     }
-    if (!disposed && !document.hidden) await load()
-  } finally { balanceRefreshRunning = false }
+    pendingProviderIds.value = new Set(all.map(provider => provider.id))
+    for (let index = 0; index < all.length; index++) {
+      if (disposed || document.hidden) break
+      const provider = all[index]
+      let current: Provider
+      try { current = await refreshProvider(provider.id) }
+      catch (reason) {
+        console.error('Automatic provider refresh failed:', reason)
+        current = { ...provider, status: 'disconnected' }
+      }
+      if (disposed) break
+      all[index] = current
+      totalBalance.value += (current.metrics.balance ?? 0) * current.exchange_rate
+      connectedCount.value = all.filter(item => item.status === 'connected').length
+      providers.value = providers.value.map(item => item.id === current.id ? current : item)
+      const pending = new Set(pendingProviderIds.value)
+      pending.delete(provider.id)
+      pendingProviderIds.value = pending
+    }
+    if (!disposed && !document.hidden) cachedTotalBalance.value = totalBalance.value
+  } catch (reason) {
+    console.error('Automatic provider balance load failed:', reason)
+    if (!disposed) totalBalance.value = cachedTotalBalance.value
+  } finally {
+    pendingProviderIds.value = new Set()
+    if (!disposed) upstreamBalanceLoading.value = false
+    balanceRefreshRunning = false
+  }
 }
 function handleVisibilityChange() {
   if (!document.hidden) void refreshBalances()
 }
-function afterSave() { showDialog.value = false; void load() }
+function afterSave() { showDialog.value = false; void load().then(() => { void refreshBalances() }) }
 function debouncedLoad() { if (searchTimer) clearTimeout(searchTimer); searchTimer = setTimeout(() => { page.value = 1; void load() }, 250) }
 onMounted(() => {
-  void load().then(() => { void refreshBalances() })
+  void loadUserBalance()
+  void load().then(() => { void refreshBalances(false) })
   balanceTimer = setInterval(() => { void refreshBalances() }, balanceRefreshInterval)
   document.addEventListener('visibilitychange', handleVisibilityChange)
 })

@@ -57,12 +57,42 @@ func TestSub2APITokenRefreshAndMetrics(t *testing.T) {
 	require.Contains(t, rotated, "rotated")
 }
 
+func TestSub2APIRefreshOnlyExchangesBeforeProfileAndStoresRotatedToken(t *testing.T) {
+	var paths []string
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		paths = append(paths, r.URL.Path)
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/api/v1/auth/refresh":
+			require.Empty(t, r.Header.Get("Authorization"))
+			_, _ = w.Write([]byte(`{"code":0,"data":{"access_token":"renewed","refresh_token":"rotated","token_type":"Bearer"}}`))
+		case "/api/v1/user/profile":
+			require.Equal(t, "Bearer renewed", r.Header.Get("Authorization"))
+			_, _ = w.Write([]byte(`{"code":0,"data":{"balance":8}}`))
+		case "/api/v1/usage/dashboard/stats":
+			require.Equal(t, "Bearer renewed", r.Header.Get("Authorization"))
+			_, _ = w.Write([]byte(`{"code":0,"data":{"today_actual_cost":1}}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+	secret, err := encodeProviderToken("", "refresh-only", "Bearer")
+	require.NoError(t, err)
+	metrics, rotated, err := probeProviderWithClientAndSecret(context.Background(), providerRecord{SiteType: "sub2api", AuthMode: "token", BaseURL: server.URL}, secret, server.Client())
+	require.NoError(t, err)
+	require.Equal(t, []string{"/api/v1/auth/refresh", "/api/v1/user/profile", "/api/v1/usage/dashboard/stats"}, paths)
+	require.Equal(t, 8.0, *metrics.Balance)
+	require.Contains(t, rotated, "renewed")
+	require.Contains(t, rotated, "rotated")
+}
+
 func TestNewAPITokenUsesUserIDAndRejectsModelKey(t *testing.T) {
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		if r.URL.Path == "/api/user/self" {
 			require.Equal(t, "Bearer system-token", r.Header.Get("Authorization"))
-			require.Equal(t, "123", r.Header.Get("New-Api-User"))
+			require.Equal(t, "user-abc_123", r.Header.Get("New-Api-User"))
 			_, _ = w.Write([]byte(`{"success":true,"data":{"quota":500000}}`))
 			return
 		}
@@ -79,7 +109,7 @@ func TestNewAPITokenUsesUserIDAndRejectsModelKey(t *testing.T) {
 	defer server.Close()
 	secret, err := encodeProviderToken("system-token", "", "Bearer")
 	require.NoError(t, err)
-	metrics, err := probeProviderWithClient(context.Background(), providerRecord{SiteType: "newapi", AuthMode: "token", BaseURL: server.URL, UserID: "123"}, secret, server.Client())
+	metrics, err := probeProviderWithClient(context.Background(), providerRecord{SiteType: "newapi", AuthMode: "token", BaseURL: server.URL, UserID: "user-abc_123"}, secret, server.Client())
 	require.NoError(t, err)
 	require.Equal(t, 1.0, *metrics.Balance)
 }

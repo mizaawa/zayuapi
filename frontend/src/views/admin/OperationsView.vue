@@ -43,9 +43,9 @@
             </div>
             <div class="flex flex-wrap items-center gap-2">
               <div class="inline-flex rounded-lg bg-gray-100 p-1 dark:bg-dark-800" :aria-label="t('admin.dashboard.timeRange')">
-                <button v-for="period in periods" :key="period.days" type="button" class="rounded-md px-3 py-1.5 text-xs font-medium transition-colors"
+                <button v-for="period in periods" :key="period.days" type="button" class="inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors"
                   :class="selectedDays === period.days ? 'bg-white text-primary-600 shadow-sm dark:bg-dark-700 dark:text-primary-400' : 'text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200'"
-                  :aria-pressed="selectedDays === period.days" :data-period="period.days" @click="selectedDays = period.days">{{ t(period.label) }}</button>
+                  :aria-pressed="selectedDays === period.days" :data-period="period.days" @click="selectedDays = period.days"><LoadingSpinner v-if="selectedDays === period.days && (loading || userLoading)" size="sm" data-testid="period-loading" />{{ t(period.label) }}</button>
               </div>
               <button type="button" class="btn btn-secondary shrink-0" :disabled="loading || userLoading" @click="refreshAll">
                 <Icon name="refresh" size="sm" :class="{ 'animate-spin': loading }" />
@@ -53,11 +53,54 @@
               </button>
             </div>
           </div>
-          <div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
+          <div class="grid grid-cols-1 items-start gap-6 xl:grid-cols-2" data-testid="site-spend-grid">
+            <div class="card min-w-0 overflow-hidden p-0">
+              <div class="border-b border-gray-100 px-4 py-4 dark:border-dark-700"><h3 class="text-sm font-semibold text-gray-900 dark:text-white">{{ t('admin.operations.siteGroupSpend') }} <span class="ml-1 text-xs font-normal text-gray-400">{{ groups.length }}</span></h3><p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ t('admin.operations.siteGroupHint') }}</p></div>
+              <div class="operations-grid border-b border-gray-100 bg-gray-50/80 px-4 py-2.5 text-xs font-medium text-gray-500 dark:border-dark-700 dark:bg-dark-800/40 dark:text-gray-400">
+                <span>{{ t('admin.operations.groups') }}</span><span class="text-right">{{ t('admin.operations.profit') }}</span><span class="text-right">{{ t('admin.operations.userCost') }}</span><span class="text-right">{{ t('admin.operations.upstreamCost') }}</span>
+              </div>
+              <button type="button" data-group="all" class="operations-grid w-full border-b border-gray-100 px-4 py-3 text-left transition-colors dark:border-dark-700"
+                :class="selectedGroup === null ? 'bg-primary-50/70 dark:bg-primary-900/15' : 'hover:bg-gray-50 dark:hover:bg-dark-800/50'" :aria-pressed="selectedGroup === null" @click="selectedGroup = null">
+                <span class="flex min-w-0 items-center gap-2 text-sm font-bold text-gray-900 dark:text-white"><span class="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-primary-100 text-primary-600 dark:bg-primary-900/30 dark:text-primary-400"><Icon name="grid" size="sm" /></span><span>{{ t('admin.operations.allGroups') }}</span><LoadingSpinner v-if="loading && selectedGroup === null" size="sm" data-testid="all-groups-selection-loading" /></span>
+                <span class="money-cell" :class="profitClass(profitOf(totals))">{{ formatMoney(profitOf(totals)) }}</span>
+                <span class="money-cell text-gray-700 dark:text-gray-300">{{ formatMoney(totals.user_cost) }}</span>
+                <span class="money-cell text-gray-700 dark:text-gray-300">{{ formatMoney(totals.upstream_cost) }}</span>
+              </button>
+              <div class="relative min-h-40 max-h-[360px] overflow-y-auto overscroll-contain" data-testid="groups-scroll-region" :aria-busy="loading">
+                <div v-if="loading" class="absolute inset-0 z-10 flex min-h-40 items-center justify-center bg-white/75 dark:bg-dark-800/75" data-testid="groups-loading" role="status">
+                  <LoadingSpinner size="md" /><span class="sr-only">{{ t('admin.operations.loading') }}</span>
+                </div>
+                <button v-for="group in groups" :key="group.group_id" type="button" class="operations-grid w-full border-b border-gray-100 px-4 py-3 text-left transition-colors last:border-b-0 dark:border-dark-700/70"
+                  :data-group="group.group_id" :aria-pressed="selectedGroup === group.group_id" :class="[selectedGroup === group.group_id ? 'bg-primary-50/70 dark:bg-primary-900/15' : 'hover:bg-gray-50 dark:hover:bg-dark-800/50', loading && selectedGroup === group.group_id ? 'relative z-20' : '']" @click="selectedGroup = group.group_id">
+                  <span class="flex min-w-0 items-center gap-2"><span class="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-gray-100 dark:bg-dark-700" :data-platform="group.platform"><PlatformIcon :platform="group.platform" size="md" :class="platformTextClass(group.platform)" /></span><span class="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1"><span class="break-words text-sm font-bold text-gray-900 dark:text-white">{{ groupName(group) }}</span><span class="inline-flex shrink-0 rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium tabular-nums text-gray-500 dark:bg-dark-700 dark:text-gray-400">{{ group.rate_multiplier }}×</span><LoadingSpinner v-if="loading && selectedGroup === group.group_id" size="sm" data-testid="group-selection-loading" /></span></span>
+                  <span class="money-cell" :class="profitClass(profitOf(group))">{{ formatMoney(profitOf(group)) }}</span>
+                  <span class="money-cell text-gray-700 dark:text-gray-300">{{ formatMoney(group.user_cost) }}</span>
+                  <span class="money-cell text-gray-700 dark:text-gray-300">{{ formatMoney(group.upstream_cost) }}</span>
+                </button>
+                <p v-if="!groups.length" class="px-4 py-10 text-center text-sm text-gray-400">{{ t('admin.operations.noGroups') }}</p>
+              </div>
+            </div>
+            <div class="card min-w-0 overflow-hidden p-0">
+              <div class="flex items-center justify-between gap-3 border-b border-gray-100 px-4 py-4 dark:border-dark-700"><div class="min-w-0"><h3 class="text-sm font-semibold text-gray-900 dark:text-white">{{ t('admin.operations.siteModelSpend') }} <span class="ml-1 text-xs font-normal text-gray-400">{{ models.length }}</span></h3><p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ t('admin.operations.siteModelHint') }}</p></div><button type="button" class="flex max-w-[45%] shrink-0 items-center gap-1 rounded-full bg-primary-50 px-2.5 py-0.5 text-xs text-primary-600 dark:bg-primary-900/20 dark:text-primary-400" :class="selectedGroup === null ? 'cursor-default' : 'hover:bg-primary-100 dark:hover:bg-primary-900/40'" :disabled="selectedGroup === null" :title="selectedGroup === null ? selectedGroupName : t('admin.operations.clearGroupFilter')" @click="selectedGroup = null"><LoadingSpinner v-if="loading" size="sm" data-testid="model-filter-loading" /><span class="truncate">{{ selectedGroupName }}</span><Icon v-if="selectedGroup !== null && !loading" name="x" size="xs" /></button></div>
+              <div class="operations-grid border-b border-gray-100 bg-gray-50/80 px-4 py-2.5 text-xs font-medium text-gray-500 dark:border-dark-700 dark:bg-dark-800/40 dark:text-gray-400">
+                <span>Model ID</span><span class="text-right">{{ t('admin.operations.profit') }}</span><span class="text-right">{{ t('admin.operations.userCost') }}</span><span class="text-right">{{ t('admin.operations.upstreamCost') }}</span>
+              </div>
+              <div class="relative min-h-40 max-h-[360px] overflow-y-auto overscroll-contain" data-testid="models-scroll-region" :aria-busy="loading">
+                <div v-if="loading" class="absolute inset-0 z-10 flex min-h-40 items-center justify-center bg-white/75 dark:bg-dark-800/75" data-testid="models-loading" role="status"><LoadingSpinner size="md" /><span class="sr-only">{{ t('admin.operations.loading') }}</span></div>
+                <div v-for="model in models" :key="model.model" :data-model="model.model" class="operations-grid border-b border-gray-100 px-4 py-3 last:border-b-0 dark:border-dark-700/70">
+                  <span class="flex min-w-0 items-center gap-2"><span v-for="platform in modelPlatforms(model)" :key="platform" class="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-gray-100 dark:bg-dark-700" :class="platformTextClass(platform)" :title="platform"><PlatformIcon :platform="platform" size="sm" /></span><span class="min-w-0 break-all text-sm font-medium leading-5 text-gray-800 dark:text-gray-200">{{ model.model }}</span></span>
+                  <span class="money-cell" :class="profitClass(profitOf(model))">{{ formatMoney(profitOf(model)) }}</span>
+                  <span class="money-cell text-gray-700 dark:text-gray-300">{{ formatMoney(model.user_cost) }}</span>
+                  <span class="money-cell text-gray-700 dark:text-gray-300">{{ formatMoney(model.upstream_cost) }}</span>
+                </div>
+                <p v-if="!models.length" class="px-4 py-16 text-center text-sm text-gray-400">{{ t('admin.operations.noModels') }}</p>
+              </div>
+            </div>
+          </div>
+          <div class="grid grid-cols-1 items-start gap-6 xl:grid-cols-2" data-testid="user-spend-grid">
             <OperationsUserSpendPanel :users="users" :selected-user-id="selectedUserId" :search="userSearch" :suggestions="suggestions" :suggestions-open="suggestionsOpen" :suggestions-loading="suggestionsLoading" :loading="userLoading" :error="userError"
               @update:search="updateUserSearch" @focus-search="focusUserSearch" @blur-search="blurUserSearch" @dismiss-suggestions="suggestionsOpen = false" @select-suggestion="selectSuggestion" @select-user="selectUser" @retry="loadUserSpend" />
-            <div class="min-w-0 space-y-6">
-              <div v-if="selectedUserId !== null" class="card min-w-0 overflow-hidden p-0" data-testid="user-detail" :aria-busy="userLoading">
+              <div class="card min-w-0 overflow-hidden p-0" data-testid="user-detail" :aria-busy="userLoading">
                 <div class="flex flex-wrap items-center justify-between gap-3 border-b border-gray-100 px-4 py-4 dark:border-dark-700">
                   <div class="min-w-0">
                     <h3 class="text-sm font-semibold text-gray-900 dark:text-white">{{ t('admin.operations.userDetails') }}</h3>
@@ -67,7 +110,7 @@
                 </div>
                 <div class="border-b border-gray-100 px-4 py-3 dark:border-dark-700">
                   <div role="tablist" :aria-label="t('admin.operations.userDetails')" class="inline-flex rounded-full bg-gray-100 p-1 dark:bg-dark-800">
-                    <button v-for="tab in breakdownTabs" :key="tab.key" type="button" role="tab" :data-detail-tab="tab.key" :aria-selected="activeBreakdownTab === tab.key" class="rounded-full px-4 py-1.5 text-xs font-medium transition-colors" :class="activeBreakdownTab === tab.key ? 'bg-white text-primary-600 shadow-sm dark:bg-dark-700 dark:text-primary-400' : 'text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200'" @click="activeBreakdownTab = tab.key">{{ t(tab.label) }}</button>
+                    <button v-for="tab in breakdownTabs" :key="tab.key" type="button" role="tab" :data-detail-tab="tab.key" :aria-selected="activeBreakdownTab === tab.key" class="inline-flex items-center gap-1.5 rounded-full px-4 py-1.5 text-xs font-medium transition-colors" :class="activeBreakdownTab === tab.key ? 'bg-white text-primary-600 shadow-sm dark:bg-dark-700 dark:text-primary-400' : 'text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200'" @click="activeBreakdownTab = tab.key"><LoadingSpinner v-if="userLoading && activeBreakdownTab === tab.key" size="sm" data-testid="detail-tab-loading" />{{ t(tab.label) }}</button>
                   </div>
                 </div>
                 <div v-if="userLoading" class="flex min-h-40 items-center justify-center" role="status" data-testid="user-detail-loading"><LoadingSpinner size="md" /><span class="sr-only">{{ t('admin.operations.loading') }}</span></div>
@@ -97,50 +140,8 @@
                     <p v-if="!userDetailModels.length" class="px-4 py-12 text-center text-sm text-gray-400">{{ t('admin.operations.noModels') }}</p>
                   </div>
                 </template>
+                <p v-else class="px-4 py-12 text-center text-sm text-gray-400">{{ t('admin.operations.userDetailsHint') }}</p>
               </div>
-            <div class="card min-w-0 overflow-hidden p-0">
-              <div class="border-b border-gray-100 px-4 py-4 dark:border-dark-700"><h3 class="text-sm font-semibold text-gray-900 dark:text-white">{{ t('admin.operations.siteGroupSpend') }} <span class="ml-1 text-xs font-normal text-gray-400">{{ groups.length }}</span></h3><p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ t('admin.operations.siteGroupHint') }}</p></div>
-              <div class="operations-grid border-b border-gray-100 bg-gray-50/80 px-4 py-2.5 text-xs font-medium text-gray-500 dark:border-dark-700 dark:bg-dark-800/40 dark:text-gray-400">
-                <span>{{ t('admin.operations.groups') }}</span><span class="text-right">{{ t('admin.operations.profit') }}</span><span class="text-right">{{ t('admin.operations.userCost') }}</span><span class="text-right">{{ t('admin.operations.upstreamCost') }}</span>
-              </div>
-              <button type="button" data-group="all" class="operations-grid w-full border-b border-gray-100 px-4 py-3 text-left transition-colors dark:border-dark-700"
-                :class="selectedGroup === null ? 'bg-primary-50/70 dark:bg-primary-900/15' : 'hover:bg-gray-50 dark:hover:bg-dark-800/50'" :aria-pressed="selectedGroup === null" @click="selectedGroup = null">
-                <span class="flex min-w-0 items-center gap-2 text-sm font-bold text-gray-900 dark:text-white"><span class="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-primary-100 text-primary-600 dark:bg-primary-900/30 dark:text-primary-400"><Icon name="grid" size="sm" /></span><span>{{ t('admin.operations.allGroups') }}</span></span>
-                <span class="money-cell" :class="profitClass(profitOf(totals))">{{ formatMoney(profitOf(totals)) }}</span>
-                <span class="money-cell text-gray-700 dark:text-gray-300">{{ formatMoney(totals.user_cost) }}</span>
-                <span class="money-cell text-gray-700 dark:text-gray-300">{{ formatMoney(totals.upstream_cost) }}</span>
-              </button>
-              <div class="relative max-h-[360px] overflow-y-auto overscroll-contain" data-testid="groups-scroll-region" :aria-busy="loading">
-                <div v-if="loading" class="absolute inset-0 z-10 flex min-h-40 items-center justify-center bg-white/75 dark:bg-dark-800/75" data-testid="groups-loading" role="status">
-                  <LoadingSpinner size="md" /><span class="sr-only">{{ t('admin.operations.loading') }}</span>
-                </div>
-                <button v-for="group in groups" :key="group.group_id" type="button" class="operations-grid w-full border-b border-gray-100 px-4 py-3 text-left transition-colors last:border-b-0 dark:border-dark-700/70"
-                  :data-group="group.group_id" :aria-pressed="selectedGroup === group.group_id" :class="selectedGroup === group.group_id ? 'bg-primary-50/70 dark:bg-primary-900/15' : 'hover:bg-gray-50 dark:hover:bg-dark-800/50'" @click="selectedGroup = group.group_id">
-                  <span class="flex min-w-0 items-center gap-2"><span class="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-gray-100 dark:bg-dark-700" :data-platform="group.platform"><PlatformIcon :platform="group.platform" size="md" :class="platformTextClass(group.platform)" /></span><span class="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1"><span class="break-words text-sm font-bold text-gray-900 dark:text-white">{{ groupName(group) }}</span><span class="inline-flex shrink-0 rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium tabular-nums text-gray-500 dark:bg-dark-700 dark:text-gray-400">{{ group.rate_multiplier }}×</span></span></span>
-                  <span class="money-cell" :class="profitClass(profitOf(group))">{{ formatMoney(profitOf(group)) }}</span>
-                  <span class="money-cell text-gray-700 dark:text-gray-300">{{ formatMoney(group.user_cost) }}</span>
-                  <span class="money-cell text-gray-700 dark:text-gray-300">{{ formatMoney(group.upstream_cost) }}</span>
-                </button>
-                <p v-if="!groups.length" class="px-4 py-10 text-center text-sm text-gray-400">{{ t('admin.operations.noGroups') }}</p>
-              </div>
-            </div>
-            <div class="card min-w-0 overflow-hidden p-0">
-              <div class="flex items-center justify-between gap-3 border-b border-gray-100 px-4 py-4 dark:border-dark-700"><div><h3 class="shrink-0 text-sm font-semibold text-gray-900 dark:text-white">{{ t('admin.operations.siteModelSpend') }} <span class="ml-1 text-xs font-normal text-gray-400">{{ models.length }}</span></h3><p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ t('admin.operations.siteModelHint') }}</p></div><button type="button" class="flex max-w-[45%] items-center gap-1 truncate rounded-full bg-primary-50 px-2.5 py-0.5 text-xs text-primary-600 dark:bg-primary-900/20 dark:text-primary-400" :class="selectedGroup === null ? 'cursor-default' : 'hover:bg-primary-100 dark:hover:bg-primary-900/40'" :disabled="selectedGroup === null" :title="selectedGroup === null ? selectedGroupName : t('admin.operations.clearGroupFilter')" @click="selectedGroup = null"><span class="truncate">{{ selectedGroupName }}</span><Icon v-if="selectedGroup !== null" name="x" size="xs" /></button></div>
-              <div class="operations-grid border-b border-gray-100 bg-gray-50/80 px-4 py-2.5 text-xs font-medium text-gray-500 dark:border-dark-700 dark:bg-dark-800/40 dark:text-gray-400">
-                <span>Model ID</span><span class="text-right">{{ t('admin.operations.profit') }}</span><span class="text-right">{{ t('admin.operations.userCost') }}</span><span class="text-right">{{ t('admin.operations.upstreamCost') }}</span>
-              </div>
-              <div v-if="loading" class="flex min-h-40 items-center justify-center" data-testid="models-loading" role="status"><LoadingSpinner size="md" /><span class="sr-only">{{ t('admin.operations.loading') }}</span></div>
-              <div v-else class="max-h-[410px] overflow-y-auto overscroll-contain" data-testid="models-scroll-region">
-                <div v-for="model in models" :key="model.model" :data-model="model.model" class="operations-grid border-b border-gray-100 px-4 py-3 last:border-b-0 dark:border-dark-700/70">
-                  <span class="flex min-w-0 items-center gap-2"><span v-for="platform in modelPlatforms(model)" :key="platform" class="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-gray-100 dark:bg-dark-700" :class="platformTextClass(platform)" :title="platform"><PlatformIcon :platform="platform" size="sm" /></span><span class="min-w-0 break-all text-sm font-medium leading-5 text-gray-800 dark:text-gray-200">{{ model.model }}</span></span>
-                  <span class="money-cell" :class="profitClass(profitOf(model))">{{ formatMoney(profitOf(model)) }}</span>
-                  <span class="money-cell text-gray-700 dark:text-gray-300">{{ formatMoney(model.user_cost) }}</span>
-                  <span class="money-cell text-gray-700 dark:text-gray-300">{{ formatMoney(model.upstream_cost) }}</span>
-                </div>
-                <p v-if="!models.length" class="px-4 py-16 text-center text-sm text-gray-400">{{ t('admin.operations.noModels') }}</p>
-              </div>
-            </div>
-            </div>
           </div>
         </section>
         <OperationsTrendChart :points="data.trend" :days="trendDays" />
@@ -413,5 +414,9 @@ onUnmounted(() => {
 <style scoped>
 .operations-grid { display: grid; grid-template-columns: minmax(0, 1.45fr) repeat(3, minmax(0, 1fr)); gap: 0.5rem; align-items: center; }
 .money-cell { text-align: right; font-size: 0.75rem; font-weight: 500; line-height: 1.4; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+@media (max-width: 639px) {
+  .operations-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.375rem; }
+  .operations-grid > :first-child { grid-column: 1 / -1; }
+}
 @media (min-width: 1536px) { .operations-grid { gap: 1rem; } }
 </style>

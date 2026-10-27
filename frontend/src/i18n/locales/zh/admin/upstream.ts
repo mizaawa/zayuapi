@@ -16,14 +16,14 @@ export default { upstream: {
   loginAccount: '登录账号', loginPassword: '登录密码', newapiAccountPlaceholder: '请输入站点登录账号',
   keepSecret: '留空保留原凭据', passwordPlaceholder: '请输入登录密码', showSecret: '显示凭据', hideSecret: '隐藏凭据',
   sub2TokenGuideTitle: '使用上游登录会话连接', sub2TokenGuide: '先在服务商站点正常登录，再填入该账号的 Access Token 或 Refresh Token。这是控制台登录令牌，不是模型调用的 API Key。',
-  sub2TokenGuideLocation: '打开服务商站点获取令牌。', sub2TokenGuideRefresh: '建议同时填写 Refresh Token 以延长连接；仅有 Access Token 时，过期后需重新登录。',
-  accessTokenPlaceholder: '粘贴 Access Token', accessTokenHint: '使用站点登录后的令牌，也可以填写 Refresh Token。',
-  refreshTokenPlaceholder: '粘贴 Refresh Token', refreshTokenHint: '用于访问令牌过期后刷新登录。',
-  userId: '用户 ID', userIdHint: '在 New API 个人设置中查看。', systemAccessToken: '系统访问令牌',
+  sub2TokenGuideLocation: '打开服务商站点获取令牌。', sub2TokenGuideRefresh: '填写 Access Token 或 Refresh Token 任意一个即可；Refresh Token 会先换取新的登录令牌。',
+  accessTokenPlaceholder: '粘贴 Access Token', accessTokenHint: '可单独使用，过期后需要重新登录。',
+  refreshTokenPlaceholder: '粘贴 Refresh Token', refreshTokenHint: '用于访问令牌过期后刷新登录。', tokenEitherHint: 'Access Token 和 Refresh Token 至少填写一个；两个都填可自动续期。',
+  userId: '用户 ID', userIdPlaceholder: '例如：123 或 user-abc', userIdHint: '在 New API 个人设置中查看，可包含字母或符号。', systemAccessToken: '系统访问令牌',
   systemTokenPlaceholder: '粘贴系统访问令牌', systemTokenHint: '在个人设置中生成，不是 sk- 开头的模型 API Key。',
-  optional: '可选', loginAndAdd: '登录并添加',
+  optional: '可选', loginAndAdd: '添加',
   exchangeRate: '充值倍率', exchangeRateHint: '人民币显示金额 = 美元金额 × 充值倍率。', notes: '备注', notesPlaceholder: '用于区分站点或记录说明',
   probe: '测试登录', probing: '正在测试…', probeHint: '验证登录后获取站点余额；先不在列表中显示。',
   probeSuccess: '登录成功，已读取站点数据', probeFailed: '登录失败，请检查站点地址和凭据',
-  savingProvider: '保存中…', providerSaved: '服务提供商已保存', providerSaveFailed: '保存服务提供商失败'
+  savingProvider: '保存中…', providerSaved: '服务提供商已保存', providerSavedDisconnected: '服务提供商已保存，但连接失败', providerSaveFailed: '保存服务提供商失败'
 } }

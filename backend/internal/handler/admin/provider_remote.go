@@ -51,8 +51,8 @@ func encodeProviderToken(accessToken, refreshToken, tokenType string) (string, e
 	accessToken = strings.TrimSpace(accessToken)
 	refreshToken = strings.TrimSpace(refreshToken)
 	tokenType = strings.TrimSpace(tokenType)
-	if accessToken == "" {
-		return "", errors.New("dashboard Access Token is required")
+	if accessToken == "" && refreshToken == "" {
+		return "", errors.New("dashboard Access Token or Refresh Token is required")
 	}
 	if tokenType == "" {
 		tokenType = "Bearer"
@@ -70,7 +70,7 @@ func encodeProviderToken(accessToken, refreshToken, tokenType string) (string, e
 func decodeProviderToken(secret string) (providerToken, error) {
 	if strings.HasPrefix(secret, "{") {
 		var token providerToken
-		if err := json.Unmarshal([]byte(secret), &token); err != nil || token.AccessToken == "" {
+		if err := json.Unmarshal([]byte(secret), &token); err != nil || (token.AccessToken == "" && token.RefreshToken == "") {
 			return providerToken{}, errors.New("stored dashboard token is invalid")
 		}
 		if !validProviderTokenType(token.TokenType) {
@@ -349,6 +349,11 @@ func probeProviderWithClientAndSecret(ctx context.Context, provider providerReco
 			r.token = access
 			r.tokenType = freshType
 			return nil
+		}
+		if provider.AuthMode != "password" && r.token == "" {
+			if err := renew(); err != nil {
+				return providerMetrics{}, "", err
+			}
 		}
 		profile, err := r.request(ctx, http.MethodGet, "/api/v1/user/profile", nil)
 		if errors.Is(err, errProviderAuthentication) && credential.RefreshToken != "" {

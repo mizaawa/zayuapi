@@ -55,20 +55,20 @@
 
       <template v-else-if="form.site_type === 'sub2api'">
         <label class="block"><span class="input-label">Access Token</span>
-          <span class="provider-secret"><input v-model.trim="form.access_token" class="input provider-input pr-10" :type="visible.access ? 'text' : 'password'" :required="secretRequired" :placeholder="provider && !secretRequired ? t('admin.upstream.keepSecret') : t('admin.upstream.accessTokenPlaceholder')" autocomplete="off" /><button type="button" :aria-label="visible.access ? t('admin.upstream.hideSecret') : t('admin.upstream.showSecret')" @click="visible.access = !visible.access"><Icon :name="visible.access ? 'eyeOff' : 'eye'" size="sm" /></button></span>
+          <span class="provider-secret"><input v-model.trim="form.access_token" class="input provider-input" :type="visible.access ? 'text' : 'password'" :required="secretRequired && !form.refresh_token" :placeholder="provider && !secretRequired ? t('admin.upstream.keepSecret') : t('admin.upstream.accessTokenPlaceholder')" autocomplete="off" /><button type="button" :aria-label="visible.access ? t('admin.upstream.hideSecret') : t('admin.upstream.showSecret')" @click="visible.access = !visible.access"><Icon :name="visible.access ? 'eyeOff' : 'eye'" size="sm" /></button></span>
           <span class="input-hint block">{{ t('admin.upstream.accessTokenHint') }}</span>
         </label>
         <div class="grid gap-3 sm:grid-cols-2">
-          <label class="block"><span class="input-label">Refresh Token <small class="font-normal text-gray-400">{{ t('admin.upstream.optional') }}</small></span>
-            <span class="provider-secret"><input v-model.trim="form.refresh_token" class="input provider-input pr-10" :type="visible.refresh ? 'text' : 'password'" :placeholder="t('admin.upstream.refreshTokenPlaceholder')" autocomplete="off" /><button type="button" :aria-label="visible.refresh ? t('admin.upstream.hideSecret') : t('admin.upstream.showSecret')" @click="visible.refresh = !visible.refresh"><Icon :name="visible.refresh ? 'eyeOff' : 'eye'" size="sm" /></button></span>
+          <label class="block"><span class="input-label">Refresh Token</span>
+            <span class="provider-secret"><input v-model.trim="form.refresh_token" class="input provider-input" :type="visible.refresh ? 'text' : 'password'" :required="secretRequired && !form.access_token" :placeholder="t('admin.upstream.refreshTokenPlaceholder')" autocomplete="off" /><button type="button" :aria-label="visible.refresh ? t('admin.upstream.hideSecret') : t('admin.upstream.showSecret')" @click="visible.refresh = !visible.refresh"><Icon :name="visible.refresh ? 'eyeOff' : 'eye'" size="sm" /></button></span>
           </label>
           <label class="block"><span class="input-label">Token Type</span><input v-model.trim="form.token_type" class="input provider-input" placeholder="Bearer" /></label>
         </div>
-        <p class="-mt-2 text-[11px] text-gray-500 dark:text-gray-400">{{ t('admin.upstream.refreshTokenHint') }}</p>
+        <p class="-mt-2 text-[11px] text-gray-500 dark:text-gray-400">{{ t('admin.upstream.tokenEitherHint') }}</p>
       </template>
 
       <div v-else class="grid gap-3 sm:grid-cols-2">
-        <label class="block"><span class="input-label">{{ t('admin.upstream.userId') }}</span><input v-model.trim="form.user_id" class="input provider-input" inputmode="numeric" pattern="[1-9][0-9]*" required placeholder="例如：123" /><span class="input-hint block">{{ t('admin.upstream.userIdHint') }}</span></label>
+        <label class="block"><span class="input-label">{{ t('admin.upstream.userId') }}</span><input v-model.trim="form.user_id" class="input provider-input" type="text" maxlength="128" required :placeholder="t('admin.upstream.userIdPlaceholder')" /><span class="input-hint block">{{ t('admin.upstream.userIdHint') }}</span></label>
         <label class="block"><span class="input-label">{{ t('admin.upstream.systemAccessToken') }}</span>
           <span class="provider-secret"><input v-model.trim="form.system_access_token" class="input provider-input pr-10" :type="visible.system ? 'text' : 'password'" :required="secretRequired" :placeholder="provider && !secretRequired ? t('admin.upstream.keepSecret') : t('admin.upstream.systemTokenPlaceholder')" autocomplete="off" /><button type="button" :aria-label="visible.system ? t('admin.upstream.hideSecret') : t('admin.upstream.showSecret')" @click="visible.system = !visible.system"><Icon :name="visible.system ? 'eyeOff' : 'eye'" size="sm" /></button></span>
           <span class="input-hint block">{{ t('admin.upstream.systemTokenHint') }}</span>
@@ -169,9 +169,14 @@ async function save() {
   saving.value = true
   probeMessage.value = ''
   try {
-    if (props.provider) await updateProvider(props.provider.id, payload())
-    else await createProvider(payload())
-    appStore.showSuccess(t('admin.upstream.providerSaved'))
+    const result = props.provider
+      ? await updateProvider(props.provider.id, payload())
+      : await createProvider(payload())
+    if (result.status === 'disconnected') {
+      appStore.showWarning(`${t('admin.upstream.providerSavedDisconnected')}: ${result.last_error || t('admin.upstream.probeFailed')}`)
+    } else {
+      appStore.showSuccess(t('admin.upstream.providerSaved'))
+    }
     emit('saved')
     emit('close')
   } catch (error) {
@@ -195,5 +200,6 @@ async function save() {
 .provider-radio { display: inline-flex; flex-shrink: 0; align-items: center; justify-content: center; width: .85rem; height: .85rem; border: 1.5px solid currentColor; border-radius: 50%; }
 .provider-radio-dot { width: .42rem; height: .42rem; border-radius: 50%; background: currentColor; }
 .provider-secret { position: relative; display: block; }
-.provider-secret button { position: absolute; right: .7rem; top: 50%; display: flex; transform: translateY(-50%); color: var(--md-sys-color-on-surface-variant); }
+.provider-secret .provider-input { width: 100%; min-width: 0; padding-inline-end: 3rem; box-sizing: border-box; }
+.provider-secret button { position: absolute; right: .6rem; top: 50%; display: flex; align-items: center; justify-content: center; width: 1.75rem; height: 1.75rem; transform: translateY(-50%); border-radius: .4rem; background: var(--md-sys-color-surface); color: var(--md-sys-color-on-surface-variant); }
 </style>

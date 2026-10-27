@@ -3,9 +3,9 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import ProviderDialog from '../ProviderDialog.vue'
 
-const mocks = vi.hoisted(() => ({ create: vi.fn(), update: vi.fn(), probe: vi.fn(), success: vi.fn(), error: vi.fn() }))
+const mocks = vi.hoisted(() => ({ create: vi.fn(), update: vi.fn(), probe: vi.fn(), success: vi.fn(), error: vi.fn(), warning: vi.fn() }))
 vi.mock('@/api/admin/upstream', () => ({ createProvider: mocks.create, updateProvider: mocks.update, probeProvider: mocks.probe }))
-vi.mock('@/stores/app', () => ({ useAppStore: () => ({ showSuccess: mocks.success, showError: mocks.error }) }))
+vi.mock('@/stores/app', () => ({ useAppStore: () => ({ showSuccess: mocks.success, showError: mocks.error, showWarning: mocks.warning }) }))
 vi.mock('vue-i18n', async () => ({
   ...(await vi.importActual<typeof import('vue-i18n')>('vue-i18n')),
   useI18n: () => ({ t: (key: string) => key })
@@ -49,6 +49,20 @@ describe('ProviderDialog login forms', () => {
     wrapper.unmount()
   })
 
+  it('accepts a Refresh Token without an Access Token', async () => {
+    const wrapper = mountDialog()
+    await wrapper.get('input[name="provider-auth"][value="token"]').setValue()
+    const access = wrapper.get('input[placeholder="admin.upstream.accessTokenPlaceholder"]')
+    const refresh = wrapper.get('input[placeholder="admin.upstream.refreshTokenPlaceholder"]')
+    expect(access.attributes('required')).toBeDefined()
+    await refresh.setValue('refresh-only')
+    expect(access.attributes('required')).toBeUndefined()
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+    expect(mocks.create).toHaveBeenCalledWith(expect.objectContaining({ access_token: '', refresh_token: 'refresh-only' }))
+    wrapper.unmount()
+  })
+
   it('shows New API password account and token fields separately', async () => {
     const wrapper = mountDialog()
     await wrapper.get('input[name="provider-kind"][value="newapi"]').setValue()
@@ -63,11 +77,13 @@ describe('ProviderDialog login forms', () => {
     mocks.create.mockClear()
     await wrapper.get('input[name="provider-auth"][value="token"]').setValue()
     expect(wrapper.find('input[autocomplete="username"]').exists()).toBe(false)
-    await wrapper.get('input[pattern="[1-9][0-9]*"]').setValue('123')
+    const userId = wrapper.get('input[placeholder="admin.upstream.userIdPlaceholder"]')
+    expect(userId.attributes('pattern')).toBeUndefined()
+    await userId.setValue('user-abc_123')
     await wrapper.get('input[placeholder="admin.upstream.systemTokenPlaceholder"]').setValue('dashboard-system-token')
     await wrapper.get('form').trigger('submit')
     await flushPromises()
-    expect(mocks.create).toHaveBeenCalledWith(expect.objectContaining({ user_id: '123', system_access_token: 'dashboard-system-token' }))
+    expect(mocks.create).toHaveBeenCalledWith(expect.objectContaining({ user_id: 'user-abc_123', system_access_token: 'dashboard-system-token' }))
     wrapper.unmount()
   })
 
@@ -79,6 +95,17 @@ describe('ProviderDialog login forms', () => {
     expect(wrapper.get('[role="status"]').text()).toBe('TURNSTILE_VERIFICATION_FAILED')
     expect(mocks.error).toHaveBeenCalledWith('TURNSTILE_VERIFICATION_FAILED')
     expect(wrapper.emitted('saved')).toBeUndefined()
+    wrapper.unmount()
+  })
+
+  it('saves an unreachable provider and shows the connection reason in a warning toast', async () => {
+    mocks.create.mockResolvedValueOnce({ id: 'one', status: 'disconnected', last_error: 'Cloudflare returned an incomplete response' })
+    const wrapper = mountDialog()
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+    expect(mocks.warning).toHaveBeenCalledWith('admin.upstream.providerSavedDisconnected: Cloudflare returned an incomplete response')
+    expect(wrapper.emitted('saved')).toHaveLength(1)
+    expect(wrapper.emitted('close')).toHaveLength(1)
     wrapper.unmount()
   })
 })

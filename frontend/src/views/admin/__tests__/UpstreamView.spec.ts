@@ -51,6 +51,45 @@ describe('UpstreamView provider management', () => {
     wrapper.unmount()
   })
 
+  it('renders first, then progressively adds provider balances while the user total loads independently', async () => {
+    let resolveUser!: (value: { metrics: { total_user_balance: number } }) => void
+    let resolveFirst!: (value: Provider) => void
+    let resolveSecond!: (value: Provider) => void
+    const other: Provider = { ...provider, id: 'provider-2', name: '备用上游', metrics: { ...provider.metrics, balance: 4 } }
+    mocks.list.mockResolvedValue({ items: [provider, other], total: 2, page: 1, pages: 1,
+      overview: { provider_count: 2, connected_count: 2, upstream_total_balance: 19.79 } })
+    mocks.dashboard.mockReturnValue(new Promise(resolve => { resolveUser = resolve }))
+    mocks.refresh.mockImplementation((id: string) => new Promise<Provider>(resolve => {
+      if (id === provider.id) resolveFirst = resolve
+      else resolveSecond = resolve
+    }))
+
+    const wrapper = mountPage()
+    expect(wrapper.find('[data-testid="users-balance-loading"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="upstream-balance-loading"]').exists()).toBe(true)
+    await flushPromises()
+    expect(wrapper.find('[data-testid="provider-provider-1-balance-loading"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="provider-provider-2-balance-loading"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="provider-provider-1-total-loading"]').exists()).toBe(true)
+    expect(wrapper.text()).toContain('$0.00')
+
+    resolveFirst({ ...provider, metrics: { ...provider.metrics, balance: 16 } })
+    await flushPromises()
+    expect(wrapper.text()).toContain('$16.00')
+    expect(wrapper.find('[data-testid="upstream-balance-loading"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="provider-provider-1-balance-loading"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="provider-provider-2-balance-loading"]').exists()).toBe(true)
+
+    resolveUser({ metrics: { total_user_balance: 1054.28 } })
+    resolveSecond({ ...other, metrics: { ...other.metrics, balance: 5 } })
+    await flushPromises()
+    expect(wrapper.text()).toContain('$21.00')
+    expect(wrapper.text()).toContain('$1,054.28')
+    expect(wrapper.find('[data-testid="upstream-balance-loading"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="users-balance-loading"]').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
   it('opens the provider login form and refreshes a card', async () => {
     const wrapper = mountPage()
     await flushPromises()
@@ -111,12 +150,13 @@ describe('UpstreamView provider management', () => {
     mocks.refresh.mockImplementation(async () => {
       balance = 20.5
       userBalance = 1070
-      return provider
+      return { ...provider, metrics: { ...provider.metrics, balance } }
     })
     const wrapper = mountPage()
     await flushPromises()
     expect(wrapper.text()).toContain('$20.50')
-    expect(wrapper.text()).toContain('$1,070.00')
+    // The user total loads independently from the provider probe.
+    expect(wrapper.text()).toContain('$1,054.28')
     wrapper.unmount()
   })
 
