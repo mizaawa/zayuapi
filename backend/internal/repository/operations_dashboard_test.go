@@ -21,13 +21,10 @@ func TestOperationsDashboardDataQueriesAndScans(t *testing.T) {
 	rangeStart := today.AddDate(0, 0, -6)
 	trendStart := today.AddDate(0, 0, -14)
 
-	mock.ExpectQuery(`SELECT\s+COALESCE\(\(SELECT SUM\(ul\.actual_cost\).*SUM\(po\.amount\).*SUM\(rc\.value\).*SUM\(ul\.actual_cost\).*SUM\(uc\.actual_cost\).*SUM\(f\.amount\).*SUM\(uc\.actual_cost\).*SUM\(f\.amount\)`).
-		WithArgs(today, tomorrow).
-		WillReturnRows(sqlmock.NewRows([]string{"today_user", "recharge", "today_monitor", "total_user", "user_balance", "total_monitor", "admin_balance"}).
-			AddRow(8.25, 15.5, 0.75, 100.5, 75.25, 12.5, 200.0))
-	mock.ExpectQuery(`FROM payment_orders po JOIN users u.*GROUP BY currency ORDER BY currency`).
-		WithArgs(today, tomorrow).
-		WillReturnRows(sqlmock.NewRows([]string{"currency", "amount"}).AddRow("CNY", 68.5).AddRow("USD", 10.0))
+	mock.ExpectQuery(`SELECT\s+COALESCE\(\(SELECT SUM\(uc\.actual_cost\).*SUM\(po\.amount\).*SUM\(rc\.value\).*SUM\(uc\.account_cost\).*SUM\(uc\.actual_cost\).*SUM\(f\.amount\).*SUM\(uc\.account_cost\).*SUM\(f\.amount\).*SUM\(uc\.account_cost\)`).
+		WithArgs("2026-10-26", today, tomorrow).
+		WillReturnRows(sqlmock.NewRows([]string{"today_user", "recharge", "today_monitor", "total_user", "user_balance", "total_monitor", "admin_balance", "today_upstream"}).
+			AddRow(8.25, 15.5, 0.75, 100.5, 75.25, 12.5, 200.0, 3.0))
 	mock.ExpectQuery(`FROM usage_logs ul JOIN users u.*GROUP BY date ORDER BY date ASC`).
 		WithArgs(trendStart, tomorrow, "Asia/Shanghai").
 		WillReturnRows(sqlmock.NewRows([]string{"date", "upstream", "user", "profit"}).AddRow("2026-10-26", 3.0, 8.0, 5.0))
@@ -47,7 +44,7 @@ func TestOperationsDashboardDataQueriesAndScans(t *testing.T) {
 	require.Equal(t, 75.25, data.Metrics.TotalUserBalance)
 	require.Equal(t, 12.5, data.Metrics.TotalMonitorConsumption)
 	require.Equal(t, 200.0, data.Metrics.AdminBalance)
-	require.Equal(t, map[string]float64{"CNY": 68.5, "USD": 10.0}, data.Metrics.TodayRevenue)
+	require.Equal(t, map[string]float64{"USD": 4.5}, data.Metrics.TodayRevenue)
 	require.Len(t, data.Trend, 1)
 	require.Len(t, data.Groups, 1)
 	require.Equal(t, "openai", data.Groups[0].Platform)
