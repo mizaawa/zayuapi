@@ -26,11 +26,14 @@
           <Icon name="search" size="sm" class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
           <input v-model.trim="search" class="input w-full pl-10" :placeholder="t('admin.upstream.search')" :aria-label="t('admin.upstream.search')" @input="debouncedLoad" />
         </div>
-        <select v-model="status" class="input w-auto min-w-[8rem]" :aria-label="t('admin.upstream.filterStatus')" @change="page = 1; load()">
-          <option value="all">{{ t('admin.upstream.allStatus') }}</option>
-          <option value="connected">{{ t('admin.upstream.connected') }}</option>
-          <option value="disconnected">{{ t('admin.upstream.disconnected') }}</option>
-        </select>
+        <div class="w-full sm:w-40">
+          <Select
+            v-model="status"
+            :options="statusOptions"
+            :aria-label="t('admin.upstream.filterStatus')"
+            @change="page = 1; load()"
+          />
+        </div>
         <button type="button" class="btn btn-secondary inline-flex items-center gap-2" :disabled="loading" @click="load"><Icon name="refresh" size="sm" :class="{ 'animate-spin': loading }" /><span class="hidden sm:inline">{{ t('admin.upstream.refresh') }}</span></button>
       </div>
 
@@ -92,6 +95,7 @@ import { listProviders, refreshProvider, type Provider } from '@/api/admin/upstr
 import { useAppStore } from '@/stores/app'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import Icon from '@/components/icons/Icon.vue'
+import Select from '@/components/common/Select.vue'
 import ProviderDialog from '@/components/admin/provider/ProviderDialog.vue'
 import { dateRange } from './operationsUtils'
 
@@ -107,6 +111,11 @@ const page = ref(1)
 const pages = ref(1)
 const search = ref('')
 const status = ref('all')
+const statusOptions = computed(() => [
+  { value: 'all', label: t('admin.upstream.allStatus') },
+  { value: 'connected', label: t('admin.upstream.connected') },
+  { value: 'disconnected', label: t('admin.upstream.disconnected') }
+])
 const loading = ref(false)
 const error = ref(false)
 const refreshingId = ref<string | null>(null)

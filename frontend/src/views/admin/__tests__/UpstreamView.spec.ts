@@ -61,4 +61,18 @@ describe('UpstreamView provider management', () => {
     expect(mocks.refresh).toHaveBeenCalledWith('provider-1')
     wrapper.unmount()
   })
+
+  it('filters providers from the themed status menu', async () => {
+    const wrapper = mountPage()
+    await flushPromises()
+    await wrapper.get('button[aria-label="admin.upstream.filterStatus"]').trigger('click')
+    const choices = document.body.querySelectorAll<HTMLElement>('[role="option"]')
+    expect(Array.from(choices, choice => choice.textContent)).toEqual([
+      'admin.upstream.allStatus', 'admin.upstream.connected', 'admin.upstream.disconnected'
+    ])
+    choices[1]?.click()
+    await flushPromises()
+    expect(mocks.list).toHaveBeenLastCalledWith(1, '', 'connected')
+    wrapper.unmount()
+  })
 })
