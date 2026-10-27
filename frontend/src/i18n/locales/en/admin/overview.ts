@@ -87,7 +87,7 @@ export default {
     },
 
     operations: {
-      title: 'Operations Panel',
+      title: 'Operations Panel', eyebrow: 'Operations', subtitle: 'Revenue, spend, profit and recharge activity at a glance. Amounts are in USD.',
       metrics: 'Financial overview',
       todayUserConsumption: "Today's user spend",
       todayUserRecharge: "Today's user top-ups",

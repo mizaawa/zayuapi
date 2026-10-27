@@ -156,16 +156,16 @@ func TestSub2APIProviderLoginAndMetrics(t *testing.T) {
 func TestNewAPIProviderUsesSessionAndQuotaPerUnit(t *testing.T) {
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		switch {
-		case r.URL.Path == "/api/user/login":
+		switch r.URL.Path {
+		case "/api/user/login":
 			http.SetCookie(w, &http.Cookie{Name: "session", Value: "demo", Path: "/", Secure: true})
 			_, _ = w.Write([]byte(`{"success":true,"data":{"username":"demo"}}`))
-		case r.URL.Path == "/api/user/self":
+		case "/api/user/self":
 			require.True(t, strings.Contains(r.Header.Get("Cookie"), "session=demo"))
 			_, _ = w.Write([]byte(`{"success":true,"data":{"quota":500000,"used_quota":250000}}`))
-		case r.URL.Path == "/api/status":
+		case "/api/status":
 			_, _ = w.Write([]byte(`{"success":true,"data":{"quota_per_unit":500000}}`))
-		case r.URL.Path == "/api/log/self/stat":
+		case "/api/log/self/stat":
 			_, _ = w.Write([]byte(`{"success":true,"data":{"quota":100000}}`))
 		default:
 			http.NotFound(w, r)

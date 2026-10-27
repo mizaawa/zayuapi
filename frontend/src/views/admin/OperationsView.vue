@@ -1,16 +1,23 @@
 <template>
   <AppLayout>
     <div class="space-y-6">
-      <div v-if="error" role="alert" class="flex items-center justify-between gap-3 rounded-xl bg-red-50 p-4 text-sm text-red-600 dark:bg-red-900/20 dark:text-red-400">
+      <header class="ops-hero">
+        <div class="min-w-0">
+          <p class="ops-eyebrow">{{ t('admin.operations.eyebrow') }}</p>
+          <h1 class="mt-1.5 text-2xl font-bold tracking-tight text-gray-900">{{ t('admin.operations.title') }}</h1>
+          <p class="mt-2 max-w-2xl text-sm leading-relaxed text-gray-600">{{ t('admin.operations.subtitle') }}</p>
+        </div>
+      </header>
+      <div v-if="error" role="alert" class="flex items-center justify-between gap-3 rounded-2xl bg-red-50 p-4 text-sm text-red-700">
         {{ t('admin.operations.failedToLoad') }}
         <button type="button" class="font-medium underline" @click="loadData">{{ t('admin.operations.retry') }}</button>
       </div>
       <div v-if="loading && !data" class="flex justify-center py-20"><LoadingSpinner /></div>
       <template v-if="data">
         <section class="grid grid-cols-2 gap-4 lg:grid-cols-4" :aria-label="t('admin.operations.metrics')" data-testid="operations-metrics">
-          <article v-for="metric in metrics" :key="metric.key" class="card min-w-0 p-4" :data-metric="metric.key">
-            <div class="flex items-center gap-3">
-              <span class="flex shrink-0 rounded-lg p-2" :class="metric.color"><Icon :name="metric.icon" size="md" :stroke-width="2" /></span>
+          <article v-for="metric in metrics" :key="metric.key" class="ops-metric card min-w-0 p-4 sm:p-5" :data-metric="metric.key">
+            <div class="flex items-start gap-3">
+              <span class="ops-metric-icon" :class="metric.color"><Icon :name="metric.icon" size="md" :stroke-width="2" /></span>
               <div class="min-w-0 flex-1">
                 <p class="text-xs font-medium text-gray-500 dark:text-gray-400">{{ t(metric.label) }}</p>
                 <div v-if="metric.key === 'today_revenue'" class="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
@@ -48,9 +55,9 @@
               <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ consumptionRange.start }} — {{ consumptionRange.end }} · USD</p>
             </div>
             <div class="flex flex-wrap items-center gap-2">
-              <div class="inline-flex rounded-lg bg-gray-100 p-1 dark:bg-dark-800" :aria-label="t('admin.dashboard.timeRange')">
+              <div class="segment-group" :aria-label="t('admin.dashboard.timeRange')">
                 <button v-for="period in periods" :key="period.days" type="button" class="inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors"
-                  :class="selectedDays === period.days ? 'bg-white text-primary-600 shadow-sm dark:bg-dark-700 dark:text-primary-400' : 'text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200'"
+                  :class="selectedDays === period.days ? 'segment-active' : 'segment-idle'"
                   :aria-pressed="selectedDays === period.days" :data-period="period.days" @click="selectedDays = period.days"><LoadingSpinner v-if="selectedDays === period.days && (loading || userLoading)" size="sm" data-testid="period-loading" />{{ t(period.label) }}</button>
               </div>
               <button type="button" class="btn btn-secondary shrink-0" :disabled="loading || userLoading" @click="refreshAll">
@@ -115,8 +122,8 @@
                   <button v-if="manuallySelectedUser" type="button" class="rounded-full bg-gray-100 px-2.5 py-1 text-xs font-medium text-gray-600 hover:bg-gray-200 dark:bg-dark-700 dark:text-gray-300 dark:hover:bg-dark-600" @click="selectTopUser">{{ t('admin.operations.backToTopUser') }}</button>
                 </div>
                 <div class="border-b border-gray-100 px-4 py-3 dark:border-dark-700">
-                  <div role="tablist" :aria-label="t('admin.operations.userDetails')" class="inline-flex rounded-full bg-gray-100 p-1 dark:bg-dark-800">
-                    <button v-for="tab in breakdownTabs" :key="tab.key" type="button" role="tab" :data-detail-tab="tab.key" :aria-selected="activeBreakdownTab === tab.key" class="inline-flex items-center gap-1.5 rounded-full px-4 py-1.5 text-xs font-medium transition-colors" :class="activeBreakdownTab === tab.key ? 'bg-white text-primary-600 shadow-sm dark:bg-dark-700 dark:text-primary-400' : 'text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200'" @click="activeBreakdownTab = tab.key"><LoadingSpinner v-if="userLoading && activeBreakdownTab === tab.key" size="sm" data-testid="detail-tab-loading" />{{ t(tab.label) }}</button>
+                  <div role="tablist" :aria-label="t('admin.operations.userDetails')" class="segment-group">
+                    <button v-for="tab in breakdownTabs" :key="tab.key" type="button" role="tab" :data-detail-tab="tab.key" :aria-selected="activeBreakdownTab === tab.key" class="inline-flex items-center gap-1.5 rounded-full px-4 py-1.5 text-xs font-medium transition-colors" :class="activeBreakdownTab === tab.key ? 'segment-active' : 'segment-idle'" @click="activeBreakdownTab = tab.key"><LoadingSpinner v-if="userLoading && activeBreakdownTab === tab.key" size="sm" data-testid="detail-tab-loading" />{{ t(tab.label) }}</button>
                   </div>
                 </div>
                 <div v-if="userLoading" class="flex min-h-40 items-center justify-center" role="status" data-testid="user-detail-loading"><LoadingSpinner size="md" /><span class="sr-only">{{ t('admin.operations.loading') }}</span></div>
@@ -522,6 +529,11 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
+.ops-hero { position: relative; overflow: hidden; padding: 1.5rem; border-radius: 1.75rem; background: radial-gradient(120% 140% at 0% 0%, rgb(255 231 138 / 0.55), transparent 55%), radial-gradient(90% 120% at 100% 100%, rgb(121 179 123 / 0.18), transparent 60%), var(--md-sys-color-surface); box-shadow: var(--theme-highlight), var(--theme-elevation-1); }
+.ops-eyebrow { font-size: 0.6875rem; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; color: #976800; }
+.ops-metric { position: relative; overflow: hidden; }
+.ops-metric:hover { box-shadow: var(--theme-highlight), var(--theme-elevation-2); }
+.ops-metric-icon { display: flex; flex-shrink: 0; align-items: center; justify-content: center; width: 2.75rem; height: 2.75rem; border-radius: 1rem; }
 .operations-grid { display: grid; grid-template-columns: minmax(0, 1.45fr) repeat(3, minmax(0, 1fr)); gap: 0.5rem; align-items: center; }
 .money-cell { text-align: right; font-size: 0.75rem; font-weight: 500; line-height: 1.4; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
 @media (max-width: 639px) {

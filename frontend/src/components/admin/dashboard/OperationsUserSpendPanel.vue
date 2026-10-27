@@ -11,12 +11,12 @@
         </span>
       </div>
       <div class="relative mt-4">
-        <Icon name="search" size="sm" class="pointer-events-none absolute left-3 top-2.5 text-gray-400" />
-        <input :value="search" type="search" class="w-full rounded-lg border border-gray-200 bg-white py-2 pl-9 pr-3 text-sm text-gray-900 outline-none transition-colors placeholder:text-gray-400 focus:border-primary-400 focus:ring-2 focus:ring-primary-500/10 dark:border-dark-600 dark:bg-dark-800 dark:text-white"
+        <Icon name="search" size="sm" class="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
+        <input :value="search" type="search" class="input ops-search"
           :placeholder="t('admin.operations.searchEmail')" :aria-label="t('admin.operations.searchEmail')" role="combobox" aria-autocomplete="list"
           aria-controls="operations-user-suggestions" :aria-expanded="suggestionsOpen" data-testid="user-search"
           @input="$emit('update:search', ($event.target as HTMLInputElement).value)" @focus="$emit('focus-search')" @blur="$emit('blur-search')" @keydown.esc="$emit('dismiss-suggestions')" />
-        <div v-if="suggestionsOpen && search.trim()" id="operations-user-suggestions" role="listbox" class="absolute left-0 right-0 top-full z-20 mt-1 max-h-56 overflow-y-auto rounded-lg border border-gray-200 bg-white py-1 shadow-lg dark:border-dark-600 dark:bg-dark-800" data-testid="user-suggestions">
+        <div v-if="suggestionsOpen && search.trim()" id="operations-user-suggestions" role="listbox" class="absolute left-0 right-0 top-full z-20 mt-1 max-h-56 overflow-y-auto ops-popover py-1" data-testid="user-suggestions">
           <p v-if="suggestionsLoading" class="flex items-center gap-2 px-3 py-2 text-xs text-gray-500" role="status"><LoadingSpinner size="sm" />{{ t('admin.operations.loading') }}</p>
           <button v-for="user in suggestions" :key="user.id" type="button" role="option" class="block w-full truncate px-3 py-2 text-left text-sm text-gray-700 hover:bg-primary-50 focus:bg-primary-50 dark:text-gray-200 dark:hover:bg-dark-700 dark:focus:bg-dark-700" :aria-selected="false" @mousedown.prevent @click="$emit('select-suggestion', user)">
             {{ user.email }}

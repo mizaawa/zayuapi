@@ -114,7 +114,7 @@ func (h *AccountHandler) refreshProviderBalances(ctx context.Context, settings *
 			if current[i].ID != result.original.ID {
 				continue
 			}
-			if current[i].SecretEncrypted != result.original.SecretEncrypted || current[i].BaseURL != result.original.BaseURL || current[i].Account != result.original.Account {
+			if !sameProviderIdentity(current[i], result.original) {
 				break // An admin edited this identity while the remote request ran.
 			}
 			if result.err == nil {
@@ -144,6 +144,13 @@ func (h *AccountHandler) refreshProviderBalances(ctx context.Context, settings *
 			h.sendProviderLowBalanceAlert(ctx, pendingAlert, mailer)
 		}
 	}
+}
+
+// sameProviderIdentity reports whether a record still points at the same
+// upstream account and credential as the snapshot that was probed.
+func sameProviderIdentity(a, b providerRecord) bool {
+	return a.SecretEncrypted == b.SecretEncrypted && a.BaseURL == b.BaseURL && a.Account == b.Account &&
+		a.SiteType == b.SiteType && a.AuthMode == b.AuthMode && a.UserID == b.UserID
 }
 
 func (h *AccountHandler) sendProviderLowBalanceAlert(ctx context.Context, alert *providerRecord, mailer providerAlertMailer) {

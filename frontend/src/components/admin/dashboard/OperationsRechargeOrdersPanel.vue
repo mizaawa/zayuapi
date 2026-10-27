@@ -5,34 +5,34 @@
         <h3 class="text-sm font-semibold text-gray-900 dark:text-white">{{ t('admin.operations.recharge.ordersTitle') }}</h3>
         <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ t('admin.operations.recharge.ordersHint') }}</p>
       </div>
-      <div class="inline-flex shrink-0 rounded-full bg-gray-100 p-1 dark:bg-dark-800" :aria-label="t('admin.operations.recharge.timeRange')">
+      <div class="segment-group shrink-0" :aria-label="t('admin.operations.recharge.timeRange')">
         <button v-for="range in ranges" :key="range.days" type="button" class="rounded-full px-2.5 py-1.5 text-xs font-medium transition-colors sm:px-3"
-          :class="days === range.days ? 'bg-white text-primary-600 shadow-sm dark:bg-dark-700 dark:text-primary-400' : 'text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200'"
+          :class="days === range.days ? 'segment-active' : 'segment-idle'"
           :aria-pressed="days === range.days" :data-order-days="range.days" @click="$emit('select-days', range.days)">{{ t(range.label) }}</button>
       </div>
     </div>
 
     <div class="relative z-10 space-y-3 border-b border-gray-100 px-4 py-3 dark:border-dark-700 sm:px-5">
       <div class="relative">
-        <Icon name="search" size="sm" class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-        <input :value="search" type="search" class="w-full rounded-lg border border-gray-200 bg-white py-2 pl-9 pr-3 text-sm text-gray-900 outline-none transition-colors placeholder:text-gray-400 focus:border-primary-400 focus:ring-2 focus:ring-primary-500/10 dark:border-dark-600 dark:bg-dark-800 dark:text-white"
+        <Icon name="search" size="sm" class="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
+        <input :value="search" type="search" class="input ops-search"
           :placeholder="t('admin.operations.recharge.searchEmail')" :aria-label="t('admin.operations.recharge.searchEmail')" role="combobox" aria-autocomplete="list" aria-controls="recharge-order-suggestions" :aria-expanded="suggestionsOpen && Boolean(search.trim())" data-testid="recharge-order-search"
           @input="$emit('update:search', ($event.target as HTMLInputElement).value)" @focus="$emit('focus-search')" @blur="$emit('blur-search')" @keydown.esc="($event.target as HTMLInputElement).blur()" />
-        <div v-if="suggestionsOpen && search.trim()" id="recharge-order-suggestions" role="listbox" class="absolute left-0 right-0 top-full z-30 mt-1 max-h-48 overflow-y-auto rounded-lg border border-gray-200 bg-white py-1 shadow-lg dark:border-dark-600 dark:bg-dark-800" data-testid="recharge-order-suggestions">
+        <div v-if="suggestionsOpen && search.trim()" id="recharge-order-suggestions" role="listbox" class="absolute left-0 right-0 top-full z-30 mt-1 max-h-48 overflow-y-auto ops-popover py-1" data-testid="recharge-order-suggestions">
           <p v-if="suggestionsLoading" class="flex items-center gap-2 px-3 py-2 text-xs text-gray-500" role="status"><LoadingSpinner size="sm" />{{ t('admin.operations.loading') }}</p>
           <button v-for="user in suggestions" :key="user.id" type="button" role="option" class="block w-full truncate px-3 py-2 text-left text-sm text-gray-700 hover:bg-primary-50 focus:bg-primary-50 dark:text-gray-200 dark:hover:bg-dark-700 dark:focus:bg-dark-700" :aria-selected="false" @mousedown.prevent @click="$emit('select-suggestion', user)">{{ user.email }}</button>
           <p v-if="!suggestionsLoading && !suggestions.length" class="px-3 py-2 text-xs text-gray-500">{{ t('admin.operations.noMatchingEmails') }}</p>
         </div>
       </div>
       <div class="flex flex-wrap gap-x-3 gap-y-2">
-        <div class="inline-flex max-w-full overflow-x-auto rounded-full bg-gray-100 p-1 dark:bg-dark-800" :aria-label="t('admin.operations.recharge.status')">
+        <div class="segment-group max-w-full overflow-x-auto" :aria-label="t('admin.operations.recharge.status')">
           <button v-for="option in statuses" :key="option.value" type="button" class="shrink-0 rounded-full px-2.5 py-1 text-xs font-medium transition-colors"
-            :class="status === option.value ? 'bg-white text-primary-600 shadow-sm dark:bg-dark-700 dark:text-primary-400' : 'text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200'"
+            :class="status === option.value ? 'segment-active' : 'segment-idle'"
             :aria-pressed="status === option.value" :data-order-status="option.value" @click="$emit('select-status', option.value)">{{ t(option.label) }}</button>
         </div>
-        <div class="inline-flex max-w-full overflow-x-auto rounded-full bg-gray-100 p-1 dark:bg-dark-800" :aria-label="t('admin.operations.recharge.channel')">
+        <div class="segment-group max-w-full overflow-x-auto" :aria-label="t('admin.operations.recharge.channel')">
           <button v-for="option in channels" :key="option.value" type="button" class="shrink-0 rounded-full px-2.5 py-1 text-xs font-medium transition-colors"
-            :class="channel === option.value ? 'bg-white text-primary-600 shadow-sm dark:bg-dark-700 dark:text-primary-400' : 'text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200'"
+            :class="channel === option.value ? 'segment-active' : 'segment-idle'"
             :aria-pressed="channel === option.value" :data-order-channel="option.value" @click="$emit('select-channel', option.value)">{{ t(option.label) }}</button>
         </div>
       </div>
@@ -66,8 +66,8 @@
     <div class="flex items-center justify-between gap-3 border-t border-gray-100 px-4 py-3 text-xs text-gray-500 dark:border-dark-700 dark:text-gray-400 sm:px-5">
       <span>{{ t('admin.operations.recharge.pageSummary', { page, pages, total }) }}</span>
       <div class="flex shrink-0 gap-2">
-        <button type="button" class="rounded-lg border border-gray-200 px-2.5 py-1.5 font-medium transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-dark-600 dark:hover:bg-dark-700" :disabled="page <= 1 || loading" @click="$emit('select-page', page - 1)">{{ t('admin.operations.recharge.previous') }}</button>
-        <button type="button" class="rounded-lg border border-gray-200 px-2.5 py-1.5 font-medium transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-dark-600 dark:hover:bg-dark-700" :disabled="page >= pages || loading" @click="$emit('select-page', page + 1)">{{ t('admin.operations.recharge.next') }}</button>
+        <button type="button" class="btn btn-secondary btn-sm" :disabled="page <= 1 || loading" @click="$emit('select-page', page - 1)">{{ t('admin.operations.recharge.previous') }}</button>
+        <button type="button" class="btn btn-secondary btn-sm" :disabled="page >= pages || loading" @click="$emit('select-page', page + 1)">{{ t('admin.operations.recharge.next') }}</button>
       </div>
     </div>
   </section>

@@ -116,8 +116,12 @@ func validateProviderInput(input *providerInput, previous *providerRecord) (prov
 		return providerRecord{}, "", err
 	}
 	name := strings.TrimSpace(input.Name)
-	if len(name) == 0 || len(name) > 120 || len(input.Notes) > 1000 || len(input.Account) > 320 {
+	if len(name) == 0 || len(name) > 120 || len(input.Notes) > 1000 || len(input.Account) > 320 ||
+		strings.IndexFunc(name, unicode.IsControl) >= 0 || strings.IndexFunc(input.Account, unicode.IsControl) >= 0 {
 		return providerRecord{}, "", errors.New("invalid provider name or notes")
+	}
+	if len(input.Password) > 1024 {
+		return providerRecord{}, "", errors.New("login credential is too long")
 	}
 	if input.SiteType != "sub2api" && input.SiteType != "newapi" {
 		return providerRecord{}, "", errors.New("unsupported provider type")
@@ -134,7 +138,7 @@ func validateProviderInput(input *providerInput, previous *providerRecord) (prov
 	userID := strings.TrimSpace(input.UserID)
 	if input.SiteType == "newapi" && input.AuthMode == "token" {
 		if userID == "" || len(userID) > 128 || strings.IndexFunc(userID, unicode.IsControl) >= 0 {
-			return providerRecord{}, "", errors.New("New API user ID must be a nonempty identifier without control characters (up to 128 bytes)")
+			return providerRecord{}, "", errors.New("the New API user ID must be a nonempty identifier without control characters (up to 128 bytes)")
 		}
 	}
 	if math.IsNaN(input.ExchangeRate) || math.IsInf(input.ExchangeRate, 0) || input.ExchangeRate < 0 || input.ExchangeRate > 1e6 {
@@ -161,7 +165,7 @@ func validateProviderInput(input *providerInput, previous *providerRecord) (prov
 		} else {
 			if input.SystemAccessToken != "" {
 				if strings.HasPrefix(strings.ToLower(strings.TrimSpace(input.SystemAccessToken)), "sk-") {
-					return providerRecord{}, "", errors.New("New API requires the user system access token, not an sk- model API key")
+					return providerRecord{}, "", errors.New("the New API site requires the user system access token, not an sk- model API key")
 				}
 				secret, err = encodeProviderToken(input.SystemAccessToken, "", "Bearer")
 				if err != nil {
@@ -265,6 +269,16 @@ func (h *AccountHandler) protectProviderCredential(record *providerRecord, secre
 
 // ListProviders returns ten records at a time and an overview for the whole list.
 func (h *AccountHandler) ListProviders(c *gin.Context) {
+	query := strings.ToLower(strings.TrimSpace(c.Query("search")))
+	if len([]rune(query)) > 200 {
+		response.BadRequest(c, "Search is too long")
+		return
+	}
+	filter := strings.TrimSpace(c.Query("status"))
+	if filter != "" && filter != "connected" && filter != "disconnected" {
+		response.BadRequest(c, "Invalid status")
+		return
+	}
 	records, err := h.providerRecords(c)
 	if err != nil {
 		response.Error(c, http.StatusInternalServerError, "Failed to load providers")
@@ -275,8 +289,6 @@ func (h *AccountHandler) ListProviders(c *gin.Context) {
 		page = 1
 	}
 	const size = 10
-	query := strings.ToLower(strings.TrimSpace(c.Query("search")))
-	filter := strings.TrimSpace(c.Query("status"))
 	filtered := make([]providerView, 0, len(records))
 	connected := 0
 	var totalBalance float64

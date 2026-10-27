@@ -16,7 +16,9 @@ func (h *PaymentHandler) RechargeActivity(c *gin.Context) {
 	page := 1
 	if raw := c.Query("page"); raw != "" {
 		parsed, err := strconv.Atoi(raw)
-		if err != nil || parsed < 1 || parsed > 1000 {
+		// Each page merges two sources up to page*25 rows, so bound the depth to
+		// keep a single request from loading tens of thousands of records.
+		if err != nil || parsed < 1 || parsed > 400 {
 			response.BadRequest(c, "Invalid page")
 			return
 		}

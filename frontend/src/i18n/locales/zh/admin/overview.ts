@@ -87,7 +87,7 @@ export default {
     },
 
     operations: {
-      title: '运营面板',
+      title: '运营面板', eyebrow: 'Operations', subtitle: '实时掌握收入、消费、利润与充值动态，所有金额以美元计算。',
       metrics: '收支概览',
       todayUserConsumption: '今日用户消费',
       todayUserRecharge: '今日用户充值',

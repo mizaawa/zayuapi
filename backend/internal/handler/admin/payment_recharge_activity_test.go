@@ -14,6 +14,7 @@ func TestRechargeActivityRejectsInvalidFiltersBeforeQuery(t *testing.T) {
 	for _, path := range []string{
 		"/recharge-activity?page=0",
 		"/recharge-activity?page=10001",
+		"/recharge-activity?page=401",
 		"/recharge-activity?status=unknown",
 		"/recharge-activity?channel=other",
 		"/recharge-activity?start_time=bad",

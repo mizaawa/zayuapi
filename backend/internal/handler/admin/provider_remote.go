@@ -40,7 +40,7 @@ func validProviderTokenType(value string) bool {
 		if index == 0 && !letter {
 			return false
 		}
-		if !letter && !(char >= '0' && char <= '9') && char != '-' {
+		if !letter && (char < '0' || char > '9') && char != '-' {
 			return false
 		}
 	}
@@ -63,6 +63,9 @@ func encodeProviderToken(accessToken, refreshToken, tokenType string) (string, e
 	if len(accessToken) > 8192 || len(refreshToken) > 8192 {
 		return "", errors.New("login credential is too long")
 	}
+	if !validProviderCredential(accessToken) || !validProviderCredential(refreshToken) {
+		return "", errors.New("login credential contains invalid characters")
+	}
 	data, err := json.Marshal(providerToken{AccessToken: accessToken, RefreshToken: refreshToken, TokenType: tokenType})
 	return string(data), err
 }
@@ -79,6 +82,9 @@ func decodeProviderToken(secret string) (providerToken, error) {
 		return token, nil
 	}
 	// Existing manually entered dashboard tokens from the earlier version.
+	if !validProviderCredential(secret) {
+		return providerToken{}, errors.New("stored dashboard token is invalid")
+	}
 	return providerToken{AccessToken: secret, TokenType: "Bearer"}, nil
 }
 
@@ -161,13 +167,41 @@ func providerHTTPClient() (*http.Client, error) {
 	}, nil
 }
 
+// providerBlockedPrefixes covers special-purpose ranges that IsGlobalUnicast
+// accepts. Translation prefixes (NAT64, 6to4, Teredo) are blocked because they
+// can embed a private IPv4 address that a gateway would then reach.
+var providerBlockedPrefixes = func() []netip.Prefix {
+	blocks := []string{
+		"0.0.0.0/8", "100.64.0.0/10", "192.0.0.0/24", "192.0.2.0/24", "192.88.99.0/24",
+		"198.18.0.0/15", "198.51.100.0/24", "203.0.113.0/24", "240.0.0.0/4",
+		"64:ff9b::/96", "64:ff9b:1::/48", "100::/64", "2001::/32", "2001:10::/28",
+		"2001:20::/28", "2001:db8::/32", "2002::/16", "fc00::/7",
+	}
+	prefixes := make([]netip.Prefix, 0, len(blocks))
+	for _, block := range blocks {
+		prefixes = append(prefixes, netip.MustParsePrefix(block))
+	}
+	return prefixes
+}()
+
 func allowedProviderIP(ip netip.Addr) bool {
+	ip = ip.Unmap()
 	if !ip.IsValid() || !ip.IsGlobalUnicast() || ip.IsPrivate() || ip.IsLoopback() || ip.IsLinkLocalUnicast() {
 		return false
 	}
-	for _, block := range []string{"100.64.0.0/10", "192.0.0.0/24", "198.18.0.0/15", "2001:db8::/32", "fc00::/7"} {
-		prefix := netip.MustParsePrefix(block)
+	for _, prefix := range providerBlockedPrefixes {
 		if prefix.Contains(ip) {
+			return false
+		}
+	}
+	return true
+}
+
+// validProviderCredential rejects values that would be unsafe or invalid
+// inside an HTTP header, such as CR/LF or other control characters.
+func validProviderCredential(value string) bool {
+	for _, char := range value {
+		if char < 0x20 || char == 0x7f {
 			return false
 		}
 	}
@@ -213,7 +247,7 @@ func (r *providerRemote) request(ctx context.Context, method, path string, body 
 	if err != nil {
 		return nil, fmt.Errorf("provider request failed: %w", err)
 	}
-	defer res.Body.Close()
+	defer func() { _ = res.Body.Close() }()
 	var envelope map[string]any
 	if err := json.NewDecoder(io.LimitReader(res.Body, 1<<20)).Decode(&envelope); err != nil {
 		if res.StatusCode == http.StatusUnauthorized || res.StatusCode == http.StatusForbidden {
@@ -408,7 +442,7 @@ func probeProviderWithClientAndSecret(ctx context.Context, provider providerReco
 		}
 		quotaPerUnit, ok := number(status["quota_per_unit"])
 		if !ok || quotaPerUnit <= 0 {
-			return providerMetrics{}, "", errors.New("New API quota conversion is unavailable")
+			return providerMetrics{}, "", errors.New("the New API quota conversion is unavailable")
 		}
 		metrics := providerMetrics{
 			Balance:    divide(field(profile, "quota"), quotaPerUnit),

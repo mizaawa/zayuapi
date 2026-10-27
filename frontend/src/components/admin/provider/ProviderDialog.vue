@@ -7,7 +7,7 @@
         <span class="input-label">{{ t('admin.upstream.providerName') }} <span class="text-primary-600">*</span></span>
         <input v-model.trim="form.name" class="input provider-input" required :placeholder="t('admin.upstream.namePlaceholder')" />
       </label>
-      <label class="flex items-center justify-between gap-3 rounded-lg border border-gray-200 px-3 py-2 dark:border-dark-700">
+      <label class="provider-toggle-row">
         <span class="text-sm text-gray-700 dark:text-gray-300">{{ t('admin.upstream.suppressLowBalanceAlert') }}</span>
         <input v-model="form.suppress_low_balance_alert" type="checkbox" class="h-4 w-4 accent-primary-600" data-testid="provider-suppress-low-balance-alert" />
       </label>
@@ -42,7 +42,7 @@
         </div>
       </fieldset>
 
-      <div v-if="form.auth_mode === 'token' && form.site_type === 'sub2api'" class="rounded-xl border border-primary-200 bg-primary-50 p-3 text-xs leading-relaxed text-gray-700 dark:border-primary-700 dark:bg-primary-900/20 dark:text-gray-200">
+      <div v-if="form.auth_mode === 'token' && form.site_type === 'sub2api'" class="rounded-2xl bg-primary-50 p-3.5 text-xs leading-relaxed text-gray-700 dark:border-primary-700 dark:bg-primary-900/20 dark:text-gray-200">
         <p class="font-semibold">{{ t('admin.upstream.sub2TokenGuideTitle') }}</p>
         <p class="mt-1">{{ t('admin.upstream.sub2TokenGuide') }}</p>
         <a v-if="siteLink" :href="siteLink" target="_blank" rel="noopener noreferrer" class="mt-2 inline-flex items-center gap-1 font-semibold text-primary-700 underline-offset-2 hover:underline dark:text-primary-300">{{ t('admin.upstream.sub2TokenGuideLocation') }} <Icon name="externalLink" size="xs" /></a>
@@ -79,16 +79,16 @@
         </label>
       </div>
 
-      <div class="grid gap-3 border-t border-dashed border-primary-200 pt-4 dark:border-primary-800 sm:grid-cols-2">
+      <div class="grid gap-3 pt-1 sm:grid-cols-2">
         <label class="block"><span class="input-label">{{ t('admin.upstream.exchangeRate') }}</span><input v-model.number="form.exchange_rate" class="input provider-input" type="number" min="0.001" max="1000000" step="0.001" required /><span class="input-hint block">{{ t('admin.upstream.exchangeRateHint') }}</span></label>
         <label class="block"><span class="input-label">{{ t('admin.upstream.notes') }} <small class="font-normal text-gray-400">{{ t('admin.upstream.optional') }}</small></span><input v-model.trim="form.notes" class="input provider-input" :placeholder="t('admin.upstream.notesPlaceholder')" /></label>
       </div>
 
-      <div class="flex flex-wrap items-center gap-2 border-t border-dashed border-primary-200 pt-4 dark:border-primary-800">
+      <div class="provider-probe-bar">
         <button type="button" class="btn btn-secondary inline-flex items-center gap-2" :disabled="probing || saving" @click="testConnection"><Icon name="shield" size="sm" />{{ probing ? t('admin.upstream.probing') : t('admin.upstream.probe') }}</button>
         <span class="text-[11px] text-gray-500 dark:text-gray-400">{{ t('admin.upstream.probeHint') }}</span>
       </div>
-      <p v-if="probeMessage" role="status" class="rounded-lg px-3 py-2 text-xs" :class="probeOk ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300' : 'bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-300'">{{ probeMessage }}</p>
+      <p v-if="probeMessage" role="status" class="rounded-xl px-3 py-2.5 text-xs leading-relaxed" :class="probeOk ? 'bg-emerald-50 text-emerald-800' : 'bg-red-50 text-red-700'">{{ probeMessage }}</p>
     </form>
     <template #footer><div class="flex w-full justify-end gap-2"><button type="button" class="btn btn-secondary" @click="emit('close')">{{ t('common.cancel') }}</button><button type="submit" form="provider-form" class="btn btn-primary" :disabled="saving || probing">{{ saving ? t('admin.upstream.savingProvider') : provider ? t('common.save') : t('admin.upstream.loginAndAdd') }}</button></div></template>
   </BaseDialog>
@@ -192,18 +192,23 @@ async function save() {
 </script>
 
 <style scoped>
-.provider-input { border: 1px solid color-mix(in srgb, var(--md-sys-color-primary) 30%, transparent); border-radius: .75rem; background: var(--md-sys-color-surface); padding: .65rem .85rem; }
-.provider-input:focus { border-color: var(--md-sys-color-primary); }
-.provider-choice { display: flex; align-items: center; min-width: 0; gap: .45rem; cursor: pointer; border: 1px solid color-mix(in srgb, var(--md-sys-color-primary) 23%, transparent); border-radius: .85rem; background: var(--md-sys-color-surface); color: var(--md-sys-color-on-surface); transition: border-color .15s, background .15s, box-shadow .15s; }
+.provider-input { border: 1px solid color-mix(in srgb, var(--md-sys-color-primary) 26%, transparent); border-radius: 0.875rem; background: var(--md-sys-color-surface); padding: 0.65rem 0.9rem; box-shadow: inset 0 1px 2px rgb(63 52 32 / 0.04); }
+.provider-input:hover:not(:focus) { border-color: color-mix(in srgb, var(--md-sys-color-primary) 45%, transparent); }
+.provider-input:focus { border-color: var(--md-sys-color-primary); box-shadow: 0 0 0 4px rgb(233 184 36 / 0.16); }
+.provider-choice { display: flex; align-items: center; min-width: 0; gap: 0.5rem; cursor: pointer; border: 1px solid color-mix(in srgb, var(--md-sys-color-primary) 22%, transparent); border-radius: 1rem; background: var(--md-sys-color-surface); color: var(--md-sys-color-on-surface); transition: border-color 0.15s, background 0.15s, box-shadow 0.2s, transform 0.2s var(--theme-ease-out); }
 .provider-choice:focus-within { outline: 2px solid var(--md-sys-color-primary); outline-offset: 2px; }
-.provider-choice:hover { border-color: var(--md-sys-color-primary); }
-.provider-choice-active { border-color: var(--md-sys-color-primary); background: color-mix(in srgb, var(--md-sys-color-primary) 8%, var(--md-sys-color-surface)); color: var(--md-sys-color-primary); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--md-sys-color-primary) 25%, transparent); }
-.provider-platform { min-height: 3.4rem; padding: .55rem; font-size: .76rem; }
-.provider-choice-icon { display: flex; flex-shrink: 0; align-items: center; justify-content: center; width: 1.8rem; height: 1.8rem; border-radius: .5rem; background: color-mix(in srgb, var(--md-sys-color-primary) 14%, var(--md-sys-color-surface)); color: var(--md-sys-color-primary); }
-.provider-mode { min-height: 2.65rem; padding: .5rem .7rem; font-size: .75rem; font-weight: 600; }
-.provider-radio { display: inline-flex; flex-shrink: 0; align-items: center; justify-content: center; width: .85rem; height: .85rem; border: 1.5px solid currentColor; border-radius: 50%; }
-.provider-radio-dot { width: .42rem; height: .42rem; border-radius: 50%; background: currentColor; }
+.provider-choice:hover { border-color: var(--md-sys-color-primary); transform: translateY(-1px); }
+.provider-choice-active { border-color: var(--md-sys-color-primary); background: linear-gradient(135deg, #fffbe8, #fff3bd); color: #7e5600; box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--md-sys-color-primary) 30%, transparent), 0 8px 18px -12px rgb(151 104 0 / 0.55); }
+.provider-platform { min-height: 3.6rem; padding: 0.6rem 0.7rem; font-size: 0.8rem; }
+.provider-choice-icon { display: flex; flex-shrink: 0; align-items: center; justify-content: center; width: 2rem; height: 2rem; border-radius: 0.65rem; background: color-mix(in srgb, var(--md-sys-color-primary) 16%, var(--md-sys-color-surface)); color: #7e5600; }
+.provider-choice-active .provider-choice-icon { background: var(--md-sys-color-primary); color: var(--md-sys-color-on-primary); }
+.provider-mode { min-height: 2.75rem; padding: 0.5rem 0.75rem; font-size: 0.78rem; font-weight: 600; }
+.provider-radio { display: inline-flex; flex-shrink: 0; align-items: center; justify-content: center; width: 0.9rem; height: 0.9rem; border: 1.5px solid currentColor; border-radius: 50%; }
+.provider-radio-dot { width: 0.45rem; height: 0.45rem; border-radius: 50%; background: currentColor; }
 .provider-secret { position: relative; display: block; }
 .provider-secret .provider-input { width: 100%; min-width: 0; padding-inline-end: 3rem; box-sizing: border-box; }
-.provider-secret button { position: absolute; right: .6rem; top: 50%; display: flex; align-items: center; justify-content: center; width: 1.75rem; height: 1.75rem; transform: translateY(-50%); border-radius: .4rem; background: var(--md-sys-color-surface); color: var(--md-sys-color-on-surface-variant); }
+.provider-secret button { position: absolute; right: 0.55rem; top: 50%; display: flex; align-items: center; justify-content: center; width: 1.85rem; height: 1.85rem; transform: translateY(-50%); border-radius: 0.55rem; background: transparent; color: var(--md-sys-color-on-surface-variant); transition: background 0.15s, color 0.15s; }
+.provider-secret button:hover { background: var(--md-sys-color-surface-container); color: #7e5600; }
+.provider-toggle-row { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; padding: 0.7rem 0.9rem; border-radius: 1rem; background: color-mix(in srgb, var(--md-sys-color-surface-container) 55%, var(--md-sys-color-surface)); cursor: pointer; }
+.provider-probe-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem; padding: 0.75rem; border-radius: 1rem; background: linear-gradient(135deg, rgb(228 240 223 / 0.7), rgb(255 251 232 / 0.9)); }
 </style>

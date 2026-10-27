@@ -5,10 +5,10 @@
         <h2 class="text-sm font-semibold text-gray-900 dark:text-white">{{ t('admin.operations.trend') }}</h2>
         <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ range.start }} — {{ range.end }} · USD</p>
       </div>
-      <div class="inline-flex rounded-full bg-gray-100 p-1 dark:bg-dark-800">
+      <div class="segment-group">
         <button v-for="mode in modes" :key="String(mode.value)" type="button"
           class="rounded-full px-3 py-1.5 text-xs font-medium transition-colors"
-          :class="profitOnly === mode.value ? 'bg-white text-primary-600 shadow-sm dark:bg-dark-700 dark:text-primary-400' : 'text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200'"
+          :class="profitOnly === mode.value ? 'segment-active' : 'segment-idle'"
           :aria-pressed="profitOnly === mode.value" @click="profitOnly = mode.value">{{ t(mode.label) }}</button>
       </div>
     </div>
@@ -18,7 +18,7 @@
         :class="profitOnly && index !== 2 ? 'opacity-35' : 'opacity-100'"
         :data-series="series.key" :aria-pressed="!profitOnly || index === 2"
         @click="profitOnly = index === 2">
-        <span class="h-0.5 w-5 rounded-full" :style="{ backgroundColor: series.color }"></span>
+        <span class="h-1 w-5 rounded-full" :style="{ backgroundColor: series.color }"></span>
         <span class="text-gray-600 dark:text-gray-300">{{ t(series.label) }}</span>
       </button>
     </div>
@@ -45,9 +45,9 @@ const dark = ref(document.documentElement.classList.contains('dark'))
 useMutationObserver(document.documentElement, () => { dark.value = document.documentElement.classList.contains('dark') }, { attributes: true, attributeFilter: ['class'] })
 const modes = [{ value: false, label: 'admin.operations.defaultView' }, { value: true, label: 'admin.operations.profitOnly' }]
 const seriesDefinitions = [
-  { key: 'upstream_cost', label: 'admin.operations.upstreamCost', color: '#3b82f6' },
-  { key: 'user_cost', label: 'admin.operations.userCost', color: '#10b981' },
-  { key: 'profit', label: 'admin.operations.profit', color: '#eab308' }
+  { key: 'upstream_cost', label: 'admin.operations.upstreamCost', color: '#5b8fb9' },
+  { key: 'user_cost', label: 'admin.operations.userCost', color: '#5c9865' },
+  { key: 'profit', label: 'admin.operations.profit', color: '#d99a00' }
 ] as const
 const range = computed(() => dateRange(props.days))
 const points = computed(() => {
@@ -85,6 +85,9 @@ const chartOptions = computed<ChartOptions<'line'>>(() => ({
     legend: { display: false },
     tooltip: {
       padding: 12,
+      backgroundColor: 'rgba(63, 52, 32, 0.92)',
+      cornerRadius: 12,
+      boxPadding: 4,
       callbacks: {
         title: items => points.value[items[0]?.dataIndex ?? 0]?.date ?? '',
         label: item => `${item.dataset.label}: ${formatMoney(Number(item.parsed.y ?? 0))}`,
@@ -98,8 +101,8 @@ const chartOptions = computed<ChartOptions<'line'>>(() => ({
     }
   },
   scales: {
-    x: { grid: { display: false }, ticks: { color: dark.value ? '#9ca3af' : '#6b7280', maxRotation: 0, autoSkip: false, font: { size: 11 } }, border: { display: false } },
-    y: { grid: { color: dark.value ? '#1f2937' : '#f3f4f6' }, ticks: { color: dark.value ? '#9ca3af' : '#6b7280', font: { size: 11 }, callback: value => formatMoney(Number(value)) }, border: { display: false } }
+    x: { grid: { display: false }, ticks: { color: dark.value ? '#9ca3af' : '#716744', maxRotation: 0, autoSkip: false, font: { size: 11 } }, border: { display: false } },
+    y: { grid: { color: dark.value ? '#1f2937' : 'rgba(215, 202, 162, 0.35)' }, ticks: { color: dark.value ? '#9ca3af' : '#716744', font: { size: 11 }, callback: value => formatMoney(Number(value)) }, border: { display: false } }
   }
 }))
 </script>

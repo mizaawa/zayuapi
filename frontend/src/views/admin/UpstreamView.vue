@@ -1,95 +1,120 @@
 <template>
   <AppLayout>
-    <div class="space-y-5">
-      <header class="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <p class="text-[11px] font-semibold uppercase tracking-[0.14em] text-primary-500">{{ t('admin.upstream.eyebrow') }}</p>
-          <h1 class="mt-1 flex items-center gap-2 text-xl font-bold text-gray-900 dark:text-white">{{ t('admin.upstream.pageTitle') }} <span class="rounded-full bg-primary-100 px-2 py-0.5 text-xs font-semibold text-primary-700 dark:bg-primary-900/30 dark:text-primary-300">{{ providerCount }}</span></h1>
+    <div class="upstream-page space-y-6">
+      <header class="upstream-hero">
+        <div class="min-w-0">
+          <p class="upstream-eyebrow">{{ t('admin.upstream.eyebrow') }}</p>
+          <h1 class="mt-1.5 flex flex-wrap items-center gap-2.5 text-2xl font-bold tracking-tight text-gray-900">
+            {{ t('admin.upstream.pageTitle') }}
+            <span class="upstream-count">{{ providerCount }}</span>
+          </h1>
+          <p class="mt-2 max-w-2xl text-sm leading-relaxed text-gray-600">{{ t('admin.upstream.subtitle') }}</p>
         </div>
-        <button type="button" class="btn btn-primary inline-flex items-center gap-2" @click="editing = null; showDialog = true"><Icon name="plus" size="sm" />{{ t('admin.upstream.add') }}</button>
+        <button type="button" class="btn btn-primary shrink-0" @click="openCreate"><Icon name="plus" size="sm" />{{ t('admin.upstream.add') }}</button>
       </header>
 
-      <section class="grid grid-cols-2 gap-3 lg:grid-cols-4" :aria-label="t('admin.upstream.overview')">
-        <article v-for="metric in metrics" :key="metric.key" class="card min-w-0 p-4" :data-testid="`${metric.key}-metric`">
-          <div class="flex items-start gap-3">
-            <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg" :class="metric.iconClass"><Icon :name="metric.icon" size="sm" /></span>
-            <div class="min-w-0">
-              <p class="text-xs font-medium text-gray-500 dark:text-gray-400">{{ t(metric.label) }}</p>
-              <div class="mt-1 flex min-h-7 items-center gap-2 text-lg font-bold tabular-nums text-gray-900 dark:text-white sm:text-xl">
-                <span v-if="!metric.loading" class="break-all">{{ metric.value }}</span>
-                <span v-else-if="metric.key === 'upstream'" class="break-all">{{ metric.value }}</span>
-                <LoadingSpinner v-if="metric.loading" size="sm" :data-testid="`${metric.key}-balance-loading`" />
-              </div>
+      <section class="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4" :aria-label="t('admin.upstream.overview')">
+        <article v-for="metric in metrics" :key="metric.key" class="upstream-metric card" :data-testid="`${metric.key}-metric`">
+          <span class="upstream-metric-icon" :class="metric.tone"><Icon :name="metric.icon" size="md" /></span>
+          <div class="min-w-0 flex-1">
+            <p class="truncate text-xs font-medium text-gray-500">{{ t(metric.label) }}</p>
+            <div class="mt-1 flex min-h-8 items-center text-xl font-bold tabular-nums text-gray-900 sm:text-2xl">
+              <LoadingSpinner v-if="metric.loading" size="sm" :data-testid="`${metric.key}-balance-loading`" />
+              <span v-else class="truncate" :title="metric.value">{{ metric.value }}</span>
             </div>
+            <p v-if="metric.key === 'connected' && providerCount > 0" class="mt-0.5 text-[11px] font-medium text-emerald-700">{{ t('admin.upstream.connectionRate', { rate: connectionRate }) }}</p>
           </div>
         </article>
       </section>
 
-      <div class="card flex flex-wrap items-center gap-3 p-3">
-        <div class="relative min-w-[11rem] flex-1">
-          <Icon name="search" size="sm" class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-          <input v-model.trim="search" class="input w-full pl-10" :placeholder="t('admin.upstream.search')" :aria-label="t('admin.upstream.search')" @input="debouncedLoad" />
+      <div class="upstream-toolbar card">
+        <div class="relative min-w-[12rem] flex-1">
+          <Icon name="search" size="sm" class="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
+          <input v-model.trim="search" type="search" class="input w-full pl-11" :placeholder="t('admin.upstream.search')" :aria-label="t('admin.upstream.search')" @input="debouncedLoad" />
         </div>
-        <div class="w-full sm:w-40">
-          <Select
-            v-model="status"
-            :options="statusOptions"
-            :aria-label="t('admin.upstream.filterStatus')"
-            @change="page = 1; load()"
-          />
+        <div class="w-full sm:w-44">
+          <Select v-model="status" :options="statusOptions" :aria-label="t('admin.upstream.filterStatus')" @change="page = 1; load()" />
         </div>
-        <button type="button" class="btn btn-secondary inline-flex items-center gap-2" :disabled="loading" @click="load()"><Icon name="refresh" size="sm" :class="{ 'animate-spin': loading }" /><span class="hidden sm:inline">{{ t('admin.upstream.refresh') }}</span></button>
+        <button type="button" class="btn btn-secondary" :disabled="loading" :aria-label="t('admin.upstream.refresh')" @click="load()"><Icon name="refresh" size="sm" :class="{ 'animate-spin': loading }" /><span class="hidden sm:inline">{{ t('admin.upstream.refresh') }}</span></button>
       </div>
 
-      <div v-if="error" role="alert" class="card border-red-200 p-4 text-sm text-red-600 dark:border-red-900 dark:text-red-400">{{ t('admin.upstream.loadFailed') }} <button type="button" class="ml-2 underline" @click="load()">{{ t('admin.upstream.retry') }}</button></div>
-      <div v-if="loading && !providers.length" class="card py-16 text-center text-sm text-gray-500 dark:text-gray-400">{{ t('admin.upstream.loading') }}</div>
-      <div v-else-if="!visibleProviders.length" class="card py-16 text-center text-sm text-gray-500 dark:text-gray-400">{{ t('admin.upstream.empty') }}</div>
+      <div v-if="error" role="alert" class="flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-red-50 px-4 py-3 text-sm text-red-700">
+        <span class="flex items-center gap-2"><Icon name="exclamationCircle" size="sm" />{{ t('admin.upstream.loadFailed') }}</span>
+        <button type="button" class="font-semibold underline-offset-2 hover:underline" @click="load()">{{ t('admin.upstream.retry') }}</button>
+      </div>
 
-      <section v-else class="space-y-4" :aria-label="t('admin.upstream.pageTitle')">
-        <article v-for="provider in visibleProviders" :key="provider.id" class="card overflow-hidden" :data-provider-id="provider.id">
-          <div class="flex flex-wrap items-start justify-between gap-3 border-b border-gray-100 px-4 py-4 dark:border-dark-700 sm:px-5">
-            <div class="flex min-w-0 items-start gap-3">
-              <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary-100 text-primary-600 dark:bg-primary-900/30 dark:text-primary-400"><Icon name="server" size="md" /></span>
-              <div class="min-w-0">
-                <div class="flex flex-wrap items-center gap-2">
-                  <h2 class="break-all text-base font-bold text-gray-900 dark:text-white">{{ provider.name }}</h2>
-                  <span class="rounded-full bg-gray-100 px-2 py-0.5 text-[11px] font-medium text-gray-600 dark:bg-dark-700 dark:text-gray-300">{{ provider.site_type === 'newapi' ? 'New API' : 'Sub2API' }}</span>
-                </div>
-                <a :href="provider.base_url" target="_blank" rel="noopener noreferrer" class="mt-1 inline-block break-all text-xs text-primary-600 hover:underline dark:text-primary-400">{{ provider.base_url }} ↗</a>
+      <div v-if="loading && !providers.length" class="grid gap-4 lg:grid-cols-2" role="status" :aria-label="t('admin.upstream.loading')">
+        <div v-for="index in 2" :key="index" class="card space-y-4 p-5">
+          <div class="flex items-center gap-3"><div class="skeleton h-11 w-11 rounded-2xl" /><div class="flex-1 space-y-2"><div class="skeleton h-4 w-1/3" /><div class="skeleton h-3 w-1/2" /></div></div>
+          <div class="skeleton h-20 w-full rounded-2xl" />
+        </div>
+      </div>
+      <div v-else-if="!visibleProviders.length" class="card empty-state">
+        <span class="upstream-empty-icon"><Icon name="server" size="xl" /></span>
+        <p class="empty-state-title">{{ t('admin.upstream.empty') }}</p>
+        <p v-if="providerCount === 0" class="empty-state-description">{{ t('admin.upstream.emptyHint') }}</p>
+        <button v-if="providerCount === 0" type="button" class="btn btn-primary mt-5" @click="openCreate"><Icon name="plus" size="sm" />{{ t('admin.upstream.add') }}</button>
+      </div>
+
+      <section v-else class="grid gap-4 lg:grid-cols-2" :aria-label="t('admin.upstream.pageTitle')">
+        <article v-for="provider in visibleProviders" :key="provider.id" class="provider-card card" :class="{ 'provider-card-offline': provider.status === 'disconnected' }" :data-provider-id="provider.id">
+          <div class="flex items-start gap-3 px-5 pt-5">
+            <span class="provider-avatar" :class="provider.site_type === 'newapi' ? 'provider-avatar-newapi' : ''" aria-hidden="true">{{ initials(provider.name) }}</span>
+            <div class="min-w-0 flex-1">
+              <div class="flex flex-wrap items-center gap-1.5">
+                <h2 class="min-w-0 break-all text-base font-bold text-gray-900">{{ provider.name }}</h2>
+                <span class="badge badge-gray">{{ provider.site_type === 'newapi' ? 'New API' : 'Sub2API' }}</span>
               </div>
+              <a :href="safeHref(provider.base_url)" target="_blank" rel="noopener noreferrer" class="mt-1 inline-flex max-w-full items-center gap-1 text-xs text-gray-500 hover:text-primary-700">
+                <Icon name="globe" size="xs" class="shrink-0" /><span class="truncate font-mono">{{ hostOf(provider.base_url) }}</span>
+              </a>
             </div>
-            <div class="ml-auto flex items-center gap-2">
-              <span class="rounded-full px-2.5 py-1 text-xs font-semibold" :class="provider.status === 'connected' ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-400' : 'bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-400'"><span class="mr-1">●</span>{{ provider.status === 'connected' ? t('admin.upstream.connected') : t('admin.upstream.disconnected') }}</span>
-              <span v-if="provider.low_balance_alert" class="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-800 dark:bg-amber-900/30 dark:text-amber-300" data-testid="provider-low-balance-alert">{{ t('admin.upstream.lowBalanceAlert') }}</span>
-              <button type="button" class="rounded-lg p-2 text-gray-500 hover:bg-gray-100 hover:text-primary-600 dark:hover:bg-dark-700" :aria-label="t('admin.upstream.edit')" @click="editing = provider; showDialog = true"><Icon name="edit" size="sm" /></button>
-              <button type="button" class="flex items-center gap-1 rounded-lg px-2 py-1 text-xs text-gray-500 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-900/20" :aria-label="t('admin.upstream.delete')" :disabled="deletingId === provider.id" @click="deleting = provider"><Icon name="trash" size="sm" />{{ t('admin.upstream.delete') }}</button>
+            <div class="flex shrink-0 items-center gap-0.5">
+              <button type="button" class="provider-icon-button" :aria-label="t('admin.upstream.edit')" :title="t('admin.upstream.edit')" @click="openEdit(provider)"><Icon name="edit" size="sm" /></button>
+              <button type="button" class="provider-icon-button provider-icon-danger" :aria-label="t('admin.upstream.delete')" :title="t('admin.upstream.delete')" :disabled="deletingId === provider.id" @click="deleting = provider"><Icon name="trash" size="sm" /></button>
             </div>
           </div>
 
-          <div class="grid grid-cols-1 divide-y divide-gray-100 p-4 dark:divide-dark-700 sm:grid-cols-3 sm:divide-x sm:divide-y-0 sm:px-5">
-            <div v-for="amount in providerAmounts(provider)" :key="amount.key" class="min-w-0 py-2 first:pt-0 last:pb-0 sm:px-4 sm:py-0 sm:first:pl-0 sm:last:pr-0">
-              <p class="text-xs font-medium text-gray-500 dark:text-gray-400">{{ t(amount.label) }}</p>
-              <div class="mt-1 flex min-h-7 items-center text-xl font-bold tabular-nums" :class="amount.key === 'balance' ? 'text-primary-600 dark:text-primary-400' : 'text-gray-900 dark:text-white'">
-                <span class="break-all">{{ amount.value === null ? '—' : yuan(amount.value * provider.exchange_rate) }}</span>
-              </div>
-              <p class="mt-0.5 text-[11px] text-gray-400">{{ amount.value === null ? t('admin.upstream.unknown') : money(amount.value) + ' USD' }}</p>
-            </div>
+          <div class="flex flex-wrap items-center gap-1.5 px-5 pt-3">
+            <span class="provider-status" :class="provider.status === 'connected' ? 'provider-status-online' : 'provider-status-offline'">
+              <span class="provider-status-dot" />{{ provider.status === 'connected' ? t('admin.upstream.connected') : t('admin.upstream.disconnected') }}
+            </span>
+            <span v-if="provider.low_balance_alert" class="badge badge-warning" data-testid="provider-low-balance-alert">{{ t('admin.upstream.lowBalanceAlert') }}</span>
+            <span v-if="provider.exchange_rate !== 1" class="badge badge-primary tabular-nums">×{{ provider.exchange_rate }}</span>
           </div>
-          <p class="flex items-center justify-end gap-1 px-4 pb-3 text-right text-xs text-gray-500 dark:text-gray-400 sm:px-5">{{ t('admin.upstream.totalConsumption') }} <strong class="tabular-nums text-gray-700 dark:text-gray-200">{{ provider.metrics.total_spend === null ? '—' : money(provider.metrics.total_spend) }}</strong></p>
-          <p v-if="provider.status === 'disconnected' && provider.last_error" class="mx-4 mb-3 rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700 dark:bg-red-900/20 dark:text-red-300 sm:mx-5" role="status">{{ provider.last_error }}</p>
-          <div class="flex flex-wrap items-center justify-between gap-2 border-t border-gray-100 bg-gray-50/60 px-4 py-3 text-xs text-gray-500 dark:border-dark-700 dark:bg-dark-800/40 dark:text-gray-400 sm:px-5">
-            <span>{{ t('admin.upstream.updated') }} {{ formattedTime(provider.updated_at) }}</span>
-            <div class="flex items-center gap-3">
-              <a :href="provider.base_url" target="_blank" rel="noopener noreferrer" class="font-medium text-gray-700 hover:text-primary-600 dark:text-gray-300 dark:hover:text-primary-400">{{ t('admin.upstream.visitSite') }} ↗</a>
-              <button type="button" class="btn btn-secondary py-1 text-xs" :disabled="refreshingId === provider.id" @click="refresh(provider)"><Icon name="refresh" size="sm" :class="{ 'animate-spin': refreshingId === provider.id }" />{{ t('admin.upstream.refresh') }}</button>
-            </div>
+
+          <div class="provider-balance mx-5 mt-4">
+            <p class="text-xs font-medium text-gray-600">{{ t('admin.upstream.balance') }}</p>
+            <p class="mt-1 break-all text-3xl font-bold tabular-nums tracking-tight" :class="provider.low_balance_alert ? 'text-amber-700' : 'text-gray-900'">{{ provider.metrics.balance === null ? '—' : yuan(provider.metrics.balance * provider.exchange_rate) }}</p>
+            <p class="mt-0.5 text-xs tabular-nums text-gray-500">{{ provider.metrics.balance === null ? t('admin.upstream.unknown') : money(provider.metrics.balance) + ' USD' }}</p>
           </div>
+
+          <dl class="grid grid-cols-3 gap-2 px-5 pt-3">
+            <div v-for="amount in secondaryAmounts(provider)" :key="amount.key" class="provider-stat">
+              <dt class="truncate text-[11px] font-medium text-gray-500">{{ t(amount.label) }}</dt>
+              <dd class="mt-0.5 truncate text-sm font-semibold tabular-nums text-gray-900" :title="amount.value === null ? '' : money(amount.value)">{{ amount.value === null ? '—' : money(amount.value) }}</dd>
+            </div>
+          </dl>
+
+          <p v-if="provider.status === 'disconnected' && provider.last_error" class="mx-5 mt-3 flex items-start gap-2 rounded-xl bg-red-50 px-3 py-2 text-xs leading-relaxed text-red-700" role="status"><Icon name="exclamationCircle" size="sm" class="mt-px shrink-0" /><span class="min-w-0 break-words">{{ provider.last_error }}</span></p>
+          <p v-if="provider.notes" class="mx-5 mt-3 line-clamp-2 text-xs text-gray-500" :title="provider.notes">{{ provider.notes }}</p>
+
+          <footer class="mt-4 flex flex-wrap items-center justify-between gap-2 px-5 pb-4 pt-3 text-xs text-gray-500 provider-footer">
+            <span class="inline-flex items-center gap-1"><Icon name="clock" size="xs" />{{ t('admin.upstream.updated') }} {{ formattedTime(provider.updated_at) }}</span>
+            <div class="flex items-center gap-2">
+              <a :href="safeHref(provider.base_url)" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-1 rounded-lg px-2 py-1 font-medium text-gray-600 hover:bg-primary-50 hover:text-primary-700">{{ t('admin.upstream.visitSite') }}<Icon name="externalLink" size="xs" /></a>
+              <button type="button" class="btn btn-secondary btn-sm" :disabled="refreshingId === provider.id" @click="refresh(provider)"><Icon name="refresh" size="xs" :class="{ 'animate-spin': refreshingId === provider.id }" />{{ t('admin.upstream.refresh') }}</button>
+            </div>
+          </footer>
         </article>
       </section>
 
-      <footer v-if="pages > 1" class="flex items-center justify-between gap-3 text-xs text-gray-500 dark:text-gray-400">
-        <span>{{ t('admin.upstream.pagination', { page, pages, total }) }}</span>
-        <div class="flex gap-2"><button class="btn btn-secondary" :disabled="page <= 1 || loading" @click="page--; load()">{{ t('admin.upstream.previous') }}</button><button class="btn btn-secondary" :disabled="page >= pages || loading" @click="page++; load()">{{ t('admin.upstream.next') }}</button></div>
+      <footer v-if="pages > 1" class="flex flex-wrap items-center justify-between gap-3 text-xs text-gray-500">
+        <span class="tabular-nums">{{ t('admin.upstream.pagination', { page, pages, total }) }}</span>
+        <div class="flex gap-2">
+          <button type="button" class="btn btn-secondary btn-sm" :disabled="page <= 1 || loading" @click="page--; load()"><Icon name="chevronLeft" size="xs" />{{ t('admin.upstream.previous') }}</button>
+          <button type="button" class="btn btn-secondary btn-sm" :disabled="page >= pages || loading" @click="page++; load()">{{ t('admin.upstream.next') }}<Icon name="chevronRight" size="xs" /></button>
+        </div>
       </footer>
       <ProviderDialog :show="showDialog" :provider="editing" @close="showDialog = false" @saved="afterSave" />
       <ConfirmDialog
@@ -150,45 +175,72 @@ let searchTimer: ReturnType<typeof setTimeout> | undefined
 let balanceTimer: ReturnType<typeof setInterval> | undefined
 let userBalanceTimer: ReturnType<typeof setInterval> | undefined
 let userBalanceRequestInFlight = false
+let listSequence = 0
 let disposed = false
 const balanceRefreshInterval = 10_000
-const money = (amount: number) => new Intl.NumberFormat(undefined, { style: 'currency', currency: 'USD', maximumFractionDigits: 2 }).format(amount)
-const yuan = (amount: number) => new Intl.NumberFormat('zh-CN', { style: 'currency', currency: 'CNY', maximumFractionDigits: 2 }).format(amount)
+const finite = (amount: number) => (Number.isFinite(amount) ? amount : 0)
+const money = (amount: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 2 }).format(finite(amount))
+const yuan = (amount: number) => new Intl.NumberFormat('zh-CN', { style: 'currency', currency: 'CNY', maximumFractionDigits: 2 }).format(finite(amount))
 const visibleProviders = computed(() => providers.value)
+const connectionRate = computed(() => (providerCount.value ? Math.round((connectedCount.value / providerCount.value) * 100) : 0))
 const metrics = computed(() => [
-  { key: 'count', label: 'admin.upstream.providerCount', icon: 'server' as const, iconClass: 'bg-primary-100 text-primary-600 dark:bg-primary-900/30 dark:text-primary-400', value: String(providerCount.value), loading: false },
-  { key: 'connected', label: 'admin.upstream.connectedCount', icon: 'check' as const, iconClass: 'bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400', value: String(connectedCount.value), loading: false },
-  { key: 'upstream', label: 'admin.upstream.totalBalance', icon: 'creditCard' as const, iconClass: 'bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400', value: yuan(totalBalance.value), loading: upstreamBalanceLoading.value },
-  { key: 'users', label: 'admin.upstream.userBalance', icon: 'users' as const, iconClass: 'bg-violet-100 text-violet-600 dark:bg-violet-900/30 dark:text-violet-400', value: userBalance.value === null ? '—' : money(userBalance.value), loading: userBalanceLoading.value }
+  { key: 'count', label: 'admin.upstream.providerCount', icon: 'server' as const, tone: 'tone-honey', value: String(providerCount.value), loading: false },
+  { key: 'connected', label: 'admin.upstream.connectedCount', icon: 'checkCircle' as const, tone: 'tone-garden', value: String(connectedCount.value), loading: false },
+  { key: 'upstream', label: 'admin.upstream.totalBalance', icon: 'creditCard' as const, tone: 'tone-sky', value: yuan(totalBalance.value), loading: upstreamBalanceLoading.value },
+  { key: 'users', label: 'admin.upstream.userBalance', icon: 'users' as const, tone: 'tone-rose', value: userBalance.value === null ? '—' : money(userBalance.value), loading: userBalanceLoading.value }
 ])
-function providerAmounts(provider: Provider) {
+function secondaryAmounts(provider: Provider) {
   return [
-    { key: 'balance', label: 'admin.upstream.balance', value: provider.metrics.balance },
     { key: 'today', label: 'admin.upstream.todayConsumption', value: provider.metrics.today_spend },
-    { key: 'recharge', label: 'admin.upstream.totalRecharge', value: provider.metrics.total_recharge }
+    { key: 'recharge', label: 'admin.upstream.totalRecharge', value: provider.metrics.total_recharge },
+    { key: 'total', label: 'admin.upstream.totalConsumption', value: provider.metrics.total_spend }
   ]
+}
+// The backend only stores HTTPS origins, but refuse any other scheme here too
+// so a legacy or tampered record can never render as a javascript: link.
+function safeHref(raw: string): string | undefined {
+  try {
+    const url = new URL(raw)
+    return url.protocol === 'https:' && !url.username && !url.password ? url.origin : undefined
+  } catch {
+    return undefined
+  }
+}
+function hostOf(raw: string): string {
+  try { return new URL(raw).host } catch { return raw }
+}
+function initials(name: string): string {
+  const trimmed = name.trim()
+  return trimmed ? Array.from(trimmed).slice(0, 2).join('').toUpperCase() : '?'
 }
 function formattedTime(value?: string) {
   if (!value) return '—'
   const time = new Date(value)
   return Number.isNaN(time.getTime()) ? '—' : new Intl.DateTimeFormat(undefined, { dateStyle: 'short', timeStyle: 'short' }).format(time)
 }
+function openCreate() { editing.value = null; showDialog.value = true }
+function openEdit(provider: Provider) { editing.value = provider; showDialog.value = true }
 async function load(silent = false) {
+  // A slow silent poll must not overwrite the result of a newer filter or page change.
+  const sequence = ++listSequence
   if (!silent) { loading.value = true; error.value = false }
   try {
     const list = await listProviders(page.value, search.value, status.value === 'all' ? '' : status.value)
-    if (disposed) return
+    if (disposed || sequence !== listSequence) return
     providers.value = list.items ?? []
     total.value = list.total
     pages.value = Math.max(1, list.pages)
+    if (page.value > pages.value) page.value = pages.value
     providerCount.value = list.overview.provider_count
     connectedCount.value = list.overview.connected_count
     totalBalance.value = list.overview.upstream_total_balance
     upstreamBalanceLoading.value = false
   } catch (reason) {
-    if (!silent) error.value = true
+    if (!silent && sequence === listSequence) error.value = true
     console.error('Provider list failed:', reason)
-  } finally { if (!silent) { loading.value = false; upstreamBalanceLoading.value = false } }
+  } finally {
+    if (!silent && sequence === listSequence) { loading.value = false; upstreamBalanceLoading.value = false }
+  }
 }
 async function loadUserBalance(silent = false) {
   if (userBalanceRequestInFlight) return
@@ -206,10 +258,18 @@ async function loadUserBalance(silent = false) {
   }
 }
 async function refresh(provider: Provider) {
+  if (refreshingId.value) return
   refreshingId.value = provider.id
-  try { await refreshProvider(provider.id); await load(); appStore.showSuccess(t('admin.upstream.refreshed')) }
-  catch (reason) { appStore.showError(t('admin.upstream.refreshFailed')); console.error('Provider refresh failed:', reason) }
-  finally { refreshingId.value = null }
+  try {
+    await refreshProvider(provider.id)
+    await load()
+    appStore.showSuccess(t('admin.upstream.refreshed'))
+  } catch (reason) {
+    // The backend saves the disconnected state and error; show it on the card.
+    await load(true)
+    appStore.showError(t('admin.upstream.refreshFailed'))
+    console.error('Provider refresh failed:', reason)
+  } finally { refreshingId.value = null }
 }
 async function confirmDelete() {
   const provider = deleting.value
@@ -246,3 +306,36 @@ onUnmounted(() => {
   document.removeEventListener('visibilitychange', handleVisibilityChange)
 })
 </script>
+
+<style scoped>
+.upstream-hero { position: relative; display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 1rem; overflow: hidden; padding: 1.5rem; border-radius: 1.75rem; background: radial-gradient(120% 140% at 0% 0%, rgb(255 231 138 / 0.55), transparent 55%), radial-gradient(90% 120% at 100% 100%, rgb(121 179 123 / 0.18), transparent 60%), var(--md-sys-color-surface); box-shadow: var(--theme-highlight), var(--theme-elevation-1); }
+.upstream-eyebrow { font-size: 0.6875rem; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; color: #976800; }
+.upstream-count { display: inline-flex; min-width: 1.75rem; justify-content: center; padding: 0.125rem 0.625rem; border-radius: 999px; background: var(--md-sys-color-primary); color: var(--md-sys-color-on-primary); font-size: 0.75rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+.upstream-metric { display: flex; align-items: flex-start; gap: 0.875rem; min-width: 0; padding: 1rem 1.125rem; }
+.upstream-metric-icon { display: flex; flex-shrink: 0; align-items: center; justify-content: center; width: 2.75rem; height: 2.75rem; border-radius: 1rem; }
+.tone-honey { background: #fff3bd; color: #7e5600; }
+.tone-garden { background: #e4f0df; color: #386344; }
+.tone-sky { background: #e0f0fb; color: #1f5f8b; }
+.tone-rose { background: #fbe6e1; color: #9a3b2b; }
+.upstream-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem; padding: 0.75rem; }
+.upstream-empty-icon { display: flex; align-items: center; justify-content: center; width: 4.5rem; height: 4.5rem; margin-bottom: 1rem; border-radius: 1.5rem; background: #fff3bd; color: #976800; }
+.provider-card { display: flex; flex-direction: column; min-width: 0; overflow: hidden; }
+.provider-card:hover { box-shadow: var(--theme-highlight), var(--theme-elevation-2); }
+.provider-card-offline { background: linear-gradient(180deg, rgb(254 242 242 / 0.7), var(--md-sys-color-surface) 9rem); }
+.provider-avatar { display: flex; flex-shrink: 0; align-items: center; justify-content: center; width: 2.75rem; height: 2.75rem; border-radius: 1rem; background: linear-gradient(135deg, #f8d65d, #e9b824); color: #3f3420; font-size: 0.875rem; font-weight: 800; box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.55), 0 6px 14px -8px rgb(151 104 0 / 0.6); }
+.provider-avatar-newapi { background: linear-gradient(135deg, #a5cc9f, #5c9865); color: #fff; }
+.provider-icon-button { display: flex; align-items: center; justify-content: center; width: 2rem; height: 2rem; border-radius: 0.75rem; color: var(--md-sys-color-on-surface-variant); transition: background-color 150ms ease, color 150ms ease; }
+.provider-icon-button:hover:not(:disabled) { background: var(--md-sys-color-surface-container); color: #7e5600; }
+.provider-icon-danger:hover:not(:disabled) { background: #fef2f2; color: #b91c1c; }
+.provider-icon-button:disabled { cursor: not-allowed; opacity: 0.5; }
+.provider-status { display: inline-flex; align-items: center; gap: 0.375rem; padding: 0.1875rem 0.625rem; border-radius: 999px; font-size: 0.75rem; font-weight: 600; }
+.provider-status-online { background: #e4f0df; color: #2e5038; }
+.provider-status-offline { background: #fee2e2; color: #991b1b; }
+.provider-status-dot { width: 0.4375rem; height: 0.4375rem; border-radius: 999px; background: currentColor; }
+.provider-status-online .provider-status-dot { box-shadow: 0 0 0 3px rgb(92 152 101 / 0.25); animation: provider-pulse 2.4s ease-in-out infinite; }
+@keyframes provider-pulse { 0%, 100% { box-shadow: 0 0 0 2px rgb(92 152 101 / 0.3); } 50% { box-shadow: 0 0 0 5px rgb(92 152 101 / 0.05); } }
+.provider-balance { padding: 0.875rem 1rem; border-radius: 1.25rem; background: linear-gradient(135deg, #fffbe8, #fff3bd); box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.8); }
+.provider-stat { min-width: 0; padding: 0.5rem 0.625rem; border-radius: 0.875rem; background: var(--md-sys-color-surface-container); background: color-mix(in srgb, var(--md-sys-color-surface-container) 55%, var(--md-sys-color-surface)); }
+.provider-footer { margin-top: auto; background: color-mix(in srgb, var(--md-sys-color-surface-container) 35%, transparent); }
+@media (prefers-reduced-motion: reduce) { .provider-status-online .provider-status-dot { animation: none; } }
+</style>

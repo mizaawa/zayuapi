@@ -11,7 +11,7 @@
     <div class="relative min-h-0 flex-1 overflow-y-auto overscroll-contain" data-testid="recharge-risk-scroll">
       <div v-if="loading" class="absolute inset-0 z-10 flex items-center justify-center bg-white/75 dark:bg-dark-800/75" role="status"><LoadingSpinner size="md" /><span class="sr-only">{{ t('admin.operations.loading') }}</span></div>
       <button v-for="event in events" :key="event.id" type="button" class="flex w-full items-center justify-between gap-3 border-b border-gray-100 px-4 py-3 text-left transition-colors last:border-b-0 hover:bg-gray-50 focus-visible:bg-primary-50 focus-visible:outline-none dark:border-dark-700/70 dark:hover:bg-dark-800/50 dark:focus-visible:bg-primary-900/20" :data-risk-id="event.id" @click="selected = event">
-        <span class="min-w-0 truncate text-xs font-medium text-gray-800 dark:text-gray-200" :title="riskTitle(event.type)">{{ riskTitle(event.type) }}</span>
+        <span class="flex min-w-0 items-center gap-2"><span class="h-2 w-2 shrink-0 rounded-full" :class="event.result === 'success' ? 'bg-amber-500' : 'bg-red-500'" aria-hidden="true" /><span class="min-w-0"><span class="block truncate text-xs font-semibold text-gray-800" :title="riskTitle(event.type)">{{ riskTitle(event.type) }}</span><span class="block truncate text-[11px] text-gray-500" :title="event.user_email">{{ event.user_email || '—' }}</span></span></span>
         <span class="shrink-0 text-[11px] tabular-nums text-gray-400">{{ formatTime(event.last_at) }}</span>
       </button>
       <div v-if="error" class="px-4 py-8 text-center text-xs text-gray-500 dark:text-gray-400">
