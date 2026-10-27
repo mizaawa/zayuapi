@@ -105,6 +105,22 @@ describe('AppSidebar exclusive payment indicator', () => {
     expect(wrapper.find('.sidebar-exclusive-badge').exists()).toBe(false)
   })
 
+  it.each([false, true])('keeps authorized payment links visible when simple mode activates for administrator=%s', async admin => {
+    await renderSidebar(admin)
+    expect(purchaseLink().get('.sidebar-exclusive-badge').text()).toBe('专属')
+
+    // /auth/me may switch the restored session into simple mode after the menu first renders.
+    stores.auth.isSimpleMode = true
+    await flushPromises()
+    expect(purchaseLink().get('.sidebar-exclusive-badge').text()).toBe('专属')
+    expect(findMenuLink('我的订单')).toBeDefined()
+
+    stores.payment.allowed = false
+    await flushPromises()
+    expect(findMenuLink('充值/订阅')).toBeUndefined()
+    expect(findMenuLink('我的订单')).toBeUndefined()
+  })
+
   it('keeps the indicator absent until the payment access snapshot is available', async () => {
     stores.payment.access = null
     await renderSidebar()

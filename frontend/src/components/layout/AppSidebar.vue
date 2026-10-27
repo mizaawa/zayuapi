@@ -130,8 +130,8 @@
           </template>
         </div>
 
-        <!-- Personal Section for Admin (hidden in simple mode) -->
-        <div v-if="!authStore.isSimpleMode" class="sidebar-section personal-panel-section">
+        <!-- In simple mode, admins still need their authorized payment links. -->
+        <div v-if="!authStore.isSimpleMode || simplePaymentNavItems.length > 0" class="sidebar-section personal-panel-section">
           <div class="sidebar-section-title" :class="{ 'sidebar-section-title-collapsed': sidebarCollapsed }" :aria-hidden="sidebarCollapsed ? 'true' : 'false'">
             <span class="sidebar-section-title-text" :class="{ 'sidebar-section-title-text-collapsed': sidebarCollapsed }">
               {{ t('nav.myAccount') }}
@@ -140,7 +140,7 @@
 
           <component
             :is="item.openInNewWindow ? 'a' : 'router-link'"
-            v-for="item in personalNavItems"
+            v-for="item in authStore.isSimpleMode ? simplePaymentNavItems : personalNavItems"
             :key="item.path"
             :to="item.openInNewWindow ? undefined : item.path"
             :href="item.openInNewWindow ? resolveNavHref(item.path, item.externalUrl) : undefined"
@@ -828,8 +828,8 @@ function buildSelfNavItems(withDashboard: boolean): NavItem[] {
     { path: '/monitor', label: t('nav.channelStatus'), icon: SignalIcon, featureFlag: flagChannelMonitor },
     { path: '/model-plaza', label: t('nav.modelPlaza'), icon: ModelPlazaIcon, openInNewWindow: true, featureFlag: flagModelPlaza },
     { path: '/subscriptions', label: t('nav.mySubscriptions'), icon: CreditCardIcon, hideInSimpleMode: true },
-    { path: '/purchase', label: t('nav.buySubscription'), badge: paymentAccess.access?.exclusive_enabled === true ? t('nav.exclusivePayment') : undefined, icon: RechargeSubscriptionIcon, hideInSimpleMode: true, featureFlag: flagPayment },
-    { path: '/orders', label: t('nav.myOrders'), icon: OrderListIcon, hideInSimpleMode: true, featureFlag: flagPayment },
+    { path: '/purchase', label: t('nav.buySubscription'), badge: paymentAccess.access?.exclusive_enabled === true ? t('nav.exclusivePayment') : undefined, icon: RechargeSubscriptionIcon, featureFlag: flagPayment },
+    { path: '/orders', label: t('nav.myOrders'), icon: OrderListIcon, featureFlag: flagPayment },
     { path: '/redeem', label: t('nav.redeem'), icon: GiftIcon, hideInSimpleMode: true },
     { path: '/leaderboard', label: t('nav.leaderboard'), icon: LeaderboardIcon, hideInSimpleMode: true, featureFlag: flagLeaderboard },
     { path: '/affiliate', label: t('nav.affiliate'), icon: UsersIcon, hideInSimpleMode: true, featureFlag: flagAffiliate },
@@ -852,6 +852,7 @@ const userNavItems = computed((): NavItem[] => finalizeNav(buildSelfNavItems(tru
 // Admins access 可用渠道 from this section just like regular users — there is no
 // separate admin entry, since the page is purely a user-facing view.
 const personalNavItems = computed((): NavItem[] => finalizeNav(buildSelfNavItems(false)))
+const simplePaymentNavItems = computed(() => personalNavItems.value.filter(item => item.path === '/purchase' || item.path === '/orders'))
 
 // Custom menu items filtered by visibility
 const customMenuItemsForUser = computed(() => {
