@@ -99,6 +99,13 @@ describe('OperationsView', () => {
     expect(wrapper.get('[data-metric="today_user_recharge"]').text()).toContain('-$10.00')
     expect(wrapper.get('[data-metric="today_user_recharge"] .text-emerald-600').exists()).toBe(true)
     expect(wrapper.get('[data-metric="today_revenue"]').text()).toContain('-$2.00')
+    for (const key of ['today_user_consumption', 'today_user_recharge', 'today_monitor_consumption', 'today_revenue']) {
+      const card = wrapper.get(`[data-metric="${key}"]`)
+      const comparison = card.get('[data-testid="metric-comparison"]')
+      expect(comparison.text()).toContain('admin.operations.comparisonGrowth')
+      expect(comparison.element.previousElementSibling?.textContent).toContain('admin.operations.yesterday')
+      expect(comparison.element.previousElementSibling?.textContent).not.toContain('admin.operations.comparisonGrowth')
+    }
     expect(wrapper.get('[data-metric="total_user_balance"]').text()).toContain('—')
     expect(wrapper.get('[data-metric="admin_balance"]').text()).toContain('$4.00')
     expect(getOperationsDashboard.mock.calls[0][0].start_date).toBe(getOperationsDashboard.mock.calls[0][0].end_date)
@@ -186,6 +193,9 @@ describe('OperationsView', () => {
     await flushPromises()
     const site = wrapper.get('[data-testid="site-spend-grid"]')
     const users = wrapper.get('[data-testid="user-spend-grid"]')
+    expect(site.classes()).toContain('items-stretch')
+    expect(users.classes()).toContain('items-stretch')
+    expect(users.element.children[0]?.classList.contains('self-start')).toBe(false)
     expect(site.element.compareDocumentPosition(users.element) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     expect(site.element.children[0]?.textContent).toContain('admin.operations.siteGroupSpend')
     expect(site.element.children[1]?.textContent).toContain('admin.operations.siteModelSpend')

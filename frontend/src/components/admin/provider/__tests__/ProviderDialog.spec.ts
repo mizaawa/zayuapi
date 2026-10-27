@@ -35,6 +35,15 @@ describe('ProviderDialog login forms', () => {
     wrapper.unmount()
   })
 
+  it('sends the balance warning suppression choice when adding a provider', async () => {
+    const wrapper = mountDialog()
+    await wrapper.get('[data-testid="provider-suppress-low-balance-alert"]').setValue(true)
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+    expect(mocks.create).toHaveBeenCalledWith(expect.objectContaining({ suppress_low_balance_alert: true }))
+    wrapper.unmount()
+  })
+
   it('sends Sub2API dashboard tokens rather than a model API key', async () => {
     const wrapper = mountDialog()
     await wrapper.get('input[name="provider-auth"][value="token"]').setValue()

@@ -20,6 +20,7 @@ export interface ProviderInput {
   system_access_token?: string
   exchange_rate: number
   notes?: string
+  suppress_low_balance_alert?: boolean
 }
 
 export interface ProviderMetrics {
@@ -45,6 +46,8 @@ export interface Provider {
   metrics: ProviderMetrics
   updated_at?: string
   last_error?: string
+  suppress_low_balance_alert?: boolean
+  low_balance_alert?: boolean
 }
 
 export interface ProviderList {
@@ -66,6 +69,9 @@ export async function createProvider(input: ProviderInput): Promise<Provider> {
 export async function updateProvider(id: string, input: ProviderInput): Promise<Provider> {
   const { data } = await apiClient.put<Provider>('/admin/providers/' + encodeURIComponent(id), input)
   return data
+}
+export async function deleteProvider(id: string): Promise<void> {
+  await apiClient.delete('/admin/providers/' + encodeURIComponent(id))
 }
 export async function probeProvider(input: ProviderInput): Promise<Provider> {
   const { data } = await apiClient.post<Provider>('/admin/providers/probe', input)

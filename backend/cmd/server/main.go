@@ -154,6 +154,11 @@ func runMainServer() {
 		log.Fatalf("Failed to initialize application: %v", err)
 	}
 	defer app.Cleanup()
+	providerRefreshCtx, stopProviderRefresh := context.WithCancel(context.Background())
+	defer stopProviderRefresh()
+	if app.ProviderRefresher != nil {
+		go app.ProviderRefresher.RunProviderRefreshLoop(providerRefreshCtx, app.ProviderEmail)
+	}
 	if app.PromptAudit != nil {
 		if err := app.PromptAudit.Start(context.Background()); err != nil {
 			// Startup continues so unrelated APIs stay up. Fail-closed (unavailable)

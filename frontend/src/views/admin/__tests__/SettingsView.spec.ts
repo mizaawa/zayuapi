@@ -1016,6 +1016,47 @@ describe("admin SettingsView payment visible method controls", () => {
     },
   );
 
+  it("saves provider refresh and warning thresholds independently of email notifications", async () => {
+    const wrapper = mountView();
+    await flushPromises();
+    await openFeaturesTab(wrapper);
+
+    expect(wrapper.get('[data-testid="provider-low-balance-email-toggle"]').attributes("disabled")).toBeDefined();
+    await wrapper.get('[data-testid="provider-refresh-interval"]').setValue("900");
+    await wrapper.get('[data-testid="provider-low-balance-threshold"]').setValue("250");
+    await wrapper.find("form").trigger("submit.prevent");
+    await flushPromises();
+
+    expect(updateSettings).toHaveBeenCalledWith(expect.objectContaining({
+      provider_refresh_interval_seconds: 900,
+      provider_low_balance_enabled: false,
+      provider_low_balance_threshold: 250,
+    }));
+    wrapper.unmount();
+  });
+
+  it("requires an email address before enabling provider low-balance notifications", async () => {
+    getSettings.mockResolvedValue({ ...baseSettingsResponse, smtp_host: "smtp.example.com", smtp_from_email: "sender@example.com", smtp_password_configured: true });
+    const wrapper = mountView();
+    await flushPromises();
+    await openFeaturesTab(wrapper);
+
+    const toggle = wrapper.get('[data-testid="provider-low-balance-email-toggle"]');
+    expect(toggle.attributes("disabled")).toBeUndefined();
+    await toggle.setValue(true);
+    await wrapper.find("form").trigger("submit.prevent");
+    await flushPromises();
+    expect(updateSettings).not.toHaveBeenCalled();
+    await wrapper.get('[data-testid="provider-low-balance-email"]').setValue("ops@example.com");
+    await wrapper.find("form").trigger("submit.prevent");
+    await flushPromises();
+    expect(updateSettings).toHaveBeenCalledWith(expect.objectContaining({
+      provider_low_balance_enabled: true,
+      provider_low_balance_email: "ops@example.com",
+    }));
+    wrapper.unmount();
+  });
+
   it("saves a GitHub token from extended features and clears the password input after saving", async () => {
     updateSettings.mockResolvedValue({
       ...baseSettingsResponse,

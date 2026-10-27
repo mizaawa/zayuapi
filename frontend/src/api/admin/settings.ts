@@ -373,6 +373,10 @@ export function deriveWeChatConnectStoredMode(
  * System settings interface
  */
 export interface SystemSettings {
+  provider_refresh_interval_seconds: number;
+  provider_low_balance_enabled: boolean;
+  provider_low_balance_threshold: number;
+  provider_low_balance_email: string;
   update_github_token_configured: boolean;
   // Registration settings
   registration_enabled: boolean;
@@ -733,6 +737,10 @@ export interface SystemSettings {
 }
 
 export interface UpdateSettingsRequest {
+  provider_refresh_interval_seconds?: number;
+  provider_low_balance_enabled?: boolean;
+  provider_low_balance_threshold?: number;
+  provider_low_balance_email?: string;
   update_github_token?: string;
   registration_enabled?: boolean;
   registration_announcement_enabled?: boolean;

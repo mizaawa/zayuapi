@@ -21,12 +21,18 @@
                   <span>{{ t('admin.operations.yesterdayRevenue') }}:</span>
                   <span v-for="revenue in revenueComparisons" :key="revenue.currency" class="whitespace-nowrap tabular-nums">
                     {{ formatMoney(revenue.yesterday, revenue.currency) }}
-                    <span class="ml-0.5 font-medium" :class="changeClass(revenue.today - revenue.yesterday)">{{ formatChange(revenue.today - revenue.yesterday, revenue.currency) }}</span>
                   </span>
                 </p>
-                <p v-else class="mt-1 flex flex-wrap gap-x-1.5 text-xs text-gray-500 dark:text-gray-400">
+                <p v-if="metric.key === 'today_revenue'" class="mt-0.5 flex flex-wrap gap-x-2 gap-y-0.5 text-xs text-gray-500 dark:text-gray-400" data-testid="metric-comparison">
+                  <span>{{ t('admin.operations.comparisonGrowth') }}</span>
+                  <span v-for="revenue in revenueComparisons" :key="revenue.currency" class="whitespace-nowrap font-medium tabular-nums" :class="changeClass(revenue.today - revenue.yesterday)">{{ formatChange(revenue.today - revenue.yesterday, revenue.currency) }}</span>
+                </p>
+                <p v-else class="mt-1 text-xs text-gray-500 dark:text-gray-400">
                   <span>{{ t(metric.subLabel) }}: <span class="tabular-nums">{{ formatOptionalMoney(yesterdayValue(metric)) }}</span></span>
-                  <span v-if="metric.compare" class="font-medium tabular-nums" :class="changeClass(todayValue(metric) - (yesterdayValue(metric) ?? 0))">
+                </p>
+                <p v-if="metric.key !== 'today_revenue' && metric.compare" class="mt-0.5 flex flex-wrap gap-x-1.5 text-xs text-gray-500 dark:text-gray-400" data-testid="metric-comparison">
+                  <span>{{ t('admin.operations.comparisonGrowth') }}</span>
+                  <span class="font-medium tabular-nums" :class="changeClass(todayValue(metric) - (yesterdayValue(metric) ?? 0))">
                     {{ formatChange(todayValue(metric) - (yesterdayValue(metric) ?? 0)) }}
                   </span>
                 </p>
@@ -53,7 +59,7 @@
               </button>
             </div>
           </div>
-          <div class="grid grid-cols-1 items-start gap-6 xl:grid-cols-2" data-testid="site-spend-grid">
+          <div class="grid grid-cols-1 items-stretch gap-6 xl:grid-cols-2" data-testid="site-spend-grid">
             <div class="card min-w-0 overflow-hidden p-0">
               <div class="border-b border-gray-100 px-4 py-4 dark:border-dark-700"><h3 class="text-sm font-semibold text-gray-900 dark:text-white">{{ t('admin.operations.siteGroupSpend') }} <span class="ml-1 text-xs font-normal text-gray-400">{{ groups.length }}</span></h3><p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ t('admin.operations.siteGroupHint') }}</p></div>
               <div class="operations-grid border-b border-gray-100 bg-gray-50/80 px-4 py-2.5 text-xs font-medium text-gray-500 dark:border-dark-700 dark:bg-dark-800/40 dark:text-gray-400">
@@ -97,7 +103,7 @@
               </div>
             </div>
           </div>
-          <div class="grid grid-cols-1 items-start gap-6 xl:grid-cols-2" data-testid="user-spend-grid">
+          <div class="grid grid-cols-1 items-stretch gap-6 xl:grid-cols-2" data-testid="user-spend-grid">
             <OperationsUserSpendPanel :users="users" :selected-user-id="selectedUserId" :search="userSearch" :suggestions="suggestions" :suggestions-open="suggestionsOpen" :suggestions-loading="suggestionsLoading" :loading="userLoading" :error="userError"
               @update:search="updateUserSearch" @focus-search="focusUserSearch" @blur-search="blurUserSearch" @dismiss-suggestions="suggestionsOpen = false" @select-suggestion="selectSuggestion" @select-user="selectUser" @retry="loadUserSpend" />
               <div class="card min-w-0 overflow-hidden p-0" data-testid="user-detail" :aria-busy="userLoading">
@@ -145,12 +151,6 @@
           </div>
         </section>
         <OperationsTrendChart :points="data.trend" :days="trendDays" />
-      </template>
-    </div>
-  </AppLayout>
-</template>
-
-<script setup lang="ts">
         <section class="grid grid-cols-1 items-stretch gap-6 xl:grid-cols-10" :aria-label="t('admin.operations.recharge.ordersTitle')" data-testid="recharge-dashboard-grid">
           <OperationsRechargeOrdersPanel class="xl:col-span-7"
             :orders="rechargeOrders" :loading="rechargeLoading" :error="rechargeError" :page="rechargePage" :pages="rechargePages" :total="rechargeTotal"
@@ -161,6 +161,12 @@
             @select-days="selectRechargeDays" @select-page="selectRechargePage" @retry="loadRechargeOrders" />
           <OperationsRechargeRiskPanel class="xl:col-span-3" :events="rechargeRisks" :loading="rechargeRiskLoading" :error="rechargeRiskError" @retry="loadRechargeRisks" />
         </section>
+      </template>
+    </div>
+  </AppLayout>
+</template>
+
+<script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { adminAPI } from '@/api/admin'
@@ -173,15 +179,15 @@ import PlatformIcon from '@/components/common/PlatformIcon.vue'
 import LoadingSpinner from '@/components/common/LoadingSpinner.vue'
 import OperationsTrendChart from '@/components/admin/dashboard/OperationsTrendChart.vue'
 import OperationsUserSpendPanel from '@/components/admin/dashboard/OperationsUserSpendPanel.vue'
+import OperationsRechargeOrdersPanel from '@/components/admin/dashboard/OperationsRechargeOrdersPanel.vue'
+import OperationsRechargeRiskPanel from '@/components/admin/dashboard/OperationsRechargeRiskPanel.vue'
+import type { RechargeChannel, RechargeOrder, RechargeRiskEvent, RechargeStatus } from './operationsRechargeTypes'
 import { platformTextClass } from '@/utils/platformColors'
 import { compareProfit, dateRange, formatMoney, profitOf } from './operationsUtils'
 
 const { t } = useI18n()
 const data = ref<OperationsDashboardResponse | null>(null)
 const loading = ref(false)
-import OperationsRechargeOrdersPanel from '@/components/admin/dashboard/OperationsRechargeOrdersPanel.vue'
-import OperationsRechargeRiskPanel from '@/components/admin/dashboard/OperationsRechargeRiskPanel.vue'
-import type { RechargeChannel, RechargeOrder, RechargeRiskEvent, RechargeStatus } from './operationsRechargeTypes'
 const error = ref(false)
 const selectedDays = ref(1)
 const selectedGroup = ref<number | null>(null)
@@ -196,12 +202,6 @@ const suggestionsOpen = ref(false)
 const suggestionsLoading = ref(false)
 const activeBreakdownTab = ref<'groups' | 'models'>('groups')
 const trendDays = ref<7 | 15>(window.innerWidth < 768 ? 7 : 15)
-let requestSequence = 0
-let userRequestSequence = 0
-let suggestionSequence = 0
-let searchTimer: ReturnType<typeof setTimeout> | undefined
-let blurTimer: ReturnType<typeof setTimeout> | undefined
-const periods = [{ days: 1, label: 'admin.operations.today' }, { days: 7, label: 'admin.operations.last7Days' }, { days: 30, label: 'admin.operations.last30Days' }]
 const rechargeOrders = ref<RechargeOrder[]>([])
 const rechargeRisks = ref<RechargeRiskEvent[]>([])
 const rechargePage = ref(1)
@@ -222,6 +222,12 @@ let rechargeSequence = 0
 let rechargeSuggestionSequence = 0
 let rechargeSearchTimer: ReturnType<typeof setTimeout> | undefined
 let rechargeBlurTimer: ReturnType<typeof setTimeout> | undefined
+let requestSequence = 0
+let userRequestSequence = 0
+let suggestionSequence = 0
+let searchTimer: ReturnType<typeof setTimeout> | undefined
+let blurTimer: ReturnType<typeof setTimeout> | undefined
+const periods = [{ days: 1, label: 'admin.operations.today' }, { days: 7, label: 'admin.operations.last7Days' }, { days: 30, label: 'admin.operations.last30Days' }]
 const breakdownTabs = [{ key: 'groups', label: 'admin.operations.groups' }, { key: 'models', label: 'admin.operations.models' }] as const
 const metrics = [
   { key: 'today_user_consumption', label: 'admin.operations.todayUserConsumption', subLabel: 'admin.operations.yesterdayUserConsumption', compare: true, icon: 'users', color: 'bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400' },
@@ -408,12 +414,6 @@ function focusUserSearch() {
   if (!suggestions.value.length) void loadSuggestions(userSearch.value.trim())
 }
 function blurUserSearch() { blurTimer = setTimeout(() => { suggestionsOpen.value = false }, 150) }
-function refreshAll() { void loadData(); void loadUserSpend() }
-async function loadData() {
-  const sequence = ++requestSequence
-  loading.value = true
-  error.value = false
-  const range = dateRange(selectedDays.value)
 async function loadRechargeOrders() {
   const sequence = ++rechargeSequence
   rechargeLoading.value = true
@@ -481,6 +481,12 @@ function selectRechargeSuggestion(user: SimpleUser) {
   rechargeSuggestionsOpen.value = false
   resetRechargeOrders()
 }
+function refreshAll() { void loadData(); void loadUserSpend() }
+async function loadData() {
+  const sequence = ++requestSequence
+  loading.value = true
+  error.value = false
+  const range = dateRange(selectedDays.value)
   try {
     const result = await adminAPI.dashboard.getOperationsDashboard({
       start_date: range.start, end_date: range.end, trend_days: trendDays.value,
@@ -505,16 +511,16 @@ onUnmounted(() => {
   requestSequence++
   userRequestSequence++
   suggestionSequence++
+  rechargeSequence++
+  rechargeSuggestionSequence++
+  if (rechargeSearchTimer) clearTimeout(rechargeSearchTimer)
+  if (rechargeBlurTimer) clearTimeout(rechargeBlurTimer)
   if (searchTimer) clearTimeout(searchTimer)
   if (blurTimer) clearTimeout(blurTimer)
   window.removeEventListener('resize', onResize)
 })
 </script>
 
-  rechargeSequence++
-  rechargeSuggestionSequence++
-  if (rechargeSearchTimer) clearTimeout(rechargeSearchTimer)
-  if (rechargeBlurTimer) clearTimeout(rechargeBlurTimer)
 <style scoped>
 .operations-grid { display: grid; grid-template-columns: minmax(0, 1.45fr) repeat(3, minmax(0, 1fr)); gap: 0.5rem; align-items: center; }
 .money-cell { text-align: right; font-size: 0.75rem; font-weight: 500; line-height: 1.4; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }

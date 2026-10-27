@@ -4,10 +4,10 @@ import UpstreamView from '../UpstreamView.vue'
 import type { Provider } from '@/api/admin/upstream'
 
 const mocks = vi.hoisted(() => ({
-  list: vi.fn(), refresh: vi.fn(), dashboard: vi.fn(), success: vi.fn(), error: vi.fn()
+  list: vi.fn(), refresh: vi.fn(), delete: vi.fn(), dashboard: vi.fn(), success: vi.fn(), error: vi.fn()
 }))
 vi.mock('@/api/admin/upstream', () => ({
-  listProviders: mocks.list, refreshProvider: mocks.refresh
+  listProviders: mocks.list, refreshProvider: mocks.refresh, deleteProvider: mocks.delete
 }))
 vi.mock('@/api/admin', () => ({ adminAPI: { dashboard: { getOperationsDashboard: mocks.dashboard } } }))
 vi.mock('@/stores/app', () => ({ useAppStore: () => ({ showSuccess: mocks.success, showError: mocks.error }) }))
@@ -33,6 +33,7 @@ describe('UpstreamView provider management', () => {
       overview: { provider_count: 1, connected_count: 1, upstream_total_balance: 15.79 } })
     mocks.dashboard.mockResolvedValue({ metrics: { total_user_balance: 1054.28 } })
     mocks.refresh.mockResolvedValue(provider)
+    mocks.delete.mockResolvedValue(undefined)
   })
 
   it('shows only site statistics and the added user balance', async () => {
@@ -41,7 +42,7 @@ describe('UpstreamView provider management', () => {
     expect(mocks.list).toHaveBeenCalledWith(1, '', '')
     const text = wrapper.text()
     expect(text).toContain('杂鱼AI')
-    expect(text).toContain('$15.79')
+    expect(wrapper.get('[data-testid="upstream-metric"]').text()).toContain('¥15.79')
     expect(text).toContain('$1,054.28')
     expect(text).toContain('$0.70')
     expect(text).toContain('$9.21')
@@ -51,41 +52,34 @@ describe('UpstreamView provider management', () => {
     wrapper.unmount()
   })
 
-  it('renders first, then progressively adds provider balances while the user total loads independently', async () => {
+  it('shows a low-balance badge from the saved provider state', async () => {
+    mocks.list.mockResolvedValue({ items: [{ ...provider, low_balance_alert: true }], total: 1, page: 1, pages: 1,
+      overview: { provider_count: 1, connected_count: 1, upstream_total_balance: 15.79 } })
+    const wrapper = mountPage()
+    await flushPromises()
+    expect(wrapper.get('[data-testid="provider-low-balance-alert"]').text()).toBe('admin.upstream.lowBalanceAlert')
+    wrapper.unmount()
+  })
+
+  it('renders cached provider balances without remote probes while the user total loads independently', async () => {
     let resolveUser!: (value: { metrics: { total_user_balance: number } }) => void
-    let resolveFirst!: (value: Provider) => void
-    let resolveSecond!: (value: Provider) => void
     const other: Provider = { ...provider, id: 'provider-2', name: '备用上游', metrics: { ...provider.metrics, balance: 4 } }
     mocks.list.mockResolvedValue({ items: [provider, other], total: 2, page: 1, pages: 1,
       overview: { provider_count: 2, connected_count: 2, upstream_total_balance: 19.79 } })
     mocks.dashboard.mockReturnValue(new Promise(resolve => { resolveUser = resolve }))
-    mocks.refresh.mockImplementation((id: string) => new Promise<Provider>(resolve => {
-      if (id === provider.id) resolveFirst = resolve
-      else resolveSecond = resolve
-    }))
-
     const wrapper = mountPage()
     expect(wrapper.find('[data-testid="users-balance-loading"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="upstream-balance-loading"]').exists()).toBe(true)
     await flushPromises()
-    expect(wrapper.find('[data-testid="provider-provider-1-balance-loading"]').exists()).toBe(true)
-    expect(wrapper.find('[data-testid="provider-provider-2-balance-loading"]').exists()).toBe(true)
-    expect(wrapper.find('[data-testid="provider-provider-1-total-loading"]').exists()).toBe(true)
-    expect(wrapper.text()).toContain('$0.00')
-
-    resolveFirst({ ...provider, metrics: { ...provider.metrics, balance: 16 } })
-    await flushPromises()
-    expect(wrapper.text()).toContain('$16.00')
-    expect(wrapper.find('[data-testid="upstream-balance-loading"]').exists()).toBe(true)
-    expect(wrapper.find('[data-testid="provider-provider-1-balance-loading"]').exists()).toBe(false)
-    expect(wrapper.find('[data-testid="provider-provider-2-balance-loading"]').exists()).toBe(true)
+    expect(wrapper.get('[data-testid="upstream-metric"]').text()).toContain('¥19.79')
+    expect(wrapper.text()).toContain('¥15.79')
+    expect(wrapper.text()).toContain('¥4.00')
+    expect(wrapper.find('[data-testid="upstream-balance-loading"]').exists()).toBe(false)
+    expect(mocks.refresh).not.toHaveBeenCalled()
 
     resolveUser({ metrics: { total_user_balance: 1054.28 } })
-    resolveSecond({ ...other, metrics: { ...other.metrics, balance: 5 } })
     await flushPromises()
-    expect(wrapper.text()).toContain('$21.00')
     expect(wrapper.text()).toContain('$1,054.28')
-    expect(wrapper.find('[data-testid="upstream-balance-loading"]').exists()).toBe(false)
     expect(wrapper.find('[data-testid="users-balance-loading"]').exists()).toBe(false)
     wrapper.unmount()
   })
@@ -98,6 +92,44 @@ describe('UpstreamView provider management', () => {
     await wrapper.get('[data-provider-id="provider-1"]').findAll('button').find(button => button.text() === 'admin.upstream.refresh')!.trigger('click')
     await flushPromises()
     expect(mocks.refresh).toHaveBeenCalledWith('provider-1')
+    wrapper.unmount()
+  })
+
+  it('confirms deletion, removes the provider, and reloads the overview', async () => {
+    let deleted = false
+    mocks.delete.mockImplementation(async () => { deleted = true })
+    mocks.list.mockImplementation(async () => ({
+      items: deleted ? [] : [provider], total: deleted ? 0 : 1, page: 1, pages: 1,
+      overview: { provider_count: deleted ? 0 : 1, connected_count: deleted ? 0 : 1, upstream_total_balance: deleted ? 0 : 15.79 }
+    }))
+    const wrapper = mountPage()
+    await flushPromises()
+    await wrapper.get('[data-provider-id="provider-1"] button[aria-label="admin.upstream.delete"]').trigger('click')
+    const dialog = wrapper.getComponent({ name: 'ConfirmDialog' })
+    expect(dialog.props('show')).toBe(true)
+    dialog.vm.$emit('cancel')
+    await flushPromises()
+    expect(mocks.delete).not.toHaveBeenCalled()
+
+    await wrapper.get('[data-provider-id="provider-1"] button[aria-label="admin.upstream.delete"]').trigger('click')
+    dialog.vm.$emit('confirm')
+    await flushPromises()
+    expect(mocks.delete).toHaveBeenCalledExactlyOnceWith('provider-1')
+    expect(wrapper.find('[data-provider-id="provider-1"]').exists()).toBe(false)
+    expect(wrapper.text()).toContain('admin.upstream.empty')
+    expect(mocks.success).toHaveBeenCalledWith('admin.upstream.deleted')
+    wrapper.unmount()
+  })
+
+  it('keeps the provider visible if deletion fails', async () => {
+    mocks.delete.mockRejectedValue(new Error('delete failed'))
+    const wrapper = mountPage()
+    await flushPromises()
+    await wrapper.get('[data-provider-id="provider-1"] button[aria-label="admin.upstream.delete"]').trigger('click')
+    wrapper.getComponent({ name: 'ConfirmDialog' }).vm.$emit('confirm')
+    await flushPromises()
+    expect(wrapper.find('[data-provider-id="provider-1"]').exists()).toBe(true)
+    expect(mocks.error).toHaveBeenCalledWith('admin.upstream.deleteFailed')
     wrapper.unmount()
   })
 
@@ -115,30 +147,32 @@ describe('UpstreamView provider management', () => {
     wrapper.unmount()
   })
 
-  it('automatically refreshes balances while visible and stops after unmount', async () => {
+  it('silently polls saved balances while visible and stops after unmount', async () => {
     vi.useFakeTimers()
     try {
       const wrapper = mountPage()
       await flushPromises()
-      await vi.waitFor(() => expect(mocks.refresh).toHaveBeenCalledWith('provider-1'))
-      await flushPromises()
       const initialLoads = mocks.list.mock.calls.length
-      expect(initialLoads).toBeGreaterThan(1)
+      expect(initialLoads).toBe(1)
+      expect(mocks.refresh).not.toHaveBeenCalled()
 
-      await vi.advanceTimersByTimeAsync(60_000)
+      await vi.advanceTimersByTimeAsync(10_000)
       await flushPromises()
       expect(mocks.list.mock.calls.length).toBeGreaterThan(initialLoads)
+      expect(wrapper.find('[data-testid="upstream-balance-loading"]').exists()).toBe(false)
 
-      const beforeUnmount = mocks.refresh.mock.calls.length
+      const beforeUnmount = mocks.list.mock.calls.length
       wrapper.unmount()
-      await vi.advanceTimersByTimeAsync(60_000)
-      expect(mocks.refresh.mock.calls.length).toBe(beforeUnmount)
+      await vi.advanceTimersByTimeAsync(10_000)
+      expect(mocks.list.mock.calls.length).toBe(beforeUnmount)
     } finally {
       vi.useRealTimers()
     }
   })
 
-  it('replaces the displayed provider and user balances after a live probe', async () => {
+  it('shows a newer saved balance on the next silent poll', async () => {
+    vi.useFakeTimers()
+    try {
     let balance = 15.79
     let userBalance = 1054.28
     mocks.list.mockImplementation(async () => ({
@@ -147,31 +181,51 @@ describe('UpstreamView provider management', () => {
       overview: { provider_count: 1, connected_count: 1, upstream_total_balance: balance }
     }))
     mocks.dashboard.mockImplementation(async () => ({ metrics: { total_user_balance: userBalance } }))
-    mocks.refresh.mockImplementation(async () => {
-      balance = 20.5
-      userBalance = 1070
-      return { ...provider, metrics: { ...provider.metrics, balance } }
-    })
     const wrapper = mountPage()
     await flushPromises()
-    expect(wrapper.text()).toContain('$20.50')
-    // The user total loads independently from the provider probe.
+    expect(wrapper.get('[data-testid="upstream-metric"]').text()).toContain('¥15.79')
     expect(wrapper.text()).toContain('$1,054.28')
+    balance = 20.5
+    userBalance = 1070
+    await vi.advanceTimersByTimeAsync(10_000)
+    await flushPromises()
+    expect(wrapper.get('[data-testid="upstream-metric"]').text()).toContain('¥20.50')
+    expect(mocks.refresh).not.toHaveBeenCalled()
     wrapper.unmount()
+    } finally { vi.useRealTimers() }
   })
 
-  it('pauses balance probes in a hidden tab and refreshes on return', async () => {
+  it('refreshes the user total silently while the page remains open', async () => {
+    vi.useFakeTimers()
+    try {
+      let userBalance = 1054.28
+      mocks.dashboard.mockImplementation(async () => ({ metrics: { total_user_balance: userBalance } }))
+      const wrapper = mountPage()
+      await flushPromises()
+      expect(wrapper.get('[data-testid="users-metric"]').text()).toContain('$1,054.28')
+      userBalance = 1070
+      await vi.advanceTimersByTimeAsync(30_000)
+      await flushPromises()
+      expect(wrapper.get('[data-testid="users-metric"]').text()).toContain('$1,070.00')
+      expect(wrapper.find('[data-testid="users-balance-loading"]').exists()).toBe(false)
+      wrapper.unmount()
+    } finally { vi.useRealTimers() }
+  })
+
+  it('pauses polling in a hidden tab and reloads cached values on return', async () => {
     vi.useFakeTimers()
     const hidden = vi.spyOn(document, 'hidden', 'get').mockReturnValue(true)
     try {
       const wrapper = mountPage()
       await flushPromises()
-      await vi.advanceTimersByTimeAsync(60_000)
+      const initialLoads = mocks.list.mock.calls.length
+      await vi.advanceTimersByTimeAsync(10_000)
+      expect(mocks.list.mock.calls.length).toBe(initialLoads)
       expect(mocks.refresh).not.toHaveBeenCalled()
       hidden.mockReturnValue(false)
       document.dispatchEvent(new Event('visibilitychange'))
       await flushPromises()
-      expect(mocks.refresh).toHaveBeenCalledWith('provider-1')
+      expect(mocks.list.mock.calls.length).toBeGreaterThan(initialLoads)
       wrapper.unmount()
     } finally {
       hidden.mockRestore()

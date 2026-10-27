@@ -10,7 +10,7 @@
       </header>
 
       <section class="grid grid-cols-2 gap-3 lg:grid-cols-4" :aria-label="t('admin.upstream.overview')">
-        <article v-for="metric in metrics" :key="metric.key" class="card min-w-0 p-4">
+        <article v-for="metric in metrics" :key="metric.key" class="card min-w-0 p-4" :data-testid="`${metric.key}-metric`">
           <div class="flex items-start gap-3">
             <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg" :class="metric.iconClass"><Icon :name="metric.icon" size="sm" /></span>
             <div class="min-w-0">
@@ -38,10 +38,10 @@
             @change="page = 1; load()"
           />
         </div>
-        <button type="button" class="btn btn-secondary inline-flex items-center gap-2" :disabled="loading" @click="load"><Icon name="refresh" size="sm" :class="{ 'animate-spin': loading }" /><span class="hidden sm:inline">{{ t('admin.upstream.refresh') }}</span></button>
+        <button type="button" class="btn btn-secondary inline-flex items-center gap-2" :disabled="loading" @click="load()"><Icon name="refresh" size="sm" :class="{ 'animate-spin': loading }" /><span class="hidden sm:inline">{{ t('admin.upstream.refresh') }}</span></button>
       </div>
 
-      <div v-if="error" role="alert" class="card border-red-200 p-4 text-sm text-red-600 dark:border-red-900 dark:text-red-400">{{ t('admin.upstream.loadFailed') }} <button type="button" class="ml-2 underline" @click="load">{{ t('admin.upstream.retry') }}</button></div>
+      <div v-if="error" role="alert" class="card border-red-200 p-4 text-sm text-red-600 dark:border-red-900 dark:text-red-400">{{ t('admin.upstream.loadFailed') }} <button type="button" class="ml-2 underline" @click="load()">{{ t('admin.upstream.retry') }}</button></div>
       <div v-if="loading && !providers.length" class="card py-16 text-center text-sm text-gray-500 dark:text-gray-400">{{ t('admin.upstream.loading') }}</div>
       <div v-else-if="!visibleProviders.length" class="card py-16 text-center text-sm text-gray-500 dark:text-gray-400">{{ t('admin.upstream.empty') }}</div>
 
@@ -60,7 +60,9 @@
             </div>
             <div class="ml-auto flex items-center gap-2">
               <span class="rounded-full px-2.5 py-1 text-xs font-semibold" :class="provider.status === 'connected' ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-400' : 'bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-400'"><span class="mr-1">●</span>{{ provider.status === 'connected' ? t('admin.upstream.connected') : t('admin.upstream.disconnected') }}</span>
+              <span v-if="provider.low_balance_alert" class="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-800 dark:bg-amber-900/30 dark:text-amber-300" data-testid="provider-low-balance-alert">{{ t('admin.upstream.lowBalanceAlert') }}</span>
               <button type="button" class="rounded-lg p-2 text-gray-500 hover:bg-gray-100 hover:text-primary-600 dark:hover:bg-dark-700" :aria-label="t('admin.upstream.edit')" @click="editing = provider; showDialog = true"><Icon name="edit" size="sm" /></button>
+              <button type="button" class="flex items-center gap-1 rounded-lg px-2 py-1 text-xs text-gray-500 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-900/20" :aria-label="t('admin.upstream.delete')" :disabled="deletingId === provider.id" @click="deleting = provider"><Icon name="trash" size="sm" />{{ t('admin.upstream.delete') }}</button>
             </div>
           </div>
 
@@ -68,13 +70,12 @@
             <div v-for="amount in providerAmounts(provider)" :key="amount.key" class="min-w-0 py-2 first:pt-0 last:pb-0 sm:px-4 sm:py-0 sm:first:pl-0 sm:last:pr-0">
               <p class="text-xs font-medium text-gray-500 dark:text-gray-400">{{ t(amount.label) }}</p>
               <div class="mt-1 flex min-h-7 items-center text-xl font-bold tabular-nums" :class="amount.key === 'balance' ? 'text-primary-600 dark:text-primary-400' : 'text-gray-900 dark:text-white'">
-                <LoadingSpinner v-if="pendingProviderIds.has(provider.id)" size="sm" :data-testid="`provider-${provider.id}-${amount.key}-loading`" />
-                <span v-else class="break-all">{{ amount.value === null ? '—' : yuan(amount.value * provider.exchange_rate) }}</span>
+                <span class="break-all">{{ amount.value === null ? '—' : yuan(amount.value * provider.exchange_rate) }}</span>
               </div>
-              <p class="mt-0.5 text-[11px] text-gray-400">{{ pendingProviderIds.has(provider.id) ? t('admin.upstream.loading') : amount.value === null ? t('admin.upstream.unknown') : money(amount.value) + ' USD' }}</p>
+              <p class="mt-0.5 text-[11px] text-gray-400">{{ amount.value === null ? t('admin.upstream.unknown') : money(amount.value) + ' USD' }}</p>
             </div>
           </div>
-          <p class="flex items-center justify-end gap-1 px-4 pb-3 text-right text-xs text-gray-500 dark:text-gray-400 sm:px-5">{{ t('admin.upstream.totalConsumption') }} <LoadingSpinner v-if="pendingProviderIds.has(provider.id)" size="sm" :data-testid="`provider-${provider.id}-total-loading`" /><strong v-else class="tabular-nums text-gray-700 dark:text-gray-200">{{ provider.metrics.total_spend === null ? '—' : money(provider.metrics.total_spend) }}</strong></p>
+          <p class="flex items-center justify-end gap-1 px-4 pb-3 text-right text-xs text-gray-500 dark:text-gray-400 sm:px-5">{{ t('admin.upstream.totalConsumption') }} <strong class="tabular-nums text-gray-700 dark:text-gray-200">{{ provider.metrics.total_spend === null ? '—' : money(provider.metrics.total_spend) }}</strong></p>
           <p v-if="provider.status === 'disconnected' && provider.last_error" class="mx-4 mb-3 rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700 dark:bg-red-900/20 dark:text-red-300 sm:mx-5" role="status">{{ provider.last_error }}</p>
           <div class="flex flex-wrap items-center justify-between gap-2 border-t border-gray-100 bg-gray-50/60 px-4 py-3 text-xs text-gray-500 dark:border-dark-700 dark:bg-dark-800/40 dark:text-gray-400 sm:px-5">
             <span>{{ t('admin.upstream.updated') }} {{ formattedTime(provider.updated_at) }}</span>
@@ -91,6 +92,16 @@
         <div class="flex gap-2"><button class="btn btn-secondary" :disabled="page <= 1 || loading" @click="page--; load()">{{ t('admin.upstream.previous') }}</button><button class="btn btn-secondary" :disabled="page >= pages || loading" @click="page++; load()">{{ t('admin.upstream.next') }}</button></div>
       </footer>
       <ProviderDialog :show="showDialog" :provider="editing" @close="showDialog = false" @saved="afterSave" />
+      <ConfirmDialog
+        :show="deleting !== null"
+        :title="t('admin.upstream.delete')"
+        :message="t('admin.upstream.deleteConfirm', { name: deleting?.name ?? '' })"
+        :confirm-text="t('admin.upstream.delete')"
+        :danger="true"
+        :loading="deletingId !== null"
+        @confirm="confirmDelete"
+        @cancel="deleting = null"
+      />
     </div>
   </AppLayout>
 </template>
@@ -99,11 +110,12 @@
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { adminAPI } from '@/api/admin'
-import { listProviders, refreshProvider, type Provider } from '@/api/admin/upstream'
+import { deleteProvider, listProviders, refreshProvider, type Provider } from '@/api/admin/upstream'
 import { useAppStore } from '@/stores/app'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import Icon from '@/components/icons/Icon.vue'
 import LoadingSpinner from '@/components/common/LoadingSpinner.vue'
+import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import Select from '@/components/common/Select.vue'
 import ProviderDialog from '@/components/admin/provider/ProviderDialog.vue'
 import { dateRange } from './operationsUtils'
@@ -118,8 +130,6 @@ const totalBalance = ref(0)
 const userBalance = ref<number | null>(null)
 const userBalanceLoading = ref(true)
 const upstreamBalanceLoading = ref(true)
-const pendingProviderIds = ref<Set<string>>(new Set())
-const cachedTotalBalance = ref(0)
 const page = ref(1)
 const pages = ref(1)
 const search = ref('')
@@ -133,19 +143,22 @@ const loading = ref(false)
 const error = ref(false)
 const refreshingId = ref<string | null>(null)
 const editing = ref<Provider | null>(null)
+const deleting = ref<Provider | null>(null)
+const deletingId = ref<string | null>(null)
 const showDialog = ref(false)
 let searchTimer: ReturnType<typeof setTimeout> | undefined
 let balanceTimer: ReturnType<typeof setInterval> | undefined
-let balanceRefreshRunning = false
+let userBalanceTimer: ReturnType<typeof setInterval> | undefined
+let userBalanceRequestInFlight = false
 let disposed = false
-const balanceRefreshInterval = 60_000
+const balanceRefreshInterval = 10_000
 const money = (amount: number) => new Intl.NumberFormat(undefined, { style: 'currency', currency: 'USD', maximumFractionDigits: 2 }).format(amount)
 const yuan = (amount: number) => new Intl.NumberFormat('zh-CN', { style: 'currency', currency: 'CNY', maximumFractionDigits: 2 }).format(amount)
 const visibleProviders = computed(() => providers.value)
 const metrics = computed(() => [
   { key: 'count', label: 'admin.upstream.providerCount', icon: 'server' as const, iconClass: 'bg-primary-100 text-primary-600 dark:bg-primary-900/30 dark:text-primary-400', value: String(providerCount.value), loading: false },
   { key: 'connected', label: 'admin.upstream.connectedCount', icon: 'check' as const, iconClass: 'bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400', value: String(connectedCount.value), loading: false },
-  { key: 'upstream', label: 'admin.upstream.totalBalance', icon: 'creditCard' as const, iconClass: 'bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400', value: money(totalBalance.value), loading: upstreamBalanceLoading.value },
+  { key: 'upstream', label: 'admin.upstream.totalBalance', icon: 'creditCard' as const, iconClass: 'bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400', value: yuan(totalBalance.value), loading: upstreamBalanceLoading.value },
   { key: 'users', label: 'admin.upstream.userBalance', icon: 'users' as const, iconClass: 'bg-violet-100 text-violet-600 dark:bg-violet-900/30 dark:text-violet-400', value: userBalance.value === null ? '—' : money(userBalance.value), loading: userBalanceLoading.value }
 ])
 function providerAmounts(provider: Provider) {
@@ -160,34 +173,37 @@ function formattedTime(value?: string) {
   const time = new Date(value)
   return Number.isNaN(time.getTime()) ? '—' : new Intl.DateTimeFormat(undefined, { dateStyle: 'short', timeStyle: 'short' }).format(time)
 }
-async function load() {
-  loading.value = true
-  error.value = false
+async function load(silent = false) {
+  if (!silent) { loading.value = true; error.value = false }
   try {
     const list = await listProviders(page.value, search.value, status.value === 'all' ? '' : status.value)
     if (disposed) return
     providers.value = list.items ?? []
-    if (upstreamBalanceLoading.value && !balanceRefreshRunning) pendingProviderIds.value = new Set(providers.value.map(provider => provider.id))
     total.value = list.total
     pages.value = Math.max(1, list.pages)
     providerCount.value = list.overview.provider_count
     connectedCount.value = list.overview.connected_count
-    cachedTotalBalance.value = list.overview.upstream_total_balance
-    if (!upstreamBalanceLoading.value && !balanceRefreshRunning) totalBalance.value = cachedTotalBalance.value
+    totalBalance.value = list.overview.upstream_total_balance
+    upstreamBalanceLoading.value = false
   } catch (reason) {
-    error.value = true
+    if (!silent) error.value = true
     console.error('Provider list failed:', reason)
-  } finally { loading.value = false }
+  } finally { if (!silent) { loading.value = false; upstreamBalanceLoading.value = false } }
 }
-async function loadUserBalance() {
-  userBalanceLoading.value = true
+async function loadUserBalance(silent = false) {
+  if (userBalanceRequestInFlight) return
+  userBalanceRequestInFlight = true
+  if (!silent) userBalanceLoading.value = true
   try {
     const today = dateRange(1)
     const operations = await adminAPI.dashboard.getOperationsDashboard({ start_date: today.start, end_date: today.end, trend_days: 7, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC', group_id: 0 })
     if (!disposed) userBalance.value = operations.metrics.total_user_balance
   } catch (reason) {
     console.error('User balance load failed:', reason)
-  } finally { if (!disposed) userBalanceLoading.value = false }
+  } finally {
+    userBalanceRequestInFlight = false
+    if (!disposed && !silent) userBalanceLoading.value = false
+  }
 }
 async function refresh(provider: Provider) {
   refreshingId.value = provider.id
@@ -195,66 +211,38 @@ async function refresh(provider: Provider) {
   catch (reason) { appStore.showError(t('admin.upstream.refreshFailed')); console.error('Provider refresh failed:', reason) }
   finally { refreshingId.value = null }
 }
-async function refreshBalances(refreshUserBalance = true) {
-  if (disposed || document.hidden || balanceRefreshRunning || loading.value || refreshingId.value) return
-  balanceRefreshRunning = true
-  upstreamBalanceLoading.value = true
-  totalBalance.value = 0
-  if (refreshUserBalance) void loadUserBalance()
+async function confirmDelete() {
+  const provider = deleting.value
+  if (!provider || deletingId.value) return
+  deletingId.value = provider.id
   try {
-    // The list endpoint serves ten items per page. Fetch identities from all
-    // pages so the global total grows as each independent provider finishes.
-    const first = await listProviders(1)
-    const all = [...(first.items ?? [])]
-    for (let nextPage = 2; nextPage <= first.pages; nextPage++) {
-      if (disposed || document.hidden) break
-      const next = await listProviders(nextPage)
-      all.push(...(next.items ?? []))
-    }
-    pendingProviderIds.value = new Set(all.map(provider => provider.id))
-    for (let index = 0; index < all.length; index++) {
-      if (disposed || document.hidden) break
-      const provider = all[index]
-      let current: Provider
-      try { current = await refreshProvider(provider.id) }
-      catch (reason) {
-        console.error('Automatic provider refresh failed:', reason)
-        current = { ...provider, status: 'disconnected' }
-      }
-      if (disposed) break
-      all[index] = current
-      totalBalance.value += (current.metrics.balance ?? 0) * current.exchange_rate
-      connectedCount.value = all.filter(item => item.status === 'connected').length
-      providers.value = providers.value.map(item => item.id === current.id ? current : item)
-      const pending = new Set(pendingProviderIds.value)
-      pending.delete(provider.id)
-      pendingProviderIds.value = pending
-    }
-    if (!disposed && !document.hidden) cachedTotalBalance.value = totalBalance.value
+    await deleteProvider(provider.id)
+    deleting.value = null
+    if (providers.value.length === 1 && page.value > 1) page.value--
+    await load()
+    appStore.showSuccess(t('admin.upstream.deleted'))
   } catch (reason) {
-    console.error('Automatic provider balance load failed:', reason)
-    if (!disposed) totalBalance.value = cachedTotalBalance.value
-  } finally {
-    pendingProviderIds.value = new Set()
-    if (!disposed) upstreamBalanceLoading.value = false
-    balanceRefreshRunning = false
-  }
+    appStore.showError(t('admin.upstream.deleteFailed'))
+    console.error('Provider deletion failed:', reason)
+  } finally { deletingId.value = null }
 }
 function handleVisibilityChange() {
-  if (!document.hidden) void refreshBalances()
+  if (!document.hidden) { void load(true); void loadUserBalance(true) }
 }
-function afterSave() { showDialog.value = false; void load().then(() => { void refreshBalances() }) }
+function afterSave() { showDialog.value = false; void load() }
 function debouncedLoad() { if (searchTimer) clearTimeout(searchTimer); searchTimer = setTimeout(() => { page.value = 1; void load() }, 250) }
 onMounted(() => {
   void loadUserBalance()
-  void load().then(() => { void refreshBalances(false) })
-  balanceTimer = setInterval(() => { void refreshBalances() }, balanceRefreshInterval)
+  void load()
+  balanceTimer = setInterval(() => { if (!document.hidden && !loading.value && !refreshingId.value) void load(true) }, balanceRefreshInterval)
+  userBalanceTimer = setInterval(() => { if (!document.hidden) void loadUserBalance(true) }, 30_000)
   document.addEventListener('visibilitychange', handleVisibilityChange)
 })
 onUnmounted(() => {
   disposed = true
   if (searchTimer) clearTimeout(searchTimer)
   if (balanceTimer) clearInterval(balanceTimer)
+  if (userBalanceTimer) clearInterval(userBalanceTimer)
   document.removeEventListener('visibilitychange', handleVisibilityChange)
 })
 </script>

@@ -7,6 +7,10 @@
         <span class="input-label">{{ t('admin.upstream.providerName') }} <span class="text-primary-600">*</span></span>
         <input v-model.trim="form.name" class="input provider-input" required :placeholder="t('admin.upstream.namePlaceholder')" />
       </label>
+      <label class="flex items-center justify-between gap-3 rounded-lg border border-gray-200 px-3 py-2 dark:border-dark-700">
+        <span class="text-sm text-gray-700 dark:text-gray-300">{{ t('admin.upstream.suppressLowBalanceAlert') }}</span>
+        <input v-model="form.suppress_low_balance_alert" type="checkbox" class="h-4 w-4 accent-primary-600" data-testid="provider-suppress-low-balance-alert" />
+      </label>
 
       <fieldset>
         <legend class="input-label">{{ t('admin.upstream.providerType') }}</legend>
@@ -110,7 +114,7 @@ const modes = computed(() => [
   { value: 'password', label: t('admin.upstream.passwordLogin') },
   { value: 'token', label: form.site_type === 'newapi' ? t('admin.upstream.newapiKey') : t('admin.upstream.sub2apiKey') }
 ] as const)
-const form = reactive<ProviderInput>({ name: '', site_type: 'sub2api', base_url: '', auth_mode: 'password', account: '', password: '', access_token: '', refresh_token: '', token_type: 'Bearer', user_id: '', system_access_token: '', exchange_rate: 1, notes: '' })
+const form = reactive<ProviderInput>({ name: '', site_type: 'sub2api', base_url: '', auth_mode: 'password', account: '', password: '', access_token: '', refresh_token: '', token_type: 'Bearer', user_id: '', system_access_token: '', exchange_rate: 1, notes: '', suppress_low_balance_alert: false })
 const visible = reactive({ password: false, access: false, refresh: false, system: false })
 const siteLink = computed(() => {
   try {
@@ -126,7 +130,7 @@ const secretRequired = computed(() => !props.provider || props.provider.site_typ
 watch(() => [props.show, props.provider] as const, ([show]) => {
   if (!show) return
   const provider = props.provider
-  Object.assign(form, { name: provider?.name ?? '', site_type: provider?.site_type ?? 'sub2api', base_url: provider?.base_url ?? '', auth_mode: provider?.auth_mode ?? 'password', account: provider?.account ?? '', password: '', access_token: '', refresh_token: '', token_type: provider?.token_type ?? 'Bearer', user_id: provider?.user_id ?? '', system_access_token: '', exchange_rate: provider?.exchange_rate ?? 1, notes: provider?.notes ?? '' })
+  Object.assign(form, { name: provider?.name ?? '', site_type: provider?.site_type ?? 'sub2api', base_url: provider?.base_url ?? '', auth_mode: provider?.auth_mode ?? 'password', account: provider?.account ?? '', password: '', access_token: '', refresh_token: '', token_type: provider?.token_type ?? 'Bearer', user_id: provider?.user_id ?? '', system_access_token: '', exchange_rate: provider?.exchange_rate ?? 1, notes: provider?.notes ?? '', suppress_low_balance_alert: provider?.suppress_low_balance_alert ?? false })
   Object.assign(visible, { password: false, access: false, refresh: false, system: false })
   probeMessage.value = ''
   probeOk.value = false
@@ -140,7 +144,7 @@ function payload(): ProviderInput {
     token_type: form.site_type === 'sub2api' && form.auth_mode === 'token' ? form.token_type?.trim() || 'Bearer' : undefined,
     user_id: form.site_type === 'newapi' && form.auth_mode === 'token' ? form.user_id?.trim() : undefined,
     system_access_token: form.site_type === 'newapi' && form.auth_mode === 'token' ? form.system_access_token?.trim() : undefined,
-    exchange_rate: form.exchange_rate, notes: form.notes?.trim() }
+    exchange_rate: form.exchange_rate, notes: form.notes?.trim(), suppress_low_balance_alert: form.suppress_low_balance_alert }
 }
 function failureReason(error: unknown, fallback: string): string {
   if (typeof error === 'object' && error !== null) {

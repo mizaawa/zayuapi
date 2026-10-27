@@ -449,6 +449,10 @@ func (s *SettingService) buildSystemSettingsUpdates(ctx context.Context, setting
 		updates[SettingKeyChannelMonitorDefaultIntervalSeconds] = strconv.Itoa(v)
 	}
 	updates[SettingKeyChannelMonitorAnnouncement] = strings.TrimSpace(settings.ChannelMonitorAnnouncement)
+	updates[SettingKeyProviderRefreshIntervalSeconds] = strconv.Itoa(ParseProviderRefreshInterval(strconv.Itoa(settings.ProviderRefreshIntervalSeconds)))
+	updates[SettingKeyProviderLowBalanceEnabled] = strconv.FormatBool(settings.ProviderLowBalanceEnabled)
+	updates[SettingKeyProviderLowBalanceThreshold] = strconv.FormatFloat(ParseProviderLowBalanceThreshold(strconv.FormatFloat(settings.ProviderLowBalanceThreshold, 'f', -1, 64)), 'f', -1, 64)
+	updates[SettingKeyProviderLowBalanceEmail] = strings.TrimSpace(settings.ProviderLowBalanceEmail)
 
 	if err := ValidateImageWorkbenchSettings(settings); err != nil {
 		return nil, err

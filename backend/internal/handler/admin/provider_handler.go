@@ -1,6 +1,7 @@
 package admin
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
@@ -25,36 +26,41 @@ type providerMetrics struct {
 }
 
 type providerRecord struct {
-	ID              string          `json:"id"`
-	Name            string          `json:"name"`
-	SiteType        string          `json:"site_type"`
-	BaseURL         string          `json:"base_url"`
-	AuthMode        string          `json:"auth_mode"`
-	Account         string          `json:"account,omitempty"`
-	UserID          string          `json:"user_id,omitempty"`
-	ExchangeRate    float64         `json:"exchange_rate"`
-	Notes           string          `json:"notes,omitempty"`
-	SecretEncrypted string          `json:"secret_encrypted"`
-	Status          string          `json:"status"`
-	Metrics         providerMetrics `json:"metrics"`
-	UpdatedAt       *time.Time      `json:"updated_at,omitempty"`
-	LastError       string          `json:"last_error,omitempty"`
+	ID                      string          `json:"id"`
+	Name                    string          `json:"name"`
+	SiteType                string          `json:"site_type"`
+	BaseURL                 string          `json:"base_url"`
+	AuthMode                string          `json:"auth_mode"`
+	Account                 string          `json:"account,omitempty"`
+	UserID                  string          `json:"user_id,omitempty"`
+	ExchangeRate            float64         `json:"exchange_rate"`
+	Notes                   string          `json:"notes,omitempty"`
+	SecretEncrypted         string          `json:"secret_encrypted"`
+	Status                  string          `json:"status"`
+	Metrics                 providerMetrics `json:"metrics"`
+	UpdatedAt               *time.Time      `json:"updated_at,omitempty"`
+	LastError               string          `json:"last_error,omitempty"`
+	SuppressLowBalanceAlert bool            `json:"suppress_low_balance_alert"`
+	LowBalanceAlert         bool            `json:"low_balance_alert"`
+	AlertSent               bool            `json:"alert_sent,omitempty"`
 }
 
 type providerView struct {
-	ID           string          `json:"id"`
-	Name         string          `json:"name"`
-	SiteType     string          `json:"site_type"`
-	BaseURL      string          `json:"base_url"`
-	AuthMode     string          `json:"auth_mode"`
-	Account      string          `json:"account,omitempty"`
-	UserID       string          `json:"user_id,omitempty"`
-	ExchangeRate float64         `json:"exchange_rate"`
-	Notes        string          `json:"notes,omitempty"`
-	Status       string          `json:"status"`
-	Metrics      providerMetrics `json:"metrics"`
-	UpdatedAt    *time.Time      `json:"updated_at,omitempty"`
-	LastError    string          `json:"last_error,omitempty"`
+	ID                      string          `json:"id"`
+	Name                    string          `json:"name"`
+	SiteType                string          `json:"site_type"`
+	BaseURL                 string          `json:"base_url"`
+	AuthMode                string          `json:"auth_mode"`
+	Account                 string          `json:"account,omitempty"`
+	UserID                  string          `json:"user_id,omitempty"`
+	ExchangeRate            float64         `json:"exchange_rate"`
+	Notes                   string          `json:"notes,omitempty"`
+	Status                  string          `json:"status"`
+	Metrics                 providerMetrics `json:"metrics"`
+	UpdatedAt               *time.Time      `json:"updated_at,omitempty"`
+	LastError               string          `json:"last_error,omitempty"`
+	SuppressLowBalanceAlert bool            `json:"suppress_low_balance_alert"`
+	LowBalanceAlert         bool            `json:"low_balance_alert"`
 }
 
 func (r providerRecord) view() providerView {
@@ -63,24 +69,26 @@ func (r providerRecord) view() providerView {
 		mode = "token"
 	}
 	return providerView{r.ID, r.Name, r.SiteType, r.BaseURL, mode, r.Account,
-		r.UserID, r.ExchangeRate, r.Notes, r.Status, r.Metrics, r.UpdatedAt, r.LastError}
+		r.UserID, r.ExchangeRate, r.Notes, r.Status, r.Metrics, r.UpdatedAt, r.LastError,
+		r.SuppressLowBalanceAlert, r.LowBalanceAlert}
 }
 
 type providerInput struct {
-	ID                string  `json:"id"`
-	Name              string  `json:"name"`
-	SiteType          string  `json:"site_type"`
-	BaseURL           string  `json:"base_url"`
-	AuthMode          string  `json:"auth_mode"`
-	Account           string  `json:"account"`
-	Password          string  `json:"password"`
-	AccessToken       string  `json:"access_token"`
-	RefreshToken      string  `json:"refresh_token"`
-	TokenType         string  `json:"token_type"`
-	UserID            string  `json:"user_id"`
-	SystemAccessToken string  `json:"system_access_token"`
-	ExchangeRate      float64 `json:"exchange_rate"`
-	Notes             string  `json:"notes"`
+	ID                      string  `json:"id"`
+	Name                    string  `json:"name"`
+	SiteType                string  `json:"site_type"`
+	BaseURL                 string  `json:"base_url"`
+	AuthMode                string  `json:"auth_mode"`
+	Account                 string  `json:"account"`
+	Password                string  `json:"password"`
+	AccessToken             string  `json:"access_token"`
+	RefreshToken            string  `json:"refresh_token"`
+	TokenType               string  `json:"token_type"`
+	UserID                  string  `json:"user_id"`
+	SystemAccessToken       string  `json:"system_access_token"`
+	ExchangeRate            float64 `json:"exchange_rate"`
+	Notes                   string  `json:"notes"`
+	SuppressLowBalanceAlert bool    `json:"suppress_low_balance_alert"`
 }
 
 var providerWriteMu sync.Mutex
@@ -138,7 +146,7 @@ func validateProviderInput(input *providerInput, previous *providerRecord) (prov
 	}
 	record := providerRecord{Name: name, SiteType: input.SiteType, BaseURL: base,
 		AuthMode: input.AuthMode, Account: strings.TrimSpace(input.Account), ExchangeRate: rate,
-		UserID: userID, Notes: strings.TrimSpace(input.Notes)}
+		UserID: userID, Notes: strings.TrimSpace(input.Notes), SuppressLowBalanceAlert: input.SuppressLowBalanceAlert}
 	secret := input.Password
 	if input.AuthMode == "token" {
 		if input.SiteType == "sub2api" {
@@ -166,11 +174,22 @@ func validateProviderInput(input *providerInput, previous *providerRecord) (prov
 	}
 	if previous != nil {
 		record.ID = previous.ID
-		// Never send a saved credential to a different origin during an edit/probe.
 		oldMode := previous.AuthMode
 		if oldMode == "api_key" {
 			oldMode = "token"
 		}
+		sameSource := base == previous.BaseURL && input.SiteType == previous.SiteType && input.AuthMode == oldMode && strings.TrimSpace(input.Account) == previous.Account && userID == previous.UserID
+		if sameSource {
+			// A failed probe during a name or credential edit must keep the last
+			// observed balance. Never reuse it for a different upstream account.
+			record.Metrics = previous.Metrics
+			record.UpdatedAt = previous.UpdatedAt
+		}
+		if sameSource && !record.SuppressLowBalanceAlert {
+			record.AlertSent = previous.AlertSent
+			record.LowBalanceAlert = previous.LowBalanceAlert
+		}
+		// Never send a saved credential to a different origin during an edit/probe.
 		if secret == "" && base == previous.BaseURL && input.SiteType == previous.SiteType && input.AuthMode == oldMode && strings.TrimSpace(input.Account) == previous.Account && userID == previous.UserID {
 			record.SecretEncrypted = previous.SecretEncrypted
 		}
@@ -185,6 +204,10 @@ func validateProviderInput(input *providerInput, previous *providerRecord) (prov
 }
 
 func (h *AccountHandler) probeRecord(c *gin.Context, record *providerRecord, secret string) error {
+	return h.probeRecordContext(c.Request.Context(), record, secret)
+}
+
+func (h *AccountHandler) probeRecordContext(ctx context.Context, record *providerRecord, secret string) error {
 	if secret == "" {
 		if h.providerEncryptor == nil {
 			return errors.New("provider encryption unavailable")
@@ -195,7 +218,7 @@ func (h *AccountHandler) probeRecord(c *gin.Context, record *providerRecord, sec
 			return errors.New("stored provider login is unavailable")
 		}
 	}
-	metrics, effectiveSecret, err := probeProvider(c.Request.Context(), *record, secret)
+	metrics, effectiveSecret, err := probeProvider(ctx, *record, secret)
 	if err != nil {
 		return err
 	}
@@ -345,6 +368,8 @@ func (h *AccountHandler) CreateProvider(c *gin.Context) {
 	if err := h.probeRecord(c, &record, secret); err != nil {
 		record.Status = "disconnected"
 		record.LastError = providerPublicError(err)
+	} else {
+		h.updateCachedProviderWarning(c.Request.Context(), &record)
 	}
 	record.ID, err = newProviderID()
 	if err != nil {
@@ -394,6 +419,8 @@ func (h *AccountHandler) UpdateProvider(c *gin.Context) {
 		if err := h.probeRecord(c, &record, secret); err != nil {
 			record.Status = "disconnected"
 			record.LastError = providerPublicError(err)
+		} else {
+			h.updateCachedProviderWarning(c.Request.Context(), &record)
 		}
 		records[index] = record
 		if err := h.providerSettings.SaveProviderRecords(c.Request.Context(), records); err != nil {
@@ -422,6 +449,8 @@ func (h *AccountHandler) RefreshProvider(c *gin.Context) {
 		if probeErr != nil {
 			records[index].Status = "disconnected"
 			records[index].LastError = providerPublicError(probeErr)
+		} else {
+			h.updateCachedProviderWarning(c.Request.Context(), &records[index])
 		}
 		if err := h.providerSettings.SaveProviderRecords(c.Request.Context(), records); err != nil {
 			response.Error(c, http.StatusInternalServerError, "Could not save provider")

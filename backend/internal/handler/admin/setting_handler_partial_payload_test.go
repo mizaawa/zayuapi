@@ -183,6 +183,38 @@ func TestUpdateSettingsSMTPFromAliasIsWritable(t *testing.T) {
 	require.Equal(t, "new@example.com", repo.values[service.SettingKeySMTPFrom])
 }
 
+func TestUpdateSettingsProviderWarningRequiresEmailAndSMTPOnlyWhenNotificationsEnabled(t *testing.T) {
+	h, repo := newStepUpSwitchTestHandler(t, map[string]string{})
+	thresholdOnly := doUpdateSettings(t, h, map[string]any{
+		"provider_refresh_interval_seconds": 600,
+		"provider_low_balance_threshold":    300,
+		"provider_low_balance_enabled":      false,
+	}, nil)
+	require.Equal(t, http.StatusOK, thresholdOnly.Code, thresholdOnly.Body.String())
+	require.Equal(t, "300", repo.values[service.SettingKeyProviderLowBalanceThreshold])
+
+	missingEmail := doUpdateSettings(t, h, map[string]any{"provider_low_balance_enabled": true}, nil)
+	require.Equal(t, http.StatusBadRequest, missingEmail.Code)
+
+	missingSMTP := doUpdateSettings(t, h, map[string]any{
+		"provider_low_balance_enabled": true,
+		"provider_low_balance_email":   "ops@example.com",
+	}, nil)
+	require.Equal(t, http.StatusBadRequest, missingSMTP.Code)
+	require.Contains(t, missingSMTP.Body.String(), "SMTP")
+
+	configured := doUpdateSettings(t, h, map[string]any{
+		"provider_low_balance_enabled": true,
+		"provider_low_balance_email":   "ops@example.com",
+		"smtp_host":                    "smtp.example.com",
+		"smtp_from_email":              "sender@example.com",
+		"smtp_password":                "example-secret",
+	}, nil)
+	require.Equal(t, http.StatusOK, configured.Code, configured.Body.String())
+	require.Equal(t, "true", repo.values[service.SettingKeyProviderLowBalanceEnabled])
+	require.Equal(t, "ops@example.com", repo.values[service.SettingKeyProviderLowBalanceEmail])
+}
+
 func TestUpdateSettingsRejectsTwoCaptchaProviders(t *testing.T) {
 	h, _ := newStepUpSwitchTestHandler(t, map[string]string{
 		service.SettingKeyTurnstileEnabled:   "true",

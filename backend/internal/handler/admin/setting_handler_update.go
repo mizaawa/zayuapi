@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"errors"
 	"log/slog"
+	"math"
 	"net/http"
+	"net/mail"
 	"reflect"
 	"strconv"
 	"strings"
@@ -322,10 +324,14 @@ type UpdateSettingsRequest struct {
 	FrozenBalanceReleaseHours      *int  `json:"frozen_balance_release_hours"`
 
 	// Channel Monitor feature switch
-	ChannelMonitorEnabled                *bool   `json:"channel_monitor_enabled"`
-	ChannelMonitorHideUsageLogs          *bool   `json:"channel_monitor_hide_usage_logs"`
-	ChannelMonitorDefaultIntervalSeconds *int    `json:"channel_monitor_default_interval_seconds"`
-	ChannelMonitorAnnouncement           *string `json:"channel_monitor_announcement"`
+	ChannelMonitorEnabled                *bool    `json:"channel_monitor_enabled"`
+	ChannelMonitorHideUsageLogs          *bool    `json:"channel_monitor_hide_usage_logs"`
+	ChannelMonitorDefaultIntervalSeconds *int     `json:"channel_monitor_default_interval_seconds"`
+	ChannelMonitorAnnouncement           *string  `json:"channel_monitor_announcement"`
+	ProviderRefreshIntervalSeconds       *int     `json:"provider_refresh_interval_seconds"`
+	ProviderLowBalanceEnabled            *bool    `json:"provider_low_balance_enabled"`
+	ProviderLowBalanceThreshold          *float64 `json:"provider_low_balance_threshold"`
+	ProviderLowBalanceEmail              *string  `json:"provider_low_balance_email"`
 
 	ImageWorkbenchEnabled                *bool   `json:"image_workbench_enabled"`
 	ImageWorkbenchMaxConcurrent          *int    `json:"image_workbench_max_concurrent" binding:"omitempty,min=1,max=100"`
@@ -518,6 +524,41 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 	if err != nil {
 		response.ErrorFrom(c, err)
 		return
+	}
+	if req.ProviderRefreshIntervalSeconds != nil && (*req.ProviderRefreshIntervalSeconds < 30 || *req.ProviderRefreshIntervalSeconds > 86400) {
+		response.BadRequest(c, "Provider refresh interval must be 30–86400 seconds")
+		return
+	}
+	if req.ProviderLowBalanceThreshold != nil && (math.IsNaN(*req.ProviderLowBalanceThreshold) || math.IsInf(*req.ProviderLowBalanceThreshold, 0) || *req.ProviderLowBalanceThreshold <= 0 || *req.ProviderLowBalanceThreshold > 1e9) {
+		response.BadRequest(c, "Provider low-balance threshold must be greater than zero")
+		return
+	}
+	alertEnabled := previousSettings.ProviderLowBalanceEnabled
+	if req.ProviderLowBalanceEnabled != nil {
+		alertEnabled = *req.ProviderLowBalanceEnabled
+	}
+	alertEmail := previousSettings.ProviderLowBalanceEmail
+	if req.ProviderLowBalanceEmail != nil {
+		alertEmail = strings.TrimSpace(*req.ProviderLowBalanceEmail)
+	}
+	if alertEnabled {
+		address, addressErr := mail.ParseAddress(alertEmail)
+		if addressErr != nil || address.Address != alertEmail || strings.ContainsAny(alertEmail, "\r\n") {
+			response.BadRequest(c, "A valid notification email is required when provider low-balance alerts are enabled")
+			return
+		}
+		smtpHost := strings.TrimSpace(req.SMTPHost)
+		if smtpHost == "" {
+			smtpHost = previousSettings.SMTPHost
+		}
+		smtpFrom := strings.TrimSpace(req.SMTPFrom)
+		if smtpFrom == "" {
+			smtpFrom = previousSettings.SMTPFrom
+		}
+		if smtpHost == "" || smtpFrom == "" || (!previousSettings.SMTPPasswordConfigured && strings.TrimSpace(req.SMTPPassword) == "") {
+			response.BadRequest(c, "SMTP must be configured before enabling provider low-balance email")
+			return
+		}
 	}
 	// Merge every access-policy field before validation, so partial updates cannot
 	// silently reset a switch or validate an omitted list as an explicit clear.
@@ -1861,6 +1902,30 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 			return previousSettings.ChannelMonitorDefaultIntervalSeconds
 		}(),
 		ChannelMonitorAnnouncement: channelMonitorAnnouncement,
+		ProviderRefreshIntervalSeconds: func() int {
+			if req.ProviderRefreshIntervalSeconds != nil {
+				return *req.ProviderRefreshIntervalSeconds
+			}
+			return previousSettings.ProviderRefreshIntervalSeconds
+		}(),
+		ProviderLowBalanceEnabled: func() bool {
+			if req.ProviderLowBalanceEnabled != nil {
+				return *req.ProviderLowBalanceEnabled
+			}
+			return previousSettings.ProviderLowBalanceEnabled
+		}(),
+		ProviderLowBalanceThreshold: func() float64 {
+			if req.ProviderLowBalanceThreshold != nil {
+				return *req.ProviderLowBalanceThreshold
+			}
+			return previousSettings.ProviderLowBalanceThreshold
+		}(),
+		ProviderLowBalanceEmail: func() string {
+			if req.ProviderLowBalanceEmail != nil {
+				return strings.TrimSpace(*req.ProviderLowBalanceEmail)
+			}
+			return previousSettings.ProviderLowBalanceEmail
+		}(),
 		ImageWorkbenchEnabled: func() bool {
 			if req.ImageWorkbenchEnabled != nil {
 				return *req.ImageWorkbenchEnabled
@@ -2417,6 +2482,10 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		ChannelMonitorHideUsageLogs:          updatedSettings.ChannelMonitorHideUsageLogs,
 		ChannelMonitorDefaultIntervalSeconds: updatedSettings.ChannelMonitorDefaultIntervalSeconds,
 		ChannelMonitorAnnouncement:           updatedSettings.ChannelMonitorAnnouncement,
+		ProviderRefreshIntervalSeconds:       updatedSettings.ProviderRefreshIntervalSeconds,
+		ProviderLowBalanceEnabled:            updatedSettings.ProviderLowBalanceEnabled,
+		ProviderLowBalanceThreshold:          updatedSettings.ProviderLowBalanceThreshold,
+		ProviderLowBalanceEmail:              updatedSettings.ProviderLowBalanceEmail,
 		ImageWorkbenchEnabled:                updatedSettings.ImageWorkbenchEnabled,
 		ImageWorkbenchMaxConcurrent:          updatedSettings.ImageWorkbenchMaxConcurrent,
 		ImageWorkbenchMaxImageSizeMB:         updatedSettings.ImageWorkbenchMaxImageSizeMB,

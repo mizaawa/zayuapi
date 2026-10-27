@@ -420,6 +420,10 @@ const (
 	// SettingKeyChannelMonitorDefaultIntervalSeconds controls the default interval (seconds)
 	// pre-filled when creating a new channel monitor from the admin UI. Range: [15, 3600].
 	SettingKeyChannelMonitorDefaultIntervalSeconds = "channel_monitor_default_interval_seconds"
+	SettingKeyProviderRefreshIntervalSeconds       = "provider_refresh_interval_seconds"
+	SettingKeyProviderLowBalanceEnabled            = "provider_low_balance_enabled"
+	SettingKeyProviderLowBalanceThreshold          = "provider_low_balance_threshold"
+	SettingKeyProviderLowBalanceEmail              = "provider_low_balance_email"
 
 	SettingKeyImageWorkbenchEnabled                = "image_workbench_enabled"
 	SettingKeyImageWorkbenchMaxConcurrent          = "image_workbench_max_concurrent"

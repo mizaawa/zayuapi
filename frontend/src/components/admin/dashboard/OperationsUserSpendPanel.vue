@@ -1,5 +1,5 @@
 <template>
-  <div class="card min-w-0 self-start overflow-visible p-0">
+  <div class="card min-w-0 overflow-visible p-0">
     <div class="border-b border-gray-100 px-4 py-4 dark:border-dark-700">
       <div class="flex items-center justify-between gap-3">
         <div>

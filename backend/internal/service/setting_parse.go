@@ -198,6 +198,10 @@ func (s *SettingService) InitializeDefaultSettings(ctx context.Context) error {
 		SettingKeyChannelMonitorHideUsageLogs:          "false",
 		SettingKeyChannelMonitorDefaultIntervalSeconds: "60",
 		SettingKeyChannelMonitorAnnouncement:           "",
+		SettingKeyProviderRefreshIntervalSeconds:       "600",
+		SettingKeyProviderLowBalanceEnabled:            "false",
+		SettingKeyProviderLowBalanceThreshold:          "300",
+		SettingKeyProviderLowBalanceEmail:              "",
 
 		SettingKeyImageWorkbenchEnabled:                "true",
 		SettingKeyImageWorkbenchMaxConcurrent:          "5",
@@ -818,6 +822,10 @@ func (s *SettingService) parseSettings(settings map[string]string) *SystemSettin
 		settings[SettingKeyChannelMonitorDefaultIntervalSeconds],
 	)
 	result.ChannelMonitorAnnouncement = strings.TrimSpace(settings[SettingKeyChannelMonitorAnnouncement])
+	result.ProviderRefreshIntervalSeconds = ParseProviderRefreshInterval(settings[SettingKeyProviderRefreshIntervalSeconds])
+	result.ProviderLowBalanceEnabled = settings[SettingKeyProviderLowBalanceEnabled] == "true"
+	result.ProviderLowBalanceThreshold = ParseProviderLowBalanceThreshold(settings[SettingKeyProviderLowBalanceThreshold])
+	result.ProviderLowBalanceEmail = strings.TrimSpace(settings[SettingKeyProviderLowBalanceEmail])
 	workbench := parseImageWorkbenchRuntime(settings)
 	result.ImageWorkbenchEnabled = workbench.Enabled
 	result.ImageWorkbenchMaxConcurrent = workbench.MaxConcurrent

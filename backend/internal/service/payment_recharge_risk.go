@@ -37,7 +37,8 @@ type RechargeRiskEvent struct {
 }
 
 // recordRedeemFailureRisk stores only threshold crossings, without the code
-// entered by the user. At most 25 of these observations are retained.
+// entered by the user. The dashboard reads only the latest 25 observations;
+// older audit records remain available for auditing.
 func (s *RedeemService) recordRedeemFailureRisk(ctx context.Context, userID int64) {
 	if s.entClient == nil {
 		return
@@ -55,18 +56,6 @@ func (s *RedeemService) recordRedeemFailureRisk(ctx context.Context, userID int6
 		SetDetail("20 or more invalid redemption attempts within one hour").SetCreatedAt(now).Save(ctx); err != nil {
 		return
 	}
-	retained, err := s.entClient.PaymentAuditLog.Query().Where(paymentauditlog.ActionEQ(redeemFailureRiskAction)).
-		Order(dbent.Desc(paymentauditlog.FieldCreatedAt), dbent.Desc(paymentauditlog.FieldID)).Limit(maxRechargeRiskEvents).All(ctx)
-	if err != nil || len(retained) < maxRechargeRiskEvents {
-		return
-	}
-	ids := make([]int64, len(retained))
-	for i, entry := range retained {
-		ids[i] = entry.ID
-	}
-	_, _ = s.entClient.PaymentAuditLog.Delete().Where(
-		paymentauditlog.ActionEQ(redeemFailureRiskAction), paymentauditlog.IDNotIn(ids...),
-	).Exec(ctx)
 }
 
 // AdminRechargeRisks detects recent recharge anomalies from existing orders

@@ -212,10 +212,14 @@ type SystemSettings struct {
 	FrozenBalanceReleaseHours      int  `json:"frozen_balance_release_hours"`
 
 	// Channel Monitor feature
-	ChannelMonitorEnabled                bool   `json:"channel_monitor_enabled"`
-	ChannelMonitorHideUsageLogs          bool   `json:"channel_monitor_hide_usage_logs"`
-	ChannelMonitorDefaultIntervalSeconds int    `json:"channel_monitor_default_interval_seconds"`
-	ChannelMonitorAnnouncement           string `json:"channel_monitor_announcement"`
+	ChannelMonitorEnabled                bool    `json:"channel_monitor_enabled"`
+	ChannelMonitorHideUsageLogs          bool    `json:"channel_monitor_hide_usage_logs"`
+	ChannelMonitorDefaultIntervalSeconds int     `json:"channel_monitor_default_interval_seconds"`
+	ChannelMonitorAnnouncement           string  `json:"channel_monitor_announcement"`
+	ProviderRefreshIntervalSeconds       int     `json:"provider_refresh_interval_seconds"`
+	ProviderLowBalanceEnabled            bool    `json:"provider_low_balance_enabled"`
+	ProviderLowBalanceThreshold          float64 `json:"provider_low_balance_threshold"`
+	ProviderLowBalanceEmail              string  `json:"provider_low_balance_email"`
 
 	ImageWorkbenchEnabled                bool   `json:"image_workbench_enabled"`
 	ImageWorkbenchMaxConcurrent          int    `json:"image_workbench_max_concurrent"`

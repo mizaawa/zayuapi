@@ -5,11 +5,31 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
+	"strconv"
+	"strings"
 )
 
 // ProviderRecords are stored in a private setting. They are deliberately not
 // included in SystemSettings, so the generic settings API never returns them.
 const providerRecordsSettingKey = "admin_provider_records_v1"
+
+// ParseProviderRefreshInterval applies the safe default to unset/invalid values.
+func ParseProviderRefreshInterval(raw string) int {
+	value, err := strconv.Atoi(strings.TrimSpace(raw))
+	if err != nil || value < 30 || value > 86400 {
+		return 600
+	}
+	return value
+}
+
+func ParseProviderLowBalanceThreshold(raw string) float64 {
+	value, err := strconv.ParseFloat(strings.TrimSpace(raw), 64)
+	if err != nil || math.IsNaN(value) || math.IsInf(value, 0) || value <= 0 || value > 1e9 {
+		return 300
+	}
+	return value
+}
 
 func (s *SettingService) LoadProviderRecords(ctx context.Context, out any) error {
 	if s == nil || s.settingRepo == nil {

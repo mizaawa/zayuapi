@@ -9,7 +9,9 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/Wei-Shaw/sub2api/internal/config"
 	"github.com/Wei-Shaw/sub2api/internal/service"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
@@ -30,6 +32,10 @@ func (r *providerTestSettingsRepo) GetValue(context.Context, string) (string, er
 func (r *providerTestSettingsRepo) Set(_ context.Context, _ string, value string) error {
 	r.value = value
 	return nil
+}
+
+func (r *providerTestSettingsRepo) GetAll(context.Context) (map[string]string, error) {
+	return map[string]string{}, nil
 }
 
 type providerTestEncryptor struct{}
@@ -69,7 +75,7 @@ func providerTestRequest(t *testing.T, handler gin.HandlerFunc, method, path str
 func TestCreateProviderSavesDisconnectedWhenRemoteProbeFails(t *testing.T) {
 	repo := &providerTestSettingsRepo{}
 	h := &AccountHandler{}
-	h.SetProviderDependencies(service.NewSettingService(repo, nil), providerTestEncryptor{})
+	h.SetProviderDependencies(service.NewSettingService(repo, &config.Config{}), providerTestEncryptor{})
 	input := providerInput{
 		Name: "Remote", SiteType: "sub2api", BaseURL: "https://example.com", AuthMode: "password",
 		Account: "person@example.com", Password: "private-password", ExchangeRate: 1,
@@ -101,7 +107,7 @@ func TestCreateProviderSavesDisconnectedWhenRemoteProbeFails(t *testing.T) {
 func TestProbeProviderStillReportsRemoteFailureWithoutSaving(t *testing.T) {
 	repo := &providerTestSettingsRepo{}
 	h := &AccountHandler{}
-	h.SetProviderDependencies(service.NewSettingService(repo, nil), providerTestEncryptor{})
+	h.SetProviderDependencies(service.NewSettingService(repo, &config.Config{}), providerTestEncryptor{})
 	input := providerInput{
 		Name: "Remote", SiteType: "sub2api", BaseURL: "https://example.com", AuthMode: "password",
 		Account: "person@example.com", Password: "private-password", ExchangeRate: 1,
@@ -115,7 +121,7 @@ func TestProbeProviderStillReportsRemoteFailureWithoutSaving(t *testing.T) {
 func TestUpdateProviderSavesDisconnectedAndRetainsCredentialOnFailedProbe(t *testing.T) {
 	repo := &providerTestSettingsRepo{}
 	h := &AccountHandler{}
-	h.SetProviderDependencies(service.NewSettingService(repo, nil), providerTestEncryptor{})
+	h.SetProviderDependencies(service.NewSettingService(repo, &config.Config{}), providerTestEncryptor{})
 	input := providerInput{
 		Name: "Remote", SiteType: "sub2api", BaseURL: "https://example.com", AuthMode: "password",
 		Account: "person@example.com", Password: "private-password", ExchangeRate: 1,
@@ -143,6 +149,27 @@ func TestProviderPublicViewNeverExposesStoredCredential(t *testing.T) {
 	require.NoError(t, err)
 	require.NotContains(t, string(data), "ciphertext")
 	require.NotContains(t, string(data), "secret_encrypted")
+}
+
+func TestProviderEditRetainsCachedBalanceOnlyForSameUpstreamAccount(t *testing.T) {
+	amount := 125.0
+	now := time.Now().UTC()
+	previous := providerRecord{ID: "provider-1", SiteType: "sub2api", BaseURL: "https://example.com", AuthMode: "password", Account: "user@example.com", SecretEncrypted: "ciphertext", Metrics: providerMetrics{Balance: &amount}, UpdatedAt: &now, LowBalanceAlert: true, AlertSent: true}
+	input := providerInput{Name: "Renamed", SiteType: "sub2api", BaseURL: previous.BaseURL, AuthMode: "password", Account: previous.Account, ExchangeRate: 1}
+	updated, _, err := validateProviderInput(&input, &previous)
+	require.NoError(t, err)
+	require.Equal(t, amount, *updated.Metrics.Balance)
+	require.Equal(t, &now, updated.UpdatedAt)
+	require.True(t, updated.LowBalanceAlert)
+	require.True(t, updated.AlertSent)
+
+	input.Account = "different@example.com"
+	input.Password = "new-password"
+	updated, _, err = validateProviderInput(&input, &previous)
+	require.NoError(t, err)
+	require.Nil(t, updated.Metrics.Balance)
+	require.False(t, updated.LowBalanceAlert)
+	require.False(t, updated.AlertSent)
 }
 
 func TestProviderTokenInputUsesDashboardCredentialsNotModelAPIKeys(t *testing.T) {

@@ -340,9 +340,11 @@ func initializeApplication(buildInfo handler.BuildInfo) (*Application, error) {
 	userPlatformQuotaUsageFlusher := service.ProvideUserPlatformQuotaUsageFlusher(configConfig, billingCache, serviceUserPlatformQuotaRepository, timingWheelService)
 	v := provideCleanup(client, redisClient, opsMetricsCollector, opsAggregationService, opsAlertEvaluatorService, opsCleanupService, opsScheduledReportService, opsSystemLogSink, opsService, opsIngressRejectAggregator, apiKeyService, authCacheInvalidationWorker, schedulerSnapshotService, tokenRefreshService, accountExpiryService, proxyExpiryService, subscriptionExpiryService, usageCleanupService, idempotencyCleanupService, batchImageCleanupService, imageStorageCleanupService, batchImageWorkerRuntime, pricingService, emailQueueService, billingCacheService, usageRecordWorkerPool, subscriptionService, openAIGatewayService, scheduledTestRunnerService, backupService, paymentOrderExpiryService, channelMonitorRunner, userPlatformQuotaUsageFlusher, upstreamBillingProbeService, ollamaCloudUsageService, auditLogService, promptService)
 	application := &Application{
-		Server:      httpServer,
-		PromptAudit: promptService,
-		Cleanup:     v,
+		Server:            httpServer,
+		PromptAudit:       promptService,
+		ProviderRefresher: accountHandler,
+		ProviderEmail:     emailService,
+		Cleanup:           v,
 	}
 	return application, nil
 }
@@ -350,9 +352,11 @@ func initializeApplication(buildInfo handler.BuildInfo) (*Application, error) {
 // wire.go:
 
 type Application struct {
-	Server      *http.Server
-	PromptAudit *securityaudit.PromptService
-	Cleanup     func()
+	Server            *http.Server
+	PromptAudit       *securityaudit.PromptService
+	ProviderRefresher *admin.AccountHandler
+	ProviderEmail     *service.EmailService
+	Cleanup           func()
 }
 
 func providePrivacyClientFactory() service.PrivacyClientFactory {
