@@ -85,6 +85,8 @@ func RegisterPaymentRoutes(
 		adminGroup.PUT("/config", adminPaymentHandler.UpdateConfig)
 
 		// Orders
+		adminGroup.GET("/recharge-activity", adminPaymentHandler.RechargeActivity)
+		adminGroup.GET("/recharge-risks", adminPaymentHandler.RechargeRisks)
 		adminOrders := adminGroup.Group("/orders")
 		{
 			adminOrders.GET("", adminPaymentHandler.ListOrders)

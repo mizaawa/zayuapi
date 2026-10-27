@@ -4,6 +4,7 @@
  */
 
 import { apiClient } from '../client'
+import type { RechargeChannel, RechargeOrder, RechargeOrderPage, RechargeRiskEvent, RechargeStatus } from '@/views/admin/operationsRechargeTypes'
 import type {
   DashboardStats,
   TrendDataPoint,
@@ -125,6 +126,39 @@ export async function getOperationsUserSpend(params: OperationsUserSpendParams):
 
 export async function getOperationsUserSuggestions(q: string): Promise<Array<{ user_id: number; email: string }>> {
   const { data } = await apiClient.get<Array<{ user_id: number; email: string }>>('/admin/dashboard/operations/users/suggest', { params: { q } })
+  return data
+}
+
+export interface OperationsRechargeOrderParams {
+  page: number
+  page_size: 25
+  start_date: string
+  end_date: string
+  search?: string
+  status?: RechargeStatus
+  channel?: RechargeChannel
+}
+
+export async function getOperationsRechargeOrders(params: OperationsRechargeOrderParams): Promise<RechargeOrderPage> {
+  const start = new Date(`${params.start_date}T00:00:00`)
+  const end = new Date(`${params.end_date}T00:00:00`)
+  end.setDate(end.getDate() + 1)
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) throw new Error('Invalid recharge date range')
+  const query = {
+    page: params.page,
+    page_size: params.page_size,
+    email: params.search,
+    status: params.status,
+    channel: params.channel === 'code' ? 'redeem' : params.channel,
+    start_time: start.toISOString(),
+    end_time: end.toISOString()
+  }
+  const { data } = await apiClient.get<Omit<RechargeOrderPage, 'items'> & { items: Array<Omit<RechargeOrder, 'channel'> & { channel: RechargeChannel | 'redeem' }> }>('/admin/payment/recharge-activity', { params: query })
+  return { ...data, items: (data.items ?? []).map(order => ({ ...order, channel: order.channel === 'redeem' ? 'code' : order.channel })) }
+}
+
+export async function getOperationsRechargeRisks(): Promise<RechargeRiskEvent[]> {
+  const { data } = await apiClient.get<RechargeRiskEvent[]>('/admin/payment/recharge-risks')
   return data
 }
 
@@ -438,6 +472,8 @@ export const dashboardAPI = {
   getOperationsDashboard,
   getOperationsUserSpend,
   getOperationsUserSuggestions,
+  getOperationsRechargeOrders,
+  getOperationsRechargeRisks,
   getRealtimeMetrics,
   getUsageTrend,
   getModelStats,

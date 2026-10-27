@@ -141,6 +141,20 @@ export default {
       noModels: 'No model spending data',
       trend: 'Recent spend and profit trend',
       defaultView: 'Default',
+      recharge: {
+        ordersTitle: 'Orders', ordersHint: 'Current page only · 25 per page', timeRange: 'Order time range',
+        today: 'Today', last7Days: 'Last 7 days', last30Days: 'Last 30 days', searchEmail: 'Search user email',
+        status: 'Status', channel: 'Recharge channel', all: 'All', paid: 'Paid', unpaid: 'Unpaid',
+        code: 'Redeem code', direct: 'Direct', manual: 'Manual', email: 'User email', amount: 'Amount', time: 'Time',
+        loadFailed: 'Could not load orders', empty: 'No orders match these filters', pageSummary: 'Page {page} of {pages} · {total} orders', previous: 'Previous', next: 'Next'
+      },
+      rechargeRisk: {
+        title: 'Risk activity', latest25: 'Latest 25', readOnlyHint: 'For review only; user actions are not restricted',
+        loadFailed: 'Could not load risk activity', empty: 'No risk activity found', details: 'Risk activity details',
+        account: 'Account', type: 'Risk type', count: 'Related orders or actions', balance: 'User balance',
+        totalSpend: 'Total spend', timeRange: 'Action time range', outcome: 'To date', succeeded: 'Succeeded', failed: 'Failed',
+        types: { redeem_failures: 'Repeated invalid redeem codes', rapid_orders: 'Many payment orders in a short time', unpaid_orders: 'Frequent unpaid orders', repeated_amount: 'Repeated orders for the same amount' }
+      },
       profitOnly: 'Profit only',
       profitRate: 'Profit rate',
       failedToLoad: 'Failed to load operations dashboard data',

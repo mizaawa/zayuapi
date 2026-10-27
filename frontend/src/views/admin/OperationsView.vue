@@ -151,6 +151,16 @@
 </template>
 
 <script setup lang="ts">
+        <section class="grid grid-cols-1 items-stretch gap-6 xl:grid-cols-10" :aria-label="t('admin.operations.recharge.ordersTitle')" data-testid="recharge-dashboard-grid">
+          <OperationsRechargeOrdersPanel class="xl:col-span-7"
+            :orders="rechargeOrders" :loading="rechargeLoading" :error="rechargeError" :page="rechargePage" :pages="rechargePages" :total="rechargeTotal"
+            :search="rechargeSearch" :suggestions="rechargeSuggestions" :suggestions-open="rechargeSuggestionsOpen" :suggestions-loading="rechargeSuggestionsLoading"
+            :status="rechargeStatus" :channel="rechargeChannel" :days="rechargeDays"
+            @update:search="updateRechargeSearch" @focus-search="focusRechargeSearch" @blur-search="blurRechargeSearch"
+            @select-suggestion="selectRechargeSuggestion" @select-status="selectRechargeStatus" @select-channel="selectRechargeChannel"
+            @select-days="selectRechargeDays" @select-page="selectRechargePage" @retry="loadRechargeOrders" />
+          <OperationsRechargeRiskPanel class="xl:col-span-3" :events="rechargeRisks" :loading="rechargeRiskLoading" :error="rechargeRiskError" @retry="loadRechargeRisks" />
+        </section>
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { adminAPI } from '@/api/admin'
@@ -169,6 +179,9 @@ import { compareProfit, dateRange, formatMoney, profitOf } from './operationsUti
 const { t } = useI18n()
 const data = ref<OperationsDashboardResponse | null>(null)
 const loading = ref(false)
+import OperationsRechargeOrdersPanel from '@/components/admin/dashboard/OperationsRechargeOrdersPanel.vue'
+import OperationsRechargeRiskPanel from '@/components/admin/dashboard/OperationsRechargeRiskPanel.vue'
+import type { RechargeChannel, RechargeOrder, RechargeRiskEvent, RechargeStatus } from './operationsRechargeTypes'
 const error = ref(false)
 const selectedDays = ref(1)
 const selectedGroup = ref<number | null>(null)
@@ -189,6 +202,26 @@ let suggestionSequence = 0
 let searchTimer: ReturnType<typeof setTimeout> | undefined
 let blurTimer: ReturnType<typeof setTimeout> | undefined
 const periods = [{ days: 1, label: 'admin.operations.today' }, { days: 7, label: 'admin.operations.last7Days' }, { days: 30, label: 'admin.operations.last30Days' }]
+const rechargeOrders = ref<RechargeOrder[]>([])
+const rechargeRisks = ref<RechargeRiskEvent[]>([])
+const rechargePage = ref(1)
+const rechargePages = ref(1)
+const rechargeTotal = ref(0)
+const rechargeDays = ref<1 | 7 | 30>(1)
+const rechargeStatus = ref<'all' | RechargeStatus>('all')
+const rechargeChannel = ref<'all' | RechargeChannel>('all')
+const rechargeSearch = ref('')
+const rechargeSuggestions = ref<SimpleUser[]>([])
+const rechargeSuggestionsOpen = ref(false)
+const rechargeSuggestionsLoading = ref(false)
+const rechargeLoading = ref(false)
+const rechargeError = ref(false)
+const rechargeRiskLoading = ref(false)
+const rechargeRiskError = ref(false)
+let rechargeSequence = 0
+let rechargeSuggestionSequence = 0
+let rechargeSearchTimer: ReturnType<typeof setTimeout> | undefined
+let rechargeBlurTimer: ReturnType<typeof setTimeout> | undefined
 const breakdownTabs = [{ key: 'groups', label: 'admin.operations.groups' }, { key: 'models', label: 'admin.operations.models' }] as const
 const metrics = [
   { key: 'today_user_consumption', label: 'admin.operations.todayUserConsumption', subLabel: 'admin.operations.yesterdayUserConsumption', compare: true, icon: 'users', color: 'bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400' },
@@ -381,6 +414,73 @@ async function loadData() {
   loading.value = true
   error.value = false
   const range = dateRange(selectedDays.value)
+async function loadRechargeOrders() {
+  const sequence = ++rechargeSequence
+  rechargeLoading.value = true
+  rechargeError.value = false
+  const range = dateRange(rechargeDays.value)
+  try {
+    const result = await adminAPI.dashboard.getOperationsRechargeOrders({
+      page: rechargePage.value, page_size: 25, start_date: range.start, end_date: range.end,
+      ...(rechargeSearch.value.trim() ? { search: rechargeSearch.value.trim() } : {}),
+      ...(rechargeStatus.value !== 'all' ? { status: rechargeStatus.value } : {}),
+      ...(rechargeChannel.value !== 'all' ? { channel: rechargeChannel.value } : {})
+    })
+    if (sequence !== rechargeSequence) return
+    rechargeOrders.value = result.items ?? []
+    rechargeTotal.value = result.total
+    rechargePages.value = Math.max(1, result.pages)
+  } catch (reason) {
+    if (sequence !== rechargeSequence) return
+    rechargeError.value = true
+    console.error('Failed to load recharge orders:', reason)
+  } finally {
+    if (sequence === rechargeSequence) rechargeLoading.value = false
+  }
+}
+async function loadRechargeRisks() {
+  rechargeRiskLoading.value = true
+  rechargeRiskError.value = false
+  try { rechargeRisks.value = (await adminAPI.dashboard.getOperationsRechargeRisks()).slice(0, 25) }
+  catch (reason) { rechargeRiskError.value = true; console.error('Failed to load recharge risks:', reason) }
+  finally { rechargeRiskLoading.value = false }
+}
+function resetRechargeOrders() { rechargePage.value = 1; void loadRechargeOrders() }
+function selectRechargeStatus(value: 'all' | RechargeStatus) { if (rechargeStatus.value !== value) { rechargeStatus.value = value; resetRechargeOrders() } }
+function selectRechargeChannel(value: 'all' | RechargeChannel) { if (rechargeChannel.value !== value) { rechargeChannel.value = value; resetRechargeOrders() } }
+function selectRechargeDays(value: 1 | 7 | 30) { if (rechargeDays.value !== value) { rechargeDays.value = value; resetRechargeOrders() } }
+function selectRechargePage(value: number) { if (value >= 1 && value <= rechargePages.value && value !== rechargePage.value) { rechargePage.value = value; void loadRechargeOrders() } }
+function updateRechargeSearch(value: string) {
+  rechargeSearch.value = value
+  rechargeSuggestions.value = []
+  rechargeSuggestionsOpen.value = Boolean(value.trim())
+  rechargeSuggestionSequence++
+  rechargeSequence++
+  if (rechargeSearchTimer) clearTimeout(rechargeSearchTimer)
+  if (!value.trim()) { rechargeSuggestionsLoading.value = false; resetRechargeOrders(); return }
+  rechargeSearchTimer = setTimeout(() => { void loadRechargeSuggestions(value.trim()); resetRechargeOrders() }, 250)
+}
+async function loadRechargeSuggestions(keyword: string) {
+  const sequence = ++rechargeSuggestionSequence
+  rechargeSuggestionsLoading.value = true
+  try {
+    const result = await adminAPI.dashboard.getOperationsUserSuggestions(keyword)
+    if (sequence === rechargeSuggestionSequence && rechargeSearch.value.trim() === keyword)
+      rechargeSuggestions.value = result.map(user => ({ id: user.user_id, email: user.email, deleted: false }))
+  } catch (reason) {
+    if (sequence === rechargeSuggestionSequence) { rechargeSuggestions.value = []; console.error('Failed to search recharge user emails:', reason) }
+  } finally { if (sequence === rechargeSuggestionSequence) rechargeSuggestionsLoading.value = false }
+}
+function focusRechargeSearch() { if (rechargeSearch.value.trim()) { rechargeSuggestionsOpen.value = true; if (!rechargeSuggestions.value.length) void loadRechargeSuggestions(rechargeSearch.value.trim()) } }
+function blurRechargeSearch() { rechargeBlurTimer = setTimeout(() => { rechargeSuggestionsOpen.value = false }, 150) }
+function selectRechargeSuggestion(user: SimpleUser) {
+  if (rechargeSearchTimer) clearTimeout(rechargeSearchTimer)
+  if (rechargeBlurTimer) clearTimeout(rechargeBlurTimer)
+  rechargeSuggestionSequence++
+  rechargeSearch.value = user.email
+  rechargeSuggestionsOpen.value = false
+  resetRechargeOrders()
+}
   try {
     const result = await adminAPI.dashboard.getOperationsDashboard({
       start_date: range.start, end_date: range.end, trend_days: trendDays.value,
@@ -400,7 +500,7 @@ async function loadData() {
 function onResize() { trendDays.value = window.innerWidth < 768 ? 7 : 15 }
 watch([selectedDays, selectedGroup, trendDays], loadData)
 watch(selectedDays, () => { if (!manuallySelectedUser.value) selectedUserId.value = null; activeBreakdownTab.value = 'groups'; void loadUserSpend() })
-onMounted(() => { window.addEventListener('resize', onResize); void loadData(); void loadUserSpend() })
+onMounted(() => { window.addEventListener('resize', onResize); void loadData(); void loadUserSpend(); void loadRechargeOrders(); void loadRechargeRisks() })
 onUnmounted(() => {
   requestSequence++
   userRequestSequence++
@@ -411,6 +511,10 @@ onUnmounted(() => {
 })
 </script>
 
+  rechargeSequence++
+  rechargeSuggestionSequence++
+  if (rechargeSearchTimer) clearTimeout(rechargeSearchTimer)
+  if (rechargeBlurTimer) clearTimeout(rechargeBlurTimer)
 <style scoped>
 .operations-grid { display: grid; grid-template-columns: minmax(0, 1.45fr) repeat(3, minmax(0, 1fr)); gap: 0.5rem; align-items: center; }
 .money-cell { text-align: right; font-size: 0.75rem; font-weight: 500; line-height: 1.4; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }

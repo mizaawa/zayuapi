@@ -141,6 +141,20 @@ export default {
       noModels: '暂无模型消费数据',
       trend: '近期开支与盈利趋势',
       defaultView: '默认',
+      recharge: {
+        ordersTitle: '订单列表', ordersHint: '仅加载当前页，每页 25 条', timeRange: '订单时间范围',
+        today: '今日', last7Days: '近七天', last30Days: '近30天', searchEmail: '搜索用户邮箱',
+        status: '状态', channel: '充值渠道', all: '全部', paid: '已支付', unpaid: '未支付',
+        code: '兑换码', direct: '直充', manual: '人工', email: '用户邮箱', amount: '充值金额', time: '时间',
+        loadFailed: '加载订单失败', empty: '当前条件下暂无订单', pageSummary: '第 {page} / {pages} 页 · 共 {total} 条', previous: '上一页', next: '下一页'
+      },
+      rechargeRisk: {
+        title: '风险行为', latest25: '最近 25 条', readOnlyHint: '仅供查看，不限制用户操作',
+        loadFailed: '加载风险行为失败', empty: '当前没有发现风险行为', details: '风险行为详情',
+        account: '操作账号', type: '风险类型', count: '关联订单或操作次数', balance: '用户余额',
+        totalSpend: '总消费', timeRange: '操作时间范围', outcome: '截至目前', succeeded: '成功', failed: '失败',
+        types: { redeem_failures: '多次兑换码错误', rapid_orders: '短时间创建多个支付订单', unpaid_orders: '频繁未支付订单', repeated_amount: '重复创建相同金额订单' }
+      },
       profitOnly: '仅显示盈利',
       profitRate: '盈利率',
       failedToLoad: '加载运营面板数据失败',

@@ -350,7 +350,10 @@ func (s *RedeemService) incrementRedeemErrorCount(ctx context.Context, userID in
 		return
 	}
 
-	_ = s.cache.IncrementRedeemAttemptCount(ctx, userID)
+	count, countErr := s.cache.GetRedeemAttemptCount(ctx, userID)
+	if err := s.cache.IncrementRedeemAttemptCount(ctx, userID); err == nil && countErr == nil && count+1 >= redeemMaxErrorsPerHour {
+		s.recordRedeemFailureRisk(ctx, userID)
+	}
 }
 
 // acquireRedeemLock 尝试获取兑换码的分布式锁

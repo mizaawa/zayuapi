@@ -3,8 +3,10 @@ import { flushPromises, mount } from '@vue/test-utils'
 import OperationsView from '../OperationsView.vue'
 import type { OperationsDashboardResponse, OperationsUserSpendResponse } from '@/api/admin/dashboard'
 
-const { getOperationsDashboard, getOperationsUserSpend, getOperationsUserSuggestions } = vi.hoisted(() => ({ getOperationsDashboard: vi.fn(), getOperationsUserSpend: vi.fn(), getOperationsUserSuggestions: vi.fn() }))
-vi.mock('@/api/admin', () => ({ adminAPI: { dashboard: { getOperationsDashboard, getOperationsUserSpend, getOperationsUserSuggestions } } }))
+const { getOperationsDashboard, getOperationsUserSpend, getOperationsUserSuggestions, getOperationsRechargeOrders, getOperationsRechargeRisks } = vi.hoisted(() => ({
+  getOperationsDashboard: vi.fn(), getOperationsUserSpend: vi.fn(), getOperationsUserSuggestions: vi.fn(), getOperationsRechargeOrders: vi.fn(), getOperationsRechargeRisks: vi.fn()
+}))
+vi.mock('@/api/admin', () => ({ adminAPI: { dashboard: { getOperationsDashboard, getOperationsUserSpend, getOperationsUserSuggestions, getOperationsRechargeOrders, getOperationsRechargeRisks } } }))
 vi.mock('vue-i18n', async () => ({
   ...(await vi.importActual<typeof import('vue-i18n')>('vue-i18n')),
   useI18n: () => ({ t: (key: string) => key })
@@ -44,7 +46,46 @@ describe('OperationsView', () => {
     getOperationsDashboard.mockReset().mockResolvedValue(fixture())
     getOperationsUserSpend.mockReset().mockImplementation(({ search, user_id }) => Promise.resolve(userSpendFixture(search, user_id)))
     getOperationsUserSuggestions.mockReset().mockResolvedValue([{ user_id: 1, email: 'alice@example.com' }])
+    getOperationsRechargeOrders.mockReset().mockResolvedValue({ items: [], total: 0, page: 1, pages: 1 })
+    getOperationsRechargeRisks.mockReset().mockResolvedValue([])
     Object.defineProperty(window, 'innerWidth', { configurable: true, writable: true, value: 1280 })
+  })
+
+  it('loads only the first recharge page until next is selected and resets on filters', async () => {
+    getOperationsRechargeOrders.mockImplementation(async ({ page }) => ({
+      items: [{ id: `payment:${page}`, user_email: 'alice@example.com', amount: 15, currency: 'USD', status: 'paid', channel: 'direct', created_at: '2026-10-27T12:00:00Z' }],
+      total: 26, page, pages: 2
+    }))
+    const wrapper = mountPage()
+    await flushPromises()
+    expect(getOperationsRechargeOrders).toHaveBeenCalledTimes(1)
+    expect(getOperationsRechargeOrders.mock.calls[0][0]).toMatchObject({ page: 1, page_size: 25 })
+    expect(wrapper.get('[data-recharge-order="payment:1"]').text()).toContain('alice@example.com')
+    await wrapper.get('[data-testid="recharge-orders-panel"]').findAll('button').find(button => button.text() === 'admin.operations.recharge.next')!.trigger('click')
+    await flushPromises()
+    expect(getOperationsRechargeOrders).toHaveBeenCalledTimes(2)
+    expect(getOperationsRechargeOrders.mock.calls[1][0].page).toBe(2)
+    await wrapper.get('[data-order-status="unpaid"]').trigger('click')
+    await flushPromises()
+    expect(getOperationsRechargeOrders.mock.lastCall?.[0]).toMatchObject({ page: 1, status: 'unpaid' })
+    wrapper.unmount()
+  })
+
+  it('opens read-only risk details and closes the dialog', async () => {
+    getOperationsRechargeRisks.mockResolvedValue([{ id: 'rapid_orders:1', type: 'rapid_orders', user_email: 'alice@example.com', count: 10, order_count: 10, user_balance: 18, total_consumption: 34, first_at: '2026-10-27T10:00:00Z', last_at: '2026-10-27T10:20:00Z', result: 'failed' }])
+    const wrapper = mountPage()
+    await flushPromises()
+    await wrapper.get('[data-risk-id="rapid_orders:1"]').trigger('click')
+    await flushPromises()
+    expect(document.body.textContent).toContain('alice@example.com')
+    expect(document.body.textContent).toContain('$18.00')
+    expect(document.body.textContent).toContain('$34.00')
+    const close = Array.from(document.body.querySelectorAll('button')).find(button => button.textContent?.includes('common.close'))
+    expect(close).toBeTruthy()
+    close!.click()
+    await flushPromises()
+    expect(wrapper.getComponent({ name: 'OperationsRechargeRiskPanel' }).getComponent({ name: 'BaseDialog' }).props('show')).toBe(false)
+    wrapper.unmount()
   })
 
   it('shows eight financial cards, preserves currencies and defaults to today/all groups', async () => {
