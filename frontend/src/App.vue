@@ -28,8 +28,11 @@ const paymentPageHidden = computed(() => route.name !== 'NotFound' && isUserPaym
     : paymentAccess.access?.allowed === false || route.meta.requiresAuth !== false ||
       appStore.cachedPublicSettings?.payment_exclusive_enabled !== false
 ))
+const PAYMENT_ACCESS_RETRY_MIN_MS = 3000
+const PAYMENT_ACCESS_RETRY_MAX_MS = 30000
 let paymentAccessTimer: ReturnType<typeof setTimeout> | null = null
 let paymentAccessRefreshGeneration = 0
+let paymentAccessRetryDelay = PAYMENT_ACCESS_RETRY_MIN_MS
 
 function stopPaymentAccessRefresh() {
   paymentAccessRefreshGeneration++
@@ -40,6 +43,7 @@ function stopPaymentAccessRefresh() {
 
 async function refreshPaymentAccess() {
   stopPaymentAccessRefresh()
+  paymentAccessRetryDelay = PAYMENT_ACCESS_RETRY_MIN_MS
   const generation = paymentAccessRefreshGeneration
   if (!authStore.isAuthenticated || document.visibilityState === 'hidden') return
   await paymentAccess.refresh()
@@ -52,7 +56,12 @@ async function watchPaymentAccess() {
   const generation = paymentAccessRefreshGeneration
   const received = await paymentAccess.waitForChange()
   if (generation === paymentAccessRefreshGeneration && authStore.isAuthenticated && !document.hidden) {
-    paymentAccessTimer = setTimeout(watchPaymentAccess, received ? 0 : 3000)
+    // Failed watches keep the confirmed grant, so back off instead of polling a struggling server.
+    const delay = received ? 0 : paymentAccessRetryDelay
+    paymentAccessRetryDelay = received
+      ? PAYMENT_ACCESS_RETRY_MIN_MS
+      : Math.min(paymentAccessRetryDelay * 2, PAYMENT_ACCESS_RETRY_MAX_MS)
+    paymentAccessTimer = setTimeout(watchPaymentAccess, delay)
   }
 }
 

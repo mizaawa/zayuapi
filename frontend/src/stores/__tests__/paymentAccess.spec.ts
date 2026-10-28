@@ -1,13 +1,24 @@
 import { createPinia, setActivePinia } from 'pinia'
 import { reactive } from 'vue'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { usePaymentAccessStore } from '../paymentAccess'
+import { PAYMENT_ACCESS_HINT_KEY, PAYMENT_ACCESS_WATCH_TIMEOUT_MS, usePaymentAccessStore } from '../paymentAccess'
 
 const mocks = vi.hoisted(() => ({ get: vi.fn(), auth: {} as any }))
 vi.mock('@/api/client', () => ({ apiClient: { get: mocks.get } }))
 vi.mock('../auth', () => ({ useAuthStore: () => mocks.auth }))
 
+const granted = { enabled: true, allowed: true, exclusive_enabled: true }
+const transientFailures = [
+  ['a timed out watch', { status: 0, code: 'ECONNABORTED', message: 'timeout of 45000ms exceeded' }],
+  ['a dropped connection', { status: 0, message: 'Network error. Please check your connection.' }],
+  ['a gateway error', { status: 502, message: 'Bad Gateway' }],
+  ['throttling', { status: 429, code: 'RATE_LIMITED', message: 'Too many requests' }],
+  ['an unexpected client error', new Error('offline')],
+] as const
+const refusals = [401, 403, 404].map(status => ({ status, message: 'refused' }))
+
 beforeEach(() => {
+  localStorage.clear()
   setActivePinia(createPinia())
   mocks.auth = reactive({ isAuthenticated: true, user: { id: 10 } })
   mocks.get.mockReset()
@@ -24,13 +35,93 @@ describe('payment access', () => {
     expect(store.allowed).toBe(false)
   })
 
-  it('does not retain a grant after a failed refresh', async () => {
+  it.each(transientFailures)('keeps the confirmed grant through %s', async (_name, failure) => {
     const store = usePaymentAccessStore()
-    mocks.get.mockResolvedValueOnce({ data: { enabled: true, allowed: true, exclusive_enabled: false } })
+    mocks.get.mockResolvedValueOnce({ data: granted })
     await store.refresh()
-    mocks.get.mockRejectedValueOnce(new Error('offline'))
-    await store.refresh()
+    mocks.get.mockRejectedValueOnce(failure)
+    expect(await store.waitForChange()).toBe(false)
+    expect(store.allowed).toBe(true)
+    mocks.get.mockRejectedValueOnce(failure)
+    // Route guards still get no answer, but the open menu and page do not flicker.
+    expect(await store.refresh()).toBeNull()
+    expect(store.allowed).toBe(true)
+    mocks.get.mockResolvedValueOnce({ data: { ...granted, allowed: false } })
+    expect(await store.waitForChange()).toBe(true)
     expect(store.allowed).toBe(false)
+  })
+
+  it.each(refusals)('withdraws the grant when the permission check is refused with $status', async refusal => {
+    const store = usePaymentAccessStore()
+    mocks.get.mockResolvedValueOnce({ data: granted })
+    await store.refresh()
+    mocks.get.mockRejectedValueOnce(refusal)
+    expect(await store.refresh()).toBeNull()
+    expect(store.allowed).toBe(false)
+    expect(localStorage.getItem(PAYMENT_ACCESS_HINT_KEY)).toBeNull()
+
+    mocks.get.mockResolvedValueOnce({ data: granted })
+    await store.refresh()
+    mocks.get.mockRejectedValueOnce(refusal)
+    expect(await store.waitForChange()).toBe(false)
+    expect(store.allowed).toBe(false)
+  })
+
+  it('gives every watch its own cache key and outlasts the server hold', async () => {
+    const store = usePaymentAccessStore()
+    mocks.get.mockResolvedValueOnce({ data: granted })
+    await store.refresh()
+    mocks.get.mockResolvedValue({ data: granted })
+    await store.waitForChange()
+    await store.waitForChange()
+    const [first, second] = mocks.get.mock.calls.slice(1).map(call => call[1])
+    expect(first.params.watch).toBe('true:true:true')
+    expect(first.params.nonce).toEqual(expect.any(String))
+    expect(second.params.nonce).not.toBe(first.params.nonce)
+    expect(first.timeout).toBe(PAYMENT_ACCESS_WATCH_TIMEOUT_MS)
+    expect(PAYMENT_ACCESS_WATCH_TIMEOUT_MS).toBeGreaterThan(25_000 + 10_000)
+  })
+
+  it('shows the remembered grant of the same account before the first check and lets the check withdraw it', async () => {
+    mocks.get.mockResolvedValueOnce({ data: granted })
+    await usePaymentAccessStore().refresh()
+
+    // A reload creates a new store: the links render immediately instead of popping in later.
+    setActivePinia(createPinia())
+    const reloaded = usePaymentAccessStore()
+    expect(reloaded.allowed).toBe(true)
+    expect(reloaded.access).toEqual(granted)
+    expect(mocks.get).toHaveBeenCalledTimes(1)
+
+    mocks.get.mockResolvedValueOnce({ data: { enabled: true, allowed: false, exclusive_enabled: true } })
+    await reloaded.refresh()
+    expect(reloaded.allowed).toBe(false)
+    expect(localStorage.getItem(PAYMENT_ACCESS_HINT_KEY)).toBeNull()
+
+    setActivePinia(createPinia())
+    expect(usePaymentAccessStore().allowed).toBe(false)
+  })
+
+  it('never reuses a remembered grant for another account or after sign-out', async () => {
+    mocks.get.mockResolvedValueOnce({ data: granted })
+    await usePaymentAccessStore().refresh()
+
+    mocks.auth.user = { id: 11 }
+    setActivePinia(createPinia())
+    const otherAccount = usePaymentAccessStore()
+    expect(otherAccount.allowed).toBe(false)
+    let resolve!: (response: unknown) => void
+    mocks.get.mockReturnValueOnce(new Promise(done => { resolve = done }))
+    const pending = otherAccount.refresh()
+    expect(otherAccount.allowed).toBe(false)
+    resolve({ data: granted })
+    await pending
+    expect(otherAccount.allowed).toBe(true)
+
+    mocks.auth.isAuthenticated = false
+    mocks.auth.user = null
+    otherAccount.reset()
+    expect(localStorage.getItem(PAYMENT_ACCESS_HINT_KEY)).toBeNull()
   })
 
   it('hides access as soon as authentication ends, even before the user object is cleared', async () => {
@@ -151,14 +242,14 @@ describe('payment access', () => {
     expect(store.allowed).toBe(false)
   })
 
-  it('does not let a late watcher restore access after a failed independent check', async () => {
+  it('does not let a late watcher restore access after a refused independent check', async () => {
     const store = usePaymentAccessStore()
     mocks.get.mockResolvedValueOnce({ data: { enabled: true, allowed: true, exclusive_enabled: true } })
     await store.refresh()
     let resolveWatch!: (response: unknown) => void
     mocks.get.mockReturnValueOnce(new Promise(done => { resolveWatch = done }))
     const watching = store.waitForChange()
-    mocks.get.mockRejectedValueOnce(new Error('offline'))
+    mocks.get.mockRejectedValueOnce({ status: 403, message: 'refused' })
     await store.refresh()
     expect(store.allowed).toBe(false)
     resolveWatch({ data: { enabled: true, allowed: true, exclusive_enabled: true } })
@@ -167,21 +258,39 @@ describe('payment access', () => {
     expect(store.access).toBeNull()
   })
 
-  it('does not let a late check restore access after a failed watcher', async () => {
+  it('does not let a late check restore access after a refused watcher', async () => {
     const store = usePaymentAccessStore()
     mocks.get.mockResolvedValueOnce({ data: { enabled: true, allowed: true, exclusive_enabled: true } })
     await store.refresh()
-    let rejectWatch!: (error: Error) => void
+    let rejectWatch!: (error: unknown) => void
     let resolveCheck!: (response: unknown) => void
     mocks.get.mockReturnValueOnce(new Promise((_done, fail) => { rejectWatch = fail }))
     const watching = store.waitForChange()
     mocks.get.mockReturnValueOnce(new Promise(done => { resolveCheck = done }))
     const checking = store.refresh()
-    rejectWatch(new Error('offline'))
+    rejectWatch({ status: 404, message: 'refused' })
     await watching
     resolveCheck({ data: { enabled: true, allowed: true, exclusive_enabled: true } })
     expect(await checking).toBeNull()
     expect(store.allowed).toBe(false)
+  })
+
+  it('lets an independent check confirm the grant while a watcher is merely reconnecting', async () => {
+    const store = usePaymentAccessStore()
+    mocks.get.mockResolvedValueOnce({ data: granted })
+    await store.refresh()
+    let rejectWatch!: (error: unknown) => void
+    let resolveCheck!: (response: unknown) => void
+    mocks.get.mockReturnValueOnce(new Promise((_done, fail) => { rejectWatch = fail }))
+    const watching = store.waitForChange()
+    mocks.get.mockReturnValueOnce(new Promise(done => { resolveCheck = done }))
+    const checking = store.refresh()
+    rejectWatch({ status: 0, code: 'ECONNABORTED', message: 'timeout' })
+    expect(await watching).toBe(false)
+    expect(store.allowed).toBe(true)
+    resolveCheck({ data: granted })
+    expect(await checking).toEqual(granted)
+    expect(store.allowed).toBe(true)
   })
 
   it.each([

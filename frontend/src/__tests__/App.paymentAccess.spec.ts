@@ -133,3 +133,39 @@ describe('open payment page authorization', () => {
     expect(router.currentRoute.value.fullPath).toBe('/purchase?from=test#resume')
   })
 })
+
+describe('payment access watch loop', () => {
+  afterEach(() => {
+    vi.useRealTimers()
+    delete (document as { hidden?: boolean }).hidden
+  })
+
+  it('backs off failed watches, keeps the open page, and resumes immediately after an answer', async () => {
+    Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'visible' })
+    Object.defineProperty(document, 'hidden', { configurable: true, value: false })
+    const outcomes = [false, false, false, true]
+    stores.payment.waitForChange.mockImplementation(() => outcomes.length > 0
+      ? Promise.resolve(outcomes.shift())
+      : new Promise(() => {}))
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    await mountPayment()
+    const watches = () => stores.payment.waitForChange.mock.calls.length
+
+    await vi.advanceTimersByTimeAsync(0)
+    expect(watches()).toBe(1)
+    await vi.advanceTimersByTimeAsync(2999)
+    expect(watches()).toBe(1)
+    await vi.advanceTimersByTimeAsync(1)
+    expect(watches()).toBe(2)
+    await vi.advanceTimersByTimeAsync(5999)
+    expect(watches()).toBe(2)
+    await vi.advanceTimersByTimeAsync(1)
+    expect(watches()).toBe(3)
+    await vi.advanceTimersByTimeAsync(12000)
+    expect(watches()).toBe(4)
+    // A delivered answer starts the next watch right away (fake timers turn 0ms into 1ms mid-tick).
+    await vi.advanceTimersByTimeAsync(1)
+    expect(watches()).toBe(5)
+    expect(wrapper!.find('[data-testid="protected-payment"]').exists()).toBe(true)
+  })
+})
