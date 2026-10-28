@@ -1,18 +1,6 @@
 <template>
   <AppLayout>
     <div class="upstream-page space-y-6">
-      <header class="upstream-hero">
-        <div class="min-w-0">
-          <p class="upstream-eyebrow">{{ t('admin.upstream.eyebrow') }}</p>
-          <h1 class="mt-1.5 flex flex-wrap items-center gap-2.5 text-2xl font-bold tracking-tight text-gray-900">
-            {{ t('admin.upstream.pageTitle') }}
-            <span class="upstream-count">{{ providerCount }}</span>
-          </h1>
-          <p class="mt-2 max-w-2xl text-sm leading-relaxed text-gray-600">{{ t('admin.upstream.subtitle') }}</p>
-        </div>
-        <button type="button" class="btn btn-primary shrink-0" @click="openCreate"><Icon name="plus" size="sm" />{{ t('admin.upstream.add') }}</button>
-      </header>
-
       <section class="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4" :aria-label="t('admin.upstream.overview')">
         <article v-for="metric in metrics" :key="metric.key" class="upstream-metric card" :data-testid="`${metric.key}-metric`">
           <span class="upstream-metric-icon" :class="metric.tone"><Icon :name="metric.icon" size="md" /></span>
@@ -36,6 +24,7 @@
           <Select v-model="status" :options="statusOptions" :aria-label="t('admin.upstream.filterStatus')" @change="page = 1; load()" />
         </div>
         <button type="button" class="btn btn-secondary" :disabled="loading" :aria-label="t('admin.upstream.refresh')" @click="load()"><Icon name="refresh" size="sm" :class="{ 'animate-spin': loading }" /><span class="hidden sm:inline">{{ t('admin.upstream.refresh') }}</span></button>
+        <button type="button" class="btn btn-primary shrink-0" @click="openCreate"><Icon name="plus" size="sm" />{{ t('admin.upstream.add') }}</button>
       </div>
 
       <div v-if="error" role="alert" class="flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-red-50 px-4 py-3 text-sm text-red-700">
@@ -308,9 +297,6 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
-.upstream-hero { position: relative; display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 1rem; overflow: hidden; padding: 1.5rem; border-radius: 1.75rem; background: radial-gradient(120% 140% at 0% 0%, rgb(255 231 138 / 0.55), transparent 55%), radial-gradient(90% 120% at 100% 100%, rgb(121 179 123 / 0.18), transparent 60%), var(--md-sys-color-surface); box-shadow: var(--theme-highlight), var(--theme-elevation-1); }
-.upstream-eyebrow { font-size: 0.6875rem; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; color: #976800; }
-.upstream-count { display: inline-flex; min-width: 1.75rem; justify-content: center; padding: 0.125rem 0.625rem; border-radius: 999px; background: var(--md-sys-color-primary); color: var(--md-sys-color-on-primary); font-size: 0.75rem; font-weight: 700; font-variant-numeric: tabular-nums; }
 .upstream-metric { display: flex; align-items: flex-start; gap: 0.875rem; min-width: 0; padding: 1rem 1.125rem; }
 .upstream-metric-icon { display: flex; flex-shrink: 0; align-items: center; justify-content: center; width: 2.75rem; height: 2.75rem; border-radius: 1rem; }
 .tone-honey { background: #fff3bd; color: #7e5600; }

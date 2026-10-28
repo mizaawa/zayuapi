@@ -1,6 +1,6 @@
 export default { upstream: {
-  eyebrow: 'Provider Management', pageTitle: '服务提供商', subtitle: '集中查看各上游站点的余额、消费与连接状态，余额由后台定时同步。',
-  connectionRate: '在线率 {rate}%', emptyHint: '添加第一个上游站点后，这里会显示它的余额与消费。', lastUpdated: '最近同步', noProviders: '还没有服务提供商',
+  pageTitle: '服务提供商',
+  connectionRate: '在线率 {rate}%', emptyHint: '添加第一个上游站点后，这里会显示它的余额与消费。',
   add: '添加服务提供商', editProvider: '编辑服务提供商', overview: '服务提供商概览',
   providerCount: '服务提供商', connectedCount: '已连接', totalBalance: '上游总余额', userBalance: '用户总余额',
   suppressLowBalanceAlert: '屏蔽余额不足提示', lowBalanceAlert: '余额即将告罄',

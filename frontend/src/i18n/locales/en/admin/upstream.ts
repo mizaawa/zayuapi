@@ -1,6 +1,6 @@
 export default { upstream: {
-  eyebrow: 'Provider Management', pageTitle: 'Providers', subtitle: 'Track balance, spend and connection status for every upstream site. Balances sync in the background.',
-  connectionRate: '{rate}% online', emptyHint: 'Add your first upstream site to see its balance and spend here.', lastUpdated: 'Last synced', noProviders: 'No providers yet',
+  pageTitle: 'Providers',
+  connectionRate: '{rate}% online', emptyHint: 'Add your first upstream site to see its balance and spend here.',
   add: 'Add provider', editProvider: 'Edit provider', overview: 'Provider overview',
   providerCount: 'Providers', connectedCount: 'Connected', totalBalance: 'Upstream balance', userBalance: 'User balance',
   suppressLowBalanceAlert: 'Suppress low-balance warning', lowBalanceAlert: 'Balance running low',
