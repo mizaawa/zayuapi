@@ -31,9 +31,8 @@ WHERE fallback_group_id IN (SELECT id FROM retired_antigravity_groups);
 UPDATE groups SET fallback_group_id_on_invalid_request = NULL
 WHERE fallback_group_id_on_invalid_request IN (SELECT id FROM retired_antigravity_groups);
 
--- API keys bound to a removed group become ungrouped, as with ON DELETE SET NULL.
-UPDATE api_keys SET group_id = NULL
-WHERE group_id IN (SELECT id FROM retired_antigravity_groups);
+-- Keep API keys bound to the retired group. Authentication rejects a key whose
+-- group was soft-deleted; clearing group_id would make it an unrestricted key.
 
 UPDATE composite_model_routes SET deleted_at = NOW()
 WHERE deleted_at IS NULL AND group_id IN (SELECT id FROM retired_antigravity_groups);

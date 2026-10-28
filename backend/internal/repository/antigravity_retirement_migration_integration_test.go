@@ -69,7 +69,8 @@ func TestMigration223RemovesAntigravityDataAndKeepsOthers(t *testing.T) {
 
 	require.Zero(t, count(`SELECT COUNT(*) FROM account_groups WHERE group_id = $1 OR account_id = $2`, agGroup, agAccount))
 	require.Equal(t, 1, count(`SELECT COUNT(*) FROM account_groups WHERE group_id = $1 AND account_id = $2`, keepGroup, keepAccount))
-	require.Zero(t, count(`SELECT COUNT(*) FROM api_keys WHERE id = $1 AND group_id IS NOT NULL`, agKey))
+	require.Equal(t, 1, count(`SELECT COUNT(*) FROM api_keys WHERE id = $1 AND group_id = $2`, agKey, agGroup),
+		"keys must remain bound to the retired group so authentication rejects them")
 	require.Zero(t, count(`SELECT COUNT(*) FROM groups WHERE id = $1 AND fallback_group_id IS NOT NULL`, keepGroup))
 	require.Zero(t, count(`SELECT COUNT(*) FROM subscription_plans WHERE id = $1 AND for_sale`, planID))
 	require.Zero(t, count(`SELECT COUNT(*) FROM channel_model_pricing WHERE channel_id = $1 AND platform = 'antigravity'`, channelID))

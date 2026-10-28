@@ -457,8 +457,9 @@ func (s *providerSession) listRows(ctx context.Context, pathFor func(page int) s
 				added++
 			}
 		}
-		if added == 0 || (current.total >= 0 && len(rows) >= current.total) ||
-			(!current.legacy && current.total < 0 && len(current.items) < providerKeyPageSize) {
+		// An upstream may cap page_size below our requested size without
+		// returning total. A short page does not prove there is no next page.
+		if added == 0 || (current.total >= 0 && len(rows) >= current.total) {
 			return rows, nil
 		}
 		if fetched >= providerKeyMaxPages {
@@ -603,7 +604,9 @@ func validProviderKeyID(id string) bool {
 		return false
 	}
 	for _, r := range id {
-		if !(r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || r == '-' || r == '_') {
+		switch {
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9', r == '-', r == '_':
+		default:
 			return false
 		}
 	}

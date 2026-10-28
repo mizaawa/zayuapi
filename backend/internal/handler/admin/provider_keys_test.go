@@ -420,6 +420,25 @@ func TestLegacyNewAPIKeyPagesStartAtZero(t *testing.T) {
 	require.Equal(t, []string{"1", "2", "3"}, ids)
 }
 
+func TestProviderKeyPagesWithoutTotalContinueAfterShortPage(t *testing.T) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Some providers cap page_size below the requested 100 and omit total.
+		pages := map[string]string{"1": `[{"id":1}]`, "2": `[{"id":2}]`}
+		rows := pages[r.URL.Query().Get("page")]
+		if rows == "" {
+			rows = `[]`
+		}
+		writeProviderJSON(w, http.StatusOK, `{"code":0,"data":{"items":`+rows+`}}`)
+	}))
+	defer server.Close()
+	session := &providerSession{record: providerRecord{SiteType: "sub2api"}, remote: providerRemote{client: server.Client(), base: server.URL}}
+	rows, err := session.listRows(context.Background(), func(page int) string {
+		return fmt.Sprintf("/keys?page=%d&page_size=100", page)
+	}, false)
+	require.NoError(t, err)
+	require.Len(t, rows, 2)
+}
+
 func TestProviderRequestTreatsExplainedForbiddenAsRefusal(t *testing.T) {
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/explained" {
