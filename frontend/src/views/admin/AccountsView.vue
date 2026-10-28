@@ -24,7 +24,7 @@
                     showAutoRefreshDropdown = !showAutoRefreshDropdown;
                     showAccountToolsDropdown = false
                   "
-                  class="btn btn-secondary px-2 md:px-3"
+                  class="btn btn-secondary px-2 md:px-3 max-sm:h-11 max-sm:w-11 max-sm:shrink-0 max-sm:p-0"
                   :title="t('admin.accounts.autoRefresh')"
                 >
                   <Icon name="refresh" size="sm" :class="[autoRefreshEnabled ? 'animate-spin' : '']" />
@@ -36,9 +36,10 @@
                     }}
                   </span>
                 </button>
+                <!-- On phones the button sits near the left edge: open the menu rightward. -->
                 <div
                   v-if="showAutoRefreshDropdown"
-                  class="absolute right-0 z-50 mt-2 w-56 origin-top-right rounded-lg border border-gray-200 bg-white shadow-lg dark:border-dark-700 dark:bg-dark-800"
+                  class="absolute right-0 z-50 mt-2 w-56 origin-top-right rounded-lg border border-gray-200 bg-white shadow-lg dark:border-dark-700 dark:bg-dark-800 max-sm:left-0 max-sm:right-auto max-sm:origin-top-left"
                 >
                   <div class="p-2">
                     <button
@@ -67,7 +68,7 @@
                 <button
                   ref="accountToolsTriggerRef"
                   @click="toggleAccountToolsDropdown"
-                  class="btn btn-secondary px-2 md:px-3"
+                  class="btn btn-secondary px-2 md:px-3 max-sm:h-11 max-sm:w-11 max-sm:shrink-0 max-sm:p-0"
                   :title="t('admin.accounts.moreActions')"
                   :aria-expanded="showAccountToolsDropdown"
                 >

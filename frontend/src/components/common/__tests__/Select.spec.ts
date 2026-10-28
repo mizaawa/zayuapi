@@ -36,7 +36,7 @@ const mockTriggerRect = (left: number, width: number) => {
   })
 }
 
-const openSelect = async (centered = false) => {
+const openSelect = async (centered = false, dropdownMinWidth?: number) => {
   const wrapper = mount(Select, {
     props: {
       modelValue: null,
@@ -47,6 +47,7 @@ const openSelect = async (centered = false) => {
         },
       ],
       centered,
+      dropdownMinWidth,
     },
   })
   unmountWrapper = () => wrapper.unmount()
@@ -148,5 +149,31 @@ describe('Select dropdown viewport constraints', () => {
     expect(dropdown?.style.transform).toBe('translate(-50%, -50%)')
     expect(dropdown?.style.width).toBe('304px')
     expect(document.body.querySelector('.select-centered-backdrop')).not.toBeNull()
+  })
+
+  it('opens an opt-in wide menu leftward from a trigger near the right edge', async () => {
+    setViewportWidth(1440)
+    mockTriggerRect(1244, 160)
+
+    const dropdown = await openSelect(false, 320)
+
+    expect(dropdown).not.toBeNull()
+    expect(dropdown?.style.left).toBe('')
+    expect(dropdown?.style.right).toBe('36px')
+    expect(dropdown?.style.minWidth).toBe('320px')
+    expect(dropdown?.style.maxWidth).toBe('1396px')
+  })
+
+  it('keeps an opt-in wide menu left-aligned when it fits', async () => {
+    setViewportWidth(1440)
+    mockTriggerRect(400, 160)
+
+    const dropdown = await openSelect(false, 320)
+
+    expect(dropdown).not.toBeNull()
+    expect(dropdown?.style.left).toBe('400px')
+    expect(dropdown?.style.right).toBe('')
+    expect(dropdown?.style.minWidth).toBe('320px')
+    expect(dropdown?.style.maxWidth).toBe('1032px')
   })
 })

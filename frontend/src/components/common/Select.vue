@@ -166,6 +166,12 @@ interface Props {
   ariaLabel?: string
   ariaDescribedby?: string
   centered?: boolean
+  /**
+   * Opt-in preferred menu width in px. When the space right of the trigger is
+   * narrower, the menu opens leftward, anchored to the trigger's right edge,
+   * instead of shrinking at the viewport edge.
+   */
+  dropdownMinWidth?: number
 }
 
 interface Emits {
@@ -236,14 +242,26 @@ const dropdownStyle = computed(() => {
     viewportRight
   )
   const availableWidth = Math.max(0, viewportRight - left)
-  const preferredMinWidth = Math.max(dropdownMinimumWidth, rect.width)
-  const minWidth = Math.min(preferredMinWidth, availableWidth)
-  const style: Record<string, string> = {
-    position: 'fixed',
-    left: `${left}px`,
-    minWidth: `${minWidth}px`,
-    maxWidth: `${availableWidth}px`,
-    zIndex: '100000020'
+  const preferredMinWidth = Math.max(dropdownMinimumWidth, rect.width, props.dropdownMinWidth ?? 0)
+  let style: Record<string, string>
+  if (props.dropdownMinWidth && availableWidth < preferredMinWidth) {
+    const anchorRight = Math.min(Math.max(dropdownViewportPadding, rect.right), viewportRight)
+    const maxWidth = Math.max(0, anchorRight - dropdownViewportPadding)
+    style = {
+      position: 'fixed',
+      right: `${window.innerWidth - anchorRight}px`,
+      minWidth: `${Math.min(preferredMinWidth, maxWidth)}px`,
+      maxWidth: `${maxWidth}px`,
+      zIndex: '100000020'
+    }
+  } else {
+    style = {
+      position: 'fixed',
+      left: `${left}px`,
+      minWidth: `${Math.min(preferredMinWidth, availableWidth)}px`,
+      maxWidth: `${availableWidth}px`,
+      zIndex: '100000020'
+    }
   }
 
   if (dropdownPosition.value === 'top') {
