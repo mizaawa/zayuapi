@@ -18,7 +18,7 @@ import (
 func mustCreateUserForQuota(t *testing.T, client *dbent.Client) int64 {
 	t.Helper()
 	u := mustCreateUser(t, client, &service.User{
-		Email: fmt.Sprintf("quota-test-%d@example.com", time.Now().UnixNano()),
+		Email: fmt.Sprintf("quota-test-%s@example.com", uniqueNano()),
 	})
 	return u.ID
 }

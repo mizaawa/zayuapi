@@ -4,6 +4,8 @@ package repository
 
 import (
 	"context"
+	"fmt"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -13,12 +15,27 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// fixtureUserSeq keeps generated emails unique even when the clock is coarse
+// (Windows timers tick about every 0.5ms, so back-to-back calls can collide).
+var fixtureUserSeq atomic.Uint64
+
+// uniqueNano returns a value that is unique for the whole test binary: the
+// wall clock alone repeats on coarse timers, so a sequence number is appended.
+func uniqueNano() string {
+	return fmt.Sprintf("%d-%d", time.Now().UnixNano(), fixtureUserSeq.Add(1))
+}
+
+// uniqueStamp is the RFC3339Nano variant of uniqueNano for readable names.
+func uniqueStamp() string {
+	return fmt.Sprintf("%s-%d", time.Now().Format(time.RFC3339Nano), fixtureUserSeq.Add(1))
+}
+
 func mustCreateUser(t *testing.T, client *dbent.Client, u *service.User) *service.User {
 	t.Helper()
 	ctx := context.Background()
 
 	if u.Email == "" {
-		u.Email = "user-" + time.Now().Format(time.RFC3339Nano) + "@example.com"
+		u.Email = fmt.Sprintf("user-%s-%d@example.com", time.Now().Format(time.RFC3339Nano), fixtureUserSeq.Add(1))
 	}
 	if u.PasswordHash == "" {
 		u.PasswordHash = "test-password-hash"

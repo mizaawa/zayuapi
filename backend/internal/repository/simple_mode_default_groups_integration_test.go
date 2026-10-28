@@ -227,7 +227,7 @@ func TestEnsureSimpleModeDefaultGroups_BackfillsOnlyAutoCreatedGrokDefault(t *te
 	require.NoError(t, err)
 
 	operatorGroup, err := client.Group.Create().
-		SetName("operator-grok-images-disabled-" + time.Now().Format(time.RFC3339Nano)).
+		SetName("operator-grok-images-disabled-" + uniqueStamp()).
 		SetDescription("Operator-managed group").
 		SetPlatform(service.PlatformGrok).
 		SetStatus(service.StatusActive).
@@ -332,8 +332,8 @@ func TestEnsureSimpleModeDefaultGroups_AntigravityNeedsTwoGroupsOnlyByCount(t *t
 	seedCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 
-	mustCreateGroup(t, client, &service.Group{Name: "ag-custom-1-" + time.Now().Format(time.RFC3339Nano), Platform: service.PlatformAntigravity})
-	mustCreateGroup(t, client, &service.Group{Name: "ag-custom-2-" + time.Now().Format(time.RFC3339Nano), Platform: service.PlatformAntigravity})
+	mustCreateGroup(t, client, &service.Group{Name: "ag-custom-1-" + uniqueStamp(), Platform: service.PlatformAntigravity})
+	mustCreateGroup(t, client, &service.Group{Name: "ag-custom-2-" + uniqueStamp(), Platform: service.PlatformAntigravity})
 
 	require.NoError(t, ensureSimpleModeDefaultGroups(seedCtx, client))
 

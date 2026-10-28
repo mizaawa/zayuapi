@@ -6150,41 +6150,6 @@
 	        <!-- Tab: Features (功能开关) -->
         <div v-show="activeTab === 'features'" class="space-y-6">
 
-        <section class="card" data-testid="provider-settings">
-          <div class="border-b border-gray-100 px-6 py-4 dark:border-dark-700">
-            <h2 class="text-lg font-semibold text-gray-900 dark:text-white">{{ localText('上游管理', 'Provider management') }}</h2>
-            <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">{{ localText('后台定时刷新服务提供商余额，并标记余额不足的站点。', 'Refresh provider balances in the background and flag low balances.') }}</p>
-          </div>
-          <div class="space-y-5 p-6">
-            <label class="block max-w-xs">
-              <span class="input-label">{{ localText('上游自动刷新间隔（秒）', 'Provider refresh interval (seconds)') }}</span>
-              <input v-model.number="form.provider_refresh_interval_seconds" class="input w-full" type="number" min="30" max="86400" step="1" required data-testid="provider-refresh-interval" />
-              <span class="input-hint block">{{ localText('默认 600 秒。打开上游管理时直接显示最近一次后台刷新结果。', 'Default 600 seconds. Provider management opens with the latest cached results.') }}</span>
-            </label>
-            <div>
-              <label class="block max-w-xs">
-                <span class="input-label">{{ localText('余额不足提示', 'Low-balance warning') }}</span>
-                <input v-model.number="form.provider_low_balance_threshold" class="input w-full" type="number" min="0.01" max="1000000000" step="0.01" required data-testid="provider-low-balance-threshold" />
-              </label>
-              <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ localText('低于此余额时为服务提供商标记“余额即将告罄”，默认 $300。', 'Show a low-balance warning below this amount; default $300.') }}</p>
-            </div>
-            <div class="rounded-xl border border-gray-200 p-4 dark:border-dark-700">
-              <div class="flex items-center justify-between gap-3">
-                <div>
-                  <p class="text-sm font-medium text-gray-900 dark:text-white">{{ localText('上游余额即将不足自动通知', 'Email low-balance warnings') }}</p>
-                  <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ localText('只有开启此选项时才发送邮件。', 'Email is sent only when this option is enabled.') }}</p>
-                </div>
-                <Toggle v-model="form.provider_low_balance_enabled" :disabled="!providerSmtpConfigured" data-testid="provider-low-balance-email-toggle" />
-              </div>
-              <p v-if="!providerSmtpConfigured" class="mt-2 text-xs text-amber-700 dark:text-amber-300">{{ localText('需要先在邮件设置中配置 SMTP，才可启用此选项。', 'Configure SMTP under Email settings before enabling this option.') }}</p>
-              <label v-if="form.provider_low_balance_enabled" class="mt-4 block max-w-md">
-                <span class="input-label">{{ localText('通知邮箱', 'Notification email') }}</span>
-                <input v-model.trim="form.provider_low_balance_email" class="input w-full" type="email" autocomplete="email" required data-testid="provider-low-balance-email" />
-              </label>
-            </div>
-          </div>
-        </section>
-
         <div class="card">
           <div class="border-b border-gray-100 px-6 py-4 dark:border-dark-700">
             <h2 class="text-lg font-semibold text-gray-900 dark:text-white">
@@ -6397,6 +6362,41 @@
             </div>
           </div>
         </div>
+
+        <section class="card" data-testid="provider-settings">
+          <div class="border-b border-gray-100 px-6 py-4 dark:border-dark-700">
+            <h2 class="text-lg font-semibold text-gray-900 dark:text-white">{{ localText('上游管理', 'Provider management') }}</h2>
+            <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">{{ localText('后台定时刷新服务提供商余额，并标记余额不足的站点。', 'Refresh provider balances in the background and flag low balances.') }}</p>
+          </div>
+          <div class="space-y-5 p-6">
+            <label class="block max-w-xs">
+              <span class="input-label">{{ localText('上游自动刷新间隔（秒）', 'Provider refresh interval (seconds)') }}</span>
+              <input v-model.number="form.provider_refresh_interval_seconds" class="input w-full" type="number" min="30" max="86400" step="1" required data-testid="provider-refresh-interval" />
+              <span class="input-hint block">{{ localText('默认 600 秒。打开上游管理时直接显示最近一次后台刷新结果。', 'Default 600 seconds. Provider management opens with the latest cached results.') }}</span>
+            </label>
+            <div>
+              <label class="block max-w-xs">
+                <span class="input-label">{{ localText('余额不足提示', 'Low-balance warning') }}</span>
+                <input v-model.number="form.provider_low_balance_threshold" class="input w-full" type="number" min="0.01" max="1000000000" step="0.01" required data-testid="provider-low-balance-threshold" />
+              </label>
+              <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ localText('低于此余额时为服务提供商标记“余额即将告罄”，默认 $300。', 'Show a low-balance warning below this amount; default $300.') }}</p>
+            </div>
+            <div class="rounded-xl border border-gray-200 p-4 dark:border-dark-700">
+              <div class="flex items-center justify-between gap-3">
+                <div>
+                  <p class="text-sm font-medium text-gray-900 dark:text-white">{{ localText('上游余额即将不足自动通知', 'Email low-balance warnings') }}</p>
+                  <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ localText('只有开启此选项时才发送邮件。', 'Email is sent only when this option is enabled.') }}</p>
+                </div>
+                <Toggle v-model="form.provider_low_balance_enabled" :disabled="!providerSmtpConfigured" data-testid="provider-low-balance-email-toggle" />
+              </div>
+              <p v-if="!providerSmtpConfigured" class="mt-2 text-xs text-amber-700 dark:text-amber-300">{{ localText('需要先在邮件设置中配置 SMTP，才可启用此选项。', 'Configure SMTP under Email settings before enabling this option.') }}</p>
+              <label v-if="form.provider_low_balance_enabled" class="mt-4 block max-w-md">
+                <span class="input-label">{{ localText('通知邮箱', 'Notification email') }}</span>
+                <input v-model.trim="form.provider_low_balance_email" class="input w-full" type="email" autocomplete="email" required data-testid="provider-low-balance-email" />
+              </label>
+            </div>
+          </div>
+        </section>
 
         <div class="card">
           <div class="border-b border-gray-100 px-6 py-4 dark:border-dark-700">

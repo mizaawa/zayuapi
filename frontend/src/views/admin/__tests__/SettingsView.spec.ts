@@ -121,6 +121,21 @@ vi.mock("@/api", () => ({
   },
 }));
 
+// The affiliate panel loads its user list on mount; keep it off the network so
+// jsdom does not attempt a real XHR (which surfaced as an AggregateError).
+vi.mock("@/api/admin/affiliates", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/api/admin/affiliates")>();
+  const affiliatesAPI = {
+    ...actual.affiliatesAPI,
+    listUsers: vi.fn().mockResolvedValue({ items: [], total: 0, page: 1, page_size: 20, pages: 1 }),
+    lookupUsers: vi.fn().mockResolvedValue([]),
+    updateUserSettings: vi.fn().mockResolvedValue(undefined),
+    clearUserSettings: vi.fn().mockResolvedValue(undefined),
+    batchSetRate: vi.fn().mockResolvedValue(undefined),
+  };
+  return { ...actual, affiliatesAPI, default: affiliatesAPI };
+});
+
 vi.mock("@/stores", () => ({
   useAppStore: () => ({
     showError,

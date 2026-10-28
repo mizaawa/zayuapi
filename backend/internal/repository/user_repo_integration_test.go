@@ -45,7 +45,7 @@ func (s *UserRepoSuite) mustCreateUser(u *service.User) *service.User {
 	s.T().Helper()
 
 	if u.Email == "" {
-		u.Email = "user-" + time.Now().Format(time.RFC3339Nano) + "@example.com"
+		u.Email = "user-" + uniqueStamp() + "@example.com"
 	}
 	if u.PasswordHash == "" {
 		u.PasswordHash = "test-password-hash"

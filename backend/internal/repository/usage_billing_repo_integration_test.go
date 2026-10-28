@@ -21,7 +21,7 @@ func TestUsageBillingRepositoryApply_DeduplicatesBalanceBilling(t *testing.T) {
 	repo := NewUsageBillingRepository(client, integrationDB)
 
 	user := mustCreateUser(t, client, &service.User{
-		Email:        fmt.Sprintf("usage-billing-user-%d@example.com", time.Now().UnixNano()),
+		Email:        fmt.Sprintf("usage-billing-user-%s@example.com", uniqueNano()),
 		PasswordHash: "hash",
 		Balance:      100,
 	})
@@ -86,7 +86,7 @@ func TestUsageBillingRepositoryApply_DeduplicatesSubscriptionBilling(t *testing.
 	repo := NewUsageBillingRepository(client, integrationDB)
 
 	user := mustCreateUser(t, client, &service.User{
-		Email:        fmt.Sprintf("usage-billing-sub-user-%d@example.com", time.Now().UnixNano()),
+		Email:        fmt.Sprintf("usage-billing-sub-user-%s@example.com", uniqueNano()),
 		PasswordHash: "hash",
 	})
 	group := mustCreateGroup(t, client, &service.Group{
@@ -293,7 +293,7 @@ func TestUsageBillingRepositoryApply_RequestFingerprintConflict(t *testing.T) {
 	repo := NewUsageBillingRepository(client, integrationDB)
 
 	user := mustCreateUser(t, client, &service.User{
-		Email:        fmt.Sprintf("usage-billing-conflict-user-%d@example.com", time.Now().UnixNano()),
+		Email:        fmt.Sprintf("usage-billing-conflict-user-%s@example.com", uniqueNano()),
 		PasswordHash: "hash",
 		Balance:      100,
 	})
@@ -327,7 +327,7 @@ func TestUsageBillingRepositoryApply_UpdatesAccountQuota(t *testing.T) {
 	repo := NewUsageBillingRepository(client, integrationDB)
 
 	user := mustCreateUser(t, client, &service.User{
-		Email:        fmt.Sprintf("usage-billing-account-user-%d@example.com", time.Now().UnixNano()),
+		Email:        fmt.Sprintf("usage-billing-account-user-%s@example.com", uniqueNano()),
 		PasswordHash: "hash",
 	})
 	apiKey := mustCreateApiKey(t, client, &service.APIKey{
@@ -486,7 +486,7 @@ func TestUsageBillingRepositoryApply_DeduplicatesAgainstArchivedKey(t *testing.T
 	aggRepo := newDashboardAggregationRepositoryWithSQL(integrationDB)
 
 	user := mustCreateUser(t, client, &service.User{
-		Email:        fmt.Sprintf("usage-billing-archive-user-%d@example.com", time.Now().UnixNano()),
+		Email:        fmt.Sprintf("usage-billing-archive-user-%s@example.com", uniqueNano()),
 		PasswordHash: "hash",
 		Balance:      100,
 	})

@@ -511,7 +511,7 @@ func TestIncrementQuotaUsed_Concurrent(t *testing.T) {
 
 	// 创建测试用户和 API Key
 	u, err := client.User.Create().
-		SetEmail("concurrent-incr-" + time.Now().Format(time.RFC3339Nano) + "@test.com").
+		SetEmail("concurrent-incr-" + uniqueStamp() + "@test.com").
 		SetPasswordHash("hash").
 		SetStatus(service.StatusActive).
 		SetRole(service.RoleUser).
@@ -520,7 +520,7 @@ func TestIncrementQuotaUsed_Concurrent(t *testing.T) {
 
 	k := &service.APIKey{
 		UserID: u.ID,
-		Key:    "sk-concurrent-" + time.Now().Format(time.RFC3339Nano),
+		Key:    "sk-concurrent-" + uniqueStamp(),
 		Name:   "Concurrent",
 		Status: service.StatusActive,
 	}
