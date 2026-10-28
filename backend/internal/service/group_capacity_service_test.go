@@ -160,6 +160,30 @@ func TestGetAllGroupCapacityBatchAggregatesRuntimeAndLimits(t *testing.T) {
 	}, results)
 }
 
+func TestGetAllGroupCapacityBatchMarksUnlimitedConcurrency(t *testing.T) {
+	accountRepo := &groupCapacityAccountRepoStub{
+		rows: []GroupAccountCapacityRow{
+			{GroupID: 30, AccountID: 5, Concurrency: 4},
+			{GroupID: 30, AccountID: 6, Concurrency: 0},
+			{GroupID: 40, AccountID: 7, Concurrency: 3},
+		},
+	}
+	groupRepo := &groupCapacityGroupRepoStub{groupIDs: []int64{30, 40}}
+	concurrencyCache := &groupCapacityConcurrencyCacheStub{counts: map[int64]int{5: 1, 6: 9, 7: 2}}
+	svc := NewGroupCapacityService(accountRepo, groupRepo, NewConcurrencyService(concurrencyCache), nil, nil)
+
+	results, err := svc.GetAllGroupCapacity(context.Background())
+	require.NoError(t, err)
+	require.Len(t, results, 2)
+	// An unlimited account contributes usage but no finite maximum.
+	require.Equal(t, 10, results[0].ConcurrencyUsed)
+	require.Equal(t, 4, results[0].ConcurrencyMax)
+	require.True(t, results[0].ConcurrencyUnlimited)
+	require.Equal(t, 2, results[1].ConcurrencyUsed)
+	require.Equal(t, 3, results[1].ConcurrencyMax)
+	require.False(t, results[1].ConcurrencyUnlimited)
+}
+
 func TestGetAllGroupCapacityBatchKeepsEmptyGroupRows(t *testing.T) {
 	accountRepo := &groupCapacityAccountRepoStub{
 		rows: []GroupAccountCapacityRow{

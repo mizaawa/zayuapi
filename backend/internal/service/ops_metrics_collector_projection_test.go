@@ -57,7 +57,8 @@ func TestCollectConcurrencyQueueDepthUsesProjectionAndPreservesFallbackResult(t 
 	accountLoads := []AccountWithConcurrency{
 		{ID: 11, MaxConcurrency: 7},
 		{ID: 12, MaxConcurrency: 3},
-		{ID: 13, MaxConcurrency: 1},
+		// Concurrency 0 means unlimited, so there is no capacity ceiling.
+		{ID: 13, MaxConcurrency: 0},
 	}
 	loads := map[int64]*AccountLoadInfo{
 		11: {AccountID: 11, WaitingCount: 2},

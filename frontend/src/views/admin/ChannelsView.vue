@@ -770,7 +770,11 @@ const form = reactive({
 let abortController: AbortController | null = null
 
 // ── Platform config ──
-const platformOrder: ChannelPricingPlatform[] = ['anthropic', 'openai', 'gemini', 'antigravity', 'grok', 'custom']
+const platformOrder: ChannelPricingPlatform[] = ['anthropic', 'openai', 'gemini', 'grok', 'custom']
+// Antigravity is no longer configurable here. Existing channels may still carry
+// its groups, prices, mappings and rules; keep them untouched on save instead of
+// silently deleting configuration that the form can no longer show.
+const retiredPricingPlatforms = new Set<string>(['antigravity'])
 
 // ── Helpers ──
 function formatDate(value: string): string {
@@ -1070,7 +1074,7 @@ function clearAllRuleAccountSearchState() {
 }
 
 function accountStatsRulesToAPI(): AccountStatsPricingRule[] {
-  const rules: AccountStatsPricingRule[] = []
+  const rules: AccountStatsPricingRule[] = [...retainedRetiredPlatformConfig().account_stats_pricing_rules]
   for (const section of form.platforms) {
     if (!section.enabled) continue
     for (const rule of section.account_stats_pricing_rules) {
@@ -1136,6 +1140,10 @@ function formToAPI(): { group_ids: number[], model_pricing: ChannelModelPricing[
       })
     }
   }
+  const retained = retainedRetiredPlatformConfig()
+  group_ids.push(...retained.group_ids)
+  model_pricing.push(...retained.model_pricing)
+  Object.assign(model_mapping, retained.model_mapping)
   const uniqueGroupIds = Array.from(new Set(group_ids))
 
   // Collect web_search_emulation (only anthropic platform supports it)
@@ -1181,6 +1189,30 @@ function formToAPI(): { group_ids: number[], model_pricing: ChannelModelPricing[
   }
 
   return { group_ids: uniqueGroupIds, model_pricing, model_mapping, features_config: featuresConfig }
+}
+
+/** Config of the editing channel that belongs to retired platforms (kept as-is). */
+function retainedRetiredPlatformConfig(): { group_ids: number[], model_pricing: ChannelModelPricing[], model_mapping: Record<string, Record<string, string>>, account_stats_pricing_rules: AccountStatsPricingRule[] } {
+  const channel = editingChannel.value
+  const empty = { group_ids: [], model_pricing: [], model_mapping: {}, account_stats_pricing_rules: [] }
+  if (!channel) return empty
+  const platformOfGroup = new Map<number, string>()
+  for (const g of allGroups.value) platformOfGroup.set(g.id, g.platform)
+  const isRetired = (platform: string | undefined) => Boolean(platform && retiredPricingPlatforms.has(platform))
+  const model_mapping: Record<string, Record<string, string>> = {}
+  for (const [platform, mapping] of Object.entries(channel.model_mapping || {})) {
+    if (isRetired(platform)) model_mapping[platform] = { ...mapping }
+  }
+  return {
+    group_ids: (channel.group_ids || []).filter(gid => isRetired(platformOfGroup.get(gid))),
+    model_pricing: (channel.model_pricing || []).filter(p => isRetired(p.platform)).map(p => ({ ...p })),
+    model_mapping,
+    account_stats_pricing_rules: (channel.account_stats_pricing_rules || []).filter(rule => {
+      const groupPlatforms = (rule.group_ids || []).map(gid => platformOfGroup.get(gid))
+      if (groupPlatforms.some(p => p && !isRetired(p))) return false
+      return groupPlatforms.some(isRetired) || (rule.pricing || []).some(p => isRetired(p.platform))
+    }),
+  }
 }
 
 function apiToForm(channel: Channel): PlatformSection[] {

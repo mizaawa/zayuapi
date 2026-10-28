@@ -72,6 +72,20 @@ func TestFilterPlazaVisibleGroups_BlockedIDsOnlyHidePublicStandardGroups(t *test
 	require.ElementsMatch(t, []int64{2, 3, 4}, []int64{visible[0].ID, visible[1].ID, visible[2].ID})
 }
 
+func TestExcludeRetiredPlazaPlatforms_DropsAntigravityGroupsAndModels(t *testing.T) {
+	groups := []service.PlazaGroup{
+		{ID: 1, Platform: service.PlatformAntigravity, Models: []service.PlazaModel{{Name: "ag", Platform: service.PlatformAntigravity}}},
+		{ID: 2, Platform: service.PlatformAnthropic, Models: []service.PlazaModel{
+			{Name: "claude", Platform: service.PlatformAnthropic},
+			{Name: "ag-leak", Platform: service.PlatformAntigravity},
+		}},
+	}
+	kept := excludeRetiredPlazaPlatforms(groups)
+	require.Len(t, kept, 1)
+	require.Equal(t, int64(2), kept[0].ID)
+	require.Equal(t, []service.PlazaModel{{Name: "claude", Platform: service.PlatformAnthropic}}, kept[0].Models)
+}
+
 func TestFilterGroupsByAccountModels_UsesBoundAccountMappings(t *testing.T) {
 	h := &ModelPlazaHandler{modelAvailability: &plazaModelAvailabilityStub{
 		models:    map[string][]string{service.PlatformOpenAI: {"gpt-5.6-sol"}},

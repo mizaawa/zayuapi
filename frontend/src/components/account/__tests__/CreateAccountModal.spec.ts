@@ -177,28 +177,40 @@ describe('CreateAccountModal OpenAI long-context billing', () => {
     expect(createAccountMock.mock.calls[0]?.[0]?.upstream_billing_probe_enabled).toBe(false)
   })
 
-  it('antigravity upstream 创建默认携带上游倍率探测开关', async () => {
-    // antigravity upstream 走独立创建 helper，
-    // 也必须与其余 API-key 平台一样默认开启探测并传递开关。
+  it('no longer offers Antigravity as a platform for new accounts', async () => {
     const wrapper = mountModal()
-    await selectButtonByText(wrapper, 'Antigravity')
-    await wrapper.get('form#create-account-form input[type="text"]').setValue('antigravity relay')
-    const baseInput = wrapper
-      .findAll('input')
-      .find((candidate) => candidate.attributes('placeholder') === 'https://cloudcode-pa.googleapis.com')
-    expect(baseInput).toBeDefined()
-    await baseInput?.setValue('https://relay.example')
-    await wrapper.get('form#create-account-form input[type="password"]').setValue('sk-upstream')
+    await flushPromises()
+    const labels = wrapper.findAll('button').map(button => button.text().trim())
+    expect(labels).not.toContain('Antigravity')
+    for (const label of ['Anthropic', 'OpenAI', 'Gemini', 'Grok', 'Custom']) {
+      expect(labels).toContain(label)
+    }
+    wrapper.unmount()
+  })
+
+  it('leaves concurrency blank by default and sends 0 (unlimited) when left blank', async () => {
+    const wrapper = mountModal()
+    await flushPromises()
+    const input = wrapper.get('[data-testid="account-concurrency-input"]')
+    expect((input.element as HTMLInputElement).value).toBe('')
+    await wrapper.get('[data-tour="account-form-name"]').setValue('unlimited fixture')
+    await wrapper.get('input[type="password"]').setValue('fixture-key')
     await wrapper.get('form#create-account-form').trigger('submit.prevent')
     await flushPromises()
+    expect(createAccountMock).toHaveBeenCalledWith(expect.objectContaining({ concurrency: 0 }))
+    wrapper.unmount()
+  })
 
-    expect(createAccountMock).toHaveBeenCalledTimes(1)
-    const payload = createAccountMock.mock.calls[0]?.[0]
-    expect(payload?.platform).toBe('antigravity')
-    expect(payload?.type).toBe('apikey')
-    expect(payload?.upstream_billing_probe_enabled).toBe(true)
-    // 创建成功后前端立即发起一次首探（与其他 apikey 平台一致）。
-    expect(probeUpstreamBillingMock).toHaveBeenCalledWith(42)
+  it('sends the entered concurrency as a limit', async () => {
+    const wrapper = mountModal()
+    await flushPromises()
+    await wrapper.get('[data-tour="account-form-name"]').setValue('limited fixture')
+    await wrapper.get('input[type="password"]').setValue('fixture-key')
+    await wrapper.get('[data-testid="account-concurrency-input"]').setValue('8')
+    await wrapper.get('form#create-account-form').trigger('submit.prevent')
+    await flushPromises()
+    expect(createAccountMock).toHaveBeenCalledWith(expect.objectContaining({ concurrency: 8 }))
+    wrapper.unmount()
   })
 
   it.each([
@@ -240,15 +252,14 @@ describe('CreateAccountModal OpenAI long-context billing', () => {
 
   it.each([
     ['anthropic', 'Anthropic'], ['openai', 'OpenAI'], ['gemini', 'Gemini'],
-    ['antigravity', 'Antigravity'], ['grok', 'Grok'], ['custom', 'Custom'],
+    ['grok', 'Grok'], ['custom', 'Custom'],
   ])('creates %s directly with an API Key and rejects empty credentials', async (platform, label) => {
     const wrapper = mountModal()
     await selectButtonByText(wrapper, label)
     await flushPromises()
     await wrapper.get('[data-tour="account-form-name"]').setValue(platform + ' fixture')
-    if (platform === 'antigravity' || platform === 'custom') {
-      const placeholder = platform === 'antigravity' ? 'https://cloudcode-pa.googleapis.com' : 'https://api.example.com/v1'
-      await wrapper.get('input[placeholder="' + placeholder + '"]').setValue('https://relay.example/v1')
+    if (platform === 'custom') {
+      await wrapper.get('input[placeholder="https://api.example.com/v1"]').setValue('https://relay.example/v1')
     }
     expect(wrapper.get('[data-testid="account-type-api-key"]').text()).toContain('API Key')
     expect(wrapper.get('[data-tour="account-form-type"]').findAll('button')).toHaveLength(0)
@@ -314,15 +325,14 @@ describe('CreateAccountModal OpenAI long-context billing', () => {
     wrapper.unmount()
   })
 
-  it.each(['Grok', 'Antigravity', 'Custom'])('preserves model mapping for %s', async label => {
+  it.each(['Grok', 'Custom'])('preserves model mapping for %s', async label => {
     const wrapper = mountModal()
     await selectButtonByText(wrapper, label)
     await flushPromises()
     await wrapper.get('[data-tour="account-form-name"]').setValue('fixture')
     await wrapper.get('input[type="password"]').setValue('fixture-key')
-    if (label === 'Antigravity' || label === 'Custom') {
-      const placeholder = label === 'Antigravity' ? 'https://cloudcode-pa.googleapis.com' : 'https://api.example.com/v1'
-      await wrapper.get('input[placeholder="' + placeholder + '"]').setValue('https://relay.example/v1')
+    if (label === 'Custom') {
+      await wrapper.get('input[placeholder="https://api.example.com/v1"]').setValue('https://relay.example/v1')
     }
     await selectButtonByText(wrapper, 'admin.accounts.addMapping')
     await wrapper.get('input[placeholder="admin.accounts.requestModel"]').setValue('client-model')

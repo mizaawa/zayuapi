@@ -20,9 +20,10 @@ func TestEffectiveLoadFactor_NilLoadFactor_PositiveConcurrency(t *testing.T) {
 	require.Equal(t, 5, a.EffectiveLoadFactor())
 }
 
+// Concurrency 0 means unlimited: no capacity ceiling, so no load rate.
 func TestEffectiveLoadFactor_NilLoadFactor_ZeroConcurrency(t *testing.T) {
 	a := &Account{Concurrency: 0}
-	require.Equal(t, 1, a.EffectiveLoadFactor())
+	require.Equal(t, 0, a.EffectiveLoadFactor())
 }
 
 func TestEffectiveLoadFactor_PositiveLoadFactor(t *testing.T) {
@@ -42,5 +43,10 @@ func TestEffectiveLoadFactor_NegativeLoadFactor_FallbackToConcurrency(t *testing
 
 func TestEffectiveLoadFactor_ZeroLoadFactor_ZeroConcurrency(t *testing.T) {
 	a := &Account{Concurrency: 0, LoadFactor: intPtrHelper(0)}
-	require.Equal(t, 1, a.EffectiveLoadFactor())
+	require.Equal(t, 0, a.EffectiveLoadFactor())
+}
+
+func TestEffectiveLoadFactor_UnlimitedConcurrencyKeepsExplicitLoadFactor(t *testing.T) {
+	a := &Account{Concurrency: 0, LoadFactor: intPtrHelper(8)}
+	require.Equal(t, 8, a.EffectiveLoadFactor())
 }

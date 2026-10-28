@@ -172,7 +172,9 @@ func (a *Account) EffectiveLoadFactor() int {
 	if a.Concurrency > 0 {
 		return a.Concurrency
 	}
-	return 1
+	// Concurrency 0 means "unlimited": report no capacity ceiling so load-aware
+	// scheduling never treats the account as full (load rate stays 0).
+	return 0
 }
 
 func (a *Account) IsSchedulable() bool {

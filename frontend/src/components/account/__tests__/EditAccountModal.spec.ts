@@ -341,6 +341,37 @@ describe('EditAccountModal', () => {
     authIsSimpleMode.value = true
   })
 
+  it('shows an unlimited account with blank concurrency and keeps it unlimited on save', async () => {
+    const account = { ...buildAccount(), concurrency: 0 }
+    updateAccountMock.mockReset().mockResolvedValue(account)
+    checkMixedChannelRiskMock.mockReset().mockResolvedValue({ has_risk: false })
+    const wrapper = mountModal(account)
+    const input = wrapper.get('[data-testid="account-concurrency-input"]')
+    expect((input.element as HTMLInputElement).value).toBe('')
+    await wrapper.get('form#edit-account-form').trigger('submit.prevent')
+    await flushPromises()
+    expect(updateAccountMock).toHaveBeenCalledWith(account.id, expect.objectContaining({ concurrency: 0 }))
+    wrapper.unmount()
+  })
+
+  it('clearing concurrency removes the limit; a number sets it', async () => {
+    const account = { ...buildAccount(), concurrency: 6 }
+    updateAccountMock.mockReset().mockResolvedValue(account)
+    checkMixedChannelRiskMock.mockReset().mockResolvedValue({ has_risk: false })
+    const wrapper = mountModal(account)
+    const input = wrapper.get('[data-testid="account-concurrency-input"]')
+    expect((input.element as HTMLInputElement).value).toBe('6')
+    await input.setValue('')
+    await wrapper.get('form#edit-account-form').trigger('submit.prevent')
+    await flushPromises()
+    expect(updateAccountMock).toHaveBeenLastCalledWith(account.id, expect.objectContaining({ concurrency: 0 }))
+    await input.setValue('12')
+    await wrapper.get('form#edit-account-form').trigger('submit.prevent')
+    await flushPromises()
+    expect(updateAccountMock).toHaveBeenLastCalledWith(account.id, expect.objectContaining({ concurrency: 12 }))
+    wrapper.unmount()
+  })
+
   it('keeps API-key availability out of ordinary account edits', async () => {
     const account = buildAccount()
     account.status = 'error'

@@ -10,10 +10,13 @@ type GroupCapacitySummary struct {
 	GroupID         int64 `json:"group_id"`
 	ConcurrencyUsed int   `json:"concurrency_used"`
 	ConcurrencyMax  int   `json:"concurrency_max"`
-	SessionsUsed    int   `json:"sessions_used"`
-	SessionsMax     int   `json:"sessions_max"`
-	RPMUsed         int   `json:"rpm_used"`
-	RPMMax          int   `json:"rpm_max"`
+	// ConcurrencyUnlimited is true when any schedulable account in the group has
+	// no concurrency limit (concurrency 0), so the group total is unbounded.
+	ConcurrencyUnlimited bool `json:"concurrency_unlimited"`
+	SessionsUsed         int  `json:"sessions_used"`
+	SessionsMax          int  `json:"sessions_max"`
+	RPMUsed              int  `json:"rpm_used"`
+	RPMMax               int  `json:"rpm_max"`
 }
 
 // GroupAccountCapacityRow is the lightweight account projection needed for
@@ -163,7 +166,11 @@ func (s *GroupCapacityService) getGroupCapacitiesBatch(ctx context.Context, grou
 			SessionWindowStatus: row.SessionWindowStatus,
 		}
 
-		results[idx].ConcurrencyMax += acc.Concurrency
+		if acc.Concurrency > 0 {
+			results[idx].ConcurrencyMax += acc.Concurrency
+		} else {
+			results[idx].ConcurrencyUnlimited = true
+		}
 
 		if maxSessions := acc.GetMaxSessions(); maxSessions > 0 {
 			results[idx].SessionsMax += maxSessions
@@ -247,11 +254,16 @@ func (s *GroupCapacityService) getGroupCapacity(ctx context.Context, groupID int
 	accountIDs := make([]int64, 0, len(accounts))
 	sessionTimeouts := make(map[int64]time.Duration)
 	var concurrencyMax, sessionsMax, rpmMax int
+	concurrencyUnlimited := false
 
 	for i := range accounts {
 		acc := &accounts[i]
 		accountIDs = append(accountIDs, acc.ID)
-		concurrencyMax += acc.Concurrency
+		if acc.Concurrency > 0 {
+			concurrencyMax += acc.Concurrency
+		} else {
+			concurrencyUnlimited = true
+		}
 
 		if ms := acc.GetMaxSessions(); ms > 0 {
 			sessionsMax += ms
@@ -295,9 +307,11 @@ func (s *GroupCapacityService) getGroupCapacity(ctx context.Context, groupID int
 	return GroupCapacitySummary{
 		ConcurrencyUsed: concurrencyUsed,
 		ConcurrencyMax:  concurrencyMax,
-		SessionsUsed:    sessionsUsed,
-		SessionsMax:     sessionsMax,
-		RPMUsed:         rpmUsed,
-		RPMMax:          rpmMax,
+		// Set when any account in the group has unlimited concurrency.
+		ConcurrencyUnlimited: concurrencyUnlimited,
+		SessionsUsed:         sessionsUsed,
+		SessionsMax:          sessionsMax,
+		RPMUsed:              rpmUsed,
+		RPMMax:               rpmMax,
 	}, nil
 }

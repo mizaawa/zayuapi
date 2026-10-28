@@ -102,19 +102,6 @@
           </button>
           <button
             type="button"
-            @click="form.platform = 'antigravity'"
-            :class="[
-              'flex flex-1 items-center justify-center gap-2 rounded-md px-4 py-2.5 text-sm font-medium transition-all',
-              form.platform === 'antigravity'
-                ? 'bg-white text-purple-600 shadow-sm dark:bg-dark-600 dark:text-purple-400'
-                : 'text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200'
-            ]"
-          >
-            <Icon name="cloud" size="sm" />
-            Antigravity
-          </button>
-          <button
-            type="button"
             @click="form.platform = 'grok'"
             :class="[
               'flex flex-1 items-center justify-center gap-2 rounded-md px-4 py-2.5 text-sm font-medium transition-all',
@@ -1044,13 +1031,16 @@
       <div class="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <div>
           <label class="input-label">{{ t('admin.accounts.concurrency') }}</label>
-          <input v-model.number="form.concurrency" type="number" min="1" class="input"
-            @input="form.concurrency = Math.max(1, form.concurrency || 1)" />
+          <input v-model.number="form.concurrency" type="number" min="1" step="1" class="input"
+            data-testid="account-concurrency-input"
+            :placeholder="t('admin.accounts.concurrencyUnlimitedPlaceholder')"
+            @input="form.concurrency = normalizeConcurrencyInput(form.concurrency)" />
+          <p class="input-hint">{{ t('admin.accounts.concurrencyUnlimitedHint') }}</p>
         </div>
         <div>
           <label class="input-label">{{ t('admin.accounts.loadFactor') }}</label>
           <input v-model.number="form.load_factor" type="number" min="1"
-            class="input" :placeholder="String(form.concurrency || 1)"
+            class="input" :placeholder="form.concurrency ? String(form.concurrency) : '1'"
             @input="form.load_factor = (form.load_factor &amp;&amp; form.load_factor >= 1) ? form.load_factor : null" />
           <p class="input-hint">{{ t('admin.accounts.loadFactorHint') }}</p>
         </div>
@@ -1489,6 +1479,7 @@ import {
 } from '@/components/account/credentialsBuilder'
 import { formatDateTimeLocalInput, parseDateTimeLocalInput } from '@/utils/format'
 import { createStableObjectKeyResolver } from '@/utils/stableObjectKey'
+import { concurrencyPayload, normalizeConcurrencyInput } from '@/utils/accountConcurrency'
 import {
   OPENAI_WS_MODE_CTX_POOL,
   OPENAI_WS_MODE_OFF,
@@ -1796,7 +1787,7 @@ const form = reactive({
   type: 'apikey' as const,
   credentials: {} as Record<string, unknown>,
   proxy_id: null as number | null,
-  concurrency: 10,
+  concurrency: null as number | null,
   load_factor: null as number | null,
   priority: 1,
   rate_multiplier: 1,
@@ -1852,7 +1843,7 @@ watch(() => form.platform, (platform) => {
       if (form.platform === 'antigravity') antigravityModelMappings.value = [...mappings]
     })
   }
-  form.concurrency = platform === 'grok' ? 1 : 10
+  form.concurrency = platform === 'grok' ? 1 : null
   form.load_factor = null
   interceptWarmupRequests.value = false
   openaiPassthroughEnabled.value = false
@@ -2172,7 +2163,7 @@ const resetForm = () => {
   form.type = 'apikey'
   form.credentials = {}
   form.proxy_id = null
-  form.concurrency = 10
+  form.concurrency = null
   form.load_factor = null
   form.priority = 1
   form.rate_multiplier = 1
@@ -2521,7 +2512,7 @@ const createAccountAndFinish = async (
     credentials,
     extra: finalExtra,
     proxy_id: form.proxy_id,
-    concurrency: form.concurrency,
+    concurrency: concurrencyPayload(form.concurrency),
     load_factor: form.load_factor ?? undefined,
     priority: form.priority,
     rate_multiplier: form.rate_multiplier,

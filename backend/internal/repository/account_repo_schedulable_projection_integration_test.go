@@ -97,7 +97,8 @@ func TestListSchedulableAccountLoadsMatchesListSchedulable(t *testing.T) {
 	require.Equal(t, wantByID, byID)
 	require.Equal(t, 9, byID[positiveLoad.ID])
 	require.Equal(t, 4, byID[concurrencyFallback.ID])
-	require.Equal(t, 1, byID[zeroFallback.ID])
+	// Concurrency 0 means unlimited: no capacity ceiling, so no load-rate divisor.
+	require.Equal(t, 0, byID[zeroFallback.ID])
 	for _, included := range []*service.Account{expiredAllowed, overloadCleared, rateLimitCleared, tempCleared} {
 		require.Contains(t, byID, included.ID)
 	}

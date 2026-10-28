@@ -269,11 +269,6 @@
               <small>{{ t('home.providers.supported') }}</small>
             </div>
             <div class="provider-item">
-              <span class="provider-mark provider-mark-violet">A</span>
-              <span>{{ t('home.providers.antigravity') }}</span>
-              <small>{{ t('home.providers.supported') }}</small>
-            </div>
-            <div class="provider-item">
               <span class="provider-mark provider-mark-neutral">G</span>
               <span>{{ t('home.providers.grok') }}</span>
               <small>{{ t('home.providers.supported') }}</small>

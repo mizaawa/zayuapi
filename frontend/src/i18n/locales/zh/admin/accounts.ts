@@ -225,6 +225,7 @@ export default {
       subscriptionExpires: '到期',
       // 容量状态提示
       capacity: {
+        concurrencyUnlimited: '并发不限制',
         windowCost: {
           blocked: '5h窗口费用超限，账号暂停调度',
           stickyOnly: '5h窗口费用达阈值，仅允许粘性会话',
@@ -877,6 +878,8 @@ export default {
       proxy: '代理',
       noProxy: '无代理',
       concurrency: '并发数',
+      concurrencyUnlimitedPlaceholder: '留空不限制',
+      concurrencyUnlimitedHint: '留空表示不限制并发，填写数字则限制最大并发数',
       loadFactor: '负载因子',
       loadFactorHint: '提高负载因子可以提高对账号的调度频率',
       priority: '优先级',

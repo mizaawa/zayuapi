@@ -836,6 +836,10 @@ func (h *AccountHandler) Create(c *gin.Context) {
 		response.BadRequest(c, "rate_multiplier must be >= 0")
 		return
 	}
+	if req.Concurrency < 0 {
+		response.BadRequest(c, "concurrency must be >= 0 (0 means unlimited)")
+		return
+	}
 	// base_rpm 输入校验：负值归零，超过 10000 截断
 	sanitizeExtraBaseRPM(req.Extra)
 
@@ -967,6 +971,10 @@ func (h *AccountHandler) Update(c *gin.Context) {
 	}
 	if req.RateMultiplier != nil && *req.RateMultiplier < 0 {
 		response.BadRequest(c, "rate_multiplier must be >= 0")
+		return
+	}
+	if req.Concurrency != nil && *req.Concurrency < 0 {
+		response.BadRequest(c, "concurrency must be >= 0 (0 means unlimited)")
 		return
 	}
 	// base_rpm 输入校验：负值归零，超过 10000 截断
@@ -1858,6 +1866,10 @@ func (h *AccountHandler) BulkUpdate(c *gin.Context) {
 	}
 	if len(req.AccountIDs) == 0 && req.Filters == nil {
 		response.BadRequest(c, "account_ids or filters is required")
+		return
+	}
+	if req.Concurrency != nil && *req.Concurrency < 0 {
+		response.BadRequest(c, "concurrency must be >= 0 (0 means unlimited)")
 		return
 	}
 	// base_rpm 输入校验：负值归零，超过 10000 截断

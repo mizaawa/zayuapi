@@ -87,7 +87,7 @@ export default {
     },
 
     operations: {
-      title: '运营面板', eyebrow: 'Operations', subtitle: '实时掌握收入、消费、利润与充值动态，所有金额以美元计算。',
+      title: '运营面板',
       metrics: '收支概览',
       todayUserConsumption: '今日用户消费',
       todayUserRecharge: '今日用户充值',
@@ -951,7 +951,7 @@ export default {
         priority: '优先级',
         apiKeys: 'API 密钥数',
         accounts: '账号数',
-        capacity: '容量',
+        capacity: '并发数',
         usage: '用量',
         status: '状态',
         actions: '操作',
@@ -967,6 +967,8 @@ export default {
       accountsAvailable: '可用:',
       accountsRateLimited: '限流:',
       accountsTotal: '总量:',
+      concurrencyLabel: '并发数：',
+      concurrencyTooltip: '当前占用 {used} / 上限 {max}',
       accountsUnit: '个账号',
       form: {
         name: '名称',

@@ -87,7 +87,7 @@ export default {
     },
 
     operations: {
-      title: 'Operations Panel', eyebrow: 'Operations', subtitle: 'Revenue, spend, profit and recharge activity at a glance. Amounts are in USD.',
+      title: 'Operations Panel',
       metrics: 'Financial overview',
       todayUserConsumption: "Today's user spend",
       todayUserRecharge: "Today's user top-ups",
@@ -958,7 +958,7 @@ export default {
         priority: 'Priority',
         apiKeys: 'API Keys',
         accounts: 'Accounts',
-        capacity: 'Capacity',
+        capacity: 'Concurrency',
         usage: 'Usage',
         status: 'Status',
         actions: 'Actions',
@@ -974,6 +974,8 @@ export default {
       accountsAvailable: 'Avail:',
       accountsRateLimited: 'Limited:',
       accountsTotal: 'Total:',
+      concurrencyLabel: 'Concurrency:',
+      concurrencyTooltip: 'In use {used} / limit {max}',
       accountsUnit: '',
       rateAndAccounts: '{rate}x rate · {count} accounts',
       accountsCount: '{count} accounts',

@@ -656,11 +656,13 @@
             id="bulk-edit-concurrency"
             type="number"
             min="1"
+            step="1"
             :disabled="!enableConcurrency"
             class="input"
             :class="!enableConcurrency && 'cursor-not-allowed opacity-50'"
+            :placeholder="t('admin.accounts.concurrencyUnlimitedPlaceholder')"
             aria-labelledby="bulk-edit-concurrency-label"
-            @input="concurrency = Math.max(1, concurrency || 1)"
+            @input="concurrency = normalizeConcurrencyInput(concurrency)"
           />
         </div>
         <div>
@@ -1246,6 +1248,7 @@ import {
   resolveOpenAIWSModeConcurrencyHintKey
 } from '@/utils/openaiWsMode'
 import type { OpenAIWSMode } from '@/utils/openaiWsMode'
+import { concurrencyPayload, normalizeConcurrencyInput } from '@/utils/accountConcurrency'
 interface Props {
   show: boolean
   accountIds: number[]
@@ -1411,7 +1414,7 @@ const interceptWarmupRequests = ref(false)
 const headerOverrideEnabled = ref(false)
 const headerOverrideRows = ref<HeaderOverrideRow[]>([])
 const proxyId = ref<number | null>(null)
-const concurrency = ref(1)
+const concurrency = ref<number | null>(null)
 const loadFactor = ref<number | null>(null)
 const priority = ref(1)
 const rateMultiplier = ref(1)
@@ -1587,7 +1590,7 @@ const buildUpdatePayload = (): Record<string, unknown> | null => {
   }
 
   if (enableConcurrency.value) {
-    updates.concurrency = concurrency.value
+    updates.concurrency = concurrencyPayload(concurrency.value)
   }
 
   if (enableLoadFactor.value) {
@@ -1950,7 +1953,7 @@ watch(
       headerOverrideEnabled.value = false
       headerOverrideRows.value = []
       proxyId.value = null
-      concurrency.value = 1
+      concurrency.value = null
       loadFactor.value = null
       priority.value = 1
       rateMultiplier.value = 1

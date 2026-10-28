@@ -1,13 +1,6 @@
 <template>
   <AppLayout>
     <div class="space-y-6">
-      <header class="ops-hero">
-        <div class="min-w-0">
-          <p class="ops-eyebrow">{{ t('admin.operations.eyebrow') }}</p>
-          <h1 class="mt-1.5 text-2xl font-bold tracking-tight text-gray-900">{{ t('admin.operations.title') }}</h1>
-          <p class="mt-2 max-w-2xl text-sm leading-relaxed text-gray-600">{{ t('admin.operations.subtitle') }}</p>
-        </div>
-      </header>
       <div v-if="error" role="alert" class="flex items-center justify-between gap-3 rounded-2xl bg-red-50 p-4 text-sm text-red-700">
         {{ t('admin.operations.failedToLoad') }}
         <button type="button" class="font-medium underline" @click="loadData">{{ t('admin.operations.retry') }}</button>
@@ -529,8 +522,6 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
-.ops-hero { position: relative; overflow: hidden; padding: 1.5rem; border-radius: 1.75rem; background: radial-gradient(120% 140% at 0% 0%, rgb(255 231 138 / 0.55), transparent 55%), radial-gradient(90% 120% at 100% 100%, rgb(121 179 123 / 0.18), transparent 60%), var(--md-sys-color-surface); box-shadow: var(--theme-highlight), var(--theme-elevation-1); }
-.ops-eyebrow { font-size: 0.6875rem; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; color: #976800; }
 .ops-metric { position: relative; overflow: hidden; }
 .ops-metric:hover { box-shadow: var(--theme-highlight), var(--theme-elevation-2); }
 .ops-metric-icon { display: flex; flex-shrink: 0; align-items: center; justify-content: center; width: 2.75rem; height: 2.75rem; border-radius: 1rem; }

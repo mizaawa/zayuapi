@@ -280,6 +280,7 @@ export default {
       subscriptionExpires: 'Expires',
       // Capacity status tooltips
       capacity: {
+        concurrencyUnlimited: 'Unlimited concurrency',
         windowCost: {
           blocked: '5h window cost exceeded, account scheduling paused',
           stickyOnly: '5h window cost at threshold, only sticky sessions allowed',
@@ -816,6 +817,8 @@ export default {
       proxy: 'Proxy',
       noProxy: 'No Proxy',
       concurrency: 'Concurrency',
+      concurrencyUnlimitedPlaceholder: 'Blank = unlimited',
+      concurrencyUnlimitedHint: 'Leave blank for unlimited concurrency, or enter a maximum',
       loadFactor: 'Load Factor',
       loadFactorHint: 'Higher load factor increases scheduling frequency',
       priority: 'Priority',

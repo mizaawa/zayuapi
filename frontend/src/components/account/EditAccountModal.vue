@@ -1424,13 +1424,16 @@
       <div class="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <div>
           <label class="input-label">{{ t('admin.accounts.concurrency') }}</label>
-          <input v-model.number="form.concurrency" type="number" min="1" class="input"
-            @input="form.concurrency = Math.max(1, form.concurrency || 1)" />
+          <input v-model.number="form.concurrency" type="number" min="1" step="1" class="input"
+            data-testid="account-concurrency-input"
+            :placeholder="t('admin.accounts.concurrencyUnlimitedPlaceholder')"
+            @input="form.concurrency = normalizeConcurrencyInput(form.concurrency)" />
+          <p class="input-hint">{{ t('admin.accounts.concurrencyUnlimitedHint') }}</p>
         </div>
         <div>
           <label class="input-label">{{ t('admin.accounts.loadFactor') }}</label>
           <input v-model.number="form.load_factor" type="number" min="1"
-            class="input" :placeholder="String(form.concurrency || 1)"
+            class="input" :placeholder="form.concurrency ? String(form.concurrency) : '1'"
             @input="form.load_factor = (form.load_factor &amp;&amp; form.load_factor >= 1) ? form.load_factor : null" />
           <p class="input-hint">{{ t('admin.accounts.loadFactorHint') }}</p>
         </div>
@@ -2656,6 +2659,7 @@ import {
 } from '@/components/account/credentialsBuilder'
 import { formatDateTime, formatDateTimeLocalInput, parseDateTimeLocalInput } from '@/utils/format'
 import { createStableObjectKeyResolver } from '@/utils/stableObjectKey'
+import { concurrencyPayload, normalizeConcurrencyInput } from '@/utils/accountConcurrency'
 import { VERTEX_LOCATION_OPTIONS } from '@/constants/account'
 import {
   OPENAI_WS_MODE_CTX_POOL,
@@ -3186,7 +3190,7 @@ const form = reactive({
   name: '',
   notes: '',
   proxy_id: null as number | null,
-  concurrency: 1,
+  concurrency: null as number | null,
   load_factor: null as number | null,
   priority: 1,
   rate_multiplier: 1,
@@ -3289,7 +3293,7 @@ const syncFormFromAccount = (newAccount: Account | null) => {
   form.name = newAccount.name
   form.notes = newAccount.notes || ''
   form.proxy_id = newAccount.proxy_id
-  form.concurrency = newAccount.concurrency
+  form.concurrency = newAccount.concurrency > 0 ? newAccount.concurrency : null
   form.load_factor = newAccount.load_factor ?? null
   form.priority = newAccount.priority
   form.rate_multiplier = newAccount.rate_multiplier ?? 1
@@ -4103,6 +4107,8 @@ const handleSubmit = async () => {
     if (form.expires_at === null) {
       updatePayload.expires_at = 0
     }
+    // 并发数留空 = 不限制，后端约定 0 表示不限制
+    updatePayload.concurrency = concurrencyPayload(form.concurrency)
     // load_factor: 空值/NaN/0/负数 时发送 0（后端约定 <= 0 = 清除）
     const lf = form.load_factor
     if (lf == null || Number.isNaN(lf) || lf <= 0) {

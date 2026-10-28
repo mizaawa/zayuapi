@@ -89,7 +89,7 @@
             <p class="mt-0.5 text-xs tabular-nums text-gray-500">{{ provider.metrics.balance === null ? t('admin.upstream.unknown') : money(provider.metrics.balance) + ' USD' }}</p>
           </div>
 
-          <dl class="grid grid-cols-3 gap-2 px-5 pt-3">
+          <dl class="grid grid-cols-3 gap-2 px-5 pb-5 pt-3">
             <div v-for="amount in secondaryAmounts(provider)" :key="amount.key" class="provider-stat">
               <dt class="truncate text-[11px] font-medium text-gray-500">{{ t(amount.label) }}</dt>
               <dd class="mt-0.5 truncate text-sm font-semibold tabular-nums text-gray-900" :title="amount.value === null ? '' : money(amount.value)">{{ amount.value === null ? '—' : money(amount.value) }}</dd>

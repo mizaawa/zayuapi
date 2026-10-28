@@ -155,6 +155,7 @@ func (h *ModelPlazaHandler) Get(c *gin.Context) {
 	}
 
 	visible := filterPlazaVisibleGroups(groups, allowedGroups, blockedGroups)
+	visible = excludeRetiredPlazaPlatforms(visible)
 	visible = h.filterGroupsByAccountModels(c.Request.Context(), visible)
 
 	out := make([]modelPlazaGroup, 0, len(visible))
@@ -231,6 +232,32 @@ func modelIDAllowed(patterns []string, model string) bool {
 		return false
 	}
 	return customModelsListAllowsModel(patterns, model)
+}
+
+// retiredPlazaPlatforms are no longer offered to users, so the model plaza
+// never lists their groups or models even if legacy groups still exist.
+var retiredPlazaPlatforms = map[string]struct{}{
+	service.PlatformAntigravity: {},
+}
+
+// excludeRetiredPlazaPlatforms drops groups on retired platforms and any model
+// entries tagged with a retired platform.
+func excludeRetiredPlazaPlatforms(groups []service.PlazaGroup) []service.PlazaGroup {
+	kept := make([]service.PlazaGroup, 0, len(groups))
+	for _, group := range groups {
+		if _, retired := retiredPlazaPlatforms[group.Platform]; retired {
+			continue
+		}
+		models := make([]service.PlazaModel, 0, len(group.Models))
+		for _, model := range group.Models {
+			if _, retired := retiredPlazaPlatforms[model.Platform]; !retired {
+				models = append(models, model)
+			}
+		}
+		group.Models = models
+		kept = append(kept, group)
+	}
+	return kept
 }
 
 // filterPlazaVisibleGroups 按登录态裁剪分组可见性。

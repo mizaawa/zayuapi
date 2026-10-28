@@ -530,7 +530,7 @@ watch(
             </div>
             <div class="flex shrink-0 items-center gap-2">
               <!-- 并发使用 -->
-              <span class="font-mono text-[11px] font-bold text-gray-900 dark:text-white"> {{ row.current_in_use }}/{{ row.max_capacity }} </span>
+              <span class="font-mono text-[11px] font-bold text-gray-900 dark:text-white"> {{ row.current_in_use }}/{{ row.max_capacity > 0 ? row.max_capacity : '∞' }} </span>
               <!-- 状态徽章 -->
               <span
                 v-if="row.is_available"

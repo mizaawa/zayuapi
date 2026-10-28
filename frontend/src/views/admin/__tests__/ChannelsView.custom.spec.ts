@@ -290,6 +290,41 @@ describe('ChannelsView Custom pricing', () => {
     }))
   })
 
+  it("no longer offers Antigravity pricing but keeps an existing channel's Antigravity config on save", async () => {
+    getAllGroups.mockResolvedValue([
+      ...groups,
+      { id: 21, name: 'Legacy AG group', platform: 'antigravity', rate_multiplier: 1, account_count: 1 },
+    ] as AdminGroup[])
+    const agPricing = { ...customChannel.model_pricing[0], platform: 'antigravity', models: ['ag-model'], billing_mode: 'token', per_request_price: null }
+    const agRule = { name: 'AG rule', group_ids: [21], account_ids: [], pricing: [agPricing] }
+    const mixedChannel: Channel = {
+      ...customChannel,
+      group_ids: [12, 21],
+      model_pricing: [...customChannel.model_pricing, agPricing] as Channel['model_pricing'],
+      model_mapping: { ...customChannel.model_mapping, antigravity: { 'ag-alias': 'ag-model' } },
+      account_stats_pricing_rules: [agRule] as Channel['account_stats_pricing_rules'],
+    }
+    listChannels.mockResolvedValue({ items: [mixedChannel], total: 1 })
+    const wrapper = mountView()
+    await flushPromises()
+    await wrapper.findAll('button').find(button => button.text().includes('common.edit'))!.trigger('click')
+    await flushPromises()
+
+    expect(wrapper.findAll('label').some(label => label.text().includes('Antigravity'))).toBe(false)
+    expect(wrapper.findAll('button.channel-tab').some(tab => tab.text().includes('Antigravity'))).toBe(false)
+
+    await wrapper.get('#channel-form').trigger('submit')
+    await flushPromises()
+
+    expect(updateChannel).toHaveBeenCalledWith(77, expect.objectContaining({
+      group_ids: expect.arrayContaining([12, 21]),
+      model_mapping: expect.objectContaining({ antigravity: { 'ag-alias': 'ag-model' } }),
+      model_pricing: expect.arrayContaining([expect.objectContaining({ platform: 'antigravity', models: ['ag-model'] })]),
+      account_stats_pricing_rules: [expect.objectContaining({ name: 'AG rule', group_ids: [21] })],
+    }))
+    wrapper.unmount()
+  })
+
   it('prepends expanded pricing entries and preserves existing card state when editing', async () => {
     listChannels.mockResolvedValue({ items: [customChannel], total: 1 })
     const wrapper = mountView(false)
