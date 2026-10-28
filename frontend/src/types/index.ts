@@ -1461,6 +1461,9 @@ export interface CreateAccountRequest {
   auto_pause_on_expired?: boolean
   upstream_billing_probe_enabled?: boolean
   confirm_mixed_channel_risk?: boolean
+  /** Provider import: the server writes this provider key into credentials. */
+  provider_id?: string
+  provider_key_id?: string
 }
 
 export interface UpdateAccountRequest {

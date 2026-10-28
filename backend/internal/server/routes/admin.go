@@ -405,10 +405,15 @@ func registerAccountRoutes(admin *gin.RouterGroup, h *handler.Handlers, stepUpAu
 func registerProviderRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 	providers := admin.Group("/providers")
 	providers.GET("", h.Admin.Account.ListProviders)
+	providers.GET("/options", h.Admin.Account.ListProviderOptions)
 	providers.POST("/probe", h.Admin.Account.ProbeProvider)
 	providers.POST("", h.Admin.Account.CreateProvider)
 	providers.PUT("/:id", h.Admin.Account.UpdateProvider)
 	providers.POST("/:id/refresh", h.Admin.Account.RefreshProvider)
+	// Provider-owned model API keys for account import; secrets stay server-side.
+	providers.GET("/:id/keys", h.Admin.Account.ListProviderKeys)
+	providers.POST("/:id/keys", h.Admin.Account.CreateProviderKey)
+	providers.GET("/:id/groups", h.Admin.Account.ListProviderKeyGroups)
 	providers.DELETE("/:id", h.Admin.Account.DeleteProvider)
 }
 

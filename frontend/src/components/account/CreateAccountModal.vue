@@ -130,10 +130,7 @@
         </div>
       </div>
 
-      <div data-testid="account-type-api-key" data-tour="account-form-type">
-        <label class="input-label">{{ t('admin.accounts.accountType') }}</label>
-        <div class="rounded-xl border border-primary-200 bg-primary-50 px-4 py-3 text-sm font-medium text-primary-700 dark:border-primary-800 dark:bg-primary-900/20 dark:text-primary-300">API Key</div>
-      </div>
+      <AccountImportSourceSwitch v-model="importSource" :disabled="submitting" />
 
       <div v-if="form.platform === 'antigravity'" class="space-y-4">
         <div>
@@ -266,7 +263,16 @@
       </div>
 
       <div v-if="form.platform !== 'antigravity'" class="space-y-4">
-        <div>
+        <!-- 从服务商导入：服务提供商与 API 密钥替代 Base URL 与密钥输入，密钥只在服务端解析 -->
+        <template v-if="importSource === 'provider'">
+          <ProviderAccountImport
+            :platform="form.platform"
+            :disabled="submitting"
+            @select="handleProviderSelection"
+          />
+          <MediaProtocolSelect v-if="form.platform === 'custom'" v-model="mediaProtocol" />
+        </template>
+        <div v-else>
           <label class="input-label">{{ t('admin.accounts.baseUrl') }}</label>
           <input
             v-model="apiKeyBaseUrl"
@@ -293,7 +299,7 @@
             @select="apiKeyBaseUrl = $event"
           />
         </div>
-        <div>
+        <div v-if="importSource === 'api'">
           <label class="input-label">{{ t('admin.accounts.apiKeyRequired') }}</label>
           <input
             v-model="apiKeyValue"
@@ -1470,6 +1476,15 @@ import Toggle from '@/components/common/Toggle.vue'
 import GrokBaseUrlPresets from '@/components/account/GrokBaseUrlPresets.vue'
 import MediaProtocolSelect from '@/components/account/MediaProtocolSelect.vue'
 import HeaderOverrideEditor from '@/components/account/HeaderOverrideEditor.vue'
+import AccountImportSourceSwitch from '@/components/account/AccountImportSourceSwitch.vue'
+import ProviderAccountImport from '@/components/account/ProviderAccountImport.vue'
+import {
+  providerImportErrorMessage,
+  suggestedProviderAccountName,
+  type AccountImportSource,
+  type ProviderAccountSelection
+} from '@/components/account/providerImport'
+import type { SyncUpstreamPreviewParams } from '@/api/admin/accounts'
 import {
   applyHeaderOverride,
   applyInterceptWarmup,
@@ -1542,8 +1557,19 @@ const apiKeyBaseUrl = ref('https://api.anthropic.com')
 const mediaProtocol = ref('')
 const apiKeyValue = ref('')
 const upstreamBillingAutoProbeEnabled = ref(true)
+// 'provider' imports a key from Upstream Management. The browser only names
+// the provider key; the server writes its secret and base URL.
+const importSource = ref<AccountImportSource>('api')
+const providerSelection = ref<ProviderAccountSelection | null>(null)
+let providerSuggestedName = ''
 
-const syncPreviewCredentials = computed(() => {
+const syncPreviewCredentials = computed((): SyncUpstreamPreviewParams | undefined => {
+  if (importSource.value === 'provider') {
+    const selection = providerSelection.value
+    return selection
+      ? { platform: form.platform, type: form.type, provider_id: selection.providerId, provider_key_id: selection.keyId }
+      : undefined
+  }
   if (!apiKeyValue.value) return undefined
   return {
     platform: form.platform,
@@ -1859,6 +1885,24 @@ watch(() => form.platform, (platform) => {
   antigravityMixedChannelConfirmed.value = false
 })
 
+// Provider import: suggest a name from the chosen key unless one was typed.
+const handleProviderSelection = (selection: ProviderAccountSelection | null) => {
+  providerSelection.value = selection
+  if (!selection) return
+  const suggested = suggestedProviderAccountName(selection)
+  if (!form.name.trim() || form.name === providerSuggestedName) form.name = suggested
+  providerSuggestedName = suggested
+}
+
+watch(importSource, () => {
+  providerSelection.value = null
+})
+
+const providerBindingPayload = (): Pick<CreateAccountRequest, 'provider_id' | 'provider_key_id'> => {
+  const selection = importSource.value === 'provider' ? providerSelection.value : null
+  return selection ? { provider_id: selection.providerId, provider_key_id: selection.keyId } : {}
+}
+
 // Auto-fill related models when switching to whitelist mode or changing platform
 watch(
   [modelRestrictionMode, () => form.platform],
@@ -2149,7 +2193,7 @@ const submitCreateAccount = async (payload: CreateAccountRequest) => {
       })
       return
     }
-    appStore.showError(error.response?.data?.message || error.response?.data?.detail || t('admin.accounts.failedToCreate'))
+    appStore.showError(error.response?.data?.message || error.response?.data?.detail || providerImportErrorMessage(error, t) || t('admin.accounts.failedToCreate'))
   } finally {
     submitting.value = false
   }
@@ -2172,6 +2216,9 @@ const resetForm = () => {
   apiKeyBaseUrl.value = 'https://api.anthropic.com'
   mediaProtocol.value = ''
   apiKeyValue.value = ''
+  importSource.value = 'api'
+  providerSelection.value = null
+  providerSuggestedName = ''
   upstreamBillingAutoProbeEnabled.value = true
   editQuotaLimit.value = null
   editQuotaDailyLimit.value = null
@@ -2351,14 +2398,22 @@ const handleSubmit = async () => {
     return
   }
 
-  // For apikey type, create directly
-  if (!apiKeyValue.value.trim()) {
-    appStore.showError(t('admin.accounts.pleaseEnterApiKey'))
-    return
-  }
-  if (form.platform === 'custom' && !apiKeyBaseUrl.value.trim()) {
-    appStore.showError(t('admin.accounts.customBaseUrlRequired'))
-    return
+  const providerImport = importSource.value === 'provider'
+  if (providerImport) {
+    if (!providerSelection.value) {
+      appStore.showError(t('admin.providerImport.selectKeyRequired'))
+      return
+    }
+  } else {
+    // For apikey type, create directly
+    if (!apiKeyValue.value.trim()) {
+      appStore.showError(t('admin.accounts.pleaseEnterApiKey'))
+      return
+    }
+    if (form.platform === 'custom' && !apiKeyBaseUrl.value.trim()) {
+      appStore.showError(t('admin.accounts.customBaseUrlRequired'))
+      return
+    }
   }
 
   // Determine default base URL based on platform
@@ -2373,10 +2428,13 @@ const handleSubmit = async () => {
             ? ''
             : 'https://api.anthropic.com'
 
-  // Build credentials with optional model mapping
+  // Build credentials with optional model mapping. A provider import leaves
+  // base_url and api_key to the server, which resolves the selected key.
   const credentials: Record<string, unknown> = {
-    base_url: apiKeyBaseUrl.value.trim() || defaultBaseUrl,
-    api_key: apiKeyValue.value.trim(),
+    ...(providerImport ? {} : {
+      base_url: apiKeyBaseUrl.value.trim() || defaultBaseUrl,
+      api_key: apiKeyValue.value.trim()
+    }),
     ...(form.platform === 'custom' ? { media_protocol: mediaProtocol.value } : {})
   }
   if (form.platform === 'gemini') {
@@ -2494,7 +2552,8 @@ const createAccountAndFinish = async (
     }
   }
   if (platform === 'grok') {
-    if (!credentials.base_url) {
+    // Provider imports receive the provider's base URL from the server.
+    if (!credentials.base_url && importSource.value !== 'provider') {
       credentials.base_url = apiKeyBaseUrl.value.trim() || 'https://api.x.ai/v1'
     }
     const modelMapping = buildModelMappingObject(modelRestrictionMode.value, allowedModels.value, modelMappings.value)
@@ -2520,7 +2579,8 @@ const createAccountAndFinish = async (
     expires_at: form.expires_at,
     // 上游倍率探测对全部 API-key 平台开放（antigravity upstream 走本 helper）；
     upstream_billing_probe_enabled: upstreamBillingAutoProbeEnabled.value,
-    auto_pause_on_expired: autoPauseOnExpired.value
+    auto_pause_on_expired: autoPauseOnExpired.value,
+    ...providerBindingPayload()
   })
 }
 

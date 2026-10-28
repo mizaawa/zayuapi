@@ -488,7 +488,10 @@ export interface SyncUpstreamPreviewParams {
   platform: string
   type: string
   base_url?: string
-  api_key: string
+  api_key?: string
+  /** Provider import: the server resolves this provider key for the preview. */
+  provider_id?: string
+  provider_key_id?: string
 }
 
 /**

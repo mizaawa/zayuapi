@@ -124,6 +124,10 @@ type CreateAccountRequest struct {
 	AutoPauseOnExpired      *bool          `json:"auto_pause_on_expired"`
 	ProbeEnabled            *bool          `json:"upstream_billing_probe_enabled"`
 	ConfirmMixedChannelRisk *bool          `json:"confirm_mixed_channel_risk"` // 用户确认混合渠道风险
+	// ProviderID and ProviderKeyID import a provider-owned key: the server
+	// writes its secret and base URL into Credentials (see provider_keys.go).
+	ProviderID    string `json:"provider_id"`
+	ProviderKeyID string `json:"provider_key_id"`
 }
 
 // UpdateAccountRequest represents update account request
@@ -821,6 +825,11 @@ func (h *AccountHandler) Create(c *gin.Context) {
 	var req CreateAccountRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.BadRequest(c, "Invalid request: "+err.Error())
+		return
+	}
+	// A provider import names a provider key; its secret is resolved here.
+	if err := h.applyProviderKeyBinding(c.Request.Context(), &req); err != nil {
+		response.ErrorFrom(c, err)
 		return
 	}
 	if err := service.ValidateNewAccountCredentials(req.Platform, req.Type, req.Credentials); err != nil {
@@ -2495,13 +2504,28 @@ func (h *AccountHandler) SyncUpstreamModels(c *gin.Context) {
 // POST /api/v1/admin/accounts/models/sync-upstream-preview
 func (h *AccountHandler) SyncUpstreamModelsPreview(c *gin.Context) {
 	var req struct {
-		Platform string `json:"platform" binding:"required"`
-		Type     string `json:"type" binding:"required"`
-		BaseURL  string `json:"base_url"`
-		APIKey   string `json:"api_key" binding:"required"`
+		Platform      string `json:"platform" binding:"required"`
+		Type          string `json:"type" binding:"required"`
+		BaseURL       string `json:"base_url"`
+		APIKey        string `json:"api_key"`
+		ProviderID    string `json:"provider_id"`
+		ProviderKeyID string `json:"provider_key_id"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.BadRequest(c, "Invalid request: "+err.Error())
+		return
+	}
+	// A provider import previews models with the provider key resolved here.
+	if req.ProviderID != "" || req.ProviderKeyID != "" {
+		resolved, err := h.resolveProviderSelection(c.Request.Context(), req.ProviderID, req.ProviderKeyID, req.Platform)
+		if err != nil {
+			response.ErrorFrom(c, err)
+			return
+		}
+		req.BaseURL, req.APIKey = resolved.baseURL, resolved.key.secret
+	}
+	if strings.TrimSpace(req.APIKey) == "" {
+		response.BadRequest(c, "Invalid request: api_key is required")
 		return
 	}
 

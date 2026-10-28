@@ -81,3 +81,76 @@ export async function refreshProvider(id: string): Promise<Provider> {
   const { data } = await apiClient.post<Provider>('/admin/providers/' + encodeURIComponent(id) + '/refresh')
   return data
 }
+
+/** A provider offered as an account import source. */
+export interface ProviderOption {
+  id: string
+  name: string
+  site_type: ProviderKind
+  base_url: string
+  status: 'connected' | 'disconnected' | ''
+  last_error?: string
+  updated_at?: string
+}
+
+/** Model API key metadata. The key itself never leaves the server. */
+export interface ProviderKey {
+  id: string
+  name: string
+  group_id: string
+  group_name: string
+  group_platform?: string
+  group_multiplier: number | null
+  status: 'active' | 'disabled' | 'expired' | 'quota_exhausted' | 'unknown' | string
+  available: boolean
+}
+
+export interface ProviderKeyList {
+  provider_id: string
+  site_type: ProviderKind
+  endpoint: string
+  keys: ProviderKey[]
+  synced_at: string
+}
+
+export interface ProviderKeyGroup {
+  id: string
+  name: string
+  platform?: string
+  description?: string
+  multiplier: number | null
+  /** The name the server gives a key created for this group. */
+  key_name: string
+}
+
+export interface ProviderKeyGroupList {
+  provider_id: string
+  site_type: ProviderKind
+  groups: ProviderKeyGroup[]
+}
+
+export interface ProviderKeyCreated {
+  provider_id: string
+  created: boolean
+  name: string
+  group_id: string
+  /** Empty when the provider acknowledged the key without identifying it. */
+  key_id: string
+}
+
+export async function listProviderOptions(): Promise<ProviderOption[]> {
+  const { data } = await apiClient.get<ProviderOption[]>('/admin/providers/options')
+  return data ?? []
+}
+export async function listProviderKeys(id: string): Promise<ProviderKeyList> {
+  const { data } = await apiClient.get<ProviderKeyList>('/admin/providers/' + encodeURIComponent(id) + '/keys')
+  return data
+}
+export async function listProviderKeyGroups(id: string): Promise<ProviderKeyGroupList> {
+  const { data } = await apiClient.get<ProviderKeyGroupList>('/admin/providers/' + encodeURIComponent(id) + '/groups')
+  return data
+}
+export async function createProviderKey(id: string, groupId: string): Promise<ProviderKeyCreated> {
+  const { data } = await apiClient.post<ProviderKeyCreated>('/admin/providers/' + encodeURIComponent(id) + '/keys', { group_id: groupId })
+  return data
+}
