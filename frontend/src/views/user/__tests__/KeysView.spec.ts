@@ -3,6 +3,7 @@ import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import { nextTick } from 'vue'
 
 import type { ApiKey, Group } from '@/types'
+import GroupBadge from '@/components/common/GroupBadge.vue'
 import KeysView from '../KeysView.vue'
 
 const {
@@ -181,6 +182,12 @@ const DataTableStub = {
           <slot name="cell-id" :value="row.id" :row="row" />
         </div>
         <slot name="cell-name" :value="row.name" :row="row" />
+        <div
+          v-if="columns.some((col) => col.key === 'group')"
+          data-test="group-cell"
+        >
+          <slot name="cell-group" :value="row.group" :row="row" />
+        </div>
         <div data-test="current-concurrency">
           <slot name="cell-current_concurrency" :value="row.current_concurrency" :row="row" />
         </div>
@@ -616,6 +623,24 @@ describe('user KeysView column settings', () => {
     listKeys.mockResolvedValue({ items: [key], total: 1, page: 1, page_size: 20, pages: 1 })
     getAvailableGroups.mockResolvedValue(availableGroups)
   }
+
+  it('caps long group names so the mobile card cannot stretch the page sideways', async () => {
+    const longName = '超长分组名称测试高速稳定专线'.repeat(7)
+    const key = { ...createApiKey(), group_id: 1, group: group(1, 'openai', { name: longName }) }
+    setKey(key, [group(1, 'openai', { name: longName })])
+    const wrapper = await mountView()
+
+    const cell = wrapper.get('[data-test="group-cell"]')
+    const badge = cell.getComponent(GroupBadge)
+    // 名称原样传给徽章，由徽章按字数省略并在悬停时显示全名
+    expect(badge.props('name')).toBe(longName)
+    expect(badge.props('maxNameLength')).toBe(20)
+    // 宽度约束兜底：窄屏下徽章不超过按钮宽度，按钮不超过卡片的值列
+    expect(badge.classes()).toContain('max-w-full')
+    expect(cell.get('button').classes()).toEqual(
+      expect.arrayContaining(['max-w-[calc(100%_+_1rem)]', 'flex-wrap'])
+    )
+  })
 
   it('shows green health when configured but not cooling', async () => {
     const key = { ...createApiKey(), group_id: 1, group: group(1), failover_enabled: true, failover_group_id: 2 }

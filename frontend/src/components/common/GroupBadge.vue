@@ -5,10 +5,10 @@
       badgeClass
     ]"
   >
-    <!-- Platform logo -->
-    <PlatformIcon v-if="platform" :platform="platform" size="sm" />
+    <!-- Platform logo (shrink-0: keep the icon intact when the badge is width-capped) -->
+    <PlatformIcon v-if="platform" :platform="platform" size="sm" class="shrink-0" />
     <!-- Group name -->
-    <span class="truncate">{{ name }}</span>
+    <span class="truncate" :title="truncatedName ? name : undefined">{{ truncatedName ?? name }}</span>
     <!-- Right side label -->
     <span v-if="showLabel" :class="labelClass">
       <template v-if="hasCustomRate">
@@ -52,6 +52,12 @@ interface Props {
    * 只关心费率、不关心有效期的场景）。
    */
   alwaysShowRate?: boolean
+  /**
+   * 分组名最多显示的字数（按 Unicode 码点计，emoji / 生僻字不会被截成半个），
+   * 超出部分用"…"省略，悬停可看全名；不传则完整显示。
+   * 只限制字数：要保证窄屏不被撑破，调用方仍需给徽章加 max-w-full 等宽度约束。
+   */
+  maxNameLength?: number
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -66,6 +72,15 @@ const props = withDefaults(defineProps<Props>(), {
 const { t } = useI18n()
 
 const isSubscription = computed(() => props.subscriptionType === 'subscription')
+
+// 超过 maxNameLength 时返回截断后的名称，否则为 null（照常显示原名）
+const truncatedName = computed(() => {
+  const limit = props.maxNameLength
+  if (!limit || limit < 1) return null
+  const chars = Array.from(props.name)
+  if (chars.length <= limit) return null
+  return `${chars.slice(0, limit).join('').trimEnd()}…`
+})
 
 // 是否有专属倍率（且与默认倍率不同）
 const hasCustomRate = computed(() => {

@@ -135,15 +135,19 @@
 
           <template #cell-group="{ row }">
             <div class="group/dropdown relative">
+              <!-- 手机卡片里分组名过长会把整页撑宽：按钮限宽（+1rem 抵消 -mx-2），
+                   空间不够时"选择分组"换到下一行，分组徽章独占一行并省略超长名称 -->
               <button
                 :ref="(el) => setGroupButtonRef(row.id, el)"
                 @click="openGroupSelector(row)"
-                class="-mx-2 -my-1 flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1 transition-all duration-200 hover:bg-gray-100 dark:hover:bg-dark-700"
+                class="-mx-2 -my-1 flex max-w-[calc(100%_+_1rem)] cursor-pointer flex-wrap items-center justify-end gap-2 rounded-lg px-2 py-1 transition-all duration-200 hover:bg-gray-100 dark:hover:bg-dark-700"
                 :title="t('keys.clickToChangeGroup')"
               >
-                <div v-if="row.group" class="flex min-w-0 flex-wrap items-center gap-1.5">
+                <div v-if="row.group" class="flex min-w-0 max-w-full flex-wrap items-center justify-end gap-1.5">
                   <GroupBadge
+                    class="max-w-full"
                     :name="row.group.name"
+                    :max-name-length="GROUP_NAME_MAX_LENGTH"
                     :platform="row.group.platform"
                     :subscription-type="row.group.subscription_type"
                     :rate-multiplier="row.group.rate_multiplier"
@@ -161,20 +165,22 @@
                 <span v-else class="text-sm text-gray-400 dark:text-dark-500">{{
                   t('keys.noGroup')
                 }}</span>
-                <span class="text-xs text-gray-500 dark:text-gray-400">{{ t('keys.selectGroup') }}</span>
-                <svg
-                  class="h-3.5 w-3.5 text-gray-400 opacity-60 transition-opacity group-hover/dropdown:opacity-100"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                  stroke-width="2"
-                >
-                  <path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    d="M8.25 15L12 18.75 15.75 15m-7.5-6L12 5.25 15.75 9"
-                  />
-                </svg>
+                <span class="inline-flex shrink-0 items-center gap-2">
+                  <span class="whitespace-nowrap text-xs text-gray-500 dark:text-gray-400">{{ t('keys.selectGroup') }}</span>
+                  <svg
+                    class="h-3.5 w-3.5 text-gray-400 opacity-60 transition-opacity group-hover/dropdown:opacity-100"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                    stroke-width="2"
+                  >
+                    <path
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      d="M8.25 15L12 18.75 15.75 15m-7.5-6L12 5.25 15.75 9"
+                    />
+                  </svg>
+                </span>
               </button>
             </div>
           </template>
@@ -1277,6 +1283,9 @@ interface GroupOption {
   platform: GroupPlatform
   blocked?: boolean
 }
+
+// 列表里分组名最多显示的字数，超出用"…"省略（悬停看全名）
+const GROUP_NAME_MAX_LENGTH = 20
 
 const appStore = useAppStore()
 const onboardingStore = useOnboardingStore()
