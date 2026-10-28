@@ -70,14 +70,109 @@
         </div>
       </div>
 
-      <div class="card p-6">
-        <div class="flex flex-wrap items-end justify-between gap-4">
-          <div v-if="activeTab === 'errors'" class="flex flex-1 flex-wrap items-end gap-4">
-            <div class="w-full sm:w-auto sm:min-w-[220px]">
-              <label class="input-label">{{ t('usage.errors.keyName') }}</label>
-              <Select v-model="errorFilter.api_key_id" :options="errorKeyOptions" @change="applyErrorFilters" />
+      <!-- Tabs, actions, filters and records share one panel; on phones the panel opens up so each record card sits on the canvas. -->
+      <section class="usage-records-panel" data-usage-records>
+        <div class="usage-records-head">
+          <div class="flex flex-wrap items-center justify-between gap-3">
+            <div class="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2">
+              <div v-if="errorViewEnabled" class="segment-group" role="tablist">
+                <button
+                  type="button"
+                  role="tab"
+                  class="usage-records-tab"
+                  :class="activeTab === 'usage' ? 'segment-active' : 'segment-idle'"
+                  :aria-selected="activeTab === 'usage'"
+                  @click="activeTab = 'usage'"
+                >
+                  <Icon name="document" size="sm" />
+                  {{ t('usage.tabs.usage') }}
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  class="usage-records-tab"
+                  :class="activeTab === 'errors' ? 'segment-active' : 'segment-idle'"
+                  :aria-selected="activeTab === 'errors'"
+                  @click="switchToErrors"
+                >
+                  <Icon name="exclamationTriangle" size="sm" />
+                  {{ t('usage.tabs.errors') }}
+                </button>
+              </div>
+              <h2 v-else class="usage-records-title">
+                <span class="usage-records-title-icon" aria-hidden="true"><Icon name="document" size="sm" /></span>
+                {{ t('usage.tabs.usage') }}
+              </h2>
+              <span v-if="recordsSummary" class="usage-records-count" data-testid="usage-records-count">{{ recordsSummary }}</span>
             </div>
-            <div class="w-full sm:w-auto sm:min-w-[220px]">
+
+            <div class="usage-records-actions">
+              <div class="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  class="btn btn-secondary usage-records-button md:hidden"
+                  :aria-expanded="filtersOpen"
+                  @click="filtersOpen = !filtersOpen"
+                >
+                  <Icon name="filter" size="sm" />
+                  {{ t('common.filter') }}
+                  <span v-if="activeFilterCount > 0" class="usage-records-filter-count">{{ activeFilterCount }}</span>
+                </button>
+                <button type="button" @click="refreshData" :disabled="activeTab === 'errors' ? errorLoading : loading" class="btn btn-secondary usage-records-button">
+                  {{ t('common.refresh') }}
+                </button>
+                <button type="button" @click="resetFilters" class="btn btn-secondary usage-records-button">
+                  {{ t('common.reset') }}
+                </button>
+                <div class="md:relative" ref="columnDropdownRef">
+                  <button
+                    type="button"
+                    @click="showColumnDropdown = !showColumnDropdown"
+                    class="btn btn-secondary usage-records-button"
+                    :title="t('admin.users.columnSettings')"
+                  >
+                    <Icon name="grid" size="sm" />
+                    <span class="hidden md:inline">{{ t('admin.users.columnSettings') }}</span>
+                  </button>
+                  <div
+                    v-if="showColumnDropdown"
+                    class="usage-column-menu absolute inset-x-0 top-full z-50 mt-1.5 max-h-80 overflow-y-auto py-1.5 md:left-auto md:right-0 md:w-52"
+                  >
+                    <button
+                      v-for="col in currentToggleableColumns"
+                      :key="col.key"
+                      type="button"
+                      @click="toggleCurrentColumn(col.key)"
+                      class="usage-column-option"
+                    >
+                      <span>{{ col.label }}</span>
+                      <Icon v-if="isCurrentColumnVisible(col.key)" name="check" size="sm" class="text-primary-600" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+              <div v-if="activeTab !== 'errors'" class="usage-records-exports">
+                <button type="button" @click="exportToCSV" :disabled="exporting" class="btn btn-secondary usage-records-button">
+                  {{ exporting ? t('usage.exporting') : t('usage.exportCsv') }}
+                </button>
+                <button type="button" @click="exportToExcel" :disabled="exporting" class="btn btn-primary usage-records-button">
+                  <Icon name="download" size="sm" />
+                  {{ exporting ? t('usage.exporting') : t('usage.exportExcel') }}
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div
+            v-if="activeTab === 'errors'"
+            class="usage-filter-grid usage-filter-grid--errors"
+            :class="{ 'is-open': filtersOpen }"
+          >
+            <div class="min-w-0">
+              <label class="input-label">{{ t('usage.errors.keyName') }}</label>
+              <Select v-model="errorFilter.api_key_id" :options="errorKeyOptions" :placeholder="t('usage.errors.allKeys')" @change="applyErrorFilters" />
+            </div>
+            <div class="min-w-0">
               <label class="input-label">{{ t('usage.errors.model') }}</label>
               <Select
                 v-model="errorFilter.model"
@@ -89,138 +184,89 @@
                 @change="applyErrorFilters"
               />
             </div>
-            <div class="w-full sm:w-auto sm:min-w-[200px]">
+            <div class="min-w-0">
               <label class="input-label">{{ t('usage.errors.category') }}</label>
               <Select v-model="errorFilter.category" :options="errorCategoryOptions" @change="applyErrorFilters" />
             </div>
-            <div class="w-full sm:w-auto sm:min-w-[180px]">
+            <div class="min-w-0">
               <label class="input-label">{{ t('usage.errors.status') }}</label>
-              <Select v-model="errorFilter.status_code" :options="errorStatusOptions" @change="applyErrorFilters" />
+              <Select v-model="errorFilter.status_code" :options="errorStatusOptions" :placeholder="t('usage.errors.allStatuses')" @change="applyErrorFilters" />
             </div>
           </div>
-          <div v-else class="flex flex-1 flex-wrap items-end gap-4">
-            <div class="w-full sm:w-auto sm:min-w-[220px]">
+          <div v-else class="usage-filter-grid usage-filter-grid--usage" :class="{ 'is-open': filtersOpen }">
+            <div class="min-w-0">
               <label class="input-label">{{ t('usage.apiKeyFilter') }}</label>
-              <Select v-model="filters.api_key_id" :options="apiKeyOptions" @change="applyFilters" />
+              <Select v-model="filters.api_key_id" :options="apiKeyOptions" :placeholder="t('usage.allApiKeys')" @change="applyFilters" />
             </div>
-            <div class="w-full sm:w-auto sm:min-w-[220px]">
+            <div class="min-w-0">
               <label class="input-label">{{ t('usage.model') }}</label>
-              <Select v-model="filters.model" :options="modelOptions" searchable @change="applyFilters" />
+              <Select v-model="filters.model" :options="modelOptions" searchable :placeholder="t('admin.usage.allModels')" @change="applyFilters" />
             </div>
-            <div class="w-full sm:w-auto sm:min-w-[200px]">
+            <div class="min-w-0">
               <label class="input-label">{{ t('admin.usage.group') }}</label>
-              <Select v-model="filters.group_id" :options="groupOptions" searchable @change="applyFilters" />
+              <Select v-model="filters.group_id" :options="groupOptions" searchable :placeholder="t('admin.usage.allGroups')" @change="applyFilters" />
             </div>
-            <div class="w-full sm:w-auto sm:min-w-[180px]">
+            <div class="min-w-0">
               <label class="input-label">{{ t('usage.type') }}</label>
-              <Select v-model="filters.request_type" :options="requestTypeOptions" @change="applyFilters" />
+              <Select v-model="filters.request_type" :options="requestTypeOptions" :placeholder="t('admin.usage.allTypes')" @change="applyFilters" />
             </div>
-            <div class="w-full sm:w-auto sm:min-w-[200px]">
+            <div class="min-w-0">
               <label class="input-label">{{ t('admin.usage.billingType') }}</label>
               <Select v-model="filters.billing_type" :options="billingTypeOptions" @change="applyFilters" />
             </div>
-            <div class="w-full sm:w-auto sm:min-w-[200px]">
+            <div class="min-w-0">
               <label class="input-label">{{ t('admin.usage.billingMode') }}</label>
               <Select v-model="filters.billing_mode" :options="billingModeOptions" @change="applyFilters" />
             </div>
           </div>
+        </div>
 
-          <div class="flex w-full flex-wrap items-center justify-end gap-3 sm:w-auto">
-            <button type="button" @click="refreshData" :disabled="activeTab === 'errors' ? errorLoading : loading" class="btn btn-secondary">
-              {{ t('common.refresh') }}
-            </button>
-            <button type="button" @click="resetFilters" class="btn btn-secondary">
-              {{ t('common.reset') }}
-            </button>
-            <div class="relative" ref="columnDropdownRef">
-              <button
-                type="button"
-                @click="showColumnDropdown = !showColumnDropdown"
-                class="btn btn-secondary px-2 md:px-3"
-                :title="t('admin.users.columnSettings')"
-              >
-                <Icon name="grid" size="sm" />
-                <span class="hidden md:inline">{{ t('admin.users.columnSettings') }}</span>
-              </button>
-              <div
-                v-if="showColumnDropdown"
-                class="absolute right-0 top-full z-50 mt-1 max-h-80 w-48 overflow-y-auto rounded-lg border border-gray-200 bg-white py-1 shadow-lg dark:border-dark-600 dark:bg-dark-800"
-              >
-                <button
-                  v-for="col in currentToggleableColumns"
-                  :key="col.key"
-                  type="button"
-                  @click="toggleCurrentColumn(col.key)"
-                  class="flex w-full items-center justify-between px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-dark-700"
-                >
-                  <span>{{ col.label }}</span>
-                  <Icon v-if="isCurrentColumnVisible(col.key)" name="check" size="sm" class="text-primary-500" />
-                </button>
-              </div>
-            </div>
-            <button v-if="activeTab !== 'errors'" type="button" @click="exportToCSV" :disabled="exporting" class="btn btn-secondary">
-              {{ exporting ? t('usage.exporting') : t('usage.exportCsv') }}
-            </button>
-            <button v-if="activeTab !== 'errors'" type="button" @click="exportToExcel" :disabled="exporting" class="btn btn-primary">
-              <Icon name="download" size="sm" />
-              {{ exporting ? t('usage.exporting') : t('usage.exportExcel') }}
-            </button>
+        <template v-if="activeTab === 'usage'">
+          <div v-if="logsError" data-usage-error="logs" role="alert" class="flex items-center gap-3 px-4 py-6 text-sm text-red-600 dark:text-red-400 md:px-6">
+            <span>{{ t('usage.failedToLoad') }}</span>
+            <button type="button" class="btn btn-secondary" @click="loadLogs">{{ t('common.refresh') }}</button>
           </div>
-        </div>
-      </div>
+          <UsageTable
+            v-else
+            flat
+            :data="usageLogs"
+            :loading="loading"
+            :columns="visibleColumns"
+            :server-side-sort="true"
+            :show-account-billing="false"
+            :show-upstream-endpoint="false"
+            default-sort-key="created_at"
+            default-sort-order="desc"
+            @sort="handleSort"
+            @ipGeoBatchFailed="handleIpGeoBatchFailed"
+          />
 
-      <div v-if="errorViewEnabled" class="flex gap-2 border-b border-gray-200 dark:border-dark-700">
-        <button class="tab" :class="{ 'tab-active': activeTab === 'usage' }" @click="activeTab = 'usage'">
-          {{ t('usage.tabs.usage') }}
-        </button>
-        <button class="tab" :class="{ 'tab-active': activeTab === 'errors' }" @click="switchToErrors">
-          {{ t('usage.tabs.errors') }}
-        </button>
-      </div>
+          <Pagination
+            v-if="!logsError && paginationTotal > 0"
+            :page="pagination.page"
+            :total="paginationTotal"
+            :total-is-exact="paginationTotalIsExact"
+            :page-size="pagination.page_size"
+            @update:page="handlePageChange"
+            @update:pageSize="handlePageSizeChange"
+          />
+        </template>
 
-      <template v-if="activeTab === 'usage'">
-        <div v-if="logsError" data-usage-error="logs" role="alert" class="flex items-center gap-3 text-sm text-red-600 dark:text-red-400">
-          <span>{{ t('usage.failedToLoad') }}</span>
-          <button type="button" class="btn btn-secondary" @click="loadLogs">{{ t('common.refresh') }}</button>
-        </div>
-        <UsageTable
-          v-else
-          :data="usageLogs"
-          :loading="loading"
-          :columns="visibleColumns"
-          :server-side-sort="true"
-          :show-account-billing="false"
-          :show-upstream-endpoint="false"
-          default-sort-key="created_at"
-          default-sort-order="desc"
-          @sort="handleSort"
+        <UserErrorRequestsTable
+          v-else-if="errorViewEnabled"
+          class="usage-errors-table"
+          :rows="errorRows"
+          :total="errorTotal"
+          :loading="errorLoading"
+          :page="errorPage"
+          :page-size="errorPageSize"
+          :visible-column-keys="errVisibleColumnKeys"
+          @sort="onErrorSort"
+          @update:page="onErrorPage"
+          @update:pageSize="onErrorPageSize"
           @ipGeoBatchFailed="handleIpGeoBatchFailed"
         />
-
-        <Pagination
-          v-if="!logsError && paginationTotal > 0"
-          :page="pagination.page"
-          :total="paginationTotal"
-          :total-is-exact="paginationTotalIsExact"
-          :page-size="pagination.page_size"
-          @update:page="handlePageChange"
-          @update:pageSize="handlePageSizeChange"
-        />
-      </template>
-
-      <UserErrorRequestsTable
-        v-else-if="errorViewEnabled"
-        :rows="errorRows"
-        :total="errorTotal"
-        :loading="errorLoading"
-        :page="errorPage"
-        :page-size="errorPageSize"
-        :visible-column-keys="errVisibleColumnKeys"
-        @sort="onErrorSort"
-        @update:page="onErrorPage"
-        @update:pageSize="onErrorPageSize"
-        @ipGeoBatchFailed="handleIpGeoBatchFailed"
-      />
+      </section>
     </div>
   </AppLayout>
 
@@ -869,20 +915,22 @@ const ALWAYS_VISIBLE = ['created_at']
 const DEFAULT_HIDDEN_COLUMNS = ['user_agent']
 const HIDDEN_COLUMNS_KEY = 'user-usage-hidden-columns'
 
+// When, what and how much come first so the essentials fit without horizontal scrolling;
+// request context (key, group, type, endpoint, IP) follows.
 const allColumns = computed<Column[]>(() => [
-  { key: 'api_key', label: t('usage.apiKeyFilter'), sortable: false },
+  { key: 'created_at', label: t('usage.time'), sortable: true },
   { key: 'model', label: t('usage.model'), sortable: true },
-  { key: 'reasoning_effort', label: t('usage.reasoningEffort'), sortable: false },
-  { key: 'endpoint', label: t('usage.endpoint'), sortable: false },
-  { key: 'ip_address', label: 'IP', sortable: false },
-  { key: 'group', label: t('admin.usage.group'), sortable: false },
-  { key: 'stream', label: t('usage.type'), sortable: false },
-  { key: 'billing_mode', label: t('admin.usage.billingMode'), sortable: false },
+  { key: 'api_key', label: t('usage.apiKeyFilter'), sortable: false },
   { key: 'tokens', label: t('usage.tokens'), sortable: false },
   { key: 'cache_hit_rate', label: t('usage.cacheHitRate'), sortable: false, class: 'text-center' },
   { key: 'cost', label: t('usage.cost'), sortable: false },
   { key: 'latency', label: t('usage.latency'), sortable: false },
-  { key: 'created_at', label: t('usage.time'), sortable: true },
+  { key: 'group', label: t('admin.usage.group'), sortable: false },
+  { key: 'stream', label: t('usage.type'), sortable: false },
+  { key: 'billing_mode', label: t('admin.usage.billingMode'), sortable: false },
+  { key: 'reasoning_effort', label: t('usage.reasoningEffort'), sortable: false },
+  { key: 'endpoint', label: t('usage.endpoint'), sortable: false },
+  { key: 'ip_address', label: 'IP', sortable: false },
   { key: 'user_agent', label: t('usage.userAgent'), sortable: false },
 ])
 
@@ -971,6 +1019,25 @@ const handleColumnClickOutside = (event: MouseEvent) => {
     showColumnDropdown.value = false
   }
 }
+
+// Phones keep the filter grid folded behind one button; wider screens always show it.
+const filtersOpen = ref(false)
+const isActiveFilterValue = (value: unknown) => value !== null && value !== undefined && value !== ''
+const activeFilterCount = computed(() => {
+  const values = activeTab.value === 'errors'
+    ? [errorFilter.value.api_key_id, (errorFilter.value.model ?? '').trim(), errorFilter.value.category, errorFilter.value.status_code]
+    : [filters.value.api_key_id, filters.value.model, filters.value.group_id, filters.value.request_type, filters.value.billing_type, filters.value.billing_mode]
+  return values.filter(isActiveFilterValue).length
+})
+
+const recordsSummary = computed(() => {
+  if (activeTab.value === 'errors') {
+    return errorTotal.value > 0 ? t('usage.recordsCount', { count: errorTotal.value.toLocaleString() }) : ''
+  }
+  if (paginationTotal.value <= 0) return ''
+  const count = paginationTotal.value.toLocaleString() + (paginationTotalIsExact.value ? '' : '+')
+  return t('usage.recordsCount', { count })
+})
 
 const loadFilterOptions = async () => {
   const controller = startRequest('filters')
@@ -1083,3 +1150,202 @@ watch(endpointDistributionSource, () => {
   // Endpoint source switching is handled by the chart component using already loaded stats.
 })
 </script>
+
+<style scoped>
+.usage-records-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.usage-records-head {
+  position: relative;
+  padding: 0.875rem;
+  border-radius: 1.5rem;
+  background: var(--md-sys-color-surface);
+  box-shadow: var(--theme-highlight), var(--theme-elevation-1);
+}
+
+.usage-records-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.9375rem;
+  font-weight: 700;
+  color: var(--md-sys-color-on-surface);
+}
+
+.usage-records-title-icon {
+  display: inline-flex;
+  width: 1.75rem;
+  height: 1.75rem;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.625rem;
+  background: #fff3bd;
+  color: #976800;
+}
+
+.usage-records-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.4375rem 0.875rem;
+  border-radius: 999px;
+  font-size: 0.8125rem;
+  transition: background-color 160ms ease, color 160ms ease, box-shadow 160ms ease;
+}
+
+.usage-records-count {
+  padding: 0.1875rem 0.625rem;
+  border-radius: 999px;
+  background: #faf6e8;
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--md-sys-color-on-surface-variant);
+}
+
+.usage-records-actions {
+  display: flex;
+  flex: 1 1 auto;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.usage-records-actions > :first-child {
+  gap: 0.375rem;
+}
+
+.usage-records-exports {
+  display: grid;
+  flex: 1 1 100%;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+
+.usage-records-button {
+  padding: 0.5rem 0.75rem;
+  border-radius: 0.875rem;
+  font-size: 0.8125rem;
+}
+
+.usage-records-filter-count {
+  display: inline-flex;
+  min-width: 1.125rem;
+  height: 1.125rem;
+  align-items: center;
+  justify-content: center;
+  padding: 0 0.3125rem;
+  border-radius: 999px;
+  background: var(--md-sys-color-primary);
+  font-size: 0.6875rem;
+  font-weight: 700;
+  color: var(--md-sys-color-on-primary);
+}
+
+.usage-filter-grid {
+  display: none;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.usage-filter-grid.is-open {
+  display: grid;
+}
+
+.usage-filter-grid :deep(.input-label) {
+  margin-bottom: 0.375rem;
+  font-size: 0.75rem;
+  color: var(--md-sys-color-on-surface-variant);
+}
+
+.usage-column-menu {
+  border-radius: 1rem;
+  background: var(--md-sys-color-surface);
+  box-shadow: var(--theme-highlight), var(--theme-elevation-3);
+}
+
+.usage-column-option {
+  display: flex;
+  width: calc(100% - 0.75rem);
+  margin: 0 0.375rem;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.5rem 0.75rem;
+  border-radius: 0.75rem;
+  font-size: 0.8125rem;
+  text-align: left;
+  color: var(--md-sys-color-on-surface);
+}
+
+.usage-column-option:hover {
+  background: color-mix(in srgb, var(--md-sys-color-primary) 14%, var(--md-sys-color-surface));
+}
+
+/* The error list brings its own card; inside the shared panel it should read as part of it. */
+.usage-errors-table > :deep(.card) {
+  overflow: visible;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+/* A standalone bar on phones; the panel clips it on wider screens. */
+.usage-records-panel :deep(.pagination-shell) {
+  border-radius: 1.25rem;
+}
+
+@media (min-width: 768px) {
+  .usage-records-panel {
+    gap: 0;
+    overflow: hidden;
+    border-radius: 1.5rem;
+    background: var(--md-sys-color-surface);
+    box-shadow: var(--theme-highlight), var(--theme-elevation-1);
+  }
+
+  .usage-records-actions > :first-child {
+    gap: 0.5rem;
+  }
+
+  .usage-records-head {
+    padding: 1.25rem 1.5rem;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: inset 0 -1px 0 rgb(215 193 106 / 0.28);
+  }
+
+  .usage-records-actions {
+    flex: 0 1 auto;
+    justify-content: flex-end;
+  }
+
+  .usage-records-exports {
+    display: flex;
+    flex: none;
+  }
+
+  .usage-filter-grid,
+  .usage-filter-grid.is-open {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .usage-records-panel :deep(.pagination-shell) {
+    border-radius: 0;
+  }
+}
+
+@media (min-width: 1280px) {
+  .usage-filter-grid.usage-filter-grid--usage {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+
+  .usage-filter-grid.usage-filter-grid--errors {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+</style>

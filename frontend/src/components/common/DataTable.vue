@@ -2,7 +2,15 @@
   <div v-if="!isDesktopViewport" class="space-y-3">
     <template v-if="loading">
       <div v-for="i in 5" :key="i" class="data-mobile-card rounded-xl border p-4">
-        <div class="space-y-3">
+        <div v-if="$slots['mobile-card']" class="space-y-3" data-test="mobile-card-skeleton">
+          <div class="flex items-center justify-between gap-4">
+            <div class="h-4 w-2/5 animate-pulse rounded bg-gray-200 dark:bg-dark-700"></div>
+            <div class="h-4 w-1/5 animate-pulse rounded bg-gray-200 dark:bg-dark-700"></div>
+          </div>
+          <div class="h-3 w-3/5 animate-pulse rounded bg-gray-200 dark:bg-dark-700"></div>
+          <div class="h-10 w-full animate-pulse rounded-lg bg-gray-200 dark:bg-dark-700"></div>
+        </div>
+        <div v-else class="space-y-3">
           <div v-for="column in dataColumns" :key="column.key" class="flex justify-between">
             <div class="h-4 w-20 animate-pulse rounded bg-gray-200 dark:bg-dark-700"></div>
             <div class="h-4 w-32 animate-pulse rounded bg-gray-200 dark:bg-dark-700"></div>
@@ -59,7 +67,15 @@
         ]"
         @click="clickableRows && emit('rowClick', row)"
       >
-        <div class="space-y-3">
+        <!-- Pages may replace the generic label/value list with a purpose-built card. -->
+        <slot
+          v-if="$slots['mobile-card']"
+          name="mobile-card"
+          :row="row"
+          :index="index"
+          :columns="dataColumns"
+        ></slot>
+        <div v-else class="space-y-3">
           <div v-if="selectable" class="flex justify-end">
             <input
               type="checkbox"

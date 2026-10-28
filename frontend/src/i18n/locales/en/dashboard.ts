@@ -432,6 +432,7 @@ export default {
     original: 'Original',
     billed: 'Billed',
     noRecords: 'No usage records found. Try adjusting your filters.',
+    recordsCount: '{count} records',
     failedToLoad: 'Failed to load usage logs',
     statsLoadFailed: 'Failed to load usage statistics. Please retry.',
     endpointStatsLoadFailed: 'Failed to load endpoint distribution. Please retry.',

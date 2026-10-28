@@ -338,6 +338,32 @@ describe('DataTable', () => {
     viewport.remove()
   })
 
+  it('renders a page-provided mobile card instead of the generic label list', async () => {
+    stubMobileMatchMedia()
+    const columns = [
+      { key: 'model', label: 'Model' },
+      { key: 'cost', label: 'Cost' }
+    ]
+    const wrapper = mount(DataTable, {
+      props: { columns, data: [{ id: 1, model: 'gpt-5.4', cost: 0.1 }], rowKey: 'id' },
+      slots: {
+        'mobile-card': `<template #mobile-card="{ row, index, columns }">
+          <div data-test="custom-card">{{ index }}:{{ row.model }}:{{ columns.map(c => c.key).join(',') }}</div>
+        </template>`,
+        'cell-model': '<span data-test="desktop-cell">desktop</span>'
+      }
+    })
+
+    expect(wrapper.get('[data-test="custom-card"]').text()).toBe('0:gpt-5.4:model,cost')
+    expect(wrapper.find('[data-field="model"]').exists()).toBe(false)
+    expect(wrapper.find('[data-test="desktop-cell"]').exists()).toBe(false)
+    expect(wrapper.get('.data-mobile-card').classes()).toContain('rounded-xl')
+
+    await wrapper.setProps({ loading: true })
+    expect(wrapper.findAll('[data-test="mobile-card-skeleton"]')).toHaveLength(5)
+    expect(wrapper.find('[data-test="custom-card"]').exists()).toBe(false)
+  })
+
   it('offers current-page select all in the mobile card layout', async () => {
     stubMobileMatchMedia()
     const wrapper = mount(DataTable, {

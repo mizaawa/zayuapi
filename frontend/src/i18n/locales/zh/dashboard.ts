@@ -437,6 +437,7 @@ export default {
     original: '原始',
     billed: '计费',
     noRecords: '未找到使用记录，请尝试调整筛选条件。',
+    recordsCount: '共 {count} 条',
     failedToLoad: '加载使用记录失败',
     statsLoadFailed: '使用统计加载失败，请重试',
     endpointStatsLoadFailed: '端点分布加载失败，请重试',
