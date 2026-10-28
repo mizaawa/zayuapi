@@ -32,8 +32,13 @@ func TestEnsureSimpleModeDefaultGroups_CreatesMissingDefaults(t *testing.T) {
 	assertGroupExists(service.PlatformAnthropic + "-default")
 	assertGroupExists(service.PlatformOpenAI + "-default")
 	assertGroupExists(service.PlatformGemini + "-default")
-	assertGroupExists(service.PlatformAntigravity + "-default-1")
-	assertGroupExists(service.PlatformAntigravity + "-default-2")
+
+	// Antigravity is retired: simple mode no longer seeds its groups.
+	antigravityCount, err := client.Group.Query().
+		Where(group.PlatformEQ(service.PlatformAntigravity), group.DeletedAtIsNil()).
+		Count(seedCtx)
+	require.NoError(t, err)
+	require.Zero(t, antigravityCount)
 
 	grokDefault, err := client.Group.Query().
 		Where(group.NameEQ(service.PlatformGrok+"-default"), group.DeletedAtIsNil()).
@@ -324,7 +329,7 @@ func TestEnsureSimpleModeDefaultGroups_IgnoresSoftDeletedGroups(t *testing.T) {
 	require.Equal(t, 1, count)
 }
 
-func TestEnsureSimpleModeDefaultGroups_AntigravityNeedsTwoGroupsOnlyByCount(t *testing.T) {
+func TestEnsureSimpleModeDefaultGroups_DoesNotSeedRetiredAntigravityGroups(t *testing.T) {
 	ctx := context.Background()
 	tx := testEntTx(t)
 	client := tx.Client()
@@ -332,12 +337,12 @@ func TestEnsureSimpleModeDefaultGroups_AntigravityNeedsTwoGroupsOnlyByCount(t *t
 	seedCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 
-	mustCreateGroup(t, client, &service.Group{Name: "ag-custom-1-" + uniqueStamp(), Platform: service.PlatformAntigravity})
-	mustCreateGroup(t, client, &service.Group{Name: "ag-custom-2-" + uniqueStamp(), Platform: service.PlatformAntigravity})
-
+	require.NoError(t, ensureSimpleModeDefaultGroups(seedCtx, client))
 	require.NoError(t, ensureSimpleModeDefaultGroups(seedCtx, client))
 
-	count, err := client.Group.Query().Where(group.PlatformEQ(service.PlatformAntigravity), group.DeletedAtIsNil()).Count(seedCtx)
+	count, err := client.Group.Query().
+		Where(group.NameHasPrefix(service.PlatformAntigravity+"-default-"), group.DeletedAtIsNil()).
+		Count(seedCtx)
 	require.NoError(t, err)
-	require.GreaterOrEqual(t, count, 2)
+	require.Zero(t, count)
 }
