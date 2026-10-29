@@ -177,11 +177,22 @@ func validProviderScope(scope string) bool {
 		return false
 	}
 	for _, char := range scope {
-		if !(char >= 'a' && char <= 'z' || char >= '0' && char <= '9' || char == '_' || char == ':' || char == '-' || char == '.') {
+		if !providerScopeChar(char) {
 			return false
 		}
 	}
 	return true
+}
+
+// providerScopeChar reports whether char may appear in a scope name.
+func providerScopeChar(char rune) bool {
+	switch {
+	case char >= 'a' && char <= 'z', char >= '0' && char <= '9':
+		return true
+	case char == '_', char == ':', char == '-', char == '.':
+		return true
+	}
+	return false
 }
 
 // newAPIAccountID returns the account ID in a /api/user/self profile, or ""
