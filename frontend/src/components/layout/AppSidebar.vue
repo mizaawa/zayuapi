@@ -95,6 +95,9 @@
                   class="sidebar-link mb-0.5 py-1.5 text-sm"
                   :class="{ 'sidebar-link-active': route.path === child.path }"
                   @click="handleMenuItemClick(child.path)"
+                  @mouseenter="warmNavItem(child)"
+                  @focus="warmNavItem(child)"
+                  @touchstart.passive="warmNavItem(child)"
                 >
                   <component :is="child.icon" class="h-4 w-4 flex-shrink-0" />
                   <span>{{ child.label }}</span>
@@ -122,6 +125,9 @@
                       : undefined
               "
               @click="handleMenuItemClick(item.path)"
+              @mouseenter="warmNavItem(item)"
+              @focus="warmNavItem(item)"
+              @touchstart.passive="warmNavItem(item)"
             >
               <span v-if="item.iconSvg" class="h-5 w-5 flex-shrink-0 sidebar-svg-icon" v-html="sanitizeSvg(item.iconSvg)"></span>
               <component v-else :is="item.icon" class="h-5 w-5 flex-shrink-0" />
@@ -151,6 +157,9 @@
             :title="sidebarCollapsed ? item.label : undefined"
             :data-tour="item.path === '/keys' ? 'sidebar-my-keys' : undefined"
             @click="handleMenuItemClick(item.path)"
+            @mouseenter="warmNavItem(item)"
+            @focus="warmNavItem(item)"
+            @touchstart.passive="warmNavItem(item)"
           >
             <span v-if="item.iconSvg" class="h-5 w-5 flex-shrink-0 sidebar-svg-icon" v-html="sanitizeSvg(item.iconSvg)"></span>
             <component v-else :is="item.icon" class="h-5 w-5 flex-shrink-0" />
@@ -183,6 +192,9 @@
             :title="sidebarCollapsed ? item.label : undefined"
             :data-tour="item.path === '/keys' ? 'sidebar-my-keys' : undefined"
             @click="handleMenuItemClick(item.path)"
+            @mouseenter="warmNavItem(item)"
+            @focus="warmNavItem(item)"
+            @touchstart.passive="warmNavItem(item)"
           >
             <span v-if="item.iconSvg" class="h-5 w-5 flex-shrink-0 sidebar-svg-icon" v-html="sanitizeSvg(item.iconSvg)"></span>
             <component v-else :is="item.icon" class="h-5 w-5 flex-shrink-0" />
@@ -238,6 +250,7 @@ import { sanitizeUrl } from '@/utils/url'
 import { buildEmbeddedUrl, detectTheme } from '@/utils/embedded-url'
 import type { CustomMenuItem } from '@/types'
 import { FeatureFlags, makeSidebarFlag } from '@/utils/featureFlags'
+import { warmRoutePath, warmRoutePathsWhenIdle } from '@/router/warmRoute'
 import { useBatchImageAccess } from '@/composables/useBatchImageAccess'
 
 interface NavItem {
@@ -969,6 +982,24 @@ function closeMobile() {
   appStore.setMobileOpen(false)
 }
 
+// Hover, keyboard focus or the first touch starts downloading the page, so the click often finds it ready.
+function warmNavItem(item: NavItem) {
+  if (item.openInNewWindow || item.expandOnly) return
+  warmRoutePath(router, item.path)
+}
+
+const navPathsToWarm = computed(() => {
+  const items: NavItem[] = isAdmin.value
+    ? [...adminNavItems.value, ...(authStore.isSimpleMode ? simplePaymentNavItems.value : personalNavItems.value)]
+    : userNavItems.value
+  return items
+    .flatMap((item) => [item, ...(item.children ?? [])])
+    .filter((item) => !item.openInNewWindow && !item.expandOnly)
+    .map((item) => item.path)
+})
+
+let cancelIdleWarm: (() => void) | null = null
+
 function handleMenuItemClick(itemPath: string) {
   if (mobileOpen.value) {
     setTimeout(() => {
@@ -1051,6 +1082,8 @@ watch(
 )
 
 onMounted(() => {
+  // Once the current page has settled, quietly fetch the other menu pages.
+  cancelIdleWarm = warmRoutePathsWhenIdle(router, navPathsToWarm.value)
   void refreshBatchImageAccess()
   if (isAdmin.value) {
     adminSettingsStore.fetch()
@@ -1066,6 +1099,7 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
+  cancelIdleWarm?.()
   if (sidebarNavRef.value) {
     appStore.sidebarScrollTop = sidebarNavRef.value.scrollTop
   }

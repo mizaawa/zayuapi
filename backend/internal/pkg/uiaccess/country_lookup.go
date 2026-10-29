@@ -126,25 +126,32 @@ func (r *CountryResolver) Detect(ctx context.Context, rawIP string, refresh bool
 		return result, countryFailure(result.ErrorCode)
 	}
 	ip := result.IP
+	// Cache, retry window and in-flight lookups are shared per network, so
+	// rotating through one IPv6 /64 cannot multiply provider requests or
+	// flush other visitors' cached decisions.
+	key := countryLookupKey(address)
 	r.mu.Lock()
 	now := time.Now()
-	last, attempted := r.attempts[ip]
+	last, attempted := r.attempts[key]
 	recent := attempted && now.Sub(last) < r.retryInterval
 	// A refresh within the retry interval reuses the decision it would repeat.
-	if entry, ok := r.cache[ip]; ok && now.Before(entry.expires) && (!refresh || recent) {
+	if entry, ok := r.cache[key]; ok && now.Before(entry.expires) && (!refresh || recent) {
 		r.mu.Unlock()
 		result = entry.result
+		result.IP = ip
 		result.Cached = true
 		return result, nil
 	}
 	if refresh {
-		delete(r.cache, ip)
+		delete(r.cache, key)
 	}
-	if flight, ok := r.inflight[ip]; ok {
+	if flight, ok := r.inflight[key]; ok {
 		r.mu.Unlock()
 		select {
 		case <-flight.done:
-			return flight.result, flight.err
+			shared := flight.result
+			shared.IP = ip
+			return shared, flight.err
 		case <-ctx.Done():
 			result.ErrorCode = CountryLookupErrorCode(ctx.Err())
 			return result, ctx.Err()
@@ -165,16 +172,16 @@ func (r *CountryResolver) Detect(ctx context.Context, rawIP string, refresh bool
 		return result, countryFailure(result.ErrorCode)
 	}
 	flight := &uiCountryFlight{done: make(chan struct{})}
-	r.inflight[ip] = flight
+	r.inflight[key] = flight
 	r.mu.Unlock()
 
 	lookupCtx, cancel := context.WithTimeout(ctx, CountryLookupTimeout)
 	result, lookupErr := r.lookup(lookupCtx, ip)
 	cancel()
 	r.mu.Lock()
-	delete(r.inflight, ip)
+	delete(r.inflight, key)
 	// Cancelled lookups count too: the provider request may already have been sent.
-	r.recordAttempt(ip, time.Now())
+	r.recordAttempt(key, time.Now())
 	if lookupErr == nil {
 		if len(r.cache) >= uiCountryCacheMax {
 			for key, entry := range r.cache {
@@ -189,7 +196,7 @@ func (r *CountryResolver) Detect(ctx context.Context, rawIP string, refresh bool
 				}
 			}
 		}
-		r.cache[ip] = uiCountryEntry{result: result, expires: time.Now().Add(uiCountryCacheTTL)}
+		r.cache[key] = uiCountryEntry{result: result, expires: time.Now().Add(uiCountryCacheTTL)}
 	}
 	flight.result, flight.err = result, lookupErr
 	close(flight.done)
@@ -198,13 +205,27 @@ func (r *CountryResolver) Detect(ctx context.Context, rawIP string, refresh bool
 	return result, lookupErr
 }
 
+// countryLookupKey groups IPv6 visitors by /64, the smallest network a host
+// is normally given; one /64 is one site, so it shares one country. IPv4
+// addresses are keyed individually.
+func countryLookupKey(address netip.Addr) string {
+	if address.Is4() {
+		return address.String()
+	}
+	prefix, err := address.Prefix(64)
+	if err != nil {
+		return address.String()
+	}
+	return prefix.String()
+}
+
 // recordAttempt must be called with r.mu held. Like the cache, the map is
 // bounded; expired windows are dropped first.
-func (r *CountryResolver) recordAttempt(ip string, now time.Time) {
+func (r *CountryResolver) recordAttempt(key string, now time.Time) {
 	if r.retryInterval <= 0 {
 		return
 	}
-	if _, exists := r.attempts[ip]; !exists && len(r.attempts) >= uiCountryCacheMax {
+	if _, exists := r.attempts[key]; !exists && len(r.attempts) >= uiCountryCacheMax {
 		for key, last := range r.attempts {
 			if now.Sub(last) >= r.retryInterval {
 				delete(r.attempts, key)
@@ -217,7 +238,7 @@ func (r *CountryResolver) recordAttempt(ip string, now time.Time) {
 			}
 		}
 	}
-	r.attempts[ip] = now
+	r.attempts[key] = now
 }
 
 func (r *CountryResolver) lookup(ctx context.Context, ip string) (CountryLookupResult, error) {

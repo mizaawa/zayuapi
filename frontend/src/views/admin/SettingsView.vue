@@ -2,20 +2,36 @@
   <AppLayout>
     <div class="mx-auto max-w-6xl space-y-6">
       <!-- Loading State -->
-      <div v-if="loading" class="flex items-center justify-center py-12">
-        <div
-          class="h-8 w-8 animate-spin rounded-full border-b-2 border-primary-600"
-        ></div>
+      <div v-if="loading" class="flex items-center justify-center py-16">
+        <PageLoader />
       </div>
 
       <!-- Settings Form -->
       <form v-else @submit.prevent="saveSettings" class="space-y-6" novalidate>
         <!-- Tab Navigation -->
-        <div class="settings-tabs-shell mt-2 md:mt-3">
+        <div
+          class="settings-tabs-shell mt-2 md:mt-3"
+          :class="{
+            'can-scroll-left': settingsTabsOverflow.left,
+            'can-scroll-right': settingsTabsOverflow.right,
+          }"
+        >
+          <button
+            v-if="settingsTabsOverflow.left"
+            type="button"
+            class="settings-tabs-arrow is-left"
+            tabindex="-1"
+            aria-hidden="true"
+            @click="scrollSettingsTabs(-1)"
+          >
+            <Icon name="chevronLeft" size="sm" />
+          </button>
           <nav
+            ref="settingsTabsScrollRef"
             class="settings-tabs-scroll"
             role="tablist"
             :aria-label="t('admin.settings.title')"
+            @scroll.passive="updateSettingsTabsOverflow"
           >
             <div class="settings-tabs">
               <button
@@ -42,97 +58,135 @@
               </button>
             </div>
           </nav>
+          <button
+            v-if="settingsTabsOverflow.right"
+            type="button"
+            class="settings-tabs-arrow is-right"
+            tabindex="-1"
+            aria-hidden="true"
+            @click="scrollSettingsTabs(1)"
+          >
+            <Icon name="chevronRight" size="sm" />
+          </button>
         </div>
 
         <!-- Tab: Security — Admin API Key -->
         <div v-show="activeTab === 'security'" class="space-y-6">
           <!-- Webpage Accessibility Controls -->
-          <div class="card" data-testid="ui-accessibility-control">
-            <div class="border-b border-gray-100 px-6 py-4 dark:border-dark-700">
-              <h2 class="text-lg font-semibold text-gray-900 dark:text-white">
-                {{ localText('访问性控制', 'Accessibility Controls') }}
-              </h2>
-              <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
-                {{ localText('仅控制网页访问，不影响 API、流式请求或支付回调。', 'Controls webpage access only; API, streaming requests and payment callbacks are unaffected.') }}
-              </p>
+          <div class="card access-card" data-testid="ui-accessibility-control">
+            <div class="access-card-head">
+              <span class="access-card-icon" aria-hidden="true"><Icon name="shield" size="md" /></span>
+              <div class="min-w-0">
+                <h2 class="text-lg font-semibold text-gray-900 dark:text-white">
+                  {{ localText('访问性控制', 'Accessibility Controls') }}
+                </h2>
+                <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                  {{ localText('仅控制网页访问，不影响 API、流式请求或支付回调。', 'Controls webpage access only; API, streaming requests and payment callbacks are unaffected.') }}
+                </p>
+              </div>
             </div>
-            <div class="space-y-5 p-6">
-              <div class="flex items-center justify-between gap-4">
-                <div>
-                  <label id="ui-access-domain-enabled-label" class="font-medium text-gray-900 dark:text-white">
-                    {{ localText('限制主域名访问', 'Restrict webpage access domain') }}
-                  </label>
-                  <p id="ui-access-domain-enabled-hint" class="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                    {{ localText('开启并填写主域名后，仅该域名可打开网页；关闭保留已填写的域名。', 'When enabled with a main domain, only that domain can open webpages. Disabling retains the saved domain.') }}
-                  </p>
-                </div>
-                <Toggle v-model="form.ui_access_domain_enabled" aria-labelledby="ui-access-domain-enabled-label" aria-describedby="ui-access-domain-enabled-hint" data-testid="ui-access-domain-enabled-toggle" @update:model-value="uiAccessDomainError = false" />
-              </div>
-              <div>
-                <label for="ui-access-domain" class="input-label">{{ localText('主域名', 'Main domain') }}</label>
-                <input
-                  id="ui-access-domain"
-                  v-model="form.ui_access_domain"
-                  type="text"
-                  inputmode="url"
-                  autocomplete="off"
-                  autocapitalize="none"
-                  spellcheck="false"
-                  class="input"
-                  placeholder="example.com"
-                  :aria-invalid="uiAccessDomainError ? 'true' : undefined"
-                  :aria-describedby="uiAccessDomainError ? 'ui-access-domain-hint ui-access-domain-error' : 'ui-access-domain-hint'"
-                  data-testid="ui-access-domain"
-                  @input="uiAccessDomainError = false"
-                />
-                <p id="ui-access-domain-hint" class="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                  {{ localText('填写裸域名，不含协议、端口、路径或通配符；HTTP/HTTPS 均可。启用前请确认该域名可访问本站，启用时不可为空；关闭时保留配置。', 'Enter a bare domain without a scheme, port, path or wildcard; both HTTP and HTTPS work. Ensure it reaches this site before enabling. A domain is required when enabled; disabling retains the configuration.') }}
-                </p>
-                <p v-if="uiAccessDomainError" id="ui-access-domain-error" role="alert" class="mt-1 text-xs text-red-600 dark:text-red-400">{{ uiAccessDomainErrorMessage }}</p>
-              </div>
-              <div class="flex items-center justify-between gap-4 border-t border-gray-100 pt-4 dark:border-dark-700">
-                <div>
-                  <label id="ui-country-restriction-label" class="font-medium text-gray-900 dark:text-white">
-                    {{ localText('国家/地区不可访问性', 'Block webpage access by country/region') }}
-                  </label>
-                  <p id="ui-country-restriction-hint" class="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                    {{ localText('开启后阻止所选国家/地区访问网页；关闭保留国家/地区列表。', 'When enabled, visitors from the selected countries/regions cannot open webpages. Disabling retains the list.') }}
-                  </p>
-                </div>
-                <Toggle v-model="form.ui_country_restriction_enabled" aria-labelledby="ui-country-restriction-label" aria-describedby="ui-country-restriction-hint" data-testid="ui-country-restriction-enabled-toggle" @update:model-value="uiBlockedCountriesError = false" />
-              </div>
-              <div>
-                <label for="ui-blocked-countries" class="input-label">{{ localText('不可访问的国家/地区', 'Blocked countries/regions') }}</label>
-                <input
-                  id="ui-blocked-countries"
-                  v-model="form.ui_blocked_countries"
-                  type="text"
-                  autocomplete="off"
-                  autocapitalize="characters"
-                  spellcheck="false"
-                  class="input"
-                  placeholder="CN, US"
-                  :aria-invalid="uiBlockedCountriesError ? 'true' : undefined"
-                  :aria-describedby="uiBlockedCountriesError ? 'ui-blocked-countries-hint ui-blocked-countries-error' : 'ui-blocked-countries-hint'"
-                  data-testid="ui-blocked-countries"
-                  @input="uiBlockedCountriesError = false"
-                />
-                <p id="ui-blocked-countries-hint" class="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                  {{ localText('使用 ISO 两位国家/地区代码，以英文逗号分隔（如 CN, US）；保存时自动大写、去空格和去重，启用时不可为空。', 'Use ISO two-letter country/region codes separated by commas (for example CN, US). Saving trims, uppercases and removes duplicates; at least one code is required when enabled.') }}
-                </p>
-                <p v-if="uiBlockedCountriesError" id="ui-blocked-countries-error" role="alert" class="mt-1 text-xs text-red-600 dark:text-red-400">{{ uiBlockedCountriesErrorMessage }}</p>
-                <p class="mt-2 text-xs text-gray-500 dark:text-gray-400" data-testid="ui-country-scope-hint">
-                  {{ localText('域名限制启用且已填写主域名时，地区限制仅作用于该主域名；否则作用于所有网页域名。', 'When domain restriction is enabled with a main domain, country restrictions apply only to that domain; otherwise they apply to every webpage domain.') }}
-                </p>
-              </div>
-              <div class="space-y-2 rounded-lg bg-gray-50 p-3 text-xs text-gray-500 dark:bg-dark-800 dark:text-gray-400" data-testid="ui-accessibility-proxy-hint">
-                <p>{{ localText('服务端根据访客 IP 检测国家/地区，检测暂不可用时显示重试页。无需填写 CNAME，也不会直接信任任意 CF-IPCountry 等国家请求头。', 'The server detects the visitor country/region from the visitor IP and shows a retry page if detection is unavailable. No CNAME is required; arbitrary country headers such as CF-IPCountry are not trusted directly.') }}</p>
-                <p>{{ localText('访客 IP 沿用系统的转发 IP 兼容开关及自定义 IP 头设置；兼容开关关闭时，严格按 server.trusted_proxies 解析。CDN/反向代理须保留原始 Host 并正确传递访客 IP。', 'Visitor IP detection follows the system forwarded-IP compatibility switch and custom IP header settings. When compatibility is off, server.trusted_proxies is authoritative. CDN/reverse proxies must preserve the original Host and forward the visitor IP correctly.') }}</p>
-              </div>
-              <div class="rounded-xl border border-gray-200 bg-gray-50/60 p-4 dark:border-dark-700 dark:bg-dark-800/50" data-testid="ui-access-check-panel">
-                <div class="flex flex-wrap items-center justify-between gap-3">
+            <div class="access-card-body">
+              <div class="access-policies">
+                <!-- Main-domain policy -->
+                <section class="access-policy" :class="{ 'is-on': form.ui_access_domain_enabled }">
+                  <div class="access-policy-head">
+                    <span class="access-policy-icon" aria-hidden="true"><Icon name="globe" size="sm" /></span>
+                    <div class="min-w-0 flex-1">
+                      <div class="flex flex-wrap items-center gap-2">
+                        <label id="ui-access-domain-enabled-label" class="font-medium text-gray-900 dark:text-white">
+                          {{ localText('限制主域名访问', 'Restrict webpage access domain') }}
+                        </label>
+                        <span class="access-policy-state">{{ form.ui_access_domain_enabled ? localText('已开启', 'On') : localText('未开启', 'Off') }}</span>
+                      </div>
+                      <p id="ui-access-domain-enabled-hint" class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                        {{ localText('开启并填写主域名后，仅该域名可打开网页；关闭保留已填写的域名。', 'When enabled with a main domain, only that domain can open webpages. Disabling retains the saved domain.') }}
+                      </p>
+                    </div>
+                    <Toggle v-model="form.ui_access_domain_enabled" aria-labelledby="ui-access-domain-enabled-label" aria-describedby="ui-access-domain-enabled-hint" data-testid="ui-access-domain-enabled-toggle" @update:model-value="uiAccessDomainError = false" />
+                  </div>
                   <div>
-                    <h3 class="text-sm font-medium text-gray-900 dark:text-gray-100">{{ localText('当前访问检测', 'Check this visit') }}</h3>
+                    <label for="ui-access-domain" class="input-label">{{ localText('主域名', 'Main domain') }}</label>
+                    <input
+                      id="ui-access-domain"
+                      v-model="form.ui_access_domain"
+                      type="text"
+                      inputmode="url"
+                      autocomplete="off"
+                      autocapitalize="none"
+                      spellcheck="false"
+                      class="input access-policy-input"
+                      placeholder="example.com"
+                      :aria-invalid="uiAccessDomainError ? 'true' : undefined"
+                      :aria-describedby="uiAccessDomainError ? 'ui-access-domain-hint ui-access-domain-error' : 'ui-access-domain-hint'"
+                      data-testid="ui-access-domain"
+                      @input="uiAccessDomainError = false"
+                    />
+                    <p id="ui-access-domain-hint" class="mt-1.5 text-xs leading-5 text-gray-500 dark:text-gray-400">
+                      {{ localText('填写裸域名，不含协议、端口、路径或通配符；HTTP/HTTPS 均可。启用前请确认该域名可访问本站，启用时不可为空；关闭时保留配置。', 'Enter a bare domain without a scheme, port, path or wildcard; both HTTP and HTTPS work. Ensure it reaches this site before enabling. A domain is required when enabled; disabling retains the configuration.') }}
+                    </p>
+                    <p v-if="uiAccessDomainError" id="ui-access-domain-error" role="alert" class="mt-1 text-xs text-red-600 dark:text-red-400">{{ uiAccessDomainErrorMessage }}</p>
+                  </div>
+                </section>
+
+                <!-- Country/region policy -->
+                <section class="access-policy" :class="{ 'is-on': form.ui_country_restriction_enabled }">
+                  <div class="access-policy-head">
+                    <span class="access-policy-icon is-region" aria-hidden="true"><Icon name="ban" size="sm" /></span>
+                    <div class="min-w-0 flex-1">
+                      <div class="flex flex-wrap items-center gap-2">
+                        <label id="ui-country-restriction-label" class="font-medium text-gray-900 dark:text-white">
+                          {{ localText('国家/地区不可访问性', 'Block webpage access by country/region') }}
+                        </label>
+                        <span class="access-policy-state">{{ form.ui_country_restriction_enabled ? localText('已开启', 'On') : localText('未开启', 'Off') }}</span>
+                      </div>
+                      <p id="ui-country-restriction-hint" class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                        {{ localText('开启后阻止所选国家/地区访问网页；关闭保留国家/地区列表。', 'When enabled, visitors from the selected countries/regions cannot open webpages. Disabling retains the list.') }}
+                      </p>
+                    </div>
+                    <Toggle v-model="form.ui_country_restriction_enabled" aria-labelledby="ui-country-restriction-label" aria-describedby="ui-country-restriction-hint" data-testid="ui-country-restriction-enabled-toggle" @update:model-value="uiBlockedCountriesError = false" />
+                  </div>
+                  <div>
+                    <label for="ui-blocked-countries" class="input-label">{{ localText('不可访问的国家/地区', 'Blocked countries/regions') }}</label>
+                    <input
+                      id="ui-blocked-countries"
+                      v-model="form.ui_blocked_countries"
+                      type="text"
+                      autocomplete="off"
+                      autocapitalize="characters"
+                      spellcheck="false"
+                      class="input access-policy-input"
+                      placeholder="CN, US"
+                      :aria-invalid="uiBlockedCountriesError ? 'true' : undefined"
+                      :aria-describedby="uiBlockedCountriesError ? 'ui-blocked-countries-hint ui-blocked-countries-error' : 'ui-blocked-countries-hint'"
+                      data-testid="ui-blocked-countries"
+                      @input="uiBlockedCountriesError = false"
+                    />
+                    <ul v-if="uiBlockedCountryCodes.length > 0" class="access-country-chips" :aria-label="localText('将按以下代码拦截', 'Codes that will be blocked')">
+                      <li v-for="code in uiBlockedCountryCodes" :key="code">{{ code }}</li>
+                    </ul>
+                    <p id="ui-blocked-countries-hint" class="mt-1.5 text-xs leading-5 text-gray-500 dark:text-gray-400">
+                      {{ localText('使用 ISO 两位国家/地区代码，以英文逗号分隔（如 CN, US）；保存时自动大写、去空格和去重，启用时不可为空。', 'Use ISO two-letter country/region codes separated by commas (for example CN, US). Saving trims, uppercases and removes duplicates; at least one code is required when enabled.') }}
+                    </p>
+                    <p v-if="uiBlockedCountriesError" id="ui-blocked-countries-error" role="alert" class="mt-1 text-xs text-red-600 dark:text-red-400">{{ uiBlockedCountriesErrorMessage }}</p>
+                    <p class="mt-2 text-xs leading-5 text-gray-500 dark:text-gray-400" data-testid="ui-country-scope-hint">
+                      {{ localText('域名限制启用且已填写主域名时，地区限制仅作用于该主域名；否则作用于所有网页域名。', 'When domain restriction is enabled with a main domain, country restrictions apply only to that domain; otherwise they apply to every webpage domain.') }}
+                    </p>
+                  </div>
+                </section>
+              </div>
+
+              <div class="access-note" data-testid="ui-accessibility-proxy-hint">
+                <Icon name="infoCircle" size="sm" class="access-note-icon" />
+                <div class="space-y-1.5">
+                  <p>{{ localText('服务端根据访客 IP 检测国家/地区，检测暂不可用时显示重试页。无需填写 CNAME，也不会直接信任任意 CF-IPCountry 等国家请求头。', 'The server detects the visitor country/region from the visitor IP and shows a retry page if detection is unavailable. No CNAME is required; arbitrary country headers such as CF-IPCountry are not trusted directly.') }}</p>
+                  <p>{{ localText('访客 IP 沿用系统的转发 IP 兼容开关及自定义 IP 头设置；兼容开关关闭时，严格按 server.trusted_proxies 解析。CDN/反向代理须保留原始 Host 并正确传递访客 IP。', 'Visitor IP detection follows the system forwarded-IP compatibility switch and custom IP header settings. When compatibility is off, server.trusted_proxies is authoritative. CDN/reverse proxies must preserve the original Host and forward the visitor IP correctly.') }}</p>
+                </div>
+              </div>
+
+              <div class="access-check" data-testid="ui-access-check-panel">
+                <div class="flex flex-wrap items-center justify-between gap-3">
+                  <div class="min-w-0">
+                    <h3 class="text-sm font-semibold text-gray-900 dark:text-gray-100">{{ localText('当前访问检测', 'Check this visit') }}</h3>
                     <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ localText('手动检测当前访客 IP 和地区，不会保存设置或触发网页拦截。', 'Manually check this visitor IP and country/region without saving settings or blocking this page.') }}</p>
                   </div>
                   <button type="button" class="btn btn-secondary inline-flex items-center gap-2" :disabled="uiAccessChecking" :aria-busy="uiAccessChecking" data-testid="ui-access-check-button" @click="checkCurrentUIAccess">
@@ -141,19 +195,19 @@
                   </button>
                 </div>
                 <div v-if="uiAccessCheckResult || uiAccessCheckFailed" class="mt-4 space-y-3" role="status" aria-live="polite" data-testid="ui-access-check-result">
-                  <dl v-if="uiAccessCheckResult" class="grid grid-cols-2 gap-3 text-xs sm:grid-cols-4">
-                    <div><dt class="text-gray-500 dark:text-gray-400">{{ localText('访客 IP', 'Visitor IP') }}</dt><dd class="mt-1 break-all font-mono text-gray-900 dark:text-gray-100" data-testid="ui-access-check-ip">{{ uiAccessCheckResult.ip || '—' }}</dd></div>
-                    <div><dt class="text-gray-500 dark:text-gray-400">{{ localText('国家/地区代码', 'Country/region code') }}</dt><dd class="mt-1 font-medium text-gray-900 dark:text-gray-100" data-testid="ui-access-check-country">{{ uiAccessCheckCountry || localText('未识别', 'Unknown') }}</dd></div>
-                    <div><dt class="text-gray-500 dark:text-gray-400">{{ localText('检测来源', 'Detection source') }}</dt><dd class="mt-1 break-all text-gray-900 dark:text-gray-100">{{ uiAccessCheckResult.provider || '—' }}<span v-if="uiAccessCheckResult.cached" class="ml-1 text-gray-500 dark:text-gray-400">{{ localText('（缓存）', '(cached)') }}</span></dd></div>
-                    <div><dt class="text-gray-500 dark:text-gray-400">{{ localText('耗时', 'Elapsed') }}</dt><dd class="mt-1 text-gray-900 dark:text-gray-100">{{ uiAccessCheckResult.elapsed_ms }} ms</dd></div>
+                  <dl v-if="uiAccessCheckResult" class="access-check-facts">
+                    <div><dt>{{ localText('访客 IP', 'Visitor IP') }}</dt><dd class="break-all font-mono" data-testid="ui-access-check-ip">{{ uiAccessCheckResult.ip || '—' }}</dd></div>
+                    <div><dt>{{ localText('国家/地区代码', 'Country/region code') }}</dt><dd data-testid="ui-access-check-country">{{ uiAccessCheckCountry || localText('未识别', 'Unknown') }}</dd></div>
+                    <div><dt>{{ localText('检测来源', 'Detection source') }}</dt><dd class="break-all">{{ uiAccessCheckResult.provider || '—' }}<span v-if="uiAccessCheckResult.cached" class="ml-1 font-normal text-gray-500 dark:text-gray-400">{{ localText('（缓存）', '(cached)') }}</span></dd></div>
+                    <div><dt>{{ localText('耗时', 'Elapsed') }}</dt><dd>{{ uiAccessCheckResult.elapsed_ms }} ms</dd></div>
                   </dl>
-                  <p v-if="uiAccessCheckError" class="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:bg-amber-900/20 dark:text-amber-300" data-testid="ui-access-check-error">{{ uiAccessCheckError }}</p>
-                  <div class="rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs dark:border-dark-700 dark:bg-dark-900">
+                  <p v-if="uiAccessCheckError" class="rounded-xl bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:bg-amber-900/20 dark:text-amber-300" data-testid="ui-access-check-error">{{ uiAccessCheckError }}</p>
+                  <div class="access-check-preview">
                     <p class="font-medium text-gray-900 dark:text-gray-100">{{ localText('当前输入规则预览', 'Preview the entered rules') }}</p>
                     <p class="mt-1 text-gray-600 dark:text-gray-300" data-testid="ui-access-check-preview">{{ uiAccessCheckPreview }}</p>
                   </div>
                 </div>
-                <p class="mt-3 text-xs text-gray-500 dark:text-gray-400">{{ localText('预览按当前输入计算，不代表已保存。保存后请刷新网页或用新窗口验证；此检测 API 不受网页访问限制。', 'The preview uses your current inputs, which may not be saved. Refresh the page or open a new window after saving to verify; this diagnostic API is not blocked by webpage access restrictions.') }}</p>
+                <p class="mt-3 text-xs leading-5 text-gray-500 dark:text-gray-400">{{ localText('预览按当前输入计算，不代表已保存。保存后请刷新网页或用新窗口验证；此检测 API 不受网页访问限制。', 'The preview uses your current inputs, which may not be saved. Refresh the page or open a new window after saving to verify; this diagnostic API is not blocked by webpage access restrictions.') }}</p>
               </div>
             </div>
           </div>
@@ -8297,7 +8351,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted, watch } from "vue";
+import { ref, reactive, computed, onMounted, watch, nextTick } from "vue";
+import { useResizeObserver } from "@vueuse/core";
 import { useI18n } from "vue-i18n";
 import { useRoute } from "vue-router";
 import { adminAPI } from "@/api";
@@ -8334,6 +8389,7 @@ import type {
 import type { ProviderInstance } from "@/types/payment";
 import AppLayout from "@/components/layout/AppLayout.vue";
 import Icon from "@/components/icons/Icon.vue";
+import PageLoader from "@/components/common/PageLoader.vue";
 import Select from "@/components/common/Select.vue";
 import ConfirmDialog from "@/components/common/ConfirmDialog.vue";
 import PaymentProviderList from "@/components/payment/PaymentProviderList.vue";
@@ -8446,6 +8502,48 @@ const settingsTabKeyboardActions = {
 function selectSettingsTab(tab: SettingsTab): void {
   activeTab.value = tab;
 }
+
+// The tab strip scrolls sideways when the labels do not fit; edge fades and
+// arrows show there is more, and the selected tab is always scrolled into view.
+const settingsTabsScrollRef = ref<HTMLElement | null>(null);
+const settingsTabsOverflow = reactive({ left: false, right: false });
+
+function updateSettingsTabsOverflow(): void {
+  const el = settingsTabsScrollRef.value;
+  if (!el) return;
+  const maxScroll = el.scrollWidth - el.clientWidth;
+  settingsTabsOverflow.left = el.scrollLeft > 2;
+  settingsTabsOverflow.right = maxScroll - el.scrollLeft > 2;
+}
+
+function scrollSettingsTabs(direction: -1 | 1): void {
+  const el = settingsTabsScrollRef.value;
+  if (!el) return;
+  el.scrollBy({ left: direction * Math.max(160, el.clientWidth * 0.6), behavior: "smooth" });
+}
+
+function revealActiveSettingsTab(): void {
+  const el = settingsTabsScrollRef.value;
+  const tab = document.getElementById(`settings-tab-${activeTab.value}`);
+  if (!el || !tab) return;
+  const tabStart = tab.offsetLeft;
+  const tabEnd = tabStart + tab.offsetWidth;
+  if (tabStart < el.scrollLeft + 24) {
+    el.scrollTo({ left: Math.max(0, tabStart - 24), behavior: "smooth" });
+  } else if (tabEnd > el.scrollLeft + el.clientWidth - 24) {
+    el.scrollTo({ left: tabEnd - el.clientWidth + 24, behavior: "smooth" });
+  }
+}
+
+useResizeObserver(settingsTabsScrollRef, updateSettingsTabsOverflow);
+watch(activeTab, () => nextTick(revealActiveSettingsTab));
+watch(settingsTabsScrollRef, (el) => {
+  if (!el) return;
+  void nextTick(() => {
+    updateSettingsTabsOverflow();
+    revealActiveSettingsTab();
+  });
+});
 
 function focusSettingsTab(tab: SettingsTab): void {
   window.requestAnimationFrame(() => {
@@ -8711,6 +8809,12 @@ const uiBlockedCountriesErrorMessage = computed(() => localText(
   "请输入有效的 ISO 两位国家/地区代码，以英文逗号分隔（例如 CN, US）；启用地区限制时至少填写一项。",
   "Enter valid ISO two-letter country/region codes separated by commas (for example CN, US); at least one code is required when the restriction is enabled.",
 ));
+
+// Codes the saved list will block, shown as chips while typing; empty while the input is invalid.
+const uiBlockedCountryCodes = computed(() => {
+  const normalized = normalizeUiBlockedCountries(form.ui_blocked_countries);
+  return normalized ? normalized.split(",") : [];
+});
 
 const uiAccessChecking = ref(false);
 const uiAccessCheckResult = ref<UIAccessCheckResult | null>(null);
@@ -12180,18 +12284,210 @@ watch(
   @apply h-[42px];
 }
 
+/* ============ 访问性控制 ============ */
+.access-card-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.875rem;
+  padding: 1.25rem 1.5rem 1rem;
+  box-shadow: inset 0 -1px 0 rgb(215 193 106 / 0.28);
+}
+
+.access-card-icon {
+  display: inline-flex;
+  width: 2.5rem;
+  height: 2.5rem;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.875rem;
+  background: #e4f0df;
+  color: #386344;
+}
+
+.access-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 1.25rem 1.5rem 1.5rem;
+}
+
+.access-policies {
+  display: grid;
+  gap: 1rem;
+}
+
+.access-policy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 1rem 1.125rem 1.125rem;
+  border-radius: 1.25rem;
+  background: #fffdf6;
+  box-shadow: inset 0 0 0 1px rgb(215 193 106 / 0.35);
+  transition: background-color 200ms ease, box-shadow 200ms ease;
+}
+
+.access-policy.is-on {
+  background: #fffbe8;
+  box-shadow: inset 0 0 0 1px rgb(201 154 18 / 0.45), 0 6px 18px -14px rgb(151 104 0 / 0.5);
+}
+
+.access-policy-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+}
+
+.access-policy-icon {
+  display: inline-flex;
+  width: 2rem;
+  height: 2rem;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.75rem;
+  background: #faf6e8;
+  color: #6b6045;
+  transition: background-color 200ms ease, color 200ms ease;
+}
+
+.access-policy.is-on .access-policy-icon {
+  background: #fff3bd;
+  color: #7e5600;
+}
+
+.access-policy.is-on .access-policy-icon.is-region {
+  background: #fde8e4;
+  color: #b4441f;
+}
+
+.access-policy-state {
+  padding: 0 0.5rem;
+  border-radius: 999px;
+  background: #faf6e8;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  line-height: 1.25rem;
+  color: #6b6045;
+}
+
+.access-policy.is-on .access-policy-state {
+  background: #e4f0df;
+  color: #2e5038;
+}
+
+.access-policy-input {
+  background: var(--md-sys-color-surface);
+}
+
+.access-country-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+  margin-top: 0.5rem;
+}
+
+.access-country-chips li {
+  padding: 0.125rem 0.5rem;
+  border-radius: 0.5rem;
+  background: #fde8e4;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: #9a3412;
+}
+
+.access-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.625rem;
+  padding: 0.75rem 0.875rem;
+  border-radius: 1rem;
+  background: #faf6e8;
+  font-size: 0.75rem;
+  line-height: 1.25rem;
+  color: #5b5238;
+}
+
+.access-note-icon {
+  flex-shrink: 0;
+  margin-top: 0.125rem;
+  color: #9b8c62;
+}
+
+.access-check {
+  padding: 1rem 1.125rem;
+  border-radius: 1.25rem;
+  background: #f2f8ef;
+  box-shadow: inset 0 0 0 1px rgb(121 179 123 / 0.28);
+}
+
+.access-check-facts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.5rem;
+  font-size: 0.75rem;
+}
+
+.access-check-facts > div {
+  min-width: 0;
+  padding: 0.5rem 0.625rem;
+  border-radius: 0.75rem;
+  background: rgb(255 254 248 / 0.85);
+}
+
+.access-check-facts dt {
+  color: var(--md-sys-color-on-surface-variant);
+}
+
+.access-check-facts dd {
+  margin-top: 0.25rem;
+  font-weight: 600;
+  color: var(--md-sys-color-on-surface);
+}
+
+.access-check-preview {
+  padding: 0.5rem 0.75rem;
+  border-radius: 0.75rem;
+  background: rgb(255 254 248 / 0.85);
+  font-size: 0.75rem;
+}
+
+@media (min-width: 640px) {
+  .access-check-facts {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1024px) {
+  .access-policies {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
 /* ============ 系统设置 Tab 导航 ============ */
+/* A light, sticky strip: idle tabs are plain text on the surface, the
+ * selected tab is a solid honey pill with dark ink (about 6.5:1), and hover
+ * or press never repaint the selected tab. The strip scrolls sideways when
+ * the labels do not fit, with fades and arrows at the clipped edges. */
 .settings-tabs-shell {
-  @apply sticky z-20 -mx-1 rounded-2xl border p-2;
-  margin-bottom: 0.25rem;
+  position: sticky;
   top: 4.75rem;
-  border-color: transparent;
-  background: var(--md-sys-color-surface-container-high);
-  box-shadow: 0 10px 24px rgb(15 23 42 / 0.08);
+  z-index: 20;
+  margin: 0 -0.25rem 0.25rem;
+  padding: 0.375rem;
+  border-radius: 1.25rem;
+  background: var(--md-sys-color-surface);
+  box-shadow: var(--theme-highlight), 0 1px 2px rgb(63 52 32 / 0.06), 0 10px 24px -14px rgb(63 52 32 / 0.28);
 }
 
 .settings-tabs-scroll {
-  @apply overflow-x-auto;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scroll-snap-type: x proximity;
   -ms-overflow-style: none;
   scrollbar-width: none;
 }
@@ -12200,106 +12496,154 @@ watch(
   display: none;
 }
 
+.settings-tabs-shell.can-scroll-left .settings-tabs-scroll {
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 2.5rem);
+  mask-image: linear-gradient(90deg, transparent, #000 2.5rem);
+}
+
+.settings-tabs-shell.can-scroll-right .settings-tabs-scroll {
+  -webkit-mask-image: linear-gradient(270deg, transparent, #000 2.5rem);
+  mask-image: linear-gradient(270deg, transparent, #000 2.5rem);
+}
+
+.settings-tabs-shell.can-scroll-left.can-scroll-right .settings-tabs-scroll {
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 2.5rem, #000 calc(100% - 2.5rem), transparent);
+  mask-image: linear-gradient(90deg, transparent, #000 2.5rem, #000 calc(100% - 2.5rem), transparent);
+}
+
 .settings-tabs {
-  @apply flex min-w-max items-center gap-1;
+  display: flex;
+  min-width: max-content;
+  align-items: center;
+  gap: 0.25rem;
 }
 
 .settings-tab {
-  @apply relative isolate flex h-11 min-w-[6.75rem] shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-xl border border-transparent px-3 text-sm font-medium text-gray-600 outline-none transition-colors duration-200 ease-out dark:text-gray-300;
+  position: relative;
+  display: inline-flex;
+  height: 2.5rem;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 0.4375rem;
+  padding: 0 0.875rem 0 0.5rem;
+  border: 0;
+  border-radius: 0.875rem;
+  background: transparent;
+  scroll-snap-align: start;
+  white-space: nowrap;
+  font-size: 0.8125rem;
+  font-weight: 600;
   line-height: 1.2;
-}
-
-@media (min-width: 768px) {
-  .settings-tabs {
-    @apply min-w-full;
-  }
-
-  .settings-tab {
-    @apply min-w-0 flex-1 basis-0 overflow-hidden px-2 text-[13px];
-  }
-
-  .settings-tab-icon {
-    @apply h-6 w-6;
-  }
-}
-
-.settings-tab::before {
-  @apply absolute inset-0 -z-10 rounded-xl opacity-0 transition-opacity duration-200;
-  content: "";
-  background: var(--md-sys-color-surface);
-}
-
-.settings-tab:hover::before,
-.settings-tab:focus-visible::before {
-  opacity: 1;
-}
-
-.settings-tab:hover,
-.settings-tab:focus-visible {
-  color: var(--md-sys-color-on-surface);
-}
-
-.settings-tab:focus-visible {
-  @apply ring-2 ring-primary-500/40 ring-offset-2 ring-offset-white dark:ring-offset-dark-900;
-}
-
-.settings-tab-active {
-  border-color: transparent;
-  background: var(--md-sys-color-primary);
-  color: var(--md-sys-color-on-primary);
-  box-shadow: none;
-}
-
-.settings-tab-active::before {
-  opacity: 0;
-}
-
-.settings-tab-active::after {
-  display: none;
+  color: var(--md-sys-color-on-surface-variant);
+  outline: none;
+  -webkit-tap-highlight-color: transparent;
+  transition: background-color 160ms ease, color 160ms ease, box-shadow 200ms ease, transform 160ms ease;
 }
 
 .settings-tab-icon {
-  @apply flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-gray-500 transition-colors duration-200 dark:text-gray-400;
-}
-
-.settings-tab:hover .settings-tab-icon,
-.settings-tab:focus-visible .settings-tab-icon {
-  @apply text-gray-700 dark:text-gray-200;
-}
-
-.settings-tab-active .settings-tab-icon {
-  background: rgb(255 255 255 / 0.18);
-  color: inherit;
+  display: inline-flex;
+  width: 1.625rem;
+  height: 1.625rem;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.5625rem;
+  background: #faf6e8;
+  color: #9b8c62;
+  transition: background-color 160ms ease, color 160ms ease;
 }
 
 .settings-tab-label {
-  @apply min-w-0 overflow-hidden text-ellipsis whitespace-nowrap leading-tight;
-}
-</style>
-
-<style>
-/* Dark-mode overrides for the settings tabs shell. Kept in an UNSCOPED block
-   because Vue's scoped-CSS compiler was dropping the `:global(.dark) ...`
-   rules in the production build, leaving inactive tabs unreadable on dark. */
-.dark .settings-tabs-shell {
-  border-color: transparent;
-  background: var(--md-sys-color-surface-container-high);
-  box-shadow: none;
+  white-space: nowrap;
 }
 
-.dark .settings-tab:hover,
-.dark .settings-tab:focus-visible {
+.settings-tab:not(.settings-tab-active):hover {
+  background: #fffbe8;
   color: var(--md-sys-color-on-surface);
 }
 
-.dark .settings-tab::before {
-  background: var(--md-sys-color-surface);
+.settings-tab:not(.settings-tab-active):hover .settings-tab-icon {
+  background: #fff3bd;
+  color: #7e5600;
 }
 
-.dark .settings-tab-active {
-  border-color: transparent;
+.settings-tab:not(.settings-tab-active):active {
+  background: #fff3bd;
+  transform: scale(0.97);
+}
+
+.settings-tab-active {
   background: var(--md-sys-color-primary);
   color: var(--md-sys-color-on-primary);
-  box-shadow: none;
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.45), 0 1px 2px rgb(151 104 0 / 0.18), 0 6px 14px -8px rgb(151 104 0 / 0.5);
+}
+
+.settings-tab-active .settings-tab-icon {
+  background: rgb(255 254 248 / 0.55);
+  color: #65460b;
+}
+
+.settings-tab-active:active {
+  background: #d9a91c;
+  transform: scale(0.98);
+}
+
+.settings-tab:focus-visible {
+  box-shadow: 0 0 0 2px var(--md-sys-color-surface), 0 0 0 4px rgb(233 184 36 / 0.55);
+}
+
+.settings-tabs-arrow {
+  position: absolute;
+  top: 50%;
+  z-index: 2;
+  display: inline-flex;
+  width: 1.75rem;
+  height: 1.75rem;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: var(--md-sys-color-surface);
+  color: #7e5600;
+  box-shadow: var(--theme-highlight), 0 2px 8px rgb(63 52 32 / 0.16);
+  transform: translateY(-50%);
+  transition: background-color 160ms ease;
+}
+
+.settings-tabs-arrow:hover {
+  background: #fff3bd;
+}
+
+.settings-tabs-arrow.is-left {
+  left: 0.25rem;
+}
+
+.settings-tabs-arrow.is-right {
+  right: 0.25rem;
+}
+
+/* Touch screens swipe the strip; the arrows are for mouse users. */
+@media (hover: none) {
+  .settings-tabs-arrow {
+    display: none;
+  }
+}
+
+@media (min-width: 768px) {
+  .settings-tab {
+    height: 2.625rem;
+    padding: 0 1rem 0 0.5625rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .settings-tab,
+  .settings-tab-icon {
+    transition: none;
+  }
+
+  .settings-tab:active {
+    transform: none;
+  }
 }
 </style>
+

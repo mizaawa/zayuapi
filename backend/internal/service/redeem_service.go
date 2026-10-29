@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	dbent "github.com/Wei-Shaw/sub2api/ent"
 	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
@@ -28,6 +29,7 @@ const (
 	redeemMaxErrorsPerHour  = 20
 	redeemRateLimitDuration = time.Hour
 	redeemLockDuration      = 10 * time.Second // 锁超时时间，防止死锁
+	redeemCodeMaxLength     = 64               // redeem_codes.code column width
 )
 
 type ctxKeySkipRedeemAffiliate struct{}
@@ -46,6 +48,11 @@ type RedeemCache interface {
 
 	AcquireRedeemLock(ctx context.Context, code string, ttl time.Duration) (bool, error)
 	ReleaseRedeemLock(ctx context.Context, code string) error
+
+	// A user may have one redemption in flight. Without it, parallel requests
+	// all pass the failed-attempt check before any of them is counted.
+	AcquireRedeemUserLock(ctx context.Context, userID int64, ttl time.Duration) (bool, error)
+	ReleaseRedeemUserLock(ctx context.Context, userID int64) error
 }
 
 type RedeemCodeRepository interface {
@@ -371,6 +378,27 @@ func (s *RedeemService) acquireRedeemLock(ctx context.Context, code string) bool
 	return ok
 }
 
+// acquireRedeemUserLock serializes one user's redemptions. Like the code
+// lock it degrades open when Redis is unavailable; the database still
+// guarantees a code is used once.
+func (s *RedeemService) acquireRedeemUserLock(ctx context.Context, userID int64) bool {
+	if s.cache == nil {
+		return true
+	}
+	ok, err := s.cache.AcquireRedeemUserLock(ctx, userID, redeemLockDuration)
+	if err != nil {
+		return true
+	}
+	return ok
+}
+
+func (s *RedeemService) releaseRedeemUserLock(ctx context.Context, userID int64) {
+	if s.cache == nil {
+		return
+	}
+	_ = s.cache.ReleaseRedeemUserLock(ctx, userID)
+}
+
 // releaseRedeemLock 释放兑换码的分布式锁
 func (s *RedeemService) releaseRedeemLock(ctx context.Context, code string) {
 	if s.cache == nil {
@@ -389,7 +417,24 @@ func unsupportedRedeemTypeError(codeType string) error {
 
 // Redeem 使用兑换码
 func (s *RedeemService) Redeem(ctx context.Context, userID int64, code string) (*RedeemCode, error) {
+	if strings.TrimSpace(code) == "" {
+		return nil, ErrRedeemCodeNotFound
+	}
 	if strings.HasPrefix(strings.ToUpper(strings.TrimSpace(code)), "PAY-") {
+		return nil, ErrRedeemCodeNotFound
+	}
+	if !s.acquireRedeemUserLock(ctx, userID) {
+		return nil, ErrRedeemCodeLocked
+	}
+	defer s.releaseRedeemUserLock(ctx, userID)
+
+	// Stored codes are at most redeemCodeMaxLength characters; a longer input
+	// cannot match, so it counts as a failed attempt without touching the database.
+	if utf8.RuneCountInString(code) > redeemCodeMaxLength {
+		if err := s.checkRedeemRateLimit(ctx, userID); err != nil {
+			return nil, err
+		}
+		s.incrementRedeemErrorCount(ctx, userID)
 		return nil, ErrRedeemCodeNotFound
 	}
 	return s.redeem(ctx, userID, code)

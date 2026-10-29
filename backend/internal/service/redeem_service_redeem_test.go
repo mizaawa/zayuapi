@@ -2,7 +2,9 @@ package service
 
 import (
 	"context"
+	"strings"
 	"testing"
+	"time"
 
 	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/pagination"
@@ -99,4 +101,81 @@ func TestRedeemRejectsInvitationCodeBeforeTransaction(t *testing.T) {
 	require.False(t, redeemRepo.useCalled)
 	require.Equal(t, StatusUnused, redeemRepo.code.Status)
 	require.Nil(t, redeemRepo.code.UsedBy)
+}
+
+type redeemFakeCache struct {
+	attempts   int
+	userLocked bool
+	userLocks  int
+}
+
+func (c *redeemFakeCache) GetRedeemAttemptCount(ctx context.Context, userID int64) (int, error) {
+	return c.attempts, nil
+}
+
+func (c *redeemFakeCache) IncrementRedeemAttemptCount(ctx context.Context, userID int64) error {
+	c.attempts++
+	return nil
+}
+
+func (c *redeemFakeCache) AcquireRedeemLock(ctx context.Context, code string, ttl time.Duration) (bool, error) {
+	return true, nil
+}
+
+func (c *redeemFakeCache) ReleaseRedeemLock(ctx context.Context, code string) error { return nil }
+
+func (c *redeemFakeCache) AcquireRedeemUserLock(ctx context.Context, userID int64, ttl time.Duration) (bool, error) {
+	if c.userLocked {
+		return false, nil
+	}
+	c.userLocked = true
+	c.userLocks++
+	return true, nil
+}
+
+func (c *redeemFakeCache) ReleaseRedeemUserLock(ctx context.Context, userID int64) error {
+	c.userLocked = false
+	return nil
+}
+
+func TestRedeemRejectsAParallelAttemptBySameUser(t *testing.T) {
+	cache := &redeemFakeCache{userLocked: true}
+	redeemRepo := &redeemRejectRepo{code: RedeemCode{ID: 1, Code: "CODE-1", Type: RedeemTypeBalance, Status: StatusUnused}}
+	redeemService := NewRedeemService(redeemRepo, nil, nil, cache, nil, nil, nil, nil)
+
+	got, err := redeemService.Redeem(context.Background(), 2, "CODE-1")
+
+	require.Nil(t, got)
+	require.ErrorIs(t, err, ErrRedeemCodeLocked)
+	require.Zero(t, cache.attempts, "a rejected parallel attempt is not counted as a wrong code")
+	require.False(t, redeemRepo.useCalled)
+}
+
+func TestRedeemCountsOverlongCodesWithoutLookingThemUp(t *testing.T) {
+	cache := &redeemFakeCache{}
+	redeemRepo := &redeemRejectRepo{code: RedeemCode{ID: 1, Code: "CODE-1", Type: RedeemTypeBalance, Status: StatusUnused}}
+	redeemService := NewRedeemService(redeemRepo, nil, nil, cache, nil, nil, nil, nil)
+
+	got, err := redeemService.Redeem(context.Background(), 2, strings.Repeat("A", redeemCodeMaxLength+1))
+
+	require.Nil(t, got)
+	require.ErrorIs(t, err, ErrRedeemCodeNotFound)
+	require.Equal(t, 1, cache.attempts)
+	require.Equal(t, 1, cache.userLocks)
+	require.False(t, cache.userLocked, "the per-user lock is released after the attempt")
+
+	cache.attempts = redeemMaxErrorsPerHour
+	_, err = redeemService.Redeem(context.Background(), 2, strings.Repeat("A", redeemCodeMaxLength+1))
+	require.ErrorIs(t, err, ErrRedeemRateLimited)
+}
+
+func TestRedeemRejectsBlankCodesWithoutCountingThem(t *testing.T) {
+	cache := &redeemFakeCache{}
+	redeemService := NewRedeemService(&redeemRejectRepo{}, nil, nil, cache, nil, nil, nil, nil)
+
+	_, err := redeemService.Redeem(context.Background(), 2, " \n\t ")
+
+	require.ErrorIs(t, err, ErrRedeemCodeNotFound)
+	require.Zero(t, cache.attempts)
+	require.Zero(t, cache.userLocks)
 }

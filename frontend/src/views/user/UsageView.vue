@@ -7,68 +7,50 @@
       </div>
       <UsageStatsCards :stats="lifetimeStats" :show-account-cost="false" :strike-standard-cost="true" cumulative />
 
-      <div class="space-y-4">
-        <div class="card p-4">
-          <div class="flex flex-wrap items-center gap-4">
-            <div class="flex items-center gap-2">
-              <span class="text-sm font-medium text-gray-700 dark:text-gray-300">{{ t('admin.dashboard.timeRange') }}:</span>
-              <DateRangePicker
-                v-model:start-date="startDate"
-                v-model:end-date="endDate"
-                @change="onDateRangeChange"
-              />
-            </div>
-            <div class="ml-auto flex items-center gap-2">
-              <span class="text-sm font-medium text-gray-700 dark:text-gray-300">{{ t('admin.dashboard.granularity') }}:</span>
-              <div class="w-28">
-                <Select v-model="granularity" :options="granularityOptions" @change="loadTrendData" />
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
-          <ModelDistributionChart
-            v-model:metric="modelDistributionMetric"
-            :model-stats="requestedModelStats"
-            :loading="modelStatsLoading"
-            :show-source-toggle="false"
-            :show-metric-toggle="true"
-            :enable-breakdown="false"
-            :show-account-cost="false"
-            :start-date="startDate"
-            :end-date="endDate"
-          />
-          <GroupDistributionChart
-            v-model:metric="groupDistributionMetric"
-            :group-stats="groupStats"
-            :loading="groupStatsLoading"
-            :show-metric-toggle="true"
-            :enable-breakdown="false"
-            :show-account-cost="false"
-            :start-date="startDate"
-            :end-date="endDate"
-          />
-        </div>
-
-        <div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
-          <EndpointDistributionChart
-            v-model:source="endpointDistributionSource"
-            v-model:metric="endpointDistributionMetric"
-            :endpoint-stats="inboundEndpointStats"
-            :upstream-endpoint-stats="upstreamEndpointStats"
-            :endpoint-path-stats="endpointPathStats"
-            :loading="endpointStatsLoading"
-            :show-source-toggle="false"
-            :show-metric-toggle="true"
-            :enable-breakdown="false"
-            :title="t('usage.endpointDistribution')"
-            :start-date="startDate"
-            :end-date="endDate"
-          />
-          <TokenUsageTrend :trend-data="trendData" :loading="trendLoading" />
-        </div>
-      </div>
+      <UsageAnalysisPanel
+        v-model:start-date="startDate"
+        v-model:end-date="endDate"
+        v-model:granularity="granularity"
+        @date-range-change="onDateRangeChange"
+        @granularity-change="loadTrendData"
+      >
+        <ModelDistributionChart
+          v-model:metric="modelDistributionMetric"
+          :model-stats="requestedModelStats"
+          :loading="modelStatsLoading"
+          :show-source-toggle="false"
+          :show-metric-toggle="true"
+          :enable-breakdown="false"
+          :show-account-cost="false"
+          :start-date="startDate"
+          :end-date="endDate"
+        />
+        <GroupDistributionChart
+          v-model:metric="groupDistributionMetric"
+          :group-stats="groupStats"
+          :loading="groupStatsLoading"
+          :show-metric-toggle="true"
+          :enable-breakdown="false"
+          :show-account-cost="false"
+          :start-date="startDate"
+          :end-date="endDate"
+        />
+        <EndpointDistributionChart
+          v-model:source="endpointDistributionSource"
+          v-model:metric="endpointDistributionMetric"
+          :endpoint-stats="inboundEndpointStats"
+          :upstream-endpoint-stats="upstreamEndpointStats"
+          :endpoint-path-stats="endpointPathStats"
+          :loading="endpointStatsLoading"
+          :show-source-toggle="false"
+          :show-metric-toggle="true"
+          :enable-breakdown="false"
+          :title="t('usage.endpointDistribution')"
+          :start-date="startDate"
+          :end-date="endDate"
+        />
+        <TokenUsageTrend :trend-data="trendData" :loading="trendLoading" />
+      </UsageAnalysisPanel>
 
       <!-- Tabs, actions, filters and records share one panel; on phones the panel opens up so each record card sits on the canvas. -->
       <section class="usage-records-panel" data-usage-records>
@@ -281,8 +263,8 @@ import { keysAPI, usageAPI, userGroupsAPI } from '@/api'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import Pagination from '@/components/common/Pagination.vue'
 import Select, { type SelectOption } from '@/components/common/Select.vue'
-import DateRangePicker from '@/components/common/DateRangePicker.vue'
 import UsageStatsCards from '@/components/admin/usage/UsageStatsCards.vue'
+import UsageAnalysisPanel from '@/components/admin/usage/UsageAnalysisPanel.vue'
 import UsageTable from '@/components/admin/usage/UsageTable.vue'
 import ModelDistributionChart from '@/components/charts/ModelDistributionChart.vue'
 import GroupDistributionChart from '@/components/charts/GroupDistributionChart.vue'
@@ -454,10 +436,6 @@ const sortState = reactive({
   sort_order: 'desc' as 'asc' | 'desc',
 })
 
-const granularityOptions = computed<SelectOption[]>(() => [
-  { value: 'day', label: t('admin.dashboard.day') },
-  { value: 'hour', label: t('admin.dashboard.hour') },
-])
 const requestTypeOptions = computed<SelectOption[]>(() => [
   { value: null, label: t('admin.usage.allTypes') },
   { value: 'ws_v2', label: t('usage.ws') },

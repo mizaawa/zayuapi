@@ -76,7 +76,7 @@
       </div>
 
       <div class="dash-trend">
-        <TokenUsageTrend :trend-data="trend" :loading="loading" />
+        <TokenUsageTrend :trend-data="trend" :loading="loading" :title="t('dashboard.tokenBreakdownTrend')" />
       </div>
     </div>
   </section>

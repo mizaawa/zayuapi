@@ -191,7 +191,14 @@ func ParsePagination(c *gin.Context) (page, pageSize int) {
 	return page, pageSize
 }
 
+// maxPaginationDigits bounds page/page_size input to 9 digits, so a huge page
+// can never overflow the offset into a negative number (a 500 from the database).
+const maxPaginationDigits = 9
+
 func parseInt(s string) (int, error) {
+	if len(s) > maxPaginationDigits {
+		return 0, nil
+	}
 	var result int
 	for _, c := range s {
 		if c < '0' || c > '9' {

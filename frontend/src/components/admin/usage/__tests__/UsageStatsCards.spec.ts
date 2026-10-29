@@ -44,44 +44,34 @@ const stats = {
 }
 
 describe('UsageStatsCards', () => {
-  it('shows cache token breakdown values', () => {
-    const wrapper = mount(UsageStatsCards, {
-      props: {
-        stats,
-      },
-      global: {
-        stubs: {
-          Icon: true,
-        },
-      },
-    })
-
-    const text = wrapper.text()
-    expect(text).toContain('Cache: 34')
-    expect(text).toContain('Cache Token Breakdown')
-    expect(text).toContain('Cache Creation')
-    expect(text).toContain('12')
-    expect(text).toContain('Cache Read')
-    expect(text).toContain('22')
+  const mountCards = (props: Record<string, unknown> = {}) => mount(UsageStatsCards, {
+    props: { stats, ...props },
+    global: { stubs: { Icon: true } },
   })
 
-  it('keeps the cache tooltip out of the layout while it is hidden', () => {
-    const wrapper = mount(UsageStatsCards, {
-      props: {
-        stats,
-      },
-      global: {
-        stubs: {
-          Icon: true,
-        },
-      },
-    })
+  it('spells out the cache token breakdown without a hover-only tooltip', () => {
+    const wrapper = mountCards()
 
-    const tooltip = wrapper.findAll('span').find((el) => el.classes().includes('group-hover:block'))
+    const text = wrapper.text()
+    expect(text).toContain('Cache 34')
+    expect(wrapper.get('[aria-label="Cache Token Breakdown"]').text()).toContain('Cache Creation12')
+    expect(wrapper.get('[aria-label="Cache Token Breakdown"]').text()).toContain('Cache Read22')
+    // Hidden panels with a fixed width used to widen phone pages; nothing is hover-gated now.
+    expect(wrapper.findAll('span').filter((el) => el.classes().includes('group-hover:block'))).toHaveLength(0)
+  })
 
-    expect(tooltip).toBeDefined()
-    // Opacity hides content visually but still lets its fixed width widen the document.
-    expect(tooltip?.classes()).toContain('hidden')
-    expect(tooltip?.classes()).not.toContain('opacity-0')
+  it('shows account cost only when asked and strikes the standard price for users', () => {
+    const admin = mountCards()
+    expect(admin.text()).toContain('Cost $0.0010')
+    expect(admin.find('.line-through').exists()).toBe(false)
+
+    const user = mountCards({ showAccountCost: false, strikeStandardCost: true, cumulative: true })
+    expect(user.text()).not.toContain('Cost $0.0010')
+    expect(user.get('.line-through').text()).toBe('$0.0010')
+  })
+
+  it('draws one bar segment per non-empty token kind', () => {
+    const wrapper = mountCards({ stats: { ...stats, total_cache_creation_tokens: 0, total_cache_tokens: 22 } })
+    expect(wrapper.findAll('.usage-summary-bar > span')).toHaveLength(3)
   })
 })

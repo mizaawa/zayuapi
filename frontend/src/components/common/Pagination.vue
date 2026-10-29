@@ -23,9 +23,9 @@
       </button>
     </div>
 
-    <div class="hidden sm:flex sm:flex-1 sm:items-center sm:justify-between">
-      <!-- Desktop pagination info -->
-      <div class="flex items-center space-x-4">
+    <div class="hidden sm:flex sm:flex-1 sm:flex-wrap sm:items-center sm:justify-between sm:gap-3">
+      <!-- Desktop pagination info; wraps on narrow tablets instead of pushing the page sideways. -->
+      <div class="flex flex-wrap items-center gap-x-4 gap-y-2">
         <p class="pagination-copy text-sm">
           {{ t('pagination.showing') }}
           <span class="font-medium">{{ fromItem }}</span>
@@ -69,7 +69,7 @@
 
       <!-- Desktop pagination buttons -->
       <nav
-        class="relative z-0 inline-flex gap-1 rounded-xl"
+        class="relative z-0 inline-flex flex-wrap gap-1 rounded-xl"
         aria-label="Pagination"
       >
         <!-- Previous button -->

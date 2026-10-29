@@ -1,6 +1,8 @@
 package handler
 
 import (
+	"strings"
+
 	"github.com/Wei-Shaw/sub2api/internal/handler/dto"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/response"
 	middleware2 "github.com/Wei-Shaw/sub2api/internal/server/middleware"
@@ -23,7 +25,8 @@ func NewRedeemHandler(redeemService *service.RedeemService) *RedeemHandler {
 
 // RedeemRequest represents the redeem code request payload
 type RedeemRequest struct {
-	Code string `json:"code" binding:"required"`
+	// Generous enough for surrounding whitespace; the service trims and checks the real width.
+	Code string `json:"code" binding:"required,max=256"`
 }
 
 // RedeemResponse represents the redeem response
@@ -50,7 +53,8 @@ func (h *RedeemHandler) Redeem(c *gin.Context) {
 		return
 	}
 
-	result, err := h.redeemService.Redeem(c.Request.Context(), subject.UserID, req.Code)
+	// Pasted codes often carry spaces or a line break; generated codes never do.
+	result, err := h.redeemService.Redeem(c.Request.Context(), subject.UserID, strings.TrimSpace(req.Code))
 	if err != nil {
 		response.ErrorFrom(c, err)
 		return

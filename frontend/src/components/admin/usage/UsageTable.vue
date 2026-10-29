@@ -27,20 +27,20 @@
         @sort="(key, order) => $emit('sort', key, order)"
       >
         <template #cell-user="{ row }">
-          <div class="text-sm">
+          <div class="flex max-w-[15rem] items-baseline text-sm">
             <button
               v-if="row.user?.email"
-              class="font-medium text-primary-600 underline decoration-dashed underline-offset-2 transition-colors hover:text-primary-700 dark:text-primary-400 dark:hover:text-primary-300"
+              class="min-w-0 truncate font-medium text-primary-600 underline decoration-dashed underline-offset-2 transition-colors hover:text-primary-700 dark:text-primary-400 dark:hover:text-primary-300"
               @click="$emit('userClick', row.user_id, row.user?.email)"
-              :title="t('admin.usage.clickToViewBalance')"
+              :title="`${row.user.email} · ${t('admin.usage.clickToViewBalance')}`"
             >
               {{ row.user.email }}
             </button>
             <span v-else class="font-medium text-gray-900 dark:text-white">-</span>
-            <span v-if="row.user?.deleted_at" class="ml-1 inline-flex items-center rounded px-1 py-px text-[10px] font-medium leading-tight bg-rose-100 text-rose-600 ring-1 ring-inset ring-rose-200 dark:bg-rose-500/20 dark:text-rose-400 dark:ring-rose-500/30">
+            <span v-if="row.user?.deleted_at" class="ml-1 inline-flex shrink-0 items-center rounded px-1 py-px text-[10px] font-medium leading-tight bg-rose-100 text-rose-600 ring-1 ring-inset ring-rose-200 dark:bg-rose-500/20 dark:text-rose-400 dark:ring-rose-500/30">
               {{ t('admin.usage.userDeletedBadge') }}
             </span>
-            <span class="ml-1 text-gray-500 dark:text-gray-400">#{{ row.user_id }}</span>
+            <span class="ml-1 shrink-0 text-gray-500 dark:text-gray-400">#{{ row.user_id }}</span>
           </div>
         </template>
 
@@ -57,7 +57,8 @@
         </template>
 
         <template #cell-model="{ row }">
-          <div class="flex min-w-0 max-w-[15rem] items-start gap-2">
+          <!-- Table cells are nowrap; long model ids wrap inside this column instead of running over the next one. -->
+          <div class="flex min-w-[10rem] max-w-[15rem] items-start gap-2 whitespace-normal">
             <span v-if="row.model" class="usage-model-mark" aria-hidden="true">
               <ModelIcon :model="row.model" size="15px" />
             </span>

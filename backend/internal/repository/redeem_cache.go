@@ -12,6 +12,7 @@ import (
 const (
 	redeemRateLimitKeyPrefix = "redeem:ratelimit:"
 	redeemLockKeyPrefix      = "redeem:lock:"
+	redeemUserLockKeyPrefix  = "redeem:userlock:"
 	redeemRateLimitDuration  = 24 * time.Hour
 )
 
@@ -23,6 +24,12 @@ func redeemRateLimitKey(userID int64) string {
 // redeemLockKey generates the Redis key for redeem code locking.
 func redeemLockKey(code string) string {
 	return redeemLockKeyPrefix + code
+}
+
+// redeemUserLockKey keys the one-attempt-at-a-time lock of a user. It has its
+// own prefix so it can never collide with a lock on a code.
+func redeemUserLockKey(userID int64) string {
+	return fmt.Sprintf("%s%d", redeemUserLockKeyPrefix, userID)
 }
 
 type redeemCache struct {
@@ -59,4 +66,12 @@ func (c *redeemCache) AcquireRedeemLock(ctx context.Context, code string, ttl ti
 func (c *redeemCache) ReleaseRedeemLock(ctx context.Context, code string) error {
 	key := redeemLockKey(code)
 	return c.rdb.Del(ctx, key).Err()
+}
+
+func (c *redeemCache) AcquireRedeemUserLock(ctx context.Context, userID int64, ttl time.Duration) (bool, error) {
+	return c.rdb.SetNX(ctx, redeemUserLockKey(userID), 1, ttl).Result()
+}
+
+func (c *redeemCache) ReleaseRedeemUserLock(ctx context.Context, userID int64) error {
+	return c.rdb.Del(ctx, redeemUserLockKey(userID)).Err()
 }

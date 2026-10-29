@@ -42,10 +42,20 @@ const chartsStub = defineComponent({
     ])
   }
 })
+const tokenTrendStub = defineComponent({
+  props: ['trend', 'range', 'startDate', 'endDate', 'loading', 'error'], emits: ['update:range', 'retry'],
+  setup(props, { emit }) {
+    return () => h('div', { 'data-testid': 'token-trend' }, [
+      JSON.stringify(props),
+      h('button', { 'data-testid': 'token-trend-30', onClick: () => emit('update:range', 30) }, '30'),
+      props.error ? h('p', { role: 'alert' }, 'token-trend-error') : null
+    ])
+  }
+})
 function mountDashboard() {
   return mount(DashboardView, { global: { stubs: {
-    AppLayout: { template: '<div><slot /></div>' }, LoadingSpinner: true, Icon: true,
-    UserDashboardStats: statsStub, UserDashboardCharts: chartsStub,
+    AppLayout: { template: '<div><slot /></div>' }, LoadingSpinner: true, PageLoader: true, Icon: true,
+    UserDashboardStats: statsStub, UserDashboardCharts: chartsStub, UserTokenTrendCard: tokenTrendStub,
     UserDashboardRecentUsage: { props: ['data', 'loading'], template: '<div data-testid="recent">{{ data }}</div>' },
     UserDashboardQuickActions: { template: '<div data-testid="actions">Actions</div>' }
   } } })
@@ -101,7 +111,8 @@ describe('Dashboard loading', () => {
     mocks.trend.mockRejectedValue(new Error('unavailable'))
     const wrapper = mountDashboard()
     await flushPromises()
-    expect(wrapper.findAll('[role="alert"]')).toHaveLength(3)
+    // stats, charts, recent usage and the token trend card each offer their own retry
+    expect(wrapper.findAll('[role="alert"]')).toHaveLength(4)
     expect(wrapper.find('[data-testid="actions"]').exists()).toBe(true)
     wrapper.unmount()
   })
@@ -156,6 +167,26 @@ describe('Dashboard loading', () => {
     await flushPromises()
     expect(wrapper.find('[data-testid="charts"]').text()).toContain('new')
     expect(wrapper.find('[data-testid="charts"]').text()).not.toContain('old')
+    wrapper.unmount()
+  })
+
+  it('loads the token trend for the last 7 days and reloads it for 30 days', async () => {
+    const wrapper = mountDashboard()
+    await flushPromises()
+    const tokenCalls = () => mocks.trend.mock.calls.filter(([params]) => params.granularity === 'day' && !('api_key_id' in params))
+    const first = tokenCalls().at(-1)![0] as { start_date: string; end_date: string }
+    const days = (a: string, b: string) => Math.round((new Date(`${b}T00:00:00`).getTime() - new Date(`${a}T00:00:00`).getTime()) / 86400000) + 1
+    expect(days(first.start_date, first.end_date)).toBe(7)
+
+    const pending = deferred<{ trend: { date: string; total_tokens: number }[] }>()
+    mocks.trend.mockReturnValueOnce(pending.promise)
+    await wrapper.find('[data-testid="token-trend-30"]').trigger('click')
+    const second = mocks.trend.mock.calls.at(-1)![0] as { start_date: string; end_date: string }
+    expect(days(second.start_date, second.end_date)).toBe(30)
+    pending.resolve({ trend: [{ date: second.end_date, total_tokens: 42 }] })
+    await flushPromises()
+    expect(wrapper.find('[data-testid="token-trend"]').text()).toContain('"total_tokens":42')
+    expect(wrapper.find('[data-testid="token-trend"]').text()).toContain('"range":30')
     wrapper.unmount()
   })
 

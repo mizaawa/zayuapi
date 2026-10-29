@@ -71,7 +71,29 @@ export default {
     viewUsage: 'View Usage',
     checkDetailedLogs: 'Check detailed usage logs',
     redeemCode: 'Redeem Code',
-    addBalanceWithCode: 'Add balance with a code'
+    addBalanceWithCode: 'Add balance with a code',
+    tokenBreakdownTrend: 'Token Breakdown Trend',
+    tokenTrend: {
+      title: 'Token Usage Trend',
+      subtitle: 'Daily total, cache hits and misses',
+      last7: 'Last 7 days',
+      last30: 'Last 30 days',
+      range: 'Range',
+      total: 'Total tokens',
+      hit: 'Cache hits',
+      miss: 'Cache misses',
+      hitRate: 'Hit rate',
+      dailyAverage: '{value} per day',
+      hitHint: 'Cache reads',
+      missHint: 'Input + cache writes',
+      hitRateHint: 'Hits ÷ (hits + misses)',
+      seriesToggle: 'Show or hide {name}',
+      showTable: 'Show daily table',
+      showChart: 'Show chart',
+      date: 'Date',
+      empty: 'No token usage in this period yet',
+      loadFailed: 'Token trend is temporarily unavailable'
+    }
   },
 
   leaderboard: {
@@ -195,6 +217,17 @@ export default {
     today: 'Today',
     total: 'Last 30d',
     quota: 'Quota',
+    tokenMix: 'Token mix',
+    tokenParts: {
+      input: 'In',
+      output: 'Out',
+      cacheWrite: 'Write',
+      cacheRead: 'Read'
+    },
+    tokenMixWindow: 'Tokens · last 30d',
+    tokenMixEmpty: 'No usage yet',
+    cacheHitRate: 'Cache hits',
+    cacheHitRateHint: 'Cache reads ÷ (input + cache writes + cache reads) over the last 30 days',
     lastUsedAt: 'Last Used',
     lastUsedIP: 'Last Used IP',
     useKey: 'Use Key',
@@ -335,6 +368,15 @@ export default {
     cacheTtlOverridden1h: 'Billed as 1h',
     totalRequests: 'Total Requests',
     totalTokens: 'Total Tokens',
+    summaryCumulative: 'All time',
+    summaryRange: 'Selected range',
+    analysis: {
+      title: 'Usage analysis',
+      subtitle: 'Break the selected range down by model, group, endpoint and time',
+    },
+    filtersTitle: 'Filters',
+    filtersActive: '{count} active',
+    recordsTitle: 'Request records',
     cacheTotal: 'Cache',
     cacheBreakdown: 'Cache Token Breakdown',
     cacheCreationTokensLabel: 'Cache Creation',
@@ -775,7 +817,14 @@ export default {
     codeRedeemSuccess: 'Code redeemed successfully!',
     failedToRedeem: 'Failed to redeem code. Please check the code and try again.',
     subscriptionRefreshFailed: 'Redeemed successfully, but failed to refresh subscription status.',
-    pleaseEnterCode: 'Please enter a redeem code'
+    pleaseEnterCode: 'Please enter a redeem code',
+    paste: 'Paste',
+    pasteFailed: 'Could not read the clipboard; paste the code manually',
+    walletTitle: 'My balance',
+    historyCount: '{count} records',
+    formTitle: 'Redeem a code',
+    formSubtitle: 'Add balance, raise concurrency or unlock a subscription with a code',
+    redeemAnother: 'Redeem another'
   },
 
   // Profile

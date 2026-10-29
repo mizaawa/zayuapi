@@ -120,7 +120,8 @@ func NewUsageHandler(
 
 func (h *UsageHandler) parseUserUsageFilters(c *gin.Context, requireRange bool) (*userUsageFilters, bool) {
 	subject, ok := middleware2.GetAuthSubjectFromContext(c)
-	if !ok {
+	// The usage repositories read UserID 0 as "every user", so a missing ID must never get this far.
+	if !ok || subject.UserID <= 0 {
 		response.Unauthorized(c, "User not authenticated")
 		return nil, false
 	}

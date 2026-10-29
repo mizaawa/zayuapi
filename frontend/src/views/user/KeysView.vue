@@ -233,6 +233,10 @@
             </div>
           </template>
 
+          <template #cell-tokens="{ row }">
+            <KeyTokenMix variant="cell" :usage="usageStats[row.id]" />
+          </template>
+
           <template #cell-rate_limit="{ row }">
             <div v-if="rateLimitWindows(row).length > 0" class="keys-windows">
               <div v-for="window in rateLimitWindows(row)" :key="window.key">
@@ -402,6 +406,8 @@
                   </dd>
                 </div>
               </dl>
+
+              <KeyTokenMix :usage="usageStats[row.id]" />
 
               <div v-if="row.quota > 0" class="keys-quota">
                 <div class="flex items-center justify-between gap-2 text-xs">
@@ -1250,6 +1256,7 @@ import TablePageLayout from '@/components/layout/TablePageLayout.vue'
 	import FailoverSettings from '@/components/keys/FailoverSettings.vue'
 	import SystemPromptSettings from '@/components/keys/SystemPromptSettings.vue'
 	import EndpointPopover from '@/components/keys/EndpointPopover.vue'
+	import KeyTokenMix from '@/components/keys/KeyTokenMix.vue'
 	import GroupBadge from '@/components/common/GroupBadge.vue'
 	import GroupOptionItem from '@/components/common/GroupOptionItem.vue'
 	import type { ApiKey, ApiKeyFailoverSettings, ApiKeySystemPromptSettings, CustomEndpoint, Group, PublicSettings, SubscriptionType, GroupPlatform, UpdateApiKeyRequest } from '@/types'
@@ -1302,6 +1309,7 @@ const allColumns = computed<Column[]>(() => [
   { key: 'current_concurrency', label: t('keys.currentConcurrency'), sortable: true },
   { key: 'failover', label: t('keys.failover.group'), sortable: false },
   { key: 'usage', label: t('keys.usage'), sortable: false },
+  { key: 'tokens', label: t('keys.tokenMix'), sortable: false },
   { key: 'rate_limit', label: t('keys.rateLimitColumn'), sortable: false },
   { key: 'expires_at', label: t('keys.expiresAt'), sortable: true },
   { key: 'status', label: t('common.status'), sortable: true },

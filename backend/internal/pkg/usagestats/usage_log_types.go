@@ -337,11 +337,17 @@ type BatchUserUsageStats struct {
 	ByPlatform      []PlatformUsage `json:"by_platform,omitempty"`
 }
 
-// BatchAPIKeyUsageStats represents usage stats for a single API key
+// BatchAPIKeyUsageStats represents usage stats for a single API key. The
+// token counts cover the same window as TotalActualCost, so a key card can
+// show its token mix and cache hit rate beside the spend.
 type BatchAPIKeyUsageStats struct {
-	APIKeyID        int64   `json:"api_key_id"`
-	TodayActualCost float64 `json:"today_actual_cost"`
-	TotalActualCost float64 `json:"total_actual_cost"`
+	APIKeyID            int64   `json:"api_key_id"`
+	TodayActualCost     float64 `json:"today_actual_cost"`
+	TotalActualCost     float64 `json:"total_actual_cost"`
+	InputTokens         int64   `json:"input_tokens"`
+	OutputTokens        int64   `json:"output_tokens"`
+	CacheCreationTokens int64   `json:"cache_creation_tokens"`
+	CacheReadTokens     int64   `json:"cache_read_tokens"`
 }
 
 // AccountUsageHistory represents daily usage history for an account

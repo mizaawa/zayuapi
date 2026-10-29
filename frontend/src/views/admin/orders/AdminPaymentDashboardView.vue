@@ -25,8 +25,8 @@
       </div>
 
       <!-- Dashboard Content -->
-      <div v-if="loading" class="flex items-center justify-center py-12">
-        <LoadingSpinner />
+      <div v-if="loading" class="flex items-center justify-center py-16">
+        <PageLoader />
       </div>
       <template v-else-if="stats">
         <OrderStatsCards :stats="stats" />
@@ -78,7 +78,7 @@ import { adminPaymentAPI } from '@/api/admin/payment'
 import { extractI18nErrorMessage } from '@/utils/apiError'
 import type { CurrencyAmounts, DashboardStats, TopUserPaymentStats } from '@/types/payment'
 import AppLayout from '@/components/layout/AppLayout.vue'
-import LoadingSpinner from '@/components/common/LoadingSpinner.vue'
+import PageLoader from '@/components/common/PageLoader.vue'
 import Icon from '@/components/icons/Icon.vue'
 import OrderStatsCards from '@/components/admin/payment/OrderStatsCards.vue'
 import DailyRevenueChart from '@/components/admin/payment/DailyRevenueChart.vue'

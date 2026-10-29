@@ -1,17 +1,17 @@
 <template>
   <div class="card p-4">
     <h3 class="mb-4 text-sm font-semibold text-gray-900 dark:text-white">
-      {{ t('admin.dashboard.tokenUsageTrend') }}
+      {{ title || t('admin.dashboard.tokenUsageTrend') }}
     </h3>
-    <div v-if="loading" class="flex h-48 items-center justify-center">
+    <div v-if="loading" class="flex h-56 items-center justify-center">
       <LoadingSpinner />
     </div>
-    <div v-else-if="trendData.length > 0 && chartData" class="h-48">
+    <div v-else-if="trendData.length > 0 && chartData" class="relative h-56">
       <Line :data="chartData" :options="lineOptions" />
     </div>
     <div
       v-else
-      class="flex h-48 items-center justify-center text-sm text-gray-500 dark:text-gray-400"
+      class="flex h-56 items-center justify-center text-sm text-gray-500 dark:text-gray-400"
     >
       {{ t('admin.dashboard.noDataAvailable') }}
     </div>
@@ -35,6 +35,7 @@ import {
 import { Line } from 'vue-chartjs'
 import LoadingSpinner from '@/components/common/LoadingSpinner.vue'
 import type { TrendDataPoint } from '@/types'
+import { trendTickCallback } from '@/utils/chartLabels'
 
 ChartJS.register(
   CategoryScale,
@@ -52,6 +53,7 @@ const { t } = useI18n()
 const props = defineProps<{
   trendData: TrendDataPoint[]
   loading?: boolean
+  title?: string
 }>()
 
 const isDarkMode = computed(() => {
@@ -68,6 +70,8 @@ const chartColors = computed(() => ({
   cacheHitRate: '#8b5cf6'
 }))
 
+const LINE_STYLE = { borderWidth: 2, pointRadius: 0, pointHoverRadius: 4, pointHitRadius: 12 }
+
 const chartData = computed(() => {
   if (!props.trendData?.length) return null
 
@@ -80,7 +84,8 @@ const chartData = computed(() => {
         borderColor: chartColors.value.input,
         backgroundColor: `${chartColors.value.input}20`,
         fill: true,
-        tension: 0.3
+        tension: 0.3,
+        ...LINE_STYLE
       },
       {
         label: 'Output',
@@ -88,7 +93,8 @@ const chartData = computed(() => {
         borderColor: chartColors.value.output,
         backgroundColor: `${chartColors.value.output}20`,
         fill: true,
-        tension: 0.3
+        tension: 0.3,
+        ...LINE_STYLE
       },
       {
         label: 'Cache Creation',
@@ -96,7 +102,8 @@ const chartData = computed(() => {
         borderColor: chartColors.value.cacheCreation,
         backgroundColor: `${chartColors.value.cacheCreation}20`,
         fill: true,
-        tension: 0.3
+        tension: 0.3,
+        ...LINE_STYLE
       },
       {
         label: 'Cache Read',
@@ -104,7 +111,8 @@ const chartData = computed(() => {
         borderColor: chartColors.value.cacheRead,
         backgroundColor: `${chartColors.value.cacheRead}20`,
         fill: true,
-        tension: 0.3
+        tension: 0.3,
+        ...LINE_STYLE
       },
       {
         label: 'Cache Hit Rate',
@@ -117,6 +125,7 @@ const chartData = computed(() => {
         borderDash: [5, 5],
         fill: false,
         tension: 0.3,
+        ...LINE_STYLE,
         yAxisID: 'yPercent'
       }
     ]
@@ -137,7 +146,9 @@ const lineOptions = computed(() => ({
         color: chartColors.value.text,
         usePointStyle: true,
         pointStyle: 'circle',
-        padding: 15,
+        boxWidth: 8,
+        boxHeight: 8,
+        padding: 12,
         font: {
           size: 11
         }
@@ -169,9 +180,13 @@ const lineOptions = computed(() => ({
       },
       ticks: {
         color: chartColors.value.text,
+        maxRotation: 0,
+        autoSkip: true,
+        maxTicksLimit: 7,
         font: {
           size: 10
-        }
+        },
+        callback: trendTickCallback
       }
     },
     y: {
@@ -180,6 +195,7 @@ const lineOptions = computed(() => ({
       },
       ticks: {
         color: chartColors.value.text,
+        maxTicksLimit: 6,
         font: {
           size: 10
         },

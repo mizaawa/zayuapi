@@ -147,7 +147,7 @@
 
           <template #cell-name="{ row }">
             <div class="groups-name-cell">
-              <span class="groups-name">{{ row.name }}</span>
+              <span class="groups-name" :title="row.name">{{ row.name }}</span>
               <span
                 v-if="row.description"
                 class="groups-description"
@@ -6921,6 +6921,19 @@ onUnmounted(() => {
 .groups-name {
   font-weight: 650;
   color: var(--md-sys-color-on-surface);
+}
+
+/* Table cells are nowrap: a long name wraps to two lines inside the column
+   (breaking long unspaced names too) instead of running over its neighbours. */
+.groups-name-cell .groups-name {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  line-height: 1.25rem;
 }
 
 .groups-description {

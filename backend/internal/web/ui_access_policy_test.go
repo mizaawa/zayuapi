@@ -173,3 +173,36 @@ func TestUICountrySafeReturnPath(t *testing.T) {
 	}
 	require.Equal(t, "/login?redirect=%2Fdashboard", safeUIReturnPath(httptest.NewRequest(http.MethodGet, "/login?redirect=%2Fdashboard", nil)))
 }
+
+func TestUICountryNoticeShowsDetectedRegionOnlyWhenBlocked(t *testing.T) {
+	provider := &mockSettingsProvider{settings: map[string]any{
+		"ui_country_restriction_enabled": true, "ui_blocked_countries": "CN",
+	}}
+	server, router := newUIAccessDomainRouter(t, provider)
+	server.countryResolver = uiCountryResolverFunc(func(context.Context, string, bool) (string, error) {
+		return "CN", nil
+	})
+	blocked := requestUIAccessDomain(router, "/login", "example.com", nil)
+	require.Equal(t, http.StatusForbidden, blocked.Code)
+	require.Contains(t, blocked.Body.String(), `<div class="detected">当前检测地区<strong>CN</strong></div>`)
+	require.Contains(t, blocked.Body.String(), "地区访问受限")
+
+	server.countryResolver = uiCountryResolverFunc(func(context.Context, string, bool) (string, error) {
+		return "", errors.New("lookup down")
+	})
+	unavailable := requestUIAccessDomain(router, "/login", "example.com", nil)
+	require.Equal(t, http.StatusServiceUnavailable, unavailable.Code)
+	require.NotContains(t, unavailable.Body.String(), `class="detected"`)
+	require.Contains(t, unavailable.Body.String(), "检测暂不可用")
+}
+
+func TestUIUnavailableNoticeReloadsTheSamePage(t *testing.T) {
+	provider := &mockSettingsProvider{err: errors.New("settings unavailable")}
+	_, router := newUIAccessDomainRouter(t, provider)
+	response := requestUIAccessDomain(router, "/dashboard?token=secret-token", "example.com", nil)
+	require.Equal(t, http.StatusServiceUnavailable, response.Code)
+	body := response.Body.String()
+	require.Contains(t, body, `<a class="primary-action" href="">`)
+	require.NotContains(t, body, "secret-token")
+	require.NotContains(t, body, "<script")
+}

@@ -16,6 +16,7 @@ import { resolveCompletedSetupRedirectPath } from './setupRedirect'
 import { resolveRouteDocumentTitle } from './title'
 import { notFoundLocation } from './notFound'
 import { checkUIAccessNavigation, safeUIAccessPath } from './uiAccess'
+import { warmRouteComponents } from './warmRoute'
 
 /**
  * Route definitions with lazy loading
@@ -859,6 +860,8 @@ router.beforeEach(async (to, _from, next) => {
   const uiAccessNavigation = ++uiAccessNavigationVersion
   // 开始导航加载状态
   navigationLoading.startNavigation()
+  // Download the target page's code while the access checks below wait on the network.
+  warmRouteComponents(to)
 
   const authStore = useAuthStore()
 

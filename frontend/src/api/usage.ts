@@ -346,6 +346,11 @@ export interface BatchApiKeyUsageStats {
   api_key_id: number
   today_actual_cost: number
   total_actual_cost: number
+  // Token totals over the same 30-day window as total_actual_cost.
+  input_tokens?: number
+  output_tokens?: number
+  cache_creation_tokens?: number
+  cache_read_tokens?: number
 }
 
 export interface BatchApiKeysUsageResponse {

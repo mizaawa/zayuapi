@@ -2,21 +2,31 @@
   <AppLayout class="dashboard-layout">
     <div class="space-y-6">
       <!-- Loading State -->
-      <div v-if="loading" class="flex items-center justify-center py-12">
-        <LoadingSpinner />
+      <div v-if="loading" class="flex items-center justify-center py-16">
+        <PageLoader />
       </div>
 
       <template v-else-if="stats">
-        <!-- Today: traffic leads; spend, cost and speed sit beside it. -->
+        <!-- Live throughput and tokens lead; spend, latency and the request count sit in the strip below. -->
         <section class="card adm-hero">
-          <div class="adm-traffic">
-            <p class="adm-traffic-label">{{ t('admin.dashboard.todayRequests') }}</p>
-            <p class="adm-traffic-figure">{{ formatNumber(stats.today_requests) }}</p>
-            <p class="adm-traffic-caption">{{ t('common.total') }} {{ formatNumber(stats.total_requests) }}</p>
-            <p class="adm-live">
+          <div class="adm-live">
+            <p class="adm-live-head">
               <span class="adm-live-dot" :class="{ 'is-active': (stats.rpm || 0) > 0 }" aria-hidden="true"></span>
-              {{ t('admin.dashboard.liveThroughput', { rpm: formatTokens(stats.rpm), tpm: formatTokens(stats.tpm) }) }}
+              <span class="adm-live-title">{{ t('admin.dashboard.liveNow') }}</span>
+              <span class="adm-live-window">{{ t('admin.dashboard.liveWindow') }}</span>
             </p>
+            <dl class="adm-live-figures">
+              <div class="adm-live-figure" data-testid="dashboard-rpm">
+                <dt class="adm-live-unit">RPM</dt>
+                <dd class="adm-live-value" :title="formatNumber(stats.rpm)">{{ formatHeroNumber(stats.rpm) }}</dd>
+                <dd class="adm-live-caption">{{ t('admin.dashboard.rpmCaption') }}</dd>
+              </div>
+              <div class="adm-live-figure" data-testid="dashboard-tpm">
+                <dt class="adm-live-unit">TPM</dt>
+                <dd class="adm-live-value" :title="formatNumber(stats.tpm)">{{ formatHeroNumber(stats.tpm) }}</dd>
+                <dd class="adm-live-caption">{{ t('admin.dashboard.tpmCaption') }}</dd>
+              </div>
+            </dl>
           </div>
 
           <div class="adm-today">
@@ -34,33 +44,14 @@
               </span>
             </header>
 
-            <dl class="adm-kpis">
-              <div class="adm-kpi">
+            <dl class="adm-token-figures">
+              <div class="adm-token-figure">
                 <dt>{{ t('admin.dashboard.todayTokens') }}</dt>
-                <dd class="adm-kpi-value">{{ formatTokens(stats.today_tokens) }}</dd>
-                <dd class="adm-kpi-sub">{{ t('common.total') }} {{ formatTokens(stats.total_tokens) }}</dd>
+                <dd class="adm-token-value" data-testid="dashboard-today-tokens" :title="formatNumber(stats.today_tokens)">{{ formatHeroNumber(stats.today_tokens) }}</dd>
               </div>
-              <div class="adm-kpi">
-                <dt>{{ t('admin.dashboard.todayActualCost') }}</dt>
-                <dd class="adm-kpi-value" :title="t('admin.dashboard.actual')">${{ formatCost(stats.today_actual_cost) }}</dd>
-                <dd class="adm-kpi-sub">
-                  <span
-                    v-if="(stats.today_cost || 0) > (stats.today_actual_cost || 0)"
-                    class="adm-list-price"
-                    :title="t('admin.dashboard.standard')"
-                  >${{ formatCost(stats.today_cost) }}</span>
-                  <span>{{ t('common.total') }} ${{ formatCost(stats.total_actual_cost) }}</span>
-                </dd>
-              </div>
-              <div class="adm-kpi">
-                <dt>{{ t('admin.dashboard.todayAccountCost') }}</dt>
-                <dd class="adm-kpi-value">${{ formatCost(stats.today_account_cost) }}</dd>
-                <dd class="adm-kpi-sub">{{ t('common.total') }} ${{ formatCost(stats.total_account_cost) }}</dd>
-              </div>
-              <div class="adm-kpi">
-                <dt>{{ t('admin.dashboard.avgResponse') }}</dt>
-                <dd class="adm-kpi-value">{{ formatDuration(stats.average_duration_ms) }}</dd>
-                <dd class="adm-kpi-sub">{{ stats.active_users }} {{ t('admin.dashboard.activeUsers') }}</dd>
+              <div class="adm-token-figure is-total">
+                <dt>{{ t('admin.dashboard.cumulativeTokens') }}</dt>
+                <dd class="adm-token-value" data-testid="dashboard-total-tokens" :title="formatNumber(stats.total_tokens)">{{ formatHeroNumber(stats.total_tokens) }}</dd>
               </div>
             </dl>
 
@@ -88,6 +79,36 @@
               </ul>
             </div>
           </div>
+
+          <dl class="adm-kpis">
+            <div class="adm-kpi">
+              <dt>{{ t('admin.dashboard.todayActualCost') }}</dt>
+              <dd class="adm-kpi-value" :title="t('admin.dashboard.actual')">${{ formatCost(stats.today_actual_cost) }}</dd>
+              <dd class="adm-kpi-sub">
+                <span
+                  v-if="(stats.today_cost || 0) > (stats.today_actual_cost || 0)"
+                  class="adm-list-price"
+                  :title="t('admin.dashboard.standard')"
+                >${{ formatCost(stats.today_cost) }}</span>
+                <span>{{ t('common.total') }} ${{ formatCost(stats.total_actual_cost) }}</span>
+              </dd>
+            </div>
+            <div class="adm-kpi">
+              <dt>{{ t('admin.dashboard.todayAccountCost') }}</dt>
+              <dd class="adm-kpi-value">${{ formatCost(stats.today_account_cost) }}</dd>
+              <dd class="adm-kpi-sub">{{ t('common.total') }} ${{ formatCost(stats.total_account_cost) }}</dd>
+            </div>
+            <div class="adm-kpi">
+              <dt>{{ t('admin.dashboard.avgResponse') }}</dt>
+              <dd class="adm-kpi-value">{{ formatDuration(stats.average_duration_ms) }}</dd>
+              <dd class="adm-kpi-sub">{{ stats.active_users }} {{ t('admin.dashboard.activeUsers') }}</dd>
+            </div>
+            <div class="adm-kpi is-minor">
+              <dt>{{ t('admin.dashboard.todayRequests') }}</dt>
+              <dd class="adm-kpi-value">{{ formatNumber(stats.today_requests) }}</dd>
+              <dd class="adm-kpi-sub">{{ t('common.total') }} {{ formatNumber(stats.total_requests) }}</dd>
+            </div>
+          </dl>
         </section>
 
         <!-- Who and what is behind the traffic. -->
@@ -226,7 +247,7 @@
 
           <div class="adm-user-trend">
             <h3 class="adm-chart-title">{{ t('admin.dashboard.userUsageTrend') }}</h3>
-            <div class="h-64">
+            <div class="adm-user-trend-plot">
               <div v-if="userTrendLoading" class="flex h-full items-center justify-center">
                 <LoadingSpinner size="md" />
               </div>
@@ -238,6 +259,22 @@
                 {{ t('admin.dashboard.noDataAvailable') }}
               </div>
             </div>
+            <!-- An HTML legend wraps on phones instead of eating the plot; tapping a user hides the line. -->
+            <ul v-if="!userTrendLoading && userTrendSeries.length > 0" class="adm-user-legend">
+              <li v-for="series in userTrendSeries" :key="series.userId">
+                <button
+                  type="button"
+                  class="adm-user-legend-item"
+                  :class="{ 'is-hidden': hiddenTrendUsers.has(series.userId) }"
+                  :aria-pressed="!hiddenTrendUsers.has(series.userId)"
+                  :title="series.name"
+                  @click="toggleTrendUser(series.userId)"
+                >
+                  <span class="adm-user-legend-key" :style="{ background: series.color }" aria-hidden="true"></span>
+                  <span class="truncate">{{ series.name }}</span>
+                </button>
+              </li>
+            </ul>
           </div>
         </section>
       </template>
@@ -262,11 +299,13 @@ import type {
 } from '@/types'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import LoadingSpinner from '@/components/common/LoadingSpinner.vue'
+import PageLoader from '@/components/common/PageLoader.vue'
 import Icon from '@/components/icons/Icon.vue'
 import DateRangePicker from '@/components/common/DateRangePicker.vue'
 import ModelDistributionChart from '@/components/charts/ModelDistributionChart.vue'
 import TokenUsageTrend from '@/components/charts/TokenUsageTrend.vue'
 import { useBatchImageAccess } from '@/composables/useBatchImageAccess'
+import { trendTickCallback } from '@/utils/chartLabels'
 
 import {
   Chart as ChartJS,
@@ -416,17 +455,9 @@ const lineOptions = computed(() => ({
     mode: 'index' as const
   },
   plugins: {
+    // The legend is rendered as HTML below the plot (see .adm-user-legend).
     legend: {
-      position: 'top' as const,
-      labels: {
-        color: chartColors.text,
-        usePointStyle: true,
-        pointStyle: 'circle',
-        padding: 15,
-        font: {
-          size: 11
-        }
-      }
+      display: false
     },
     tooltip: {
       itemSort: (a: any, b: any) => {
@@ -448,9 +479,13 @@ const lineOptions = computed(() => ({
       },
       ticks: {
         color: chartColors.text,
+        maxRotation: 0,
+        autoSkip: true,
+        maxTicksLimit: 7,
         font: {
           size: 10
-        }
+        },
+        callback: trendTickCallback
       }
     },
     y: {
@@ -459,6 +494,7 @@ const lineOptions = computed(() => ({
       },
       ticks: {
         color: chartColors.text,
+        maxTicksLimit: 6,
         font: {
           size: 10
         },
@@ -468,60 +504,77 @@ const lineOptions = computed(() => ({
   }
 }))
 
+const USER_TREND_COLORS = [
+  '#3b82f6',
+  '#10b981',
+  '#f59e0b',
+  '#ef4444',
+  '#8b5cf6',
+  '#ec4899',
+  '#14b8a6',
+  '#f97316',
+  '#6366f1',
+  '#84cc16',
+  '#06b6d4',
+  '#a855f7'
+]
+
+const hiddenTrendUsers = ref(new Set<number>())
+
+const toggleTrendUser = (userId: number) => {
+  const next = new Set(hiddenTrendUsers.value)
+  if (next.has(userId)) next.delete(userId)
+  else next.add(userId)
+  hiddenTrendUsers.value = next
+}
+
+const getTrendUserName = (point: UserUsageTrendPoint): string =>
+  point.username?.trim() || point.email?.trim() || t('admin.redeem.userPrefix', { id: point.user_id })
+
+// One entry per user in response order; the colour follows the user, so hiding a line never repaints the others.
+const userTrendSeries = computed(() => {
+  const series: Array<{ userId: number; name: string; color: string }> = []
+  const seen = new Set<number>()
+  for (const point of userTrend.value ?? []) {
+    if (seen.has(point.user_id)) continue
+    seen.add(point.user_id)
+    series.push({
+      userId: point.user_id,
+      name: getTrendUserName(point),
+      color: USER_TREND_COLORS[series.length % USER_TREND_COLORS.length]
+    })
+  }
+  return series
+})
+
 // User trend chart data
 const userTrendChartData = computed(() => {
   if (!userTrend.value?.length) return null
 
-  const getDisplayName = (point: UserUsageTrendPoint): string => {
-    const username = point.username?.trim()
-    if (username) {
-      return username
-    }
-
-    const email = point.email?.trim()
-    if (email) {
-      return email
-    }
-
-    return t('admin.redeem.userPrefix', { id: point.user_id })
-  }
-
   // Group by user_id to avoid merging different users with the same display name
-  const userGroups = new Map<number, { name: string; data: Map<string, number> }>()
+  const tokensByUser = new Map<number, Map<string, number>>()
   const allDates = new Set<string>()
 
   userTrend.value.forEach((point) => {
     allDates.add(point.date)
-    const key = point.user_id
-    if (!userGroups.has(key)) {
-      userGroups.set(key, { name: getDisplayName(point), data: new Map() })
+    if (!tokensByUser.has(point.user_id)) {
+      tokensByUser.set(point.user_id, new Map())
     }
-    userGroups.get(key)!.data.set(point.date, point.tokens)
+    tokensByUser.get(point.user_id)!.set(point.date, point.tokens)
   })
 
   const sortedDates = Array.from(allDates).sort()
-  const colors = [
-    '#3b82f6',
-    '#10b981',
-    '#f59e0b',
-    '#ef4444',
-    '#8b5cf6',
-    '#ec4899',
-    '#14b8a6',
-    '#f97316',
-    '#6366f1',
-    '#84cc16',
-    '#06b6d4',
-    '#a855f7'
-  ]
-
-  const datasets = Array.from(userGroups.values()).map((group, idx) => ({
-    label: group.name,
-    data: sortedDates.map((date) => group.data.get(date) || 0),
-    borderColor: colors[idx % colors.length],
-    backgroundColor: `${colors[idx % colors.length]}20`,
+  const datasets = userTrendSeries.value.map((series) => ({
+    label: series.name,
+    data: sortedDates.map((date) => tokensByUser.get(series.userId)?.get(date) || 0),
+    borderColor: series.color,
+    backgroundColor: `${series.color}20`,
+    borderWidth: 2,
+    pointRadius: 0,
+    pointHoverRadius: 4,
     fill: false,
-    tension: 0.3
+    tension: 0.3,
+    hidden: hiddenTrendUsers.value.has(series.userId)
   }))
 
   return {
@@ -550,6 +603,22 @@ const toFiniteNumber = (value: unknown): number => {
 
 const formatNumber = (value: number | null | undefined): string => {
   return toFiniteNumber(value).toLocaleString()
+}
+
+// Hero figures keep three significant digits (214, 98.4K, 1.28M, 23.7B) so
+// they stay short enough for a phone tile; the exact value is in the title.
+const HERO_UNITS = ['K', 'M', 'B', 'T'] as const
+const formatHeroNumber = (value: number | null | undefined): string => {
+  const number = toFiniteNumber(value)
+  if (Math.abs(number) < 1000) return Math.round(number).toLocaleString()
+  let scaled = number / 1000
+  let unit = 0
+  while (Math.abs(scaled) >= 999.5 && unit < HERO_UNITS.length - 1) {
+    scaled /= 1000
+    unit++
+  }
+  const digits = Math.abs(scaled) >= 99.95 ? 0 : Math.abs(scaled) >= 9.995 ? 1 : 2
+  return `${scaled.toFixed(digits)}${HERO_UNITS[unit]}`
 }
 
 const formatCost = (value: number | null | undefined): string => {
@@ -718,58 +787,48 @@ onMounted(() => {
 /* ---------- Today ---------- */
 .adm-hero {
   display: grid;
-  gap: 1.25rem;
-  padding: 1.25rem;
+  gap: 1rem;
+  padding: 1rem;
 }
 
-.adm-traffic {
+/* Live throughput: the two numbers an operator watches first. */
+.adm-live {
   display: flex;
   min-width: 0;
   flex-direction: column;
-  justify-content: center;
-  gap: 0.375rem;
-  padding: 1.25rem 1.375rem;
+  justify-content: space-between;
+  gap: 0.875rem;
+  padding: 0.875rem;
   border-radius: 1.25rem;
-  background: #fff7d6;
+  background: linear-gradient(150deg, #fff3bd, #fff7d6 55%, #fffbe8);
 }
 
-.adm-traffic-label {
-  font-size: 0.875rem;
-  font-weight: 600;
-  color: #6b6045;
-}
-
-/* The one hero figure on this page; it shrinks before it would ever wrap. */
-.adm-traffic-figure {
-  font-size: clamp(2.25rem, 1.25rem + 2.4vw, 3.25rem);
-  font-weight: 700;
-  line-height: 1.05;
-  letter-spacing: -0.02em;
-  white-space: nowrap;
-  color: #3f3420;
-}
-
-.adm-traffic-caption {
+.adm-live-head {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
   font-size: 0.8125rem;
   color: #6b6045;
 }
 
-.adm-live {
-  display: inline-flex;
-  align-items: center;
-  align-self: flex-start;
-  gap: 0.375rem;
-  margin-top: 0.375rem;
-  padding: 0.1875rem 0.625rem;
+.adm-live-title {
+  font-weight: 700;
+  color: #3f3420;
+}
+
+.adm-live-window {
+  margin-left: auto;
+  padding: 0.125rem 0.5rem;
   border-radius: 999px;
   background: rgb(255 254 248 / 0.75);
-  font-size: 0.75rem;
-  color: #5b5238;
+  font-size: 0.6875rem;
+  white-space: nowrap;
 }
 
 .adm-live-dot {
-  width: 0.4375rem;
-  height: 0.4375rem;
+  width: 0.5rem;
+  height: 0.5rem;
+  flex-shrink: 0;
   border-radius: 999px;
   background: #9b8c62;
 }
@@ -777,13 +836,58 @@ onMounted(() => {
 .adm-live-dot.is-active {
   background: #5c9865;
   box-shadow: 0 0 0 3px rgb(92 152 101 / 0.22);
+  animation: adm-live-pulse 2s ease-in-out infinite;
+}
+
+.adm-live-figures {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+
+.adm-live-figure {
+  container-type: inline-size;
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 0.125rem;
+  padding: 0.75rem 0.875rem;
+  border-radius: 1rem;
+  background: rgb(255 254 248 / 0.8);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.8);
+}
+
+.adm-live-unit {
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: #7e5600;
+}
+
+/* The page's hero figures. Sized from their own tile (cqi) so a five-character
+ * value such as "1.28M" still fits a narrow phone column without being cut off. */
+.adm-live-value {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 2rem;
+  font-size: clamp(1.5rem, 29cqi, 2.875rem);
+  font-weight: 750;
+  line-height: 1.08;
+  letter-spacing: -0.02em;
+  color: #3f3420;
+}
+
+.adm-live-caption {
+  font-size: 0.75rem;
+  color: #6b6045;
 }
 
 .adm-today {
   display: flex;
   min-width: 0;
   flex-direction: column;
-  gap: 1rem;
+  gap: 0.875rem;
 }
 
 .adm-today-head {
@@ -813,6 +917,50 @@ onMounted(() => {
   color: #92400e;
 }
 
+/* Tokens: today's volume beside the all-time total. */
+.adm-token-figures {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.625rem;
+}
+
+.adm-token-figure {
+  container-type: inline-size;
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 0.875rem 1rem;
+  border-radius: 1rem;
+  background: #fffbe8;
+}
+
+.adm-token-figure dt {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--md-sys-color-on-surface-variant);
+}
+
+.adm-token-value {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 1.75rem;
+  font-size: clamp(1.375rem, 23cqi, 2.25rem);
+  font-weight: 750;
+  line-height: 1.12;
+  letter-spacing: -0.015em;
+  color: var(--md-sys-color-on-surface);
+}
+
+.adm-token-figure.is-total {
+  background: #f2f8ef;
+}
+
+.adm-token-figure.is-total .adm-token-value {
+  color: #2e5038;
+}
+
 .adm-kpis {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -824,7 +972,7 @@ onMounted(() => {
   min-width: 0;
   flex-direction: column;
   gap: 0.25rem;
-  padding: 0.875rem 1rem;
+  padding: 0.75rem 0.875rem;
   border-radius: 1rem;
   background: #fffbe8;
 }
@@ -839,10 +987,21 @@ onMounted(() => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 1.375rem;
+  font-size: 1.25rem;
   font-weight: 700;
-  line-height: 1.75rem;
+  line-height: 1.625rem;
   color: var(--md-sys-color-on-surface);
+}
+
+/* Request volume is context, not the headline. */
+.adm-kpi.is-minor {
+  background: #faf6e8;
+}
+
+.adm-kpi.is-minor .adm-kpi-value {
+  font-size: 1.0625rem;
+  font-weight: 650;
+  color: #5b5238;
 }
 
 .adm-kpi-sub {
@@ -856,6 +1015,12 @@ onMounted(() => {
 .adm-list-price {
   text-decoration: line-through;
   opacity: 0.75;
+}
+
+@keyframes adm-live-pulse {
+  50% {
+    box-shadow: 0 0 0 5px rgb(92 152 101 / 0.12);
+  }
 }
 
 .adm-mix {
@@ -1169,9 +1334,17 @@ button.adm-resource:hover .adm-resource-chevron {
   border-radius: 0.875rem;
 }
 
+/* minmax(0, 1fr): a wide model table scrolls inside its own box instead of
+ * widening the column (and the page) past a phone's viewport. */
 .adm-charts {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 1.5rem;
+}
+
+.adm-charts > *,
+.adm-user-trend {
+  min-width: 0;
 }
 
 .adm-chart-title {
@@ -1187,6 +1360,54 @@ button.adm-resource:hover .adm-resource-chevron {
   box-shadow: inset 0 1px 0 rgb(215 193 106 / 0.3);
 }
 
+.adm-user-trend-plot {
+  position: relative;
+  height: 15rem;
+}
+
+.adm-user-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+  margin-top: 0.875rem;
+}
+
+.adm-user-legend li {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.adm-user-legend-item {
+  display: inline-flex;
+  max-width: 100%;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.1875rem 0.625rem;
+  border-radius: 999px;
+  background: #fffbe8;
+  font-size: 0.75rem;
+  color: var(--md-sys-color-on-surface-variant);
+  transition: background-color 160ms ease, opacity 160ms ease;
+}
+
+.adm-user-legend-item:hover {
+  background: #fff3bd;
+  color: var(--md-sys-color-on-surface);
+}
+
+.adm-user-legend-item.is-hidden {
+  opacity: 0.5;
+  text-decoration: line-through;
+}
+
+/* A short line key mirrors the plotted line rather than a filled box. */
+.adm-user-legend-key {
+  width: 0.75rem;
+  height: 0.1875rem;
+  flex-shrink: 0;
+  border-radius: 999px;
+}
+
 /* The shared chart components bring their own card; inside this panel they sit flat. */
 .adm-charts :deep(.card) {
   padding: 0;
@@ -1200,6 +1421,19 @@ button.adm-resource:hover .adm-resource-chevron {
     padding: 1.5rem;
   }
 
+  .adm-live {
+    gap: 1rem;
+    padding: 1.125rem 1.25rem 1.25rem;
+  }
+
+  .adm-live-figures {
+    gap: 0.75rem;
+  }
+
+  .adm-live-figure {
+    padding: 0.875rem 1rem;
+  }
+
   .adm-kpis {
     grid-template-columns: repeat(4, minmax(0, 1fr));
   }
@@ -1211,23 +1445,20 @@ button.adm-resource:hover .adm-resource-chevron {
   .adm-usage {
     padding: 1.5rem;
   }
-}
 
-@media (min-width: 1024px) {
-  .adm-hero {
-    grid-template-columns: minmax(17rem, 0.42fr) minmax(0, 1fr);
-    gap: 1.5rem;
+  .adm-user-trend-plot {
+    height: 17rem;
   }
-
-  .adm-kpis {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
 }
 
 @media (min-width: 1280px) {
+  .adm-hero {
+    grid-template-columns: minmax(19rem, 0.9fr) minmax(0, 1.1fr);
+    gap: 1.25rem 1.5rem;
+  }
+
   .adm-kpis {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-column: 1 / -1;
   }
 
   .adm-resources {
@@ -1255,6 +1486,10 @@ button.adm-resource:hover .adm-resource-chevron {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .adm-live-dot.is-active {
+    animation: none;
+  }
+
   .adm-resource-chevron {
     transition: none;
   }

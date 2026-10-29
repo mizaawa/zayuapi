@@ -71,7 +71,29 @@ export default {
     viewUsage: '查看使用记录',
     checkDetailedLogs: '查看详细的使用日志',
     redeemCode: '兑换码',
-    addBalanceWithCode: '使用兑换码充值'
+    addBalanceWithCode: '使用兑换码充值',
+    tokenBreakdownTrend: 'Token 分类趋势',
+    tokenTrend: {
+      title: 'Token 使用趋势',
+      subtitle: '每日总量、缓存命中与未命中',
+      last7: '近 7 天',
+      last30: '近 30 天',
+      range: '统计范围',
+      total: '总 Token',
+      hit: '缓存命中',
+      miss: '未命中',
+      hitRate: '命中率',
+      dailyAverage: '日均 {value}',
+      hitHint: '缓存读取',
+      missHint: '输入 + 缓存写入',
+      hitRateHint: '命中 ÷ (命中+未命中)',
+      seriesToggle: '显示或隐藏 {name}',
+      showTable: '查看每日明细',
+      showChart: '查看图表',
+      date: '日期',
+      empty: '这段时间还没有 Token 用量',
+      loadFailed: 'Token 趋势暂时不可用'
+    }
   },
 
   leaderboard: {
@@ -195,6 +217,17 @@ export default {
     today: '今日',
     total: '近30天',
     quota: '额度',
+    tokenMix: 'Token 构成',
+    tokenParts: {
+      input: '输入',
+      output: '输出',
+      cacheWrite: '缓存写',
+      cacheRead: '缓存读'
+    },
+    tokenMixWindow: '近 30 天 Token',
+    tokenMixEmpty: '暂无用量',
+    cacheHitRate: '缓存命中',
+    cacheHitRateHint: '缓存读取 ÷（输入 + 缓存写入 + 缓存读取），统计近 30 天',
     lastUsedAt: '上次使用时间',
     lastUsedIP: '最近使用 IP',
     useKey: '使用密钥',
@@ -340,6 +373,15 @@ export default {
     cacheTtlOverridden1h: '按 1h 计费',
     totalRequests: '总请求数',
     totalTokens: '总 Token',
+    summaryCumulative: '累计统计',
+    summaryRange: '所选范围',
+    analysis: {
+      title: '用量分析',
+      subtitle: '按模型、分组、端点与时间拆分所选范围',
+    },
+    filtersTitle: '筛选条件',
+    filtersActive: '{count} 项筛选生效',
+    recordsTitle: '请求明细',
     cacheTotal: '缓存',
     cacheBreakdown: '缓存 Token 明细',
     cacheCreationTokensLabel: '缓存创建',
@@ -780,7 +822,14 @@ export default {
     codeRedeemSuccess: '兑换成功！',
     failedToRedeem: '兑换失败，请检查兑换码后重试。',
     subscriptionRefreshFailed: '兑换成功，但订阅状态刷新失败。',
-    pleaseEnterCode: '请输入兑换码'
+    pleaseEnterCode: '请输入兑换码',
+    paste: '粘贴',
+    pasteFailed: '无法读取剪贴板，请手动粘贴',
+    walletTitle: '我的额度',
+    historyCount: '{count} 条记录',
+    formTitle: '兑换码充值',
+    formSubtitle: '输入兑换码即可充值余额、增加并发或开通订阅',
+    redeemAnother: '继续兑换'
   },
 
   // Profile

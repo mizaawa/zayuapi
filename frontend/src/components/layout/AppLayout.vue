@@ -16,8 +16,22 @@
       <AppHeader />
 
       <!-- Main Content -->
-      <main class="p-4 md:p-6 lg:p-8">
-        <slot />
+      <main
+        class="app-main p-4 md:p-6 lg:p-8"
+        :class="{ 'is-navigating': isNavigating }"
+        :aria-busy="isNavigating ? 'true' : undefined"
+      >
+        <div class="app-main-content">
+          <slot />
+        </div>
+        <!-- While the next page's code and guards load, the current page fades and a loader holds its place. -->
+        <Transition name="route-loader">
+          <div v-if="isNavigating" class="route-loader" data-testid="route-loader">
+            <div class="route-loader-anchor">
+              <PageLoader />
+            </div>
+          </div>
+        </Transition>
       </main>
     </div>
   </div>
@@ -32,6 +46,8 @@ import { useOnboardingTour } from '@/composables/useOnboardingTour'
 import { useOnboardingStore } from '@/stores/onboarding'
 import AppSidebar from './AppSidebar.vue'
 import AppHeader from './AppHeader.vue'
+import PageLoader from '@/components/common/PageLoader.vue'
+import { useNavigationLoadingState } from '@/composables/useNavigationLoading'
 
 const appStore = useAppStore()
 const authStore = useAuthStore()
@@ -41,6 +57,8 @@ const authStore = useAuthStore()
 document.documentElement.classList.remove('dark')
 
 const sidebarCollapsed = computed(() => appStore.sidebarCollapsed)
+// Already delayed by the anti-flicker window, so quick switches never flash the loader.
+const { isLoading: isNavigating } = useNavigationLoadingState()
 const isAdmin = computed(() => authStore.user?.role === 'admin')
 
 const { replayTour } = useOnboardingTour({
@@ -76,6 +94,66 @@ defineExpose({ replayTour })
   height: 0.75rem;
   background-color: var(--md-sys-color-background);
   pointer-events: none;
+}
+
+/* overflow-x: clip keeps a stray wide child from making the whole page swipe
+ * sideways on phones; unlike hidden it creates no scroll container, so sticky
+ * headers inside pages keep working. */
+.app-main {
+  position: relative;
+  min-width: 0;
+  overflow-x: clip;
+}
+
+.app-main-content {
+  /* Opacity only: a transform or filter here would re-anchor the fixed-position
+   * dialogs some pages render inline to this wrapper instead of the viewport. */
+  animation: app-page-enter 240ms ease-out backwards;
+  transition: opacity 180ms ease;
+}
+
+.app-main.is-navigating .app-main-content {
+  opacity: 0.38;
+  pointer-events: none;
+}
+
+.route-loader {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  pointer-events: none;
+}
+
+/* Sticky inside the overlay so the loader stays in view on a long, scrolled page. */
+.route-loader-anchor {
+  position: sticky;
+  top: 38vh;
+  display: flex;
+  justify-content: center;
+  padding-top: 3rem;
+}
+
+.route-loader-enter-active,
+.route-loader-leave-active {
+  transition: opacity 180ms ease;
+}
+
+.route-loader-enter-from,
+.route-loader-leave-to {
+  opacity: 0;
+}
+
+@keyframes app-page-enter {
+  from {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-main-content {
+    animation: none;
+    transition: none;
+  }
 }
 
 /* Desktop: soft gold and garden glows give the open canvas some depth

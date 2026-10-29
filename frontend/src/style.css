@@ -425,6 +425,49 @@
     color: var(--md-sys-color-on-surface);
   }
 
+  /* Distribution chart tables: breathing room between numeric columns, a
+   * readable name column and hairline rows (borders are cleared app-wide). */
+  .dist-table {
+    font-variant-numeric: tabular-nums;
+  }
+
+  .dist-table th,
+  .dist-table td {
+    padding-left: 0.875rem;
+    white-space: nowrap;
+  }
+
+  .dist-table th {
+    padding-bottom: 0.5rem;
+    font-weight: 600;
+  }
+
+  .dist-table th:first-child,
+  .dist-table td:first-child {
+    padding-left: 0;
+  }
+
+  .dist-table td:first-child {
+    max-width: 9rem;
+  }
+
+  .dist-table tbody tr + tr > td {
+    box-shadow: inset 0 1px 0 rgb(215 193 106 / 0.22);
+  }
+
+  /* Expanded breakdown rows span the table and lay out their own content. */
+  .dist-table td[colspan] {
+    max-width: none;
+    padding-left: 0;
+    white-space: normal;
+  }
+
+  @media (min-width: 640px) {
+    .dist-table td:first-child:not([colspan]) {
+      max-width: 13rem;
+    }
+  }
+
   /* ============ 分段控件（运营面板等共用） ============ */
   .segment-group {
     display: inline-flex;

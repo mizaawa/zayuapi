@@ -1204,6 +1204,11 @@ func (s *UsageLogRepoSuite) TestGetBatchApiKeyUsageStats() {
 	stats, err := s.repo.GetBatchAPIKeyUsageStats(s.ctx, []int64{apiKey1.ID, apiKey2.ID}, time.Time{}, time.Time{})
 	s.Require().NoError(err, "GetBatchAPIKeyUsageStats")
 	s.Require().Len(stats, 2)
+	s.Require().Equal(int64(10), stats[apiKey1.ID].InputTokens)
+	s.Require().Equal(int64(20), stats[apiKey1.ID].OutputTokens)
+	s.Require().Equal(int64(15), stats[apiKey2.ID].InputTokens)
+	s.Require().Equal(int64(25), stats[apiKey2.ID].OutputTokens)
+	s.Require().Zero(stats[apiKey2.ID].CacheReadTokens)
 }
 
 func (s *UsageLogRepoSuite) TestGetBatchApiKeyUsageStats_Empty() {

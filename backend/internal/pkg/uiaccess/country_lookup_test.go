@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/netip"
 	"os"
 	"strings"
 	"testing"
@@ -337,4 +338,50 @@ func TestUICountryLookupLivePublicResolverIPs(t *testing.T) {
 			})
 		}
 	}
+}
+
+func TestUICountryLookupSharesOneDecisionPerIPv6Network(t *testing.T) {
+	calls := 0
+	// Fixed answers keyed by path, so nothing from the request is echoed back.
+	answers := map[string]string{
+		"/2a01:4f8:1:2::10.json": `{"ip":"2a01:4f8:1:2::10","country_code":"DE"}`,
+		"/2a01:4f8:1:3::10.json": `{"ip":"2a01:4f8:1:3::10","country_code":"DE"}`,
+		"/8.8.8.8.json":          `{"ip":"8.8.8.8","country_code":"US"}`,
+		"/8.8.4.4.json":          `{"ip":"8.8.4.4","country_code":"US"}`,
+	}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		answer, ok := answers[r.URL.Path]
+		if !ok {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		_, _ = w.Write([]byte(answer))
+	}))
+	defer server.Close()
+	resolver := newTestCountryResolver()
+	resolver.endpoint = server.URL + "/"
+	ctx := context.Background()
+
+	first, err := resolver.Detect(ctx, "2a01:4f8:1:2::10", false)
+	require.NoError(t, err)
+	require.Equal(t, "DE", first.Country)
+	// Another host in the same /64 reuses the decision and reports its own IP.
+	second, err := resolver.Detect(ctx, "2a01:4f8:1:2:ffff::99", false)
+	require.NoError(t, err)
+	require.True(t, second.Cached)
+	require.Equal(t, "2a01:4f8:1:2:ffff::99", second.IP)
+	require.Equal(t, 1, calls)
+	// A different /64 is looked up on its own.
+	_, err = resolver.Detect(ctx, "2a01:4f8:1:3::10", false)
+	require.NoError(t, err)
+	require.Equal(t, 2, calls)
+	// IPv4 stays per address.
+	_, err = resolver.Detect(ctx, "8.8.8.8", false)
+	require.NoError(t, err)
+	_, err = resolver.Detect(ctx, "8.8.4.4", false)
+	require.NoError(t, err)
+	require.Equal(t, 4, calls)
+	require.Equal(t, "2a01:4f8:1:2::/64", countryLookupKey(netip.MustParseAddr("2a01:4f8:1:2:abcd::1")))
+	require.Equal(t, "8.8.8.8", countryLookupKey(netip.MustParseAddr("8.8.8.8")))
 }

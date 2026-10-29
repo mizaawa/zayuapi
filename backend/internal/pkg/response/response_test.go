@@ -772,6 +772,18 @@ func Test_parseInt(t *testing.T) {
 			wantVal: 0,
 			wantErr: false,
 		},
+		{
+			name:    "九位数仍可解析",
+			input:   "999999999",
+			wantVal: 999999999,
+			wantErr: false,
+		},
+		{
+			name:    "超长数字_防止偏移量溢出_返回0",
+			input:   "99999999999999999999",
+			wantVal: 0,
+			wantErr: false,
+		},
 	}
 
 	for _, tt := range tests {

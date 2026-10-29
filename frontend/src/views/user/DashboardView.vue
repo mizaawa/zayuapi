@@ -1,7 +1,7 @@
 <template>
   <AppLayout class="dashboard-layout">
     <div class="space-y-6">
-      <div v-if="loading && !stats" class="flex items-center justify-center py-12"><LoadingSpinner /></div>
+      <div v-if="loading && !stats" class="flex items-center justify-center py-16"><PageLoader /></div>
       <div v-if="statsError || totalsError" role="alert" class="dash-alert">
         <span>{{ t(statsError ? 'dashboard.statsLoadFailed' : 'dashboard.totalsLoadFailed') }}</span>
         <button type="button" class="btn btn-secondary dash-alert-retry" :title="t('common.refresh')" :aria-label="t('common.refresh')" @click="statsError ? loadStats() : loadTotals()">
@@ -9,6 +9,16 @@
         </button>
       </div>
       <UserDashboardStats v-if="stats" :stats="stats" :balance="user?.balance || 0" :is-simple="authStore.isSimpleMode" :platform-quotas="platformQuotas" />
+      <UserTokenTrendCard
+        :range="tokenTrendRange"
+        :trend="tokenTrend"
+        :start-date="tokenTrendWindow.start"
+        :end-date="tokenTrendWindow.end"
+        :loading="loadingTokenTrend"
+        :error="tokenTrendError"
+        @update:range="onTokenTrendRangeChange"
+        @retry="loadTokenTrend"
+      />
       <div v-if="chartsError" role="alert" class="dash-alert">
         <span>{{ t('dashboard.chartsLoadFailed') }}</span>
         <button type="button" class="btn btn-secondary dash-alert-retry" :title="t('common.refresh')" :aria-label="t('common.refresh')" @click="loadCharts"><Icon name="refresh" size="sm" /></button>
@@ -34,11 +44,12 @@ import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth'
 import { usageAPI, type UserDashboardStats as UserStatsType } from '@/api/usage'
 import AppLayout from '@/components/layout/AppLayout.vue'
-import LoadingSpinner from '@/components/common/LoadingSpinner.vue'
+import PageLoader from '@/components/common/PageLoader.vue'
 import Icon from '@/components/icons/Icon.vue'
 import UserDashboardStats from '@/components/user/dashboard/UserDashboardStats.vue'
 import UserDashboardRecentUsage from '@/components/user/dashboard/UserDashboardRecentUsage.vue'
 import UserDashboardQuickActions from '@/components/user/dashboard/UserDashboardQuickActions.vue'
+import UserTokenTrendCard, { type TokenTrendRange } from '@/components/user/dashboard/UserTokenTrendCard.vue'
 import type { UsageLog, TrendDataPoint, ModelStat, PlatformQuotaItem } from '@/types'
 import { getMyPlatformQuotas } from '@/api/user'
 import { formatDateLocalInput } from '@/utils/format'
@@ -62,8 +73,21 @@ const platformQuotas = ref<PlatformQuotaItem[] | null>(null)
 const startDate = ref(formatDateLocalInput(new Date(Date.now() - 6 * 86400000)))
 const endDate = ref(formatDateLocalInput(new Date()))
 const granularity = ref('day')
+const tokenTrendRange = ref<TokenTrendRange>(7)
+const tokenTrend = ref<TrendDataPoint[]>([])
+const loadingTokenTrend = ref(true)
+const tokenTrendError = ref(false)
+const tokenTrendWindow = ref(tokenTrendDates(tokenTrendRange.value))
 
-type RequestKey = 'stats' | 'totals' | 'charts' | 'recent' | 'quotas'
+// Today and the preceding days, in the browser's calendar (the API client sends its timezone).
+function tokenTrendDates(range: TokenTrendRange): { start: string; end: string } {
+  const end = new Date()
+  const start = new Date(end)
+  start.setDate(start.getDate() - (range - 1))
+  return { start: formatDateLocalInput(start), end: formatDateLocalInput(end) }
+}
+
+type RequestKey = 'stats' | 'totals' | 'charts' | 'recent' | 'quotas' | 'tokenTrend'
 const requests = new Map<RequestKey, AbortController>()
 function startRequest(key: RequestKey): AbortController {
   requests.get(key)?.abort()
@@ -132,6 +156,31 @@ async function loadCharts(): Promise<void> {
   }
 }
 
+async function loadTokenTrend(): Promise<void> {
+  const controller = startRequest('tokenTrend')
+  const dates = tokenTrendDates(tokenTrendRange.value)
+  loadingTokenTrend.value = true
+  tokenTrendError.value = false
+  try {
+    const data = await usageAPI.getDashboardTrend(
+      { start_date: dates.start, end_date: dates.end, granularity: 'day' },
+      { signal: controller.signal }
+    )
+    if (!isCurrent('tokenTrend', controller)) return
+    tokenTrendWindow.value = dates
+    tokenTrend.value = data.trend || []
+  } catch {
+    if (isCurrent('tokenTrend', controller)) tokenTrendError.value = true
+  } finally {
+    if (isCurrent('tokenTrend', controller)) loadingTokenTrend.value = false
+  }
+}
+
+function onTokenTrendRangeChange(range: TokenTrendRange): void {
+  tokenTrendRange.value = range
+  void loadTokenTrend()
+}
+
 async function loadRecent(): Promise<void> {
   const controller = startRequest('recent')
   loadingUsage.value = true
@@ -160,6 +209,7 @@ function refreshAll(): void {
   void authStore.refreshUser().catch((error) => console.warn('Failed to refresh profile:', error))
   void loadStats()
   void loadCharts()
+  void loadTokenTrend()
   void loadRecent()
   void loadPlatformQuotas()
 }
@@ -169,6 +219,7 @@ watch(() => authStore.user?.id, () => {
   stats.value = null
   trendData.value = []
   modelStats.value = []
+  tokenTrend.value = []
   recentUsage.value = []
   platformQuotas.value = null
   if (authStore.isAuthenticated) refreshAll()

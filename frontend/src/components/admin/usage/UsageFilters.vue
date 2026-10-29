@@ -1,192 +1,202 @@
 <template>
-  <div :class="flat ? 'p-4 sm:p-6' : 'card p-6'">
-    <!-- Toolbar: left filters (multi-line) + right actions -->
-    <div class="flex flex-wrap items-end justify-between gap-4">
-      <!-- Left: filters (allowed to wrap to multiple rows) -->
-      <div class="flex flex-1 flex-wrap items-end gap-4">
-        <!-- User Search -->
-        <div ref="userSearchRef" class="usage-filter-dropdown relative w-full sm:w-auto sm:min-w-[240px]">
-          <label class="input-label">{{ t('admin.usage.userFilter') }}</label>
-          <input
-            v-model="userKeyword"
-            type="text"
-            class="input pr-8"
-            :placeholder="t('admin.usage.searchUserPlaceholder')"
-            @input="debounceUserSearch"
-            @focus="showUserDropdown = true"
-          />
-          <button
-            v-if="filters.user_id"
-            type="button"
-            @click="clearUser"
-            class="absolute right-2 top-9 text-gray-400"
-            aria-label="Clear user filter"
-          >
-            ✕
-          </button>
-          <div
-            v-if="showUserDropdown && (userResults.length > 0 || userKeyword)"
-            class="absolute z-50 mt-1 max-h-60 w-full overflow-auto rounded-lg border bg-white shadow-lg dark:bg-dark-800"
-          >
-            <button
-              v-for="u in userResults"
-              :key="u.id"
-              type="button"
-              @click="selectUser(u)"
-              class="w-full px-4 py-2 text-left hover:bg-gray-100 dark:hover:bg-dark-700"
-            >
-              <span>{{ u.email }}<span v-if="u.deleted" class="ml-1 text-xs text-gray-400">（{{ t('admin.usage.userDeletedBadge') }}）</span></span>
-              <span class="ml-2 text-xs text-gray-400">#{{ u.id }}</span>
-            </button>
-          </div>
-        </div>
-
-        <!-- API Key Search -->
-        <div ref="apiKeySearchRef" class="usage-filter-dropdown relative w-full sm:w-auto sm:min-w-[240px]">
-          <label class="input-label">{{ t('usage.apiKeyFilter') }}</label>
-          <input
-            v-model="apiKeyKeyword"
-            type="text"
-            class="input pr-8"
-            :placeholder="t('admin.usage.searchApiKeyPlaceholder')"
-            @input="debounceApiKeySearch"
-            @focus="onApiKeyFocus"
-          />
-          <button
-            v-if="filters.api_key_id"
-            type="button"
-            @click="onClearApiKey"
-            class="absolute right-2 top-9 text-gray-400"
-            aria-label="Clear API key filter"
-          >
-            ✕
-          </button>
-          <div
-            v-if="showApiKeyDropdown && apiKeyResults.length > 0"
-            class="absolute z-50 mt-1 max-h-60 w-full overflow-auto rounded-lg border bg-white shadow-lg dark:bg-dark-800"
-          >
-            <button
-              v-for="k in apiKeyResults"
-              :key="k.id"
-              type="button"
-              @click="selectApiKey(k)"
-              class="w-full px-4 py-2 text-left hover:bg-gray-100 dark:hover:bg-dark-700"
-            >
-              <span class="truncate">{{ k.name || `#${k.id}` }}</span>
-              <span class="ml-2 text-xs text-gray-400">#{{ k.id }}</span>
-            </button>
-          </div>
-        </div>
-
-        <!-- Model Filter -->
-        <div class="w-full sm:w-auto sm:min-w-[220px]">
-          <label class="input-label">{{ t('usage.model') }}</label>
-          <Select v-model="filters.model" :options="modelOptions" searchable @change="emitChange" />
-        </div>
-
-        <!-- Account Filter -->
-        <div ref="accountSearchRef" class="usage-filter-dropdown relative w-full sm:w-auto sm:min-w-[220px]">
-          <label class="input-label">{{ t('admin.usage.account') }}</label>
-          <input
-            v-model="accountKeyword"
-            type="text"
-            class="input pr-8"
-            :placeholder="t('admin.usage.searchAccountPlaceholder')"
-            @input="debounceAccountSearch"
-            @focus="showAccountDropdown = true"
-          />
-          <button
-            v-if="filters.account_id"
-            type="button"
-            @click="clearAccount"
-            class="absolute right-2 top-9 text-gray-400"
-            aria-label="Clear account filter"
-          >
-            ✕
-          </button>
-          <div
-            v-if="showAccountDropdown && (accountResults.length > 0 || accountKeyword)"
-            class="absolute z-50 mt-1 max-h-60 w-full overflow-auto rounded-lg border bg-white shadow-lg dark:bg-dark-800"
-          >
-            <button
-              v-for="a in accountResults"
-              :key="a.id"
-              type="button"
-              @click="selectAccount(a)"
-              class="w-full px-4 py-2 text-left hover:bg-gray-100 dark:hover:bg-dark-700"
-            >
-              <span class="truncate">{{ a.name }}</span>
-              <span class="ml-2 text-xs text-gray-400">#{{ a.id }}</span>
-            </button>
-          </div>
-        </div>
-
-        <!-- Request Type Filter (usage only) -->
-        <div v-if="mode !== 'errors'" class="w-full sm:w-auto sm:min-w-[180px]">
-          <label class="input-label">{{ t('usage.type') }}</label>
-          <Select v-model="filters.request_type" :options="requestTypeOptions" @change="emitChange" />
-        </div>
-
-        <!-- Billing Type Filter (usage only) -->
-        <div v-if="mode !== 'errors'" class="w-full sm:w-auto sm:min-w-[200px]">
-          <label class="input-label">{{ t('admin.usage.billingType') }}</label>
-          <Select v-model="filters.billing_type" :options="billingTypeOptions" @change="emitChange" />
-        </div>
-
-        <!-- Billing Mode Filter (usage only；用户排行的 user-breakdown 接口不支持该维度) -->
-        <div v-if="mode === 'usage'" class="w-full sm:w-auto sm:min-w-[200px]">
-          <label class="input-label">{{ t('admin.usage.billingMode') }}</label>
-          <Select v-model="filters.billing_mode" :options="billingModeOptions" @change="emitChange" />
-        </div>
-
-        <div v-if="mode === 'usage'" class="w-full sm:w-auto sm:min-w-[220px]">
-          <label class="input-label">{{ t('admin.usage.upstreamModelAudit') }}</label>
-          <Select v-model="filters.upstream_model_mismatch" :options="upstreamModelMismatchOptions" @change="emitChange" />
-        </div>
-
-        <!-- Error Phase Filter (errors only) -->
-        <div v-if="mode === 'errors'" class="w-full sm:w-auto sm:min-w-[180px]">
-          <label class="input-label">{{ t('admin.ops.errorLog.type') }}</label>
-          <Select v-model="filters.error_phase" :options="errorPhaseOptions" @change="emitChange" />
-        </div>
-
-        <!-- Error Category Filter (errors only) -->
-        <div v-if="mode === 'errors'" class="w-full sm:w-auto sm:min-w-[180px]">
-          <label class="input-label">{{ t('usage.errors.category') }}</label>
-          <Select v-model="filters.error_category" :options="errorCategoryOptions" @change="emitChange" />
-        </div>
-
-        <!-- Status Code Filter (errors only) -->
-        <div v-if="mode === 'errors'" class="w-full sm:w-auto sm:min-w-[180px]">
-          <label class="input-label">{{ t('admin.ops.errorLog.status') }}</label>
-          <Select v-model="filters.status_code" :options="statusCodeOptions" @change="emitChange" />
-        </div>
-
-        <!-- Group Filter -->
-        <div class="w-full sm:w-auto sm:min-w-[200px]">
-          <label class="input-label">{{ t('admin.usage.group') }}</label>
-          <Select v-model="filters.group_id" :options="groupOptions" searchable @change="emitChange" />
-        </div>
-
-      </div>
-
-      <!-- Right: actions -->
-      <div v-if="showActions" class="flex w-full flex-wrap items-center justify-end gap-3 sm:w-auto">
-        <button type="button" @click="$emit('refresh')" class="btn btn-secondary">
+  <div class="usage-filters" :class="flat ? 'usage-filters--flat' : 'card'">
+    <!-- Actions first; on phones the filter fields fold behind the "Filter" button. -->
+    <div v-if="showActions" class="usage-filters-actions">
+      <button
+        type="button"
+        class="btn btn-secondary usage-filters-button usage-filters-toggle"
+        :aria-expanded="filtersOpen"
+        data-testid="usage-filters-toggle"
+        @click="filtersOpen = !filtersOpen"
+      >
+        <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8" aria-hidden="true">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M3 5h18l-7 8.5V19l-4 2v-7.5L3 5z" />
+        </svg>
+        {{ t('common.filter') }}
+        <span v-if="activeFilterCount > 0" class="usage-filters-count">{{ activeFilterCount }}</span>
+      </button>
+      <div class="usage-filters-buttons">
+        <button type="button" @click="$emit('refresh')" class="btn btn-secondary usage-filters-button">
           {{ t('common.refresh') }}
         </button>
-        <button type="button" @click="$emit('reset')" class="btn btn-secondary">
+        <button type="button" @click="$emit('reset')" class="btn btn-secondary usage-filters-button">
           {{ t('common.reset') }}
         </button>
         <slot name="after-reset" />
-        <template v-if="mode === 'usage'">
-          <button type="button" @click="$emit('cleanup')" class="btn btn-danger">
-            {{ t('admin.usage.cleanup.button') }}
+      </div>
+      <div v-if="mode === 'usage'" class="usage-filters-primary">
+        <button type="button" @click="$emit('cleanup')" class="btn btn-danger usage-filters-button">
+          {{ t('admin.usage.cleanup.button') }}
+        </button>
+        <button type="button" @click="$emit('export')" :disabled="exporting" class="btn btn-primary usage-filters-button">
+          {{ t('usage.exportExcel') }}
+        </button>
+      </div>
+    </div>
+
+    <div class="usage-filters-grid" :class="{ 'is-open': filtersOpen || !showActions }">
+      <!-- User Search -->
+      <div ref="userSearchRef" class="usage-filter-dropdown usage-filter-field is-wide relative">
+        <label class="input-label">{{ t('admin.usage.userFilter') }}</label>
+        <input
+          v-model="userKeyword"
+          type="text"
+          class="input pr-8"
+          :placeholder="t('admin.usage.searchUserPlaceholder')"
+          @input="debounceUserSearch"
+          @focus="showUserDropdown = true"
+        />
+        <button
+          v-if="filters.user_id"
+          type="button"
+          @click="clearUser"
+          class="absolute right-2 top-9 text-gray-400"
+          aria-label="Clear user filter"
+        >
+          ✕
+        </button>
+        <div
+          v-if="showUserDropdown && (userResults.length > 0 || userKeyword)"
+          class="usage-filter-menu absolute z-50 mt-1 max-h-60 w-full overflow-auto"
+        >
+          <button
+            v-for="u in userResults"
+            :key="u.id"
+            type="button"
+            @click="selectUser(u)"
+            class="usage-filter-option"
+          >
+            <span class="min-w-0 break-all">{{ u.email }}<span v-if="u.deleted" class="ml-1 text-xs text-gray-400">（{{ t('admin.usage.userDeletedBadge') }}）</span></span>
+            <span class="ml-2 shrink-0 text-xs text-gray-400">#{{ u.id }}</span>
           </button>
-          <button type="button" @click="$emit('export')" :disabled="exporting" class="btn btn-primary">
-            {{ t('usage.exportExcel') }}
+        </div>
+      </div>
+
+      <!-- API Key Search -->
+      <div ref="apiKeySearchRef" class="usage-filter-dropdown usage-filter-field is-wide relative">
+        <label class="input-label">{{ t('usage.apiKeyFilter') }}</label>
+        <input
+          v-model="apiKeyKeyword"
+          type="text"
+          class="input pr-8"
+          :placeholder="t('admin.usage.searchApiKeyPlaceholder')"
+          @input="debounceApiKeySearch"
+          @focus="onApiKeyFocus"
+        />
+        <button
+          v-if="filters.api_key_id"
+          type="button"
+          @click="onClearApiKey"
+          class="absolute right-2 top-9 text-gray-400"
+          aria-label="Clear API key filter"
+        >
+          ✕
+        </button>
+        <div
+          v-if="showApiKeyDropdown && apiKeyResults.length > 0"
+          class="usage-filter-menu absolute z-50 mt-1 max-h-60 w-full overflow-auto"
+        >
+          <button
+            v-for="k in apiKeyResults"
+            :key="k.id"
+            type="button"
+            @click="selectApiKey(k)"
+            class="usage-filter-option"
+          >
+            <span class="truncate">{{ k.name || `#${k.id}` }}</span>
+            <span class="ml-2 shrink-0 text-xs text-gray-400">#{{ k.id }}</span>
           </button>
-        </template>
+        </div>
+      </div>
+
+      <!-- Model Filter -->
+      <div class="usage-filter-field">
+        <label class="input-label">{{ t('usage.model') }}</label>
+        <Select :model-value="filters.model ?? null" @update:model-value="filters.model = $event" :options="modelOptions" searchable @change="emitChange" />
+      </div>
+
+      <!-- Account Filter -->
+      <div ref="accountSearchRef" class="usage-filter-dropdown usage-filter-field is-wide relative">
+        <label class="input-label">{{ t('admin.usage.account') }}</label>
+        <input
+          v-model="accountKeyword"
+          type="text"
+          class="input pr-8"
+          :placeholder="t('admin.usage.searchAccountPlaceholder')"
+          @input="debounceAccountSearch"
+          @focus="showAccountDropdown = true"
+        />
+        <button
+          v-if="filters.account_id"
+          type="button"
+          @click="clearAccount"
+          class="absolute right-2 top-9 text-gray-400"
+          aria-label="Clear account filter"
+        >
+          ✕
+        </button>
+        <div
+          v-if="showAccountDropdown && (accountResults.length > 0 || accountKeyword)"
+          class="usage-filter-menu absolute z-50 mt-1 max-h-60 w-full overflow-auto"
+        >
+          <button
+            v-for="a in accountResults"
+            :key="a.id"
+            type="button"
+            @click="selectAccount(a)"
+            class="usage-filter-option"
+          >
+            <span class="truncate">{{ a.name }}</span>
+            <span class="ml-2 shrink-0 text-xs text-gray-400">#{{ a.id }}</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Request Type Filter (usage only) -->
+      <div v-if="mode !== 'errors'" class="usage-filter-field">
+        <label class="input-label">{{ t('usage.type') }}</label>
+        <Select :model-value="filters.request_type ?? null" @update:model-value="filters.request_type = $event" :options="requestTypeOptions" @change="emitChange" />
+      </div>
+
+      <!-- Billing Type Filter (usage only) -->
+      <div v-if="mode !== 'errors'" class="usage-filter-field">
+        <label class="input-label">{{ t('admin.usage.billingType') }}</label>
+        <Select :model-value="filters.billing_type ?? null" @update:model-value="filters.billing_type = $event" :options="billingTypeOptions" @change="emitChange" />
+      </div>
+
+      <!-- Billing Mode Filter (usage only；用户排行的 user-breakdown 接口不支持该维度) -->
+      <div v-if="mode === 'usage'" class="usage-filter-field">
+        <label class="input-label">{{ t('admin.usage.billingMode') }}</label>
+        <Select :model-value="filters.billing_mode ?? null" @update:model-value="filters.billing_mode = $event" :options="billingModeOptions" @change="emitChange" />
+      </div>
+
+      <div v-if="mode === 'usage'" class="usage-filter-field">
+        <label class="input-label">{{ t('admin.usage.upstreamModelAudit') }}</label>
+        <Select :model-value="filters.upstream_model_mismatch ?? null" @update:model-value="filters.upstream_model_mismatch = $event" :options="upstreamModelMismatchOptions" @change="emitChange" />
+      </div>
+
+      <!-- Error Phase Filter (errors only) -->
+      <div v-if="mode === 'errors'" class="usage-filter-field">
+        <label class="input-label">{{ t('admin.ops.errorLog.type') }}</label>
+        <Select :model-value="filters.error_phase ?? null" @update:model-value="filters.error_phase = $event" :options="errorPhaseOptions" @change="emitChange" />
+      </div>
+
+      <!-- Error Category Filter (errors only) -->
+      <div v-if="mode === 'errors'" class="usage-filter-field">
+        <label class="input-label">{{ t('usage.errors.category') }}</label>
+        <Select :model-value="filters.error_category ?? null" @update:model-value="filters.error_category = $event" :options="errorCategoryOptions" @change="emitChange" />
+      </div>
+
+      <!-- Status Code Filter (errors only) -->
+      <div v-if="mode === 'errors'" class="usage-filter-field">
+        <label class="input-label">{{ t('admin.ops.errorLog.status') }}</label>
+        <Select :model-value="filters.status_code ?? null" @update:model-value="filters.status_code = $event" :options="statusCodeOptions" @change="emitChange" />
+      </div>
+
+      <!-- Group Filter -->
+      <div class="usage-filter-field">
+        <label class="input-label">{{ t('admin.usage.group') }}</label>
+        <Select :model-value="filters.group_id ?? null" @update:model-value="filters.group_id = $event" :options="groupOptions" searchable @change="emitChange" />
       </div>
     </div>
   </div>
@@ -319,6 +329,18 @@ const upstreamModelMismatchOptions = ref<SelectOption[]>([
 ])
 
 const emitChange = () => emit('change')
+
+// Phones show the fields only after the Filter button is pressed; the count keeps active filters visible.
+const filtersOpen = ref(false)
+const isActiveValue = (value: unknown) => value !== null && value !== undefined && value !== ''
+const activeFilterCount = computed(() => {
+  const f = filters.value
+  const keys = ['user_id', 'api_key_id', 'model', 'account_id', 'group_id']
+  if (props.mode !== 'errors') keys.push('request_type', 'billing_type')
+  if (props.mode === 'usage') keys.push('billing_mode', 'upstream_model_mismatch')
+  if (props.mode === 'errors') keys.push('error_phase', 'error_category', 'status_code')
+  return keys.filter((key) => isActiveValue(f[key])).length
+})
 
 const clearPendingUserSearch = () => {
   if (userSearchTimeout) {
@@ -538,3 +560,147 @@ const getUserSearchRevision = () => userSearchSequence
 
 defineExpose({ getUserSearchRevision, setUserKeyword })
 </script>
+
+<style scoped>
+.usage-filters--flat {
+  padding: 0;
+}
+
+.usage-filters.card {
+  padding: 1.25rem;
+}
+
+.usage-filters-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.usage-filters-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+/* Phones: the two weighty actions share a full-width row below. */
+.usage-filters-primary {
+  display: grid;
+  flex: 1 1 100%;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+
+.usage-filters-button {
+  padding: 0.5rem 0.875rem;
+  border-radius: 0.875rem;
+  font-size: 0.8125rem;
+}
+
+.usage-filters-count {
+  display: inline-flex;
+  min-width: 1.125rem;
+  height: 1.125rem;
+  align-items: center;
+  justify-content: center;
+  padding: 0 0.3125rem;
+  border-radius: 999px;
+  background: var(--md-sys-color-primary);
+  font-size: 0.6875rem;
+  font-weight: 700;
+  color: var(--md-sys-color-on-primary);
+}
+
+/* Phones: two fields per row, search boxes full width; folded until asked for. */
+.usage-filters-grid {
+  display: none;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.usage-filters-grid.is-open {
+  display: grid;
+}
+
+.usage-filter-field {
+  min-width: 0;
+}
+
+/* Search boxes go first and full width, so the selects pair up below them. */
+.usage-filter-field.is-wide {
+  order: -1;
+  grid-column: span 2 / span 2;
+}
+
+.usage-filters-grid :deep(.input-label) {
+  margin-bottom: 0.375rem;
+  font-size: 0.75rem;
+  color: var(--md-sys-color-on-surface-variant);
+}
+
+.usage-filter-menu {
+  padding: 0.375rem 0;
+  border-radius: 1rem;
+  background: var(--md-sys-color-surface);
+  box-shadow: var(--theme-highlight), var(--theme-elevation-3);
+}
+
+.usage-filter-option {
+  display: flex;
+  width: calc(100% - 0.75rem);
+  margin: 0 0.375rem;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.5rem 0.75rem;
+  border-radius: 0.75rem;
+  font-size: 0.8125rem;
+  text-align: left;
+  color: var(--md-sys-color-on-surface);
+}
+
+.usage-filter-option:hover {
+  background: color-mix(in srgb, var(--md-sys-color-primary) 14%, var(--md-sys-color-surface));
+}
+
+@media (min-width: 768px) {
+  .usage-filters-actions {
+    justify-content: flex-end;
+  }
+
+  .usage-filters-toggle {
+    display: none;
+  }
+
+  .usage-filters-primary {
+    display: flex;
+    flex: none;
+  }
+
+  .usage-filters-grid,
+  .usage-filters-grid.is-open {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .usage-filter-field.is-wide {
+    order: 0;
+    grid-column: auto;
+  }
+}
+
+@media (min-width: 1280px) {
+  .usage-filters-grid,
+  .usage-filters-grid.is-open {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1536px) {
+  .usage-filters-grid,
+  .usage-filters-grid.is-open {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+}
+</style>

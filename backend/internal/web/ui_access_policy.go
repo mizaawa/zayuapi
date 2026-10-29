@@ -5,6 +5,7 @@ package web
 import (
 	"context"
 	"encoding/json"
+	"html"
 	"mime"
 	"net/http"
 	"strings"
@@ -76,18 +77,18 @@ func (s *FrontendServer) allowUIAccess(c *gin.Context, policy uiAccessPolicy) bo
 	defer cancel()
 	resolver := s.countryResolver
 	if resolver == nil {
-		serveUICountryNotice(c, policy, true)
+		serveUICountryNotice(c, policy, true, "")
 		return false
 	}
 	country, err := resolver.Country(ctx, clientip.GetSecurityClientIP(c, false), retry)
 	if err != nil || !uiaccess.ValidCountryCode(country) {
 		c.Header("X-UI-Access-Reason", uiaccess.CountryLookupErrorCode(err))
-		serveUICountryNotice(c, policy, true)
+		serveUICountryNotice(c, policy, true, "")
 		return false
 	}
 	for _, denied := range strings.Split(blocked, ",") {
 		if denied == country {
-			serveUICountryNotice(c, policy, false)
+			serveUICountryNotice(c, policy, false, country)
 			return false
 		}
 	}
@@ -125,21 +126,26 @@ func safeUIReturnPath(request *http.Request) string {
 	return uri
 }
 
-func serveUICountryNotice(c *gin.Context, policy uiAccessPolicy, unavailable bool) {
+// serveUICountryNotice explains a blocked or undetermined region. country is
+// shown only after it passed ValidCountryCode, so it is always a two-letter
+// ISO code; it is escaped anyway.
+func serveUICountryNotice(c *gin.Context, policy uiAccessPolicy, unavailable bool, country string) {
 	title := "该地区不在服务范围内"
 	description := "基于不同国家和地区的政策要求及本站运营策略，当前所在地区暂不提供站点访问服务。感谢您的理解与支持。如您的网络环境已发生变化，请点击重试，我们将重新检测当前访问地区。"
 	status := http.StatusForbidden
+	kind, eyebrow, chip, tone := "country", "服务范围说明", "地区访问受限", ""
 	if unavailable {
 		title = "暂时无法确认访问地区"
 		description = "暂时无法完成访问地区检测，请稍后重试。若持续出现此提示，请联系站点管理员检查地区检测服务及可信代理配置。"
 		status = http.StatusServiceUnavailable
 		c.Header("Retry-After", "5")
+		kind, eyebrow, chip, tone = "retry", "访问地区检测", "检测暂不可用", "is-quiet"
 	}
-	kind, eyebrow := "country", "服务范围说明"
-	if unavailable {
-		kind, eyebrow = "retry", "访问地区检测"
+	detected := ""
+	if !unavailable && country != "" {
+		detected = `<div class="detected">当前检测地区<strong>` + html.EscapeString(country) + `</strong></div>`
 	}
-	body := uiNoticeBrand(policy) + uiNoticeIllustration(kind) + `<div class="eyebrow">` + eyebrow + `</div><h1 id="notice-title">` + title + `</h1><p class="description">` + description + `</p><form method="post" action=""><input type="hidden" name="_ui_country_retry" value="1"><button class="primary-action" type="submit">` + uiNoticeRetryIcon + `<span>重试</span></button></form><p class="footnote">重新检测通过后，将自动返回您刚才访问的页面。</p>`
+	body := uiNoticeHeader(policy, chip, tone) + `<div class="notice-body">` + uiNoticeScene(kind) + `<div class="eyebrow">` + eyebrow + `</div><h1 id="notice-title">` + title + `</h1><p class="description">` + description + `</p>` + detected + `<form method="post" action=""><input type="hidden" name="_ui_country_retry" value="1"><button class="primary-action" type="submit">` + uiNoticeRetryIcon + `<span>重试</span></button></form><p class="footnote">重新检测通过后，将自动返回您刚才访问的页面。</p></div>`
 	// This standalone document needs only its branding image and same-origin
 	// retry form. It loads no JavaScript, CSS bundle or external font.
 	serveUINoticeWithPolicy(c, status, body, "default-src 'none'; img-src 'self' https: http: data:; style-src 'unsafe-inline'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'")

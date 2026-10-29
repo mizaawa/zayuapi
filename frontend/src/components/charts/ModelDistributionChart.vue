@@ -1,12 +1,12 @@
 <template>
   <div class="card p-4">
-    <div class="mb-4 flex items-center justify-between gap-3">
-      <h3 class="text-sm font-semibold text-gray-900 dark:text-white">
+    <div class="mb-4 flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+      <h3 class="min-w-0 text-sm font-semibold text-gray-900 dark:text-white">
         {{ !enableRankingView || activeView === 'model_distribution'
           ? t('admin.dashboard.modelDistribution')
           : t('admin.dashboard.spendingRankingTitle') }}
       </h3>
-      <div class="flex flex-wrap items-center justify-end gap-2">
+      <div class="ml-auto flex max-w-full flex-wrap items-center justify-end gap-2">
         <div
           v-if="showSourceToggle"
           class="distribution-toggle"
@@ -107,7 +107,7 @@
         <Doughnut :data="chartData" :options="doughnutOptions" />
       </div>
       <div class="max-h-48 w-full min-w-0 flex-1 overflow-auto">
-        <table class="w-full text-xs">
+        <table class="dist-table w-full text-xs">
           <thead>
             <tr class="text-gray-500 dark:text-gray-400">
               <th class="pb-2 text-left">{{ t('admin.dashboard.model') }}</th>
@@ -187,7 +187,7 @@
         <Doughnut :data="rankingChartData" :options="rankingDoughnutOptions" />
       </div>
       <div class="max-h-48 w-full min-w-0 flex-1 overflow-auto">
-        <table class="w-full text-xs">
+        <table class="dist-table w-full text-xs">
           <thead>
             <tr class="text-gray-500 dark:text-gray-400">
               <th class="pb-2 text-left">{{ t('admin.dashboard.spendingRankingUser') }}</th>
