@@ -2,25 +2,25 @@
   <AppLayout class="dashboard-layout">
     <div class="space-y-6">
       <div v-if="loading && !stats" class="flex items-center justify-center py-12"><LoadingSpinner /></div>
-      <div v-if="statsError || totalsError" role="alert" class="flex items-center gap-3 text-sm text-red-600">
+      <div v-if="statsError || totalsError" role="alert" class="dash-alert">
         <span>{{ t(statsError ? 'dashboard.statsLoadFailed' : 'dashboard.totalsLoadFailed') }}</span>
-        <button type="button" class="btn btn-secondary h-9 w-9 p-2" :title="t('common.refresh')" :aria-label="t('common.refresh')" @click="statsError ? loadStats() : loadTotals()">
+        <button type="button" class="btn btn-secondary dash-alert-retry" :title="t('common.refresh')" :aria-label="t('common.refresh')" @click="statsError ? loadStats() : loadTotals()">
           <Icon name="refresh" size="sm" />
         </button>
       </div>
       <UserDashboardStats v-if="stats" :stats="stats" :balance="user?.balance || 0" :is-simple="authStore.isSimpleMode" :platform-quotas="platformQuotas" />
-      <div v-if="chartsError" role="alert" class="flex items-center gap-3 text-sm text-red-600">
+      <div v-if="chartsError" role="alert" class="dash-alert">
         <span>{{ t('dashboard.chartsLoadFailed') }}</span>
-        <button type="button" class="btn btn-secondary h-9 w-9 p-2" :title="t('common.refresh')" :aria-label="t('common.refresh')" @click="loadCharts"><Icon name="refresh" size="sm" /></button>
+        <button type="button" class="btn btn-secondary dash-alert-retry" :title="t('common.refresh')" :aria-label="t('common.refresh')" @click="loadCharts"><Icon name="refresh" size="sm" /></button>
       </div>
       <UserDashboardCharts v-model:startDate="startDate" v-model:endDate="endDate" v-model:granularity="granularity" :loading="loadingCharts" :trend="trendData" :models="modelStats" @dateRangeChange="loadCharts" @granularityChange="loadCharts" @refresh="refreshAll" />
-      <div class="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        <div class="lg:col-span-2">
-          <div v-if="recentError" role="alert" class="mb-3 flex items-center gap-3 text-sm text-red-600">
+      <div class="grid grid-cols-1 items-stretch gap-6 lg:grid-cols-3">
+        <div class="flex flex-col gap-3 lg:col-span-2">
+          <div v-if="recentError" role="alert" class="dash-alert">
             <span>{{ t('dashboard.recentLoadFailed') }}</span>
-            <button type="button" class="btn btn-secondary h-9 w-9 p-2" :title="t('common.refresh')" :aria-label="t('common.refresh')" @click="loadRecent"><Icon name="refresh" size="sm" /></button>
+            <button type="button" class="btn btn-secondary dash-alert-retry" :title="t('common.refresh')" :aria-label="t('common.refresh')" @click="loadRecent"><Icon name="refresh" size="sm" /></button>
           </div>
-          <UserDashboardRecentUsage :data="recentUsage" :loading="loadingUsage" />
+          <UserDashboardRecentUsage class="flex-1" :data="recentUsage" :loading="loadingUsage" />
         </div>
         <div class="lg:col-span-1"><UserDashboardQuickActions /></div>
       </div>
@@ -176,3 +176,22 @@ watch(() => authStore.user?.id, () => {
 onMounted(refreshAll)
 onBeforeUnmount(abortRequests)
 </script>
+
+<style scoped>
+.dash-alert {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.625rem 0.75rem 0.625rem 1rem;
+  border-radius: 1rem;
+  background: #fef2f2;
+  font-size: 0.875rem;
+  color: #b91c1c;
+}
+
+.dash-alert-retry {
+  margin-left: auto;
+  padding: 0.4375rem;
+  border-radius: 0.75rem;
+}
+</style>

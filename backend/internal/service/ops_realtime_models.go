@@ -9,6 +9,10 @@ type PlatformConcurrencyInfo struct {
 	MaxCapacity    int64   `json:"max_capacity"`
 	LoadPercentage float64 `json:"load_percentage"`
 	WaitingInQueue int64   `json:"waiting_in_queue"`
+
+	// limitedInUse counts only accounts with a concurrency limit, so unlimited
+	// accounts (tracked but capacity 0) cannot push the load past 100%.
+	limitedInUse int64
 }
 
 // GroupConcurrencyInfo aggregates concurrency usage by group.
@@ -22,6 +26,9 @@ type GroupConcurrencyInfo struct {
 	MaxCapacity    int64   `json:"max_capacity"`
 	LoadPercentage float64 `json:"load_percentage"`
 	WaitingInQueue int64   `json:"waiting_in_queue"`
+
+	// limitedInUse: see PlatformConcurrencyInfo.limitedInUse.
+	limitedInUse int64
 }
 
 // AccountConcurrencyInfo represents real-time concurrency usage for a single account.

@@ -36,6 +36,8 @@ type stubConcurrencyCacheForTest struct {
 	apiKeyConcurrencyErr error
 
 	// 记录调用
+	acquiredAccountIDs       []int64
+	acquiredMaxConcurrency   []int
 	releasedAccountIDs       []int64
 	releasedRequestIDs       []string
 	loadBatchCalls           atomic.Int64
@@ -87,7 +89,9 @@ func (c *ingressLeaseCacheForTest) ReleaseOpenAIWSIngressLease(ctx context.Conte
 var _ ConcurrencyCache = (*stubConcurrencyCacheForTest)(nil)
 var _ OpenAIWSIngressLeaseCache = (*ingressLeaseCacheForTest)(nil)
 
-func (c *stubConcurrencyCacheForTest) AcquireAccountSlot(_ context.Context, _ int64, _ int, _ string) (bool, error) {
+func (c *stubConcurrencyCacheForTest) AcquireAccountSlot(_ context.Context, accountID int64, maxConcurrency int, _ string) (bool, error) {
+	c.acquiredAccountIDs = append(c.acquiredAccountIDs, accountID)
+	c.acquiredMaxConcurrency = append(c.acquiredMaxConcurrency, maxConcurrency)
 	return c.acquireResult, c.acquireErr
 }
 func (c *stubConcurrencyCacheForTest) ReleaseAccountSlot(_ context.Context, accountID int64, requestID string) error {
@@ -222,6 +226,36 @@ func TestAcquireAccountSlot_UnlimitedConcurrency(t *testing.T) {
 		require.True(t, result.Acquired, "maxConcurrency=%d 应无限制通过", maxConcurrency)
 		require.NotNil(t, result.ReleaseFunc, "ReleaseFunc 应为 no-op 函数")
 	}
+}
+
+func TestAcquireAccountSlot_UnlimitedConcurrencyRecordsSlot(t *testing.T) {
+	cache := &stubConcurrencyCacheForTest{acquireResult: true}
+	svc := NewConcurrencyService(cache)
+
+	result, err := svc.AcquireAccountSlot(context.Background(), 7, 0)
+	require.NoError(t, err)
+	require.True(t, result.Acquired)
+	// 无上限账号也要登记槽位，实时并发统计才能看到它们
+	require.Equal(t, []int64{7}, cache.acquiredAccountIDs)
+	require.Equal(t, []int{unlimitedAccountSlotCeiling}, cache.acquiredMaxConcurrency)
+
+	result.ReleaseFunc()
+	require.Equal(t, []int64{7}, cache.releasedAccountIDs)
+	require.Len(t, cache.releasedRequestIDs, 1)
+	require.NotEmpty(t, cache.releasedRequestIDs[0])
+}
+
+func TestAcquireAccountSlot_UnlimitedConcurrencyFailsOpen(t *testing.T) {
+	cache := &stubConcurrencyCacheForTest{acquireErr: errors.New("redis down")}
+	svc := NewConcurrencyService(cache)
+
+	result, err := svc.AcquireAccountSlot(context.Background(), 7, 0)
+	require.NoError(t, err, "统计失败不能拦截无上限账号的请求")
+	require.True(t, result.Acquired)
+	require.NotNil(t, result.ReleaseFunc)
+
+	result.ReleaseFunc()
+	require.Empty(t, cache.releasedAccountIDs, "未登记的槽位不应释放")
 }
 
 func TestAcquireAccountSlot_CacheError(t *testing.T) {

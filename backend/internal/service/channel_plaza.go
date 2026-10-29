@@ -42,6 +42,8 @@ type PlazaGroup struct {
 	PeakEnd            string
 	PeakRateMultiplier float64
 	IsExclusive        bool
+	// SortOrder 是管理员在分组管理里拖拽设定的展示顺序，广场按它排列分组。
+	SortOrder int
 	// 图片按次实付倍率：ImageRateIndependent 为 true 时，图片计费模型的实付
 	// = 档位价 × ImageRateMultiplier，不乘分组/用户专属倍率（与计费口径一致）。
 	ImageRateIndependent bool
@@ -64,8 +66,8 @@ type PlazaGroup struct {
 //   - 图片计费模型的档位价按实收口径合成（分组图片价 > 渠道档位价 > 渠道默认按次价，
 //     见 plazaImageDisplayPricing）；
 //   - 每个模型附带 LiteLLM 官方参考价（查不到为 nil）；
-//   - 只返回 Models 非空的分组；分组按 RateMultiplier 升序（同倍率按名称），
-//     组内模型按名称排序。
+//   - 只返回 Models 非空的分组；分组按管理员设定的分组排序（SortOrder 升序，
+//     同序按 ID），组内模型按名称排序。
 //
 // 可见性过滤（专属分组）不在此层做，由 handler 按登录态裁剪。
 func (s *ChannelService) ListPlazaGroups(ctx context.Context) ([]PlazaGroup, error) {
@@ -99,6 +101,7 @@ func (s *ChannelService) ListPlazaGroups(ctx context.Context) ([]PlazaGroup, err
 			PeakEnd:              g.PeakEnd,
 			PeakRateMultiplier:   g.PeakRateMultiplier,
 			IsExclusive:          g.IsExclusive,
+			SortOrder:            g.SortOrder,
 			ImageRateIndependent: g.ImageRateIndependent,
 			ImageRateMultiplier:  g.ImageRateMultiplier,
 			VideoRateIndependent: g.VideoRateIndependent,
@@ -249,10 +252,10 @@ func (s *ChannelService) ListPlazaGroups(ctx context.Context) ([]PlazaGroup, err
 	}
 
 	sort.SliceStable(out, func(i, j int) bool {
-		if out[i].RateMultiplier != out[j].RateMultiplier {
-			return out[i].RateMultiplier < out[j].RateMultiplier
+		if out[i].SortOrder != out[j].SortOrder {
+			return out[i].SortOrder < out[j].SortOrder
 		}
-		return out[i].Name < out[j].Name
+		return out[i].ID < out[j].ID
 	})
 	return out, nil
 }

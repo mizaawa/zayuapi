@@ -522,6 +522,11 @@ export interface Toast {
   title?: string
   duration?: number // in milliseconds, undefined means no auto-dismiss
   startTime?: number // timestamp when toast was created, for progress bar
+  paused?: boolean // countdown is held while the pointer or focus is on the toast
+}
+
+export interface ToastOptions {
+  title?: string
 }
 
 export interface AppState {

@@ -203,6 +203,9 @@ func (s *OpsService) GetConcurrencyStats(
 			p := platform[acc.Platform]
 			p.MaxCapacity += int64(acc.Concurrency)
 			p.CurrentInUse += currentInUse
+			if acc.Concurrency > 0 {
+				p.limitedInUse += currentInUse
+			}
 			p.WaitingInQueue += waiting
 		}
 
@@ -226,6 +229,9 @@ func (s *OpsService) GetConcurrencyStats(
 			}
 			g.MaxCapacity += int64(acc.Concurrency)
 			g.CurrentInUse += currentInUse
+			if acc.Concurrency > 0 {
+				g.limitedInUse += currentInUse
+			}
 			g.WaitingInQueue += waiting
 		} else {
 			for _, grp := range acc.Groups {
@@ -249,6 +255,9 @@ func (s *OpsService) GetConcurrencyStats(
 				}
 				g.MaxCapacity += int64(acc.Concurrency)
 				g.CurrentInUse += currentInUse
+				if acc.Concurrency > 0 {
+					g.limitedInUse += currentInUse
+				}
 				g.WaitingInQueue += waiting
 			}
 		}
@@ -256,12 +265,12 @@ func (s *OpsService) GetConcurrencyStats(
 
 	for _, info := range platform {
 		if info.MaxCapacity > 0 {
-			info.LoadPercentage = float64(info.CurrentInUse) / float64(info.MaxCapacity) * 100
+			info.LoadPercentage = float64(info.limitedInUse) / float64(info.MaxCapacity) * 100
 		}
 	}
 	for _, info := range group {
 		if info.MaxCapacity > 0 {
-			info.LoadPercentage = float64(info.CurrentInUse) / float64(info.MaxCapacity) * 100
+			info.LoadPercentage = float64(info.limitedInUse) / float64(info.MaxCapacity) * 100
 		}
 	}
 

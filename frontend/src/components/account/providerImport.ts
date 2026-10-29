@@ -1,4 +1,4 @@
-import type { AccountPlatform } from '@/types'
+import type { Account, AccountPlatform } from '@/types'
 
 /** How a new account receives its API key. */
 export type AccountImportSource = 'api' | 'provider'
@@ -33,6 +33,34 @@ export interface ProviderPickerOption {
 export function providerAccountEndpoint(origin: string, platform: AccountPlatform | string): string {
   const base = origin.trim().replace(/\/+$/, '')
   return platform === 'grok' || platform === 'custom' ? `${base}/v1` : base
+}
+
+/** Non-secret provenance the server stores in extra.provider_binding on import. */
+export interface AccountProviderBinding {
+  providerId: string
+  providerName: string
+  siteType: string
+  keyName: string
+  groupName: string
+}
+
+const bindingText = (value: unknown): string => (typeof value === 'string' ? value.trim() : '')
+
+/** Reads where an imported account came from; null for accounts entered by hand. */
+export function accountProviderBinding(account: Pick<Account, 'extra'> | null | undefined): AccountProviderBinding | null {
+  const raw = account?.extra?.provider_binding
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null
+  const binding = raw as Record<string, unknown>
+  const providerId = bindingText(binding.provider_id)
+  const providerName = bindingText(binding.provider_name)
+  if (!providerId && !providerName) return null
+  return {
+    providerId,
+    providerName,
+    siteType: bindingText(binding.site_type),
+    keyName: bindingText(binding.key_name),
+    groupName: bindingText(binding.group_name)
+  }
 }
 
 export function formatProviderMultiplier(value: number | null | undefined): string {

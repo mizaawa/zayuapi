@@ -1,22 +1,27 @@
 <template>
   <div class="space-y-5">
     <!-- 页头(独立形态下展示标题;后台形态 AppHeader 已有页面标题) -->
-    <div v-if="!embedded">
-      <h1 class="text-2xl font-bold tracking-tight text-gray-900 dark:text-white sm:text-3xl">{{ t('modelPlaza.title') }}</h1>
-      <p class="mt-1.5 text-sm text-gray-500 dark:text-dark-400">{{ t('modelPlaza.description') }}</p>
-    </div>
+    <header v-if="!embedded" class="plaza-intro">
+      <div class="min-w-0">
+        <h1 class="plaza-intro-title">{{ t('modelPlaza.title') }}</h1>
+        <p class="plaza-intro-description">{{ t('modelPlaza.description') }}</p>
+      </div>
+      <p v-if="!loading && !error && orderedGroups.length > 0" class="plaza-intro-summary">
+        {{ t('modelPlaza.summary', { groups: orderedGroups.length, models: modelTotal }) }}
+      </p>
+    </header>
 
     <!-- 全局价格说明(管理员配置,Markdown) -->
     <div
       v-if="descriptionHtml"
-      class="plaza-description rounded-2xl border border-gray-100 bg-white px-5 py-4 text-sm shadow-card dark:border-dark-700/50 dark:bg-dark-800/50"
+      class="plaza-description"
       v-html="descriptionHtml"
     ></div>
 
     <!-- 未登录提示 -->
     <p
       v-if="!isAuthenticated"
-      class="flex items-center gap-1.5 text-xs text-gray-400 dark:text-dark-500"
+      class="flex items-center gap-1.5 text-xs text-gray-500 dark:text-dark-500"
     >
       <Icon name="infoCircle" size="xs" class="h-3.5 w-3.5" />
       {{ t('modelPlaza.anonymousHint') }}
@@ -28,7 +33,7 @@
     </div>
     <div
       v-else-if="error"
-      class="rounded-2xl border border-red-200 bg-red-50 px-5 py-8 text-center text-sm text-red-600 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300"
+      class="rounded-2xl bg-red-50 px-5 py-8 text-center text-sm text-red-700 dark:bg-red-500/10 dark:text-red-300"
     >
       {{ t('modelPlaza.loadFailed') }}
     </div>
@@ -48,13 +53,13 @@
         @update:search="searchQuery = $event"
       />
 
-      <!-- 分组分节的模型清单(默认按生效倍率升序) -->
-      <div v-if="filteredGroups.length > 0" class="space-y-5">
+      <!-- 分组分节的模型清单(按分组管理里的排序展示) -->
+      <div v-if="filteredGroups.length > 0" class="space-y-4">
         <PlazaGroupSection v-for="g in filteredGroups" :key="g.id" :group="g" />
       </div>
       <div
         v-else
-        class="rounded-2xl border border-dashed border-gray-300 px-5 py-12 text-center text-sm text-gray-500 dark:border-dark-600 dark:text-dark-400"
+        class="plaza-empty"
       >
         {{ searchActive ? t('modelPlaza.noSearchResult') : t('modelPlaza.empty') }}
       </div>
@@ -103,12 +108,26 @@ function effectiveRate(g: ModelPlazaGroup): number {
   return g.user_rate_multiplier ?? g.rate_multiplier
 }
 
+/**
+ * 分组按管理员在分组管理里设定的排序展示;同序(或旧接口未返回排序)时保持服务端顺序。
+ */
+const orderedGroups = computed(() =>
+  (props.response?.groups ?? [])
+    .map((group, index) => ({ group, index }))
+    .sort((a, b) => (a.group.sort_order ?? 0) - (b.group.sort_order ?? 0) || a.index - b.index)
+    .map(({ group }) => group)
+)
+
+const modelTotal = computed(() =>
+  orderedGroups.value.reduce((sum, group) => sum + group.models.length, 0)
+)
+
 const platforms = computed(() =>
-  [...new Set((props.response?.groups ?? []).map((g) => g.platform).filter(Boolean))].sort()
+  [...new Set(orderedGroups.value.map((g) => g.platform).filter(Boolean))].sort()
 )
 
 const groupOptions = computed(() =>
-  (props.response?.groups ?? []).map((g) => ({
+  orderedGroups.value.map((g) => ({
     id: g.id,
     name: g.name,
     platform: g.platform,
@@ -118,7 +137,7 @@ const groupOptions = computed(() =>
 
 /** 全量生效倍率;当前组合下不可用的项由 FilterBar 置灰而非隐藏。 */
 const rates = computed(() =>
-  [...new Set((props.response?.groups ?? []).map(effectiveRate))].sort((a, b) => a - b)
+  [...new Set(orderedGroups.value.map(effectiveRate))].sort((a, b) => a - b)
 )
 
 /** 数据刷新后选中的倍率可能不复存在,重置为全部。 */
@@ -129,7 +148,7 @@ watch(rates, (list) => {
 })
 
 const filteredGroups = computed(() => {
-  let groups = props.response?.groups ?? []
+  let groups = orderedGroups.value
   if (selectedPlatform.value !== 'all') {
     groups = groups.filter((g) => g.platform === selectedPlatform.value)
   }
@@ -146,17 +165,60 @@ const filteredGroups = computed(() => {
       .map((g) => ({ ...g, models: g.models.filter((m) => m.name.toLowerCase().includes(q)) }))
       .filter((g) => g.models.length > 0)
   }
-  // 专属倍率会改变生效值,不能只依赖后端按默认倍率的排序。
-  return [...groups].sort(
-    (a, b) => effectiveRate(a) - effectiveRate(b) || a.name.localeCompare(b.name)
-  )
+  return groups
 })
 </script>
 
 <style scoped>
+.plaza-intro {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 0.75rem 1.5rem;
+}
+
+.plaza-intro-title {
+  font-size: 1.75rem;
+  font-weight: 700;
+  line-height: 2.25rem;
+  letter-spacing: -0.01em;
+  color: var(--md-sys-color-on-surface);
+}
+
+.plaza-intro-description {
+  margin-top: 0.25rem;
+  font-size: 0.875rem;
+  color: var(--md-sys-color-on-surface-variant);
+}
+
+.plaza-intro-summary {
+  padding: 0.3125rem 0.875rem;
+  border-radius: 999px;
+  background: #fff3bd;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: #7e5600;
+}
+
 .plaza-description {
+  padding: 1rem 1.25rem;
+  border-radius: 1.25rem;
+  background: var(--md-sys-color-surface);
+  box-shadow: var(--theme-highlight), var(--theme-elevation-1);
+  font-size: 0.875rem;
   line-height: 1.7;
   overflow-wrap: anywhere;
+}
+
+.plaza-empty {
+  padding: 3rem 1.25rem;
+  border-radius: 1.5rem;
+  background: var(--md-sys-color-surface);
+  text-align: center;
+  font-size: 0.875rem;
+  color: var(--md-sys-color-on-surface-variant);
+  box-shadow: var(--theme-highlight), var(--theme-elevation-1);
 }
 
 .plaza-description :deep(h1),
@@ -170,7 +232,7 @@ const filteredGroups = computed(() => {
 }
 
 .plaza-description :deep(a) {
-  @apply text-primary-600 underline underline-offset-4 hover:text-primary-700 dark:text-primary-300;
+  @apply text-primary-700 underline underline-offset-4 hover:text-primary-800 dark:text-primary-300;
 }
 
 .plaza-description :deep(ul) {
@@ -190,6 +252,6 @@ const filteredGroups = computed(() => {
 }
 
 .plaza-description :deep(blockquote) {
-  @apply my-2 border-l-4 border-gray-300 pl-3 text-gray-600 dark:border-dark-600 dark:text-dark-300;
+  @apply my-2 border-l-4 border-primary-300 pl-3 text-gray-600 dark:border-dark-600 dark:text-dark-300;
 }
 </style>

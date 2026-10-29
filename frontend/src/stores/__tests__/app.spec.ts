@@ -197,6 +197,45 @@ describe('useAppStore', () => {
       expect(store.hasActiveToasts).toBe(false)
     })
 
+    it('悬停暂停倒计时，移开后只补剩余时间', () => {
+      const store = useAppStore()
+      const id = store.showSuccess('可暂停', 3000)
+
+      vi.advanceTimersByTime(1000)
+      store.pauseToast(id)
+      expect(store.toasts[0].paused).toBe(true)
+
+      vi.advanceTimersByTime(10000)
+      expect(store.toasts).toHaveLength(1)
+
+      store.resumeToast(id)
+      expect(store.toasts[0].paused).toBe(false)
+      vi.advanceTimersByTime(1999)
+      expect(store.toasts).toHaveLength(1)
+      vi.advanceTimersByTime(1)
+      expect(store.toasts).toHaveLength(0)
+    })
+
+    it('同时最多保留 4 条，超出时先移除最早的', () => {
+      const store = useAppStore()
+      const first = store.showInfo('1')
+      store.showInfo('2')
+      store.showInfo('3')
+      store.showInfo('4')
+      store.showInfo('5')
+
+      expect(store.toasts).toHaveLength(4)
+      expect(store.toasts.map((toast) => toast.message)).toEqual(['2', '3', '4', '5'])
+      expect(store.toasts.some((toast) => toast.id === first)).toBe(false)
+    })
+
+    it('可以带标题', () => {
+      const store = useAppStore()
+      store.showSuccess('「主力」现在使用「官方」', 3000, { title: '分组已切换' })
+
+      expect(store.toasts[0].title).toBe('分组已切换')
+    })
+
     it('多个 toast 的 ID 唯一', () => {
       const store = useAppStore()
       const id1 = store.showSuccess('消息1')

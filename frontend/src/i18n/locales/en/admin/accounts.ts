@@ -2,6 +2,17 @@ export default {
     accounts: {
       title: 'Account Management',
       description: 'Manage AI platform accounts and credentials',
+      source: {
+        apiTooltip: 'Created from a Base URL and API key entered by hand',
+        providerTooltip: 'Imported from provider {provider}',
+        providerKey: 'Upstream key: {key}',
+        providerGroup: 'Upstream group: {group}'
+      },
+      card: {
+        today: 'Today',
+        concurrency: 'Concurrency',
+        schedulable: 'Schedulable'
+      },
       createAccount: 'Create Account',
       autoRefresh: 'Auto Refresh',
       enableAutoRefresh: 'Enable auto refresh',

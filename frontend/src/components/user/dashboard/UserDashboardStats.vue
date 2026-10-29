@@ -1,233 +1,158 @@
 <template>
-  <!-- Row 1: Core Stats -->
-  <div class="grid grid-cols-2 gap-4 lg:grid-cols-4">
-    <!-- Balance -->
-    <div v-if="!isSimple" class="card p-4">
-      <div class="flex items-center gap-3">
-        <div class="rounded-lg bg-emerald-100 p-2 dark:bg-emerald-900/30">
-          <svg class="h-5 w-5 text-emerald-600 dark:text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.25 18.75a60.07 60.07 0 0115.797 2.101c.727.198 1.453-.342 1.453-1.096V18.75M3.75 4.5v.75A.75.75 0 013 6h-.75m0 0v-.375c0-.621.504-1.125 1.125-1.125H20.25M2.25 6v9m18-10.5v.75c0 .414.336.75.75.75h.75m-1.5-1.5h.375c.621 0 1.125.504 1.125 1.125v9.75c0 .621-.504 1.125-1.125 1.125h-.375m1.5-1.5H21a.75.75 0 00-.75.75v.75m0 0H3.75m0 0h-.375a1.125 1.125 0 01-1.125-1.125V15m1.5 1.5v-.75A.75.75 0 003 15h-.75M15 10.5a3 3 0 11-6 0 3 3 0 016 0zm3 0h.008v.008H18V10.5zm-12 0h.008v.008H6V10.5z" />
-          </svg>
-        </div>
-        <div>
-          <p class="text-xs font-medium text-gray-500 dark:text-gray-400">{{ t('dashboard.balance') }}</p>
-          <p class="text-xl font-bold text-emerald-600 dark:text-emerald-400">${{ formatBalance(balance) }}</p>
-          <p class="text-xs text-gray-500 dark:text-gray-400">{{ t('common.available') }}</p>
-        </div>
-      </div>
+  <!-- Hero: the balance leads, today's numbers sit beside it. -->
+  <section class="dash-hero" :class="{ 'dash-hero-simple': isSimple }">
+    <div v-if="!isSimple" class="dash-balance">
+      <p class="dash-balance-label">{{ t('dashboard.balance') }}</p>
+      <p class="dash-balance-figure" :class="balanceToneClass">${{ formatBalance(balance) }}</p>
+      <p class="dash-balance-caption">
+        {{ t('dashboard.keysSummary', { total: stats.total_api_keys || 0, active: stats.active_api_keys || 0 }) }}
+      </p>
     </div>
 
-    <!-- API Keys -->
-    <div class="card p-4">
-      <div class="flex items-center gap-3">
-        <div class="rounded-lg bg-blue-100 p-2 dark:bg-blue-900/30">
-          <Icon name="key" size="md" class="text-blue-600 dark:text-blue-400" :stroke-width="2" />
+    <div class="dash-today">
+      <header class="dash-today-head">
+        <h2 class="dash-section-title">{{ t('dashboard.today') }}</h2>
+        <p class="dash-live">
+          <span class="dash-live-dot" :class="{ 'is-active': (stats.rpm || 0) > 0 }" aria-hidden="true"></span>
+          {{ t('dashboard.liveThroughput', { rpm: formatTokens(stats.rpm || 0), tpm: formatTokens(stats.tpm || 0) }) }}
+        </p>
+      </header>
+
+      <dl class="dash-kpis">
+        <div class="dash-kpi">
+          <dt>{{ t('dashboard.todayRequests') }}</dt>
+          <dd class="dash-kpi-value">{{ formatNumber(stats.today_requests || 0) }}</dd>
+          <dd class="dash-kpi-sub" :title="stats.totals_updated_at">{{ t('common.total') }}: {{ formatTotal(stats.total_requests, formatNumber) }}</dd>
         </div>
-        <div>
-          <p class="text-xs font-medium text-gray-500 dark:text-gray-400">{{ t('dashboard.apiKeys') }}</p>
-          <p class="text-xl font-bold text-gray-900 dark:text-white">{{ stats?.total_api_keys || 0 }}</p>
-          <p class="text-xs text-green-600 dark:text-green-400">{{ stats?.active_api_keys || 0 }} {{ t('common.active') }}</p>
+        <div class="dash-kpi">
+          <dt>{{ t('dashboard.todayCost') }}</dt>
+          <dd class="dash-kpi-value" :title="t('dashboard.actual')">${{ formatCost(stats.today_actual_cost || 0) }}</dd>
+          <dd class="dash-kpi-sub">
+            <span
+              v-if="(stats.today_cost || 0) > (stats.today_actual_cost || 0)"
+              class="dash-kpi-list-price"
+              :title="t('dashboard.standard')"
+            >${{ formatCost(stats.today_cost || 0) }}</span>
+            <span :title="stats.totals_updated_at || t('dashboard.actual')">{{ t('common.total') }}: {{ formatTotal(stats.total_actual_cost, (value) => '$' + formatCost(value)) }}</span>
+          </dd>
         </div>
+        <div class="dash-kpi">
+          <dt>{{ t('dashboard.todayTokens') }}</dt>
+          <dd class="dash-kpi-value">{{ formatTokens(stats.today_tokens || 0) }}</dd>
+          <dd class="dash-kpi-sub" :title="stats.totals_updated_at">{{ t('common.total') }}: {{ formatTotal(stats.total_tokens, formatTokens) }}</dd>
+        </div>
+        <div class="dash-kpi">
+          <dt>{{ t('dashboard.avgResponse') }}</dt>
+          <dd class="dash-kpi-value">{{ formatTotal(stats.average_duration_ms, formatDuration) }}</dd>
+          <dd class="dash-kpi-sub">{{ t('dashboard.averageTime') }}</dd>
+        </div>
+      </dl>
+
+      <!-- Token mix: same entity colours as the token trend chart. -->
+      <div class="dash-mix">
+        <div class="dash-mix-head">
+          <span>{{ t('dashboard.tokenMix') }}</span>
+          <span v-if="tokenMix.total === 0" class="dash-mix-empty">{{ t('dashboard.noTokensToday') }}</span>
+        </div>
+        <div class="dash-mix-bar" role="img" :aria-label="tokenMixLabel">
+          <span
+            v-for="part in tokenMix.parts.filter((item) => item.value > 0)"
+            :key="part.key"
+            class="dash-mix-segment"
+            :style="{ width: part.percent + '%', background: part.color }"
+            :title="`${part.label} ${formatTokens(part.value)}`"
+          ></span>
+        </div>
+        <ul class="dash-mix-legend">
+          <li v-for="part in tokenMix.parts" :key="part.key" :class="{ 'is-zero': part.value === 0 }">
+            <span class="dash-mix-swatch" :style="{ background: part.color }" aria-hidden="true"></span>
+            <span class="dash-mix-name">{{ part.label }}</span>
+            <span class="dash-mix-value">{{ formatTokens(part.value) }}</span>
+          </li>
+        </ul>
       </div>
     </div>
+  </section>
 
-    <!-- Today Requests -->
-    <div class="card p-4">
-      <div class="flex items-center gap-3">
-        <div class="rounded-lg bg-green-100 p-2 dark:bg-green-900/30">
-          <Icon name="chart" size="md" class="text-green-600 dark:text-green-400" :stroke-width="2" />
-        </div>
-        <div>
-          <p class="text-xs font-medium text-gray-500 dark:text-gray-400">{{ t('dashboard.todayRequests') }}</p>
-          <p class="text-xl font-bold text-gray-900 dark:text-white">{{ stats?.today_requests || 0 }}</p>
-          <p class="text-xs text-gray-500 dark:text-gray-400" :title="stats.totals_updated_at">{{ t('common.total') }}: {{ formatTotal(stats?.total_requests, formatNumber) }}</p>
-        </div>
-      </div>
-    </div>
-
-    <!-- Today Cost -->
-    <div class="card p-4">
-      <div class="flex items-center gap-3">
-        <div class="rounded-lg bg-purple-100 p-2 dark:bg-purple-900/30">
-          <Icon name="dollar" size="md" class="text-purple-600 dark:text-purple-400" :stroke-width="2" />
-        </div>
-        <div>
-          <p class="text-xs font-medium text-gray-500 dark:text-gray-400">{{ t('dashboard.todayCost') }}</p>
-          <p class="text-xl font-bold text-gray-900 dark:text-white">
-            <span class="text-purple-600 dark:text-purple-400" :title="t('dashboard.actual')">${{ formatCost(stats?.today_actual_cost || 0) }}</span>
-            <span class="text-sm font-normal text-gray-400 dark:text-gray-500" :title="t('dashboard.standard')"> / ${{ formatCost(stats?.today_cost || 0) }}</span>
-          </p>
-          <p class="text-xs">
-            <span class="text-gray-500 dark:text-gray-400">{{ t('common.total') }}: </span>
-            <span class="text-purple-600 dark:text-purple-400" :title="stats.totals_updated_at || t('dashboard.actual')">{{ formatTotal(stats?.total_actual_cost, (value) => '$' + formatCost(value)) }}</span>
-            <span class="text-gray-400 dark:text-gray-500" :title="t('dashboard.standard')"> / {{ formatTotal(stats?.total_cost, (value) => '$' + formatCost(value)) }}</span>
-          </p>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Row 2: Token Stats -->
-  <div class="grid grid-cols-2 gap-4 lg:grid-cols-4">
-    <!-- Today Tokens -->
-    <div class="card p-4">
-      <div class="flex items-center gap-3">
-        <div class="rounded-lg bg-amber-100 p-2 dark:bg-amber-900/30">
-          <Icon name="cube" size="md" class="text-amber-600 dark:text-amber-400" :stroke-width="2" />
-        </div>
-        <div>
-          <p class="text-xs font-medium text-gray-500 dark:text-gray-400">{{ t('dashboard.todayTokens') }}</p>
-          <p class="text-xl font-bold text-gray-900 dark:text-white">{{ formatTokens(stats?.today_tokens || 0) }}</p>
-          <p class="text-xs text-gray-500 dark:text-gray-400">{{ t('dashboard.input') }}: {{ formatTokens(stats?.today_input_tokens || 0) }} / {{ t('dashboard.output') }}: {{ formatTokens(stats?.today_output_tokens || 0) }}</p>
-        </div>
-      </div>
-    </div>
-
-    <!-- Total Tokens -->
-    <div class="card p-4">
-      <div class="flex items-center gap-3">
-        <div class="rounded-lg bg-indigo-100 p-2 dark:bg-indigo-900/30">
-          <Icon name="database" size="md" class="text-indigo-600 dark:text-indigo-400" :stroke-width="2" />
-        </div>
-        <div>
-          <p class="text-xs font-medium text-gray-500 dark:text-gray-400">{{ t('dashboard.totalTokens') }}</p>
-          <p class="text-xl font-bold text-gray-900 dark:text-white" :title="stats.totals_updated_at">{{ formatTotal(stats?.total_tokens, formatTokens) }}</p>
-          <p class="text-xs text-gray-500 dark:text-gray-400">{{ t('dashboard.input') }}: {{ formatTotal(stats?.total_input_tokens, formatTokens) }} / {{ t('dashboard.output') }}: {{ formatTotal(stats?.total_output_tokens, formatTokens) }}</p>
-        </div>
-      </div>
-    </div>
-
-    <!-- Performance (RPM/TPM) -->
-    <div class="card p-4">
-      <div class="flex items-center gap-3">
-        <div class="rounded-lg bg-violet-100 p-2 dark:bg-violet-900/30">
-          <Icon name="bolt" size="md" class="text-violet-600 dark:text-violet-400" :stroke-width="2" />
-        </div>
-        <div class="flex-1">
-          <p class="text-xs font-medium text-gray-500 dark:text-gray-400">{{ t('dashboard.performance') }}</p>
-          <div class="flex items-baseline gap-2">
-            <p class="text-xl font-bold text-gray-900 dark:text-white">{{ formatTokens(stats?.rpm || 0) }}</p>
-            <span class="text-xs text-gray-500 dark:text-gray-400">RPM</span>
-          </div>
-          <div class="flex items-baseline gap-2">
-            <p class="text-sm font-semibold text-violet-600 dark:text-violet-400">{{ formatTokens(stats?.tpm || 0) }}</p>
-            <span class="text-xs text-gray-500 dark:text-gray-400">TPM</span>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Avg Response Time -->
-    <div class="card p-4">
-      <div class="flex items-center gap-3">
-        <div class="rounded-lg bg-rose-100 p-2 dark:bg-rose-900/30">
-          <Icon name="clock" size="md" class="text-rose-600 dark:text-rose-400" :stroke-width="2" />
-        </div>
-        <div>
-          <p class="text-xs font-medium text-gray-500 dark:text-gray-400">{{ t('dashboard.avgResponse') }}</p>
-          <p class="text-xl font-bold text-gray-900 dark:text-white">{{ formatTotal(stats?.average_duration_ms, formatDuration) }}</p>
-          <p class="text-xs text-gray-500 dark:text-gray-400">{{ t('dashboard.averageTime') }}</p>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Row 3: Per-platform breakdown -->
-  <div v-if="!isSimple && platformCards.length > 0" class="card p-4">
-    <div class="mb-3 flex items-center justify-between">
-      <h3 class="text-sm font-semibold text-gray-900 dark:text-white">{{ t('dashboard.platformBreakdown') }}</h3>
-      <span class="text-xs text-gray-500 dark:text-gray-400">
-        {{ t('dashboard.platformCount', { count: sortedPlatforms.length }) }}
-      </span>
-    </div>
-    <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-      <div
-        v-for="item in platformCards"
-        :key="item.platform"
-        :class="[
-          'rounded-lg border p-3',
-          item.isOther
-            ? 'border-dashed border-gray-300 bg-gray-50 dark:border-dark-500 dark:bg-dark-700/30'
-            : 'border-gray-200 dark:border-dark-600'
-        ]"
-      >
-        <div class="flex items-center justify-between">
-          <span class="text-sm font-semibold text-gray-900 dark:text-white">
-            {{ item.isOther ? t('dashboard.platformOther') : platformLabel(item.platform) }}
+  <!-- Per-platform spend with any quota windows the admin configured. -->
+  <section v-if="!isSimple && platformCards.length > 0" class="dash-panel">
+    <header class="dash-panel-head">
+      <h2 class="dash-section-title">{{ t('dashboard.platformBreakdown') }}</h2>
+      <span class="dash-panel-meta">{{ t('dashboard.platformCount', { count: sortedPlatforms.length }) }}</span>
+    </header>
+    <ul class="dash-platforms">
+      <li v-for="item in platformCards" :key="item.platform" class="dash-platform">
+        <div class="dash-platform-row">
+          <span class="dash-platform-icon" :style="{ '--chip-accent': platformAccentColor(item.platform) }">
+            <Icon v-if="item.isOther" name="cube" size="sm" />
+            <PlatformIcon v-else :platform="item.platform as GroupPlatform" size="sm" />
           </span>
-          <span class="font-mono text-sm text-purple-600 dark:text-purple-400" :title="t('dashboard.actual')">
-            {{ formatTotal(item.total_actual_cost, (value) => '$' + formatCost(value)) }}
-          </span>
-        </div>
-        <div class="mt-2 space-y-1 text-xs">
-          <div class="flex items-center justify-between">
-            <span class="text-gray-500 dark:text-gray-400">{{ t('dashboard.todayCost') }}</span>
-            <span class="font-mono text-gray-900 dark:text-white">${{ formatCost(item.today_actual_cost) }}</span>
-          </div>
-          <div class="flex items-center justify-between">
-            <span class="text-gray-500 dark:text-gray-400">{{ t('dashboard.requests') }}</span>
-            <span class="font-mono text-gray-700 dark:text-gray-300">
-              {{ formatTotal(item.total_requests, formatNumber) }}
+          <div class="dash-platform-name">
+            <span class="dash-platform-title">{{ item.isOther ? t('dashboard.platformOther') : platformLabel(item.platform) }}</span>
+            <span v-if="!item.isOther" class="dash-platform-meta">
+              <span>{{ t('dashboard.requests') }} {{ formatTotal(item.total_requests, formatNumber) }}</span>
+              <span>{{ t('dashboard.tokens') }} {{ formatTotal(item.total_tokens, formatTokens) }}</span>
             </span>
           </div>
-          <div class="flex items-center justify-between">
-            <span class="text-gray-500 dark:text-gray-400">{{ t('dashboard.tokens') }}</span>
-            <span class="font-mono text-gray-700 dark:text-gray-300">
-              {{ formatTotal(item.total_tokens, formatTokens) }}
+          <div class="dash-platform-share" :title="t('dashboard.shareOfSpend', { percent: sharePercent(item) })">
+            <span class="dash-share-track">
+              <span class="dash-share-fill" :style="{ width: sharePercent(item) + '%' }"></span>
             </span>
+            <span class="dash-share-percent">{{ sharePercent(item) }}%</span>
+          </div>
+          <div class="dash-platform-cost">
+            <span class="dash-platform-total" :title="t('dashboard.actual')">
+              {{ formatTotal(item.total_actual_cost, (value) => '$' + formatCost(value)) }}
+            </span>
+            <span class="dash-platform-today">{{ t('dashboard.todayCost') }} ${{ formatCost(item.today_actual_cost) }}</span>
           </div>
         </div>
 
-        <!-- Quota 区：仅当 quota 配置存在、非 __other__ 且至少有一个窗口配了 limit 时显示 -->
-        <div v-if="hasAnyLimit(item.quota) && !item.isOther" class="mt-3 space-y-1.5 border-t border-gray-200 pt-2 dark:border-dark-700">
-          <p class="text-[10px] uppercase tracking-wide text-gray-400">
-            {{ t('dashboard.platformQuota.title') }}
-          </p>
+        <!-- Quota windows: only when a limit is configured for this platform. -->
+        <div v-if="hasAnyLimit(item.quota) && !item.isOther" class="dash-quota">
           <template v-for="w in (['daily', 'weekly', 'monthly'] as const)" :key="w">
-            <div v-if="quotaVal(item.quota, `${w}_limit_usd`) != null" class="space-y-0.5">
-              <!-- limit=0：完全禁用 -->
+            <div v-if="quotaVal(item.quota, `${w}_limit_usd`) != null" class="dash-quota-window">
               <template v-if="(quotaVal(item.quota, `${w}_limit_usd`) as number) === 0">
-                <div class="flex items-center justify-between text-xs">
-                  <span class="text-gray-600 dark:text-gray-300">{{ t(`dashboard.platformQuota.${w}`) }}</span>
-                  <span class="font-mono text-red-500">{{ t('dashboard.platformQuota.disabled') }}</span>
+                <div class="dash-quota-head">
+                  <span>{{ t(`dashboard.platformQuota.${w}`) }}</span>
+                  <span class="text-red-600">{{ t('dashboard.platformQuota.disabled') }}</span>
                 </div>
-                <div class="h-1.5 w-full overflow-hidden rounded-full bg-gray-200 dark:bg-dark-700">
-                  <div class="h-full w-full rounded-full bg-red-500" />
-                </div>
+                <div class="dash-meter"><div class="dash-meter-fill w-full bg-red-500" /></div>
               </template>
-              <!-- limit>0：正常用量进度条 -->
               <template v-else>
-                <div class="flex items-center justify-between text-xs">
-                  <span class="text-gray-600 dark:text-gray-300">{{ t(`dashboard.platformQuota.${w}`) }}</span>
-                  <span class="font-mono text-gray-700 dark:text-gray-200">
+                <div class="dash-quota-head">
+                  <span>{{ t(`dashboard.platformQuota.${w}`) }}</span>
+                  <span class="tabular-nums">
                     ${{ formatUsd((quotaVal(item.quota, `${w}_usage_usd`) as number) ?? 0) }} / ${{ formatUsd(quotaVal(item.quota, `${w}_limit_usd`) as number) }}
                   </span>
                 </div>
-                <div class="h-1.5 w-full overflow-hidden rounded-full bg-gray-200 dark:bg-dark-700">
+                <div class="dash-meter">
                   <div
-                    class="h-full rounded-full transition-all"
+                    class="dash-meter-fill"
                     :class="quotaBarClass(calcPercent((quotaVal(item.quota, `${w}_usage_usd`) as number) ?? 0, quotaVal(item.quota, `${w}_limit_usd`) as number))"
                     :style="{ width: calcPercent((quotaVal(item.quota, `${w}_usage_usd`) as number) ?? 0, quotaVal(item.quota, `${w}_limit_usd`) as number) + '%' }"
                   />
                 </div>
-                <p v-if="quotaVal(item.quota, `${w}_window_resets_at`)" class="text-[10px] text-gray-400">
+                <p v-if="quotaVal(item.quota, `${w}_window_resets_at`)" class="dash-quota-reset">
                   {{ t('dashboard.platformQuota.resetsAt', { time: formatResetTime(quotaVal(item.quota, `${w}_window_resets_at`) as string) }) }}
                 </p>
               </template>
             </div>
           </template>
         </div>
-      </div>
-    </div>
-  </div>
+      </li>
+    </ul>
+  </section>
 </template>
 
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Icon from '@/components/icons/Icon.vue'
+import PlatformIcon from '@/components/common/PlatformIcon.vue'
 import type { UserDashboardStats as UserStatsType } from '@/api/usage'
-import type { PlatformQuotaItem } from '@/types'
+import type { GroupPlatform, PlatformQuotaItem } from '@/types'
+import { platformAccentColor } from '@/utils/platformColors'
 
 interface FusedPlatformCard {
   platform: string
@@ -249,6 +174,41 @@ const { t } = useI18n()
 const formatTotal = (value: number | undefined, formatter: (value: number) => string) =>
   props.stats.totals_pending ? '-' : formatter(value ?? 0)
 
+// Same thresholds as the header and profile balance, so one balance never wears two tones.
+const balanceToneClass = computed(() => {
+  const value = props.balance
+  if (!Number.isFinite(value) || value < 0) return 'balance-tone-negative'
+  if (value <= 10) return 'balance-tone-low'
+  if (value > 100) return 'balance-tone-premium'
+  return 'balance-tone-default'
+})
+
+// Entity colours match TokenUsageTrend so input/output/cache read the same across the page.
+const TOKEN_MIX_COLORS = {
+  input: '#3b82f6',
+  output: '#10b981',
+  cacheWrite: '#f59e0b',
+  cacheRead: '#06b6d4'
+} as const
+
+const tokenMix = computed(() => {
+  const parts = [
+    { key: 'input', label: t('dashboard.input'), value: props.stats.today_input_tokens || 0, color: TOKEN_MIX_COLORS.input },
+    { key: 'output', label: t('dashboard.output'), value: props.stats.today_output_tokens || 0, color: TOKEN_MIX_COLORS.output },
+    { key: 'cacheWrite', label: t('dashboard.cacheWrite'), value: props.stats.today_cache_creation_tokens || 0, color: TOKEN_MIX_COLORS.cacheWrite },
+    { key: 'cacheRead', label: t('dashboard.cacheRead'), value: props.stats.today_cache_read_tokens || 0, color: TOKEN_MIX_COLORS.cacheRead }
+  ]
+  const total = parts.reduce((sum, part) => sum + part.value, 0)
+  return {
+    total,
+    parts: parts.map((part) => ({ ...part, percent: total > 0 ? (part.value / total) * 100 : 0 }))
+  }
+})
+
+const tokenMixLabel = computed(() =>
+  tokenMix.value.parts.map((part) => `${part.label} ${formatTokens(part.value)}`).join(', ')
+)
+
 const PLATFORM_LABELS: Record<string, string> = {
   anthropic: 'Claude',
   openai: 'OpenAI',
@@ -267,7 +227,7 @@ const sortedPlatforms = computed(() => {
 
 // 处理"各平台之和 < 总值"的差值：后端按平台聚合时过滤了无法归属平台的行
 // （group 与 account 都缺 platform）。这里把差值作为"其他"卡片显式展示，
-// 避免 Row 1 总值与 Row 3 平台拆分加总对不上、用户困惑。
+// 避免今日/累计总值与平台拆分加总对不上、用户困惑。
 const OTHER_THRESHOLD = 0.0001
 const platformCards = computed<FusedPlatformCard[]>(() => {
   // 建立 by_platform Map
@@ -329,6 +289,15 @@ const platformCards = computed<FusedPlatformCard[]>(() => {
   return cards
 })
 
+const platformSpendTotal = computed(() =>
+  platformCards.value.reduce((sum, card) => sum + Math.max(card.total_actual_cost, 0), 0)
+)
+
+function sharePercent(card: FusedPlatformCard): number {
+  if (props.stats.totals_pending || platformSpendTotal.value <= 0) return 0
+  return Math.round((Math.max(card.total_actual_cost, 0) / platformSpendTotal.value) * 100)
+}
+
 // Quota helpers
 
 type QuotaWindow = 'daily' | 'weekly' | 'monthly'
@@ -351,7 +320,7 @@ function calcPercent(usage: number, limit: number): number {
 function quotaBarClass(p: number): string {
   if (p >= 95) return 'bg-red-500'
   if (p >= 75) return 'bg-amber-500'
-  return 'bg-green-500'
+  return 'bg-accent-500'
 }
 
 // 与 formatBalance 一致使用 Intl.NumberFormat 做半偶舍入，避免 toFixed 在不同 JS 引擎
@@ -393,3 +362,406 @@ const formatTokens = (t: number) => {
 }
 const formatDuration = (ms: number) => ms >= 1000 ? `${(ms / 1000).toFixed(2)}s` : `${ms.toFixed(0)}ms`
 </script>
+
+<style scoped>
+.dash-hero {
+  display: grid;
+  gap: 1.25rem;
+  padding: 1.25rem;
+  border-radius: 1.75rem;
+  background: var(--md-sys-color-surface);
+  box-shadow: var(--theme-highlight), var(--theme-elevation-1);
+}
+
+.dash-balance {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.375rem;
+  overflow: hidden;
+  padding: 1.25rem 1.375rem;
+  border-radius: 1.25rem;
+  background: #fff7d6;
+}
+
+.dash-balance-label {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #6b6045;
+}
+
+/* The one hero figure on this page. */
+.dash-balance-figure {
+  font-size: clamp(2.5rem, 6vw, 3.5rem);
+  font-weight: 700;
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+  color: #3f3420;
+  overflow-wrap: anywhere;
+}
+
+.dash-balance-caption {
+  font-size: 0.8125rem;
+  color: #6b6045;
+}
+
+.dash-today {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.dash-today-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.dash-section-title {
+  font-size: 0.9375rem;
+  font-weight: 700;
+  color: var(--md-sys-color-on-surface);
+}
+
+.dash-live {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.1875rem 0.625rem;
+  border-radius: 999px;
+  background: #faf6e8;
+  font-size: 0.75rem;
+  color: var(--md-sys-color-on-surface-variant);
+}
+
+.dash-live-dot {
+  width: 0.4375rem;
+  height: 0.4375rem;
+  border-radius: 999px;
+  background: #9b8c62;
+}
+
+.dash-live-dot.is-active {
+  background: #5c9865;
+  box-shadow: 0 0 0 3px rgb(92 152 101 / 0.22);
+}
+
+.dash-kpis {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.625rem;
+}
+
+.dash-kpi {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 0.875rem 1rem;
+  border-radius: 1rem;
+  background: #fffbe8;
+}
+
+.dash-kpi dt {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--md-sys-color-on-surface-variant);
+}
+
+.dash-kpi-value {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 1.375rem;
+  font-weight: 700;
+  line-height: 1.75rem;
+  color: var(--md-sys-color-on-surface);
+}
+
+.dash-kpi-sub {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 0.5rem;
+  font-size: 0.75rem;
+  color: var(--md-sys-color-on-surface-variant);
+}
+
+.dash-kpi-list-price {
+  text-decoration: line-through;
+  opacity: 0.75;
+}
+
+.dash-mix {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.dash-mix-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--md-sys-color-on-surface-variant);
+}
+
+.dash-mix-empty {
+  font-weight: 400;
+}
+
+/* Stacked bar: 2px surface gaps between segments instead of strokes. */
+.dash-mix-bar {
+  display: flex;
+  gap: 2px;
+  height: 0.625rem;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #eee5c9;
+}
+
+.dash-mix-segment {
+  min-width: 2px;
+  height: 100%;
+}
+
+.dash-mix-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem 1rem;
+  font-size: 0.75rem;
+}
+
+.dash-mix-legend li {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  color: var(--md-sys-color-on-surface-variant);
+}
+
+.dash-mix-legend li.is-zero {
+  opacity: 0.55;
+}
+
+.dash-mix-swatch {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 0.125rem;
+}
+
+.dash-mix-value {
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  color: var(--md-sys-color-on-surface);
+}
+
+/* ---------- Platform breakdown ---------- */
+.dash-panel {
+  padding: 1.25rem;
+  border-radius: 1.5rem;
+  background: var(--md-sys-color-surface);
+  box-shadow: var(--theme-highlight), var(--theme-elevation-1);
+}
+
+.dash-panel-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.dash-panel-meta {
+  font-size: 0.75rem;
+  color: var(--md-sys-color-on-surface-variant);
+}
+
+.dash-platforms {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.dash-platform {
+  padding: 0.75rem 0.875rem;
+  border-radius: 1rem;
+  background: #fffbe8;
+}
+
+.dash-platform-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.dash-platform-icon {
+  display: inline-flex;
+  width: 2.25rem;
+  height: 2.25rem;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.75rem;
+  color: color-mix(in srgb, var(--chip-accent) 70%, #3f3420);
+  background: color-mix(in srgb, var(--chip-accent) 14%, var(--md-sys-color-surface));
+}
+
+.dash-platform-name {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 0.125rem;
+}
+
+.dash-platform-title {
+  font-size: 0.875rem;
+  font-weight: 650;
+  color: var(--md-sys-color-on-surface);
+}
+
+.dash-platform-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 0.75rem;
+  font-size: 0.75rem;
+  color: var(--md-sys-color-on-surface-variant);
+}
+
+.dash-platform-share {
+  display: none;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.dash-share-track {
+  display: block;
+  width: 9rem;
+  height: 0.375rem;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #e4f0df;
+}
+
+.dash-share-fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: #5c9865;
+}
+
+.dash-share-percent {
+  width: 2.5rem;
+  text-align: right;
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--md-sys-color-on-surface-variant);
+}
+
+.dash-platform-cost {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.125rem;
+}
+
+.dash-platform-total {
+  font-size: 0.9375rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--md-sys-color-on-surface);
+}
+
+.dash-platform-today {
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--md-sys-color-on-surface-variant);
+}
+
+.dash-quota {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+  gap: 0.5rem 1rem;
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+  box-shadow: inset 0 1px 0 rgb(215 193 106 / 0.3);
+}
+
+.dash-quota-window {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.dash-quota-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  font-size: 0.75rem;
+  color: var(--md-sys-color-on-surface-variant);
+}
+
+.dash-quota-reset {
+  font-size: 0.6875rem;
+  color: var(--md-sys-color-on-surface-variant);
+  opacity: 0.8;
+}
+
+.dash-meter {
+  height: 0.375rem;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #eee5c9;
+}
+
+.dash-meter-fill {
+  height: 100%;
+  border-radius: inherit;
+  transition: width 300ms ease;
+}
+
+@media (min-width: 640px) {
+  .dash-platform-row {
+    grid-template-columns: auto minmax(0, 1fr) auto auto;
+  }
+
+  .dash-platform-share {
+    display: inline-flex;
+  }
+}
+
+@media (min-width: 768px) {
+  .dash-hero {
+    padding: 1.5rem;
+  }
+
+  .dash-kpis {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1024px) {
+  .dash-hero {
+    grid-template-columns: minmax(16rem, 0.38fr) minmax(0, 1fr);
+    gap: 1.5rem;
+  }
+
+  .dash-hero.dash-hero-simple {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .dash-kpis {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1280px) {
+  .dash-kpis {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+</style>

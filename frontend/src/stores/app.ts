@@ -5,7 +5,7 @@
 
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import type { Toast, ToastType, PublicSettings } from '@/types'
+import type { Toast, ToastOptions, ToastType, PublicSettings } from '@/types'
 import { i18n } from '@/i18n'
 import {
   checkUpdates as checkUpdatesAPI,
@@ -46,6 +46,10 @@ export const useAppStore = defineStore('app', () => {
 
   // Auto-incrementing ID for toasts
   let toastIdCounter = 0
+  // Auto-dismiss bookkeeping per toast so the countdown can pause on hover.
+  const toastTimers = new Map<string, { timer: ReturnType<typeof setTimeout>; remaining: number; startedAt: number }>()
+  // Older toasts are dropped once this many are on screen.
+  const MAX_VISIBLE_TOASTS = 4
 
   // ==================== Computed ====================
 
@@ -104,28 +108,61 @@ export const useAppStore = defineStore('app', () => {
    * @param type - Type of toast (success, error, info, warning)
    * @param message - Toast message content
    * @param duration - Auto-dismiss duration in ms (undefined = no auto-dismiss)
+   * @param options - Optional title shown above the message
    * @returns Toast ID for manual dismissal
    */
-  function showToast(type: ToastType, message: string, duration?: number): string {
+  function showToast(type: ToastType, message: string, duration?: number, options?: ToastOptions): string {
     const id = `toast-${++toastIdCounter}`
     const toast: Toast = {
       id,
       type,
       message,
+      title: options?.title,
       duration,
       startTime: duration !== undefined ? Date.now() : undefined
     }
 
     toasts.value.push(toast)
+    while (toasts.value.length > MAX_VISIBLE_TOASTS) {
+      hideToast(toasts.value[0].id)
+    }
 
     // Auto-dismiss if duration is specified
     if (duration !== undefined) {
-      setTimeout(() => {
-        hideToast(id)
-      }, duration)
+      startToastTimer(id, duration)
     }
 
     return id
+  }
+
+  function startToastTimer(id: string, remaining: number): void {
+    const timer = setTimeout(() => {
+      hideToast(id)
+    }, remaining)
+    toastTimers.set(id, { timer, remaining, startedAt: Date.now() })
+  }
+
+  /**
+   * Hold a toast's auto-dismiss countdown (pointer or keyboard focus on it).
+   */
+  function pauseToast(id: string): void {
+    const entry = toastTimers.get(id)
+    const toast = toasts.value.find((t) => t.id === id)
+    if (!entry || !toast || toast.paused) return
+    clearTimeout(entry.timer)
+    entry.remaining = Math.max(entry.remaining - (Date.now() - entry.startedAt), 0)
+    toast.paused = true
+  }
+
+  /**
+   * Continue a paused countdown with whatever time it had left.
+   */
+  function resumeToast(id: string): void {
+    const entry = toastTimers.get(id)
+    const toast = toasts.value.find((t) => t.id === id)
+    if (!entry || !toast || !toast.paused) return
+    toast.paused = false
+    startToastTimer(id, entry.remaining)
   }
 
   /**
@@ -133,8 +170,8 @@ export const useAppStore = defineStore('app', () => {
    * @param message - Success message
    * @param duration - Auto-dismiss duration in ms (default: 3000)
    */
-  function showSuccess(message: string, duration: number = 3000): string {
-    return showToast('success', message, duration)
+  function showSuccess(message: string, duration: number = 3000, options?: ToastOptions): string {
+    return showToast('success', message, duration, options)
   }
 
   /**
@@ -142,8 +179,8 @@ export const useAppStore = defineStore('app', () => {
    * @param message - Error message
    * @param duration - Auto-dismiss duration in ms (default: 5000)
    */
-  function showError(message: string, duration: number = 5000): string {
-    return showToast('error', message, duration)
+  function showError(message: string, duration: number = 5000, options?: ToastOptions): string {
+    return showToast('error', message, duration, options)
   }
 
   /**
@@ -151,8 +188,8 @@ export const useAppStore = defineStore('app', () => {
    * @param message - Info message
    * @param duration - Auto-dismiss duration in ms (default: 3000)
    */
-  function showInfo(message: string, duration: number = 3000): string {
-    return showToast('info', message, duration)
+  function showInfo(message: string, duration: number = 3000, options?: ToastOptions): string {
+    return showToast('info', message, duration, options)
   }
 
   /**
@@ -160,8 +197,8 @@ export const useAppStore = defineStore('app', () => {
    * @param message - Warning message
    * @param duration - Auto-dismiss duration in ms (default: 4000)
    */
-  function showWarning(message: string, duration: number = 4000): string {
-    return showToast('warning', message, duration)
+  function showWarning(message: string, duration: number = 4000, options?: ToastOptions): string {
+    return showToast('warning', message, duration, options)
   }
 
   /**
@@ -169,6 +206,11 @@ export const useAppStore = defineStore('app', () => {
    * @param id - Toast ID to hide
    */
   function hideToast(id: string): void {
+    const entry = toastTimers.get(id)
+    if (entry) {
+      clearTimeout(entry.timer)
+      toastTimers.delete(id)
+    }
     const index = toasts.value.findIndex((t) => t.id === id)
     if (index !== -1) {
       toasts.value.splice(index, 1)
@@ -179,6 +221,8 @@ export const useAppStore = defineStore('app', () => {
    * Clear all toasts
    */
   function clearAllToasts(): void {
+    for (const entry of toastTimers.values()) clearTimeout(entry.timer)
+    toastTimers.clear()
     toasts.value = []
   }
 
@@ -231,7 +275,7 @@ export const useAppStore = defineStore('app', () => {
     sidebarCollapsed.value = false
     loading.value = false
     loadingCount.value = 0
-    toasts.value = []
+    clearAllToasts()
   }
 
   // ==================== Version Management ====================
@@ -503,6 +547,8 @@ export const useAppStore = defineStore('app', () => {
     showInfo,
     showWarning,
     hideToast,
+    pauseToast,
+    resumeToast,
     clearAllToasts,
     withLoading,
     withLoadingAndError,

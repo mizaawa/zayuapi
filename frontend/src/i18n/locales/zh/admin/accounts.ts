@@ -2,6 +2,17 @@ export default {
     accounts: {
       title: '账号管理',
       description: '管理 AI 平台账号和 Cookie',
+      source: {
+        apiTooltip: '手动填写 Base URL 与 API Key 创建',
+        providerTooltip: '从服务商「{provider}」导入',
+        providerKey: '上游密钥：{key}',
+        providerGroup: '上游分组：{group}'
+      },
+      card: {
+        today: '今日',
+        concurrency: '并发',
+        schedulable: '参与调度'
+      },
       createAccount: '添加账号',
       autoRefresh: '自动刷新',
       enableAutoRefresh: '启用自动刷新',

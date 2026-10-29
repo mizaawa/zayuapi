@@ -40,6 +40,8 @@ export interface ModelPlazaGroup {
   peak_end: string
   peak_rate_multiplier: number
   is_exclusive: boolean
+  /** 分组管理里设定的展示顺序（升序）；广场按它排列分组。 */
+  sort_order?: number
   /** 生图独立倍率：true 时图片计费模型的实付倍率取 image_rate_multiplier，不取分组/专属倍率。 */
   image_rate_independent: boolean
   image_rate_multiplier: number

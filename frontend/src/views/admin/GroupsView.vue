@@ -2,114 +2,127 @@
   <AppLayout>
     <TablePageLayout>
       <template #filters>
-        <div
-          class="flex flex-col justify-between gap-4 lg:flex-row lg:items-start"
-        >
-          <!-- Left: fuzzy search + filters (can wrap to multiple lines) -->
-          <div class="flex flex-1 flex-wrap items-center gap-3">
-            <div class="relative w-full sm:w-64">
-              <Icon
-                name="search"
-                size="md"
-                class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500"
+        <section class="groups-toolbar">
+          <div class="groups-toolbar-main">
+            <div class="groups-toolbar-filters">
+              <div class="groups-search">
+                <Icon
+                  name="search"
+                  size="md"
+                  class="groups-search-icon"
+                />
+                <input
+                  v-model="searchQuery"
+                  type="text"
+                  :placeholder="t('admin.groups.searchGroups')"
+                  class="input groups-search-input"
+                  @input="handleSearch"
+                />
+              </div>
+              <Select
+                v-model="filters.status"
+                :options="statusOptions"
+                :placeholder="t('admin.groups.allStatus')"
+                class="groups-filter-select"
+                @change="loadGroups"
               />
-              <input
-                v-model="searchQuery"
-                type="text"
-                :placeholder="t('admin.groups.searchGroups')"
-                class="input pl-10"
-                @input="handleSearch"
+              <Select
+                v-model="filters.is_exclusive"
+                :options="exclusiveOptions"
+                :placeholder="t('admin.groups.allGroups')"
+                class="groups-filter-select"
+                @change="loadGroups"
               />
             </div>
-            <Select
-              v-model="filters.platform"
-              :options="platformFilterOptions"
-              :placeholder="t('admin.groups.allPlatforms')"
-              class="w-44"
-              @change="loadGroups"
-            />
-            <Select
-              v-model="filters.status"
-              :options="statusOptions"
-              :placeholder="t('admin.groups.allStatus')"
-              class="w-40"
-              @change="loadGroups"
-            />
-            <Select
-              v-model="filters.is_exclusive"
-              :options="exclusiveOptions"
-              :placeholder="t('admin.groups.allGroups')"
-              class="w-44"
-              @change="loadGroups"
-            />
+
+            <div class="groups-toolbar-actions">
+              <button
+                @click="loadGroups"
+                :disabled="loading"
+                class="btn btn-secondary groups-toolbar-button"
+                :title="t('common.refresh')"
+              >
+                <Icon
+                  name="refresh"
+                  size="md"
+                  :class="loading ? 'animate-spin' : ''"
+                />
+              </button>
+              <div class="relative" ref="columnDropdownRef">
+                <button
+                  @click="showColumnDropdown = !showColumnDropdown"
+                  class="btn btn-secondary groups-toolbar-button"
+                  :title="t('admin.groups.columnSettings')"
+                >
+                  <Icon name="grid" size="md" />
+                  <span class="hidden md:inline">{{
+                    t("admin.groups.columnSettings")
+                  }}</span>
+                </button>
+                <div
+                  v-if="showColumnDropdown"
+                  class="groups-column-menu absolute right-0 top-full z-50 mt-1.5 max-h-80 w-52 overflow-y-auto py-1.5"
+                >
+                  <button
+                    v-for="col in toggleableColumns"
+                    :key="col.key"
+                    @click="toggleColumn(col.key)"
+                    class="groups-column-option"
+                  >
+                    <span>{{ col.label }}</span>
+                    <Icon
+                      v-if="isColumnVisible(col.key)"
+                      name="check"
+                      size="sm"
+                      class="text-primary-600"
+                      :stroke-width="2"
+                    />
+                  </button>
+                </div>
+              </div>
+              <button
+                @click="openSortModal"
+                class="btn btn-secondary groups-toolbar-button"
+                :title="t('admin.groups.sortOrder')"
+              >
+                <Icon name="arrowsUpDown" size="md" />
+                <span class="hidden sm:inline">{{ t("admin.groups.sortOrder") }}</span>
+              </button>
+              <button
+                @click="openCreateModal"
+                class="btn btn-primary groups-toolbar-button"
+                data-tour="groups-create-btn"
+              >
+                <Icon name="plus" size="md" />
+                {{ t("admin.groups.createGroup") }}
+              </button>
+            </div>
           </div>
 
-          <!-- Right: actions -->
           <div
-            class="flex w-full flex-shrink-0 flex-wrap items-center justify-end gap-3 lg:w-auto"
+            class="groups-platforms"
+            role="group"
+            :aria-label="t('admin.groups.platformFilterLabel')"
           >
             <button
-              @click="loadGroups"
-              :disabled="loading"
-              class="btn btn-secondary"
-              :title="t('common.refresh')"
+              v-for="option in platformFilterOptions"
+              :key="option.value || 'all'"
+              type="button"
+              class="groups-platform-chip"
+              :class="{ 'is-active': filters.platform === option.value }"
+              :style="option.value ? platformAccentStyle(option.value) : undefined"
+              :aria-pressed="filters.platform === option.value"
+              @click="selectPlatformFilter(option.value)"
             >
-              <Icon
-                name="refresh"
-                size="md"
-                :class="loading ? 'animate-spin' : ''"
+              <PlatformIcon
+                v-if="option.value"
+                :platform="option.value as GroupPlatform"
+                size="xs"
               />
-            </button>
-            <div class="relative" ref="columnDropdownRef">
-              <button
-                @click="showColumnDropdown = !showColumnDropdown"
-                class="btn btn-secondary"
-                :title="t('admin.groups.columnSettings')"
-              >
-                <Icon name="grid" size="md" class="mr-2" />
-                <span class="hidden md:inline">{{
-                  t("admin.groups.columnSettings")
-                }}</span>
-              </button>
-              <div
-                v-if="showColumnDropdown"
-                class="absolute right-0 top-full z-50 mt-1 max-h-80 w-48 overflow-y-auto rounded-lg border border-gray-200 bg-white py-1 shadow-lg dark:border-dark-600 dark:bg-dark-800"
-              >
-                <button
-                  v-for="col in toggleableColumns"
-                  :key="col.key"
-                  @click="toggleColumn(col.key)"
-                  class="flex w-full items-center justify-between px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-dark-700"
-                >
-                  <span>{{ col.label }}</span>
-                  <Icon
-                    v-if="isColumnVisible(col.key)"
-                    name="check"
-                    size="sm"
-                    class="text-primary-500"
-                    :stroke-width="2"
-                  />
-                </button>
-              </div>
-            </div>
-            <button
-              @click="openSortModal"
-              class="btn btn-secondary"
-              :title="t('admin.groups.sortOrder')"
-            >
-              <Icon name="arrowsUpDown" size="md" class="mr-2" />
-              {{ t("admin.groups.sortOrder") }}
-            </button>
-            <button
-              @click="openCreateModal"
-              class="btn btn-primary"
-              data-tour="groups-create-btn"
-            >
-              <Icon name="plus" size="md" class="mr-2" />
-              {{ t("admin.groups.createGroup") }}
+              {{ option.label }}
             </button>
           </div>
-        </div>
+        </section>
       </template>
 
       <template #table>
@@ -122,10 +135,26 @@
           default-sort-order="asc"
           @sort="handleSort"
         >
-          <template #cell-name="{ value }">
-            <span class="font-medium text-gray-900 dark:text-white">{{
-              value
-            }}</span>
+          <template #header-capacity="{ column }">
+            <span
+              class="groups-live-header"
+              :title="t('admin.groups.concurrencyLiveHint', { seconds: CAPACITY_REFRESH_SECONDS })"
+            >
+              <span class="groups-live-header-dot" aria-hidden="true"></span>
+              {{ column.label }}
+            </span>
+          </template>
+
+          <template #cell-name="{ row }">
+            <div class="groups-name-cell">
+              <span class="groups-name">{{ row.name }}</span>
+              <span
+                v-if="row.description"
+                class="groups-description"
+                :title="row.description"
+                >{{ row.description }}</span
+              >
+            </div>
           </template>
 
           <template #cell-id="{ value }">
@@ -135,35 +164,21 @@
           </template>
 
           <template #cell-platform="{ value }">
-            <span
-              :class="[
-                'inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium',
-                value === 'anthropic'
-                  ? 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400'
-                  : value === 'openai'
-                    ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400'
-                    : value === 'antigravity'
-                      ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400'
-                      : value === 'grok'
-                        ? 'bg-zinc-200 text-zinc-800 dark:bg-zinc-700 dark:text-zinc-100'
-                        : 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
-              ]"
-            >
+            <span class="groups-platform-tag" :style="platformAccentStyle(value)">
               <PlatformIcon :platform="value" size="xs" />
               {{ t("admin.groups.platforms." + value) }}
             </span>
           </template>
 
           <template #cell-billing_type="{ row }">
-            <div class="space-y-1">
-              <!-- Type Badge -->
+            <div class="space-y-1.5">
               <span
-                :class="[
-                  'inline-block rounded-full px-2 py-0.5 text-xs font-medium',
+                class="groups-chip"
+                :class="
                   row.subscription_type === 'subscription'
-                    ? 'bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400'
-                    : 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300',
-                ]"
+                    ? 'groups-chip-subscription'
+                    : 'groups-chip-neutral'
+                "
               >
                 {{
                   row.subscription_type === "subscription"
@@ -171,7 +186,6 @@
                     : t("admin.groups.subscription.standard")
                 }}
               </span>
-              <!-- Subscription Limits - compact single line -->
               <div
                 v-if="row.subscription_type === 'subscription'"
                 class="space-y-0.5 text-xs text-gray-500 dark:text-gray-400"
@@ -250,13 +264,15 @@
           </template>
 
           <template #cell-rate_multiplier="{ value }">
-            <span class="text-sm text-gray-700 dark:text-gray-300"
-              >{{ value }}x</span
-            >
+            <span class="groups-rate" :class="rateToneClass(value)">{{ value }}x</span>
           </template>
 
           <template #cell-is_exclusive="{ value }">
-            <span :class="['badge', value ? 'badge-primary' : 'badge-gray']">
+            <span
+              class="groups-chip"
+              :class="value ? 'groups-chip-exclusive' : 'groups-chip-neutral'"
+            >
+              <Icon v-if="value" name="shield" size="xs" />
               {{
                 value ? t("admin.groups.exclusive") : t("admin.groups.public")
               }}
@@ -264,46 +280,40 @@
           </template>
 
           <template #cell-account_count="{ row }">
-            <div class="space-y-0.5 text-xs">
-              <div>
-                <span class="text-gray-500 dark:text-gray-400">{{
-                  t("admin.groups.accountsAvailable")
+            <div
+              class="groups-accounts"
+              :title="accountHealthTooltip(row)"
+            >
+              <template v-if="accountHealth(row).total > 0">
+                <span class="groups-accounts-count">{{
+                  t("admin.groups.accountsHealth", {
+                    available: accountHealth(row).available,
+                    total: accountHealth(row).total,
+                  })
                 }}</span>
+                <span class="groups-accounts-bar" aria-hidden="true">
+                  <span
+                    class="groups-accounts-bar-available"
+                    :style="{ width: accountHealth(row).availablePct + '%' }"
+                  ></span>
+                  <span
+                    class="groups-accounts-bar-limited"
+                    :style="{ width: accountHealth(row).limitedPct + '%' }"
+                  ></span>
+                </span>
                 <span
-                  class="ml-1 font-medium text-emerald-600 dark:text-emerald-400"
-                  >{{ row.active_account_count || 0 }}</span
+                  v-if="accountHealth(row).limited > 0"
+                  class="groups-accounts-limited"
+                  >{{
+                    t("admin.groups.accountsLimitedShort", {
+                      count: accountHealth(row).limited,
+                    })
+                  }}</span
                 >
-                <span
-                  class="ml-1 inline-flex items-center rounded bg-gray-100 px-1.5 py-0.5 font-medium text-gray-800 dark:bg-dark-600 dark:text-gray-300"
-                  >{{ t("admin.groups.accountsUnit") }}</span
-                >
-              </div>
-              <div v-if="row.rate_limited_account_count">
-                <span class="text-gray-500 dark:text-gray-400">{{
-                  t("admin.groups.accountsRateLimited")
-                }}</span>
-                <span
-                  class="ml-1 font-medium text-amber-600 dark:text-amber-400"
-                  >{{ row.rate_limited_account_count }}</span
-                >
-                <span
-                  class="ml-1 inline-flex items-center rounded bg-gray-100 px-1.5 py-0.5 font-medium text-gray-800 dark:bg-dark-600 dark:text-gray-300"
-                  >{{ t("admin.groups.accountsUnit") }}</span
-                >
-              </div>
-              <div>
-                <span class="text-gray-500 dark:text-gray-400">{{
-                  t("admin.groups.accountsTotal")
-                }}</span>
-                <span
-                  class="ml-1 font-medium text-gray-700 dark:text-gray-300"
-                  >{{ row.account_count || 0 }}</span
-                >
-                <span
-                  class="ml-1 inline-flex items-center rounded bg-gray-100 px-1.5 py-0.5 font-medium text-gray-800 dark:bg-dark-600 dark:text-gray-300"
-                  >{{ t("admin.groups.accountsUnit") }}</span
-                >
-              </div>
+              </template>
+              <span v-else class="text-xs text-gray-400 dark:text-gray-500">{{
+                t("admin.groups.noAccounts")
+              }}</span>
             </div>
           </template>
 
@@ -319,106 +329,166 @@
 
           <template #cell-usage="{ row }">
             <div v-if="usageLoading" class="text-xs text-gray-400">—</div>
-            <div v-else class="space-y-0.5 text-xs">
-              <div class="text-gray-500 dark:text-gray-400">
-                <span class="text-gray-400 dark:text-gray-500">{{
-                  t("admin.groups.usageToday")
-                }}</span>
-                <span class="ml-1 font-medium text-gray-700 dark:text-gray-300"
-                  >${{
-                    formatCost(usageMap.get(row.id)?.today_cost ?? 0)
-                  }}</span
-                >
-              </div>
-              <div class="text-gray-500 dark:text-gray-400">
-                <span class="text-gray-400 dark:text-gray-500">{{
-                  t("admin.groups.usageYesterday")
-                }}</span>
-                <span class="ml-1 font-medium text-gray-700 dark:text-gray-300"
-                  >${{
-                    formatCost(usageMap.get(row.id)?.yesterday_cost ?? 0)
-                  }}</span
-                >
-              </div>
-              <div class="text-gray-500 dark:text-gray-400">
-                <span class="text-gray-400 dark:text-gray-500">{{
-                  t("admin.groups.usageTotal")
-                }}</span>
-                <span class="ml-1 font-medium text-gray-700 dark:text-gray-300"
-                  >${{
-                    formatCost(usageMap.get(row.id)?.total_cost ?? 0)
-                  }}</span
-                >
-              </div>
-            </div>
+            <dl v-else class="groups-usage">
+              <dt>{{ t("admin.groups.usageToday") }}</dt>
+              <dd class="groups-usage-today">
+                ${{ formatCost(usageMap.get(row.id)?.today_cost ?? 0) }}
+              </dd>
+              <dt>{{ t("admin.groups.usageYesterday") }}</dt>
+              <dd>${{ formatCost(usageMap.get(row.id)?.yesterday_cost ?? 0) }}</dd>
+              <dt>{{ t("admin.groups.usageTotal") }}</dt>
+              <dd>${{ formatCost(usageMap.get(row.id)?.total_cost ?? 0) }}</dd>
+            </dl>
           </template>
 
           <template #cell-status="{ value }">
             <span
-              :class="[
-                'badge',
-                value === 'active' ? 'badge-success' : 'badge-danger',
-              ]"
+              class="groups-status"
+              :class="value === 'active' ? 'is-active' : 'is-inactive'"
             >
+              <span class="groups-status-dot" aria-hidden="true"></span>
               {{ t("admin.accounts.status." + value) }}
             </span>
           </template>
 
           <template #cell-actions="{ row }">
-            <div class="flex items-center gap-1">
+            <div class="flex items-center gap-0.5">
               <button
-                @click="handleEdit(row)"
-                class="flex flex-col items-center gap-0.5 rounded-lg p-1.5 text-gray-500 transition-colors hover:bg-gray-100 hover:text-primary-600 dark:hover:bg-dark-700 dark:hover:text-primary-400"
+                v-for="action in groupRowActions"
+                :key="action.key"
+                type="button"
+                class="groups-action"
+                :class="`groups-action-${action.tone}`"
+                :data-testid="action.testId"
+                :title="action.title?.(row)"
+                :disabled="action.disabled?.(row)"
+                @click="action.run(row)"
               >
-                <Icon name="edit" size="sm" />
-                <span class="text-xs">{{ t("common.edit") }}</span>
-              </button>
-              <button
-                data-testid="group-duplicate"
-                :title="
-                  duplicatingGroupIds.has(row.id)
-                    ? t('admin.groups.duplicating')
-                    : t('admin.groups.duplicate')
-                "
-                :disabled="duplicatingGroupIds.has(row.id)"
-                @click="handleDuplicate(row)"
-                class="flex flex-col items-center gap-0.5 rounded-lg p-1.5 text-gray-500 transition-colors hover:bg-gray-100 hover:text-primary-600 disabled:cursor-not-allowed disabled:opacity-50 dark:hover:bg-dark-700 dark:hover:text-primary-400"
-              >
-                <Icon name="copy" size="sm" />
-                <span class="text-xs">
-                  {{
-                    duplicatingGroupIds.has(row.id)
-                      ? t("admin.groups.duplicating")
-                      : t("admin.groups.duplicate")
-                  }}
-                </span>
-              </button>
-              <button
-                @click="handleRateMultipliers(row)"
-                class="flex flex-col items-center gap-0.5 rounded-lg p-1.5 text-gray-500 transition-colors hover:bg-gray-100 hover:text-purple-600 dark:hover:bg-dark-700 dark:hover:text-purple-400"
-              >
-                <Icon name="dollar" size="sm" />
-                <span class="text-xs">{{
-                  t("admin.groups.rateMultipliers")
-                }}</span>
-              </button>
-              <button
-                @click="handleRPMOverrides(row)"
-                class="flex flex-col items-center gap-0.5 rounded-lg p-1.5 text-gray-500 transition-colors hover:bg-gray-100 hover:text-orange-600 dark:hover:bg-dark-700 dark:hover:text-orange-400"
-              >
-                <Icon name="bolt" size="sm" />
-                <span class="text-xs">{{
-                  t("admin.groups.rpmOverrides")
-                }}</span>
-              </button>
-              <button
-                @click="handleDelete(row)"
-                class="flex flex-col items-center gap-0.5 rounded-lg p-1.5 text-gray-500 transition-colors hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-900/20 dark:hover:text-red-400"
-              >
-                <Icon name="trash" size="sm" />
-                <span class="text-xs">{{ t("common.delete") }}</span>
+                <Icon :name="action.icon" size="sm" />
+                <span class="text-xs">{{ action.label(row) }}</span>
               </button>
             </div>
+          </template>
+
+          <template #mobile-card="{ row }">
+            <article class="groups-card">
+              <header class="groups-card-head">
+                <span
+                  class="groups-card-platform"
+                  :style="platformAccentStyle(row.platform)"
+                  :title="t('admin.groups.platforms.' + row.platform)"
+                >
+                  <PlatformIcon :platform="row.platform" size="sm" />
+                </span>
+                <div class="min-w-0 flex-1">
+                  <p class="groups-name truncate">{{ row.name }}</p>
+                  <p
+                    v-if="row.description"
+                    class="groups-description"
+                  >
+                    {{ row.description }}
+                  </p>
+                </div>
+                <span
+                  class="groups-status"
+                  :class="row.status === 'active' ? 'is-active' : 'is-inactive'"
+                >
+                  <span class="groups-status-dot" aria-hidden="true"></span>
+                  {{ t("admin.accounts.status." + row.status) }}
+                </span>
+              </header>
+
+              <dl class="groups-card-stats">
+                <div>
+                  <dt>{{ t("admin.groups.columns.rateMultiplier") }}</dt>
+                  <dd>
+                    <span class="groups-rate" :class="rateToneClass(row.rate_multiplier)"
+                      >{{ row.rate_multiplier }}x</span
+                    >
+                  </dd>
+                </div>
+                <div>
+                  <dt>{{ t("admin.groups.columns.accounts") }}</dt>
+                  <dd :title="accountHealthTooltip(row)">
+                    {{ accountHealth(row).available }}/{{ accountHealth(row).total }}
+                  </dd>
+                </div>
+                <div v-if="isColumnVisible('capacity')">
+                  <dt>{{ t("admin.groups.columns.capacity") }}</dt>
+                  <dd>
+                    <GroupCapacityBadge
+                      v-if="capacityMap.get(row.id)"
+                      :concurrency-used="capacityMap.get(row.id)!.concurrencyUsed"
+                      :concurrency-max="capacityMap.get(row.id)!.concurrencyMax"
+                      :concurrency-unlimited="capacityMap.get(row.id)!.concurrencyUnlimited"
+                    />
+                    <span v-else class="text-gray-400">—</span>
+                  </dd>
+                </div>
+                <div v-if="isColumnVisible('usage')">
+                  <dt>{{ t("admin.groups.usageToday") }}</dt>
+                  <dd>
+                    {{
+                      usageLoading
+                        ? "—"
+                        : formatUsd(usageMap.get(row.id)?.today_cost ?? 0)
+                    }}
+                  </dd>
+                </div>
+              </dl>
+
+              <div class="groups-card-tags">
+                <span
+                  class="groups-chip"
+                  :class="
+                    row.subscription_type === 'subscription'
+                      ? 'groups-chip-subscription'
+                      : 'groups-chip-neutral'
+                  "
+                >
+                  {{
+                    row.subscription_type === "subscription"
+                      ? t("admin.groups.subscription.subscription")
+                      : t("admin.groups.subscription.standard")
+                  }}
+                </span>
+                <span
+                  class="groups-chip"
+                  :class="row.is_exclusive ? 'groups-chip-exclusive' : 'groups-chip-neutral'"
+                >
+                  {{
+                    row.is_exclusive
+                      ? t("admin.groups.exclusive")
+                      : t("admin.groups.public")
+                  }}
+                </span>
+                <span
+                  v-if="accountHealth(row).limited > 0"
+                  class="groups-accounts-limited"
+                  >{{
+                    t("admin.groups.accountsLimitedShort", {
+                      count: accountHealth(row).limited,
+                    })
+                  }}</span
+                >
+              </div>
+
+              <div class="groups-card-actions">
+                <button
+                  v-for="action in groupRowActions"
+                  :key="action.key"
+                  type="button"
+                  class="groups-action"
+                  :class="`groups-action-${action.tone}`"
+                  :title="action.title?.(row)"
+                  :disabled="action.disabled?.(row)"
+                  @click="action.run(row)"
+                >
+                  <Icon :name="action.icon" size="sm" />
+                  <span class="text-xs">{{ action.label(row) }}</span>
+                </button>
+              </div>
+            </article>
           </template>
 
           <template #empty>
@@ -4338,6 +4408,7 @@ import type { ChannelModelPricing } from "@/api/admin/channels";
 import { VueDraggable } from "vue-draggable-plus";
 import SortableScrollArea from "@/components/common/SortableScrollArea.vue";
 import { createStableObjectKeyResolver } from "@/utils/stableObjectKey";
+import { platformAccentColor } from "@/utils/platformColors";
 import { extractApiErrorMessage } from "@/utils/apiError";
 import { useKeyedDebouncedSearch } from "@/composables/useKeyedDebouncedSearch";
 import { getPersistedPageSize } from "@/composables/usePersistedPageSize";
@@ -5639,12 +5710,21 @@ const loadUsageSummary = async () => {
   }
 };
 
+// 实时并发：表格可见时定时刷新容量汇总，乱序返回的旧结果直接丢弃。
+const CAPACITY_REFRESH_SECONDS = 10;
+let capacityRequestSeq = 0;
+let capacityRequestsInFlight = 0;
+let capacityRefreshTimer: ReturnType<typeof setInterval> | null = null;
+
 const loadCapacitySummary = async () => {
   if (!hasVisibleCapacityColumn.value) {
     return;
   }
+  const seq = ++capacityRequestSeq;
+  capacityRequestsInFlight++;
   try {
     const data = await adminAPI.groups.getCapacitySummary();
+    if (seq !== capacityRequestSeq) return;
     const map = new Map<
       number,
       {
@@ -5663,7 +5743,61 @@ const loadCapacitySummary = async () => {
     capacityMap.value = map;
   } catch (error) {
     console.error("Error loading group capacity summary:", error);
+  } finally {
+    capacityRequestsInFlight--;
   }
+};
+
+const refreshLiveCapacity = () => {
+  if (typeof document !== "undefined" && document.hidden) return;
+  if (loading.value || capacityRequestsInFlight > 0) return;
+  void loadCapacitySummary();
+};
+
+const platformAccentStyle = (platform: string) => ({
+  "--chip-accent": platformAccentColor(platform),
+});
+
+const selectPlatformFilter = (platform: string) => {
+  if (filters.platform === platform) return;
+  filters.platform = platform;
+  pagination.page = 1;
+  loadGroups();
+};
+
+// 倍率低于 1 是折扣、高于 1 是溢价，用颜色区分后扫一眼就能看出贵贱。
+const rateToneClass = (rate: number) => {
+  if (rate < 1) return "groups-rate-discount";
+  if (rate > 1) return "groups-rate-premium";
+  return "groups-rate-standard";
+};
+
+// 可用与暂时限流互不重叠，其余为停用或不可调度的账号。
+const accountHealth = (group: AdminGroup) => {
+  const total = Math.max(group.account_count || 0, 0);
+  const available = Math.min(Math.max(group.active_account_count || 0, 0), total);
+  const limited = Math.min(
+    Math.max(group.rate_limited_account_count || 0, 0),
+    total - available,
+  );
+  const percent = (count: number) => (total > 0 ? (count / total) * 100 : 0);
+  return {
+    total,
+    available,
+    limited,
+    other: total - available - limited,
+    availablePct: percent(available),
+    limitedPct: percent(limited),
+  };
+};
+
+const accountHealthTooltip = (group: AdminGroup) => {
+  const health = accountHealth(group);
+  return t("admin.groups.accountsHealthTooltip", {
+    available: health.available,
+    limited: health.limited,
+    other: health.other,
+  });
 };
 
 let searchTimeout: ReturnType<typeof setTimeout>;
@@ -6563,16 +6697,565 @@ const saveSortOrder = async () => {
   }
 };
 
+// 行操作只声明一次，桌面表格和手机卡片共用，避免两处按钮行为不一致。
+type GroupRowAction = {
+  key: string;
+  icon: "edit" | "copy" | "dollar" | "bolt" | "trash";
+  tone: "primary" | "violet" | "orange" | "danger";
+  label: (group: AdminGroup) => string;
+  title?: (group: AdminGroup) => string;
+  disabled?: (group: AdminGroup) => boolean;
+  testId?: string;
+  run: (group: AdminGroup) => void;
+};
+
+const duplicateActionLabel = (group: AdminGroup) =>
+  duplicatingGroupIds.has(group.id)
+    ? t("admin.groups.duplicating")
+    : t("admin.groups.duplicate");
+
+const groupRowActions: GroupRowAction[] = [
+  {
+    key: "edit",
+    icon: "edit",
+    tone: "primary",
+    label: () => t("common.edit"),
+    run: (group) => void handleEdit(group),
+  },
+  {
+    key: "duplicate",
+    icon: "copy",
+    tone: "primary",
+    label: duplicateActionLabel,
+    title: duplicateActionLabel,
+    disabled: (group) => duplicatingGroupIds.has(group.id),
+    testId: "group-duplicate",
+    run: (group) => void handleDuplicate(group),
+  },
+  {
+    key: "rates",
+    icon: "dollar",
+    tone: "violet",
+    label: () => t("admin.groups.rateMultipliers"),
+    run: (group) => handleRateMultipliers(group),
+  },
+  {
+    key: "rpm",
+    icon: "bolt",
+    tone: "orange",
+    label: () => t("admin.groups.rpmOverrides"),
+    run: (group) => handleRPMOverrides(group),
+  },
+  {
+    key: "delete",
+    icon: "trash",
+    tone: "danger",
+    label: () => t("common.delete"),
+    run: (group) => handleDelete(group),
+  },
+];
+
 onMounted(() => {
   loadGroups();
+  capacityRefreshTimer = setInterval(
+    refreshLiveCapacity,
+    CAPACITY_REFRESH_SECONDS * 1000,
+  );
   void loadLiveCapability();
   loadModelsListCandidates("create", 0, createForm.platform);
   document.addEventListener("click", handleClickOutside);
 });
 
 onUnmounted(() => {
+  if (capacityRefreshTimer) clearInterval(capacityRefreshTimer);
+  capacityRequestSeq++;
   document.removeEventListener("click", handleClickOutside);
   accountSearchRunner.clearAll();
   clearAllAccountSearchState();
 });
 </script>
+
+<style scoped>
+/* ---------- Toolbar ---------- */
+.groups-toolbar {
+  display: flex;
+  flex-direction: column;
+  gap: 0.875rem;
+  padding: 1rem;
+  border-radius: 1.5rem;
+  background: var(--md-sys-color-surface);
+  box-shadow: var(--theme-highlight), var(--theme-elevation-1);
+}
+
+.groups-toolbar-main {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.groups-toolbar-filters {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.625rem;
+}
+
+.groups-search {
+  position: relative;
+  grid-column: 1 / -1;
+}
+
+.groups-search-icon {
+  position: absolute;
+  top: 50%;
+  left: 0.875rem;
+  transform: translateY(-50%);
+  color: var(--md-sys-color-on-surface-variant);
+  opacity: 0.7;
+  pointer-events: none;
+}
+
+.groups-search-input {
+  padding-top: 0.625rem;
+  padding-bottom: 0.625rem;
+  padding-left: 2.5rem;
+}
+
+.groups-toolbar-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.groups-toolbar-button {
+  padding: 0.5625rem 0.875rem;
+  border-radius: 0.875rem;
+  white-space: nowrap;
+}
+
+.groups-column-menu {
+  border-radius: 1rem;
+  background: var(--md-sys-color-surface);
+  box-shadow: var(--theme-highlight), var(--theme-elevation-3);
+}
+
+.groups-column-option {
+  display: flex;
+  width: calc(100% - 0.75rem);
+  margin: 0 0.375rem;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.5rem 0.75rem;
+  border-radius: 0.75rem;
+  font-size: 0.8125rem;
+  text-align: left;
+  color: var(--md-sys-color-on-surface);
+}
+
+.groups-column-option:hover {
+  background: color-mix(in srgb, var(--md-sys-color-primary) 14%, var(--md-sys-color-surface));
+}
+
+/* Platform quick filter: each chip borrows its platform colour. */
+.groups-platforms {
+  display: flex;
+  gap: 0.375rem;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.groups-platforms::-webkit-scrollbar {
+  display: none;
+}
+
+.groups-platform-chip {
+  --chip-accent: var(--md-sys-color-primary);
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.375rem 0.8125rem;
+  border-radius: 999px;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--md-sys-color-on-surface-variant);
+  background: #faf6e8;
+  transition: background-color 160ms ease, color 160ms ease, box-shadow 160ms ease;
+}
+
+.groups-platform-chip:hover {
+  color: var(--md-sys-color-on-surface);
+  background: color-mix(in srgb, var(--chip-accent) 14%, var(--md-sys-color-surface));
+}
+
+.groups-platform-chip.is-active {
+  font-weight: 650;
+  color: color-mix(in srgb, var(--chip-accent) 68%, #3f3420);
+  background: color-mix(in srgb, var(--chip-accent) 18%, var(--md-sys-color-surface));
+  box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--chip-accent) 55%, transparent);
+}
+
+/* ---------- Table cells ---------- */
+.groups-live-header {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+
+.groups-live-header-dot {
+  width: 0.375rem;
+  height: 0.375rem;
+  border-radius: 999px;
+  background: #5c9865;
+  box-shadow: 0 0 0 3px rgb(92 152 101 / 0.2);
+}
+
+.groups-name-cell {
+  display: flex;
+  min-width: 9rem;
+  max-width: 16rem;
+  flex-direction: column;
+  gap: 0.125rem;
+}
+
+.groups-name {
+  font-weight: 650;
+  color: var(--md-sys-color-on-surface);
+}
+
+.groups-description {
+  overflow: hidden;
+  font-size: 0.75rem;
+  line-height: 1rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--md-sys-color-on-surface-variant);
+}
+
+.groups-platform-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.1875rem 0.625rem 0.1875rem 0.4375rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  white-space: nowrap;
+  color: color-mix(in srgb, var(--chip-accent) 70%, #3f3420);
+  background: color-mix(in srgb, var(--chip-accent) 12%, var(--md-sys-color-surface));
+}
+
+.groups-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.125rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1.25rem;
+  white-space: nowrap;
+}
+
+.groups-chip-neutral {
+  background: #faf6e8;
+  color: #5b5238;
+}
+
+.groups-chip-subscription {
+  background: #ede9fe;
+  color: #6d28d9;
+}
+
+.groups-chip-exclusive {
+  background: #fff3bd;
+  color: #7e5600;
+}
+
+.groups-rate {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.125rem 0.5rem;
+  border-radius: 0.5rem;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.groups-rate-standard {
+  background: #faf6e8;
+  color: #48402d;
+}
+
+.groups-rate-discount {
+  background: #e4f0df;
+  color: #2e5038;
+}
+
+.groups-rate-premium {
+  background: #ffedd5;
+  color: #9a3412;
+}
+
+.groups-accounts {
+  display: flex;
+  min-width: 6.5rem;
+  flex-direction: column;
+  gap: 0.3125rem;
+}
+
+.groups-accounts-count {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--md-sys-color-on-surface);
+}
+
+.groups-accounts-bar {
+  display: flex;
+  width: 6.5rem;
+  height: 0.3125rem;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #eee5c9;
+}
+
+.groups-accounts-bar-available {
+  background: #5c9865;
+}
+
+.groups-accounts-bar-limited {
+  background: #e0a42b;
+}
+
+.groups-accounts-limited {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  color: #a96700;
+}
+
+.groups-usage {
+  display: grid;
+  grid-template-columns: auto auto;
+  align-items: baseline;
+  column-gap: 0.625rem;
+  row-gap: 0.125rem;
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.groups-usage dt {
+  color: var(--md-sys-color-on-surface-variant);
+}
+
+.groups-usage dd {
+  text-align: right;
+  font-weight: 500;
+  color: var(--md-sys-color-on-surface);
+}
+
+.groups-usage .groups-usage-today {
+  font-size: 0.875rem;
+  font-weight: 700;
+}
+
+.groups-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.1875rem 0.625rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.groups-status.is-active {
+  background: #e4f0df;
+  color: #2e5038;
+}
+
+.groups-status.is-inactive {
+  background: #f3efe2;
+  color: #716744;
+}
+
+.groups-status-dot {
+  width: 0.375rem;
+  height: 0.375rem;
+  border-radius: 999px;
+  background: currentColor;
+}
+
+.groups-action {
+  display: inline-flex;
+  min-width: 2.75rem;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.125rem;
+  padding: 0.375rem 0.4375rem;
+  border-radius: 0.75rem;
+  color: var(--md-sys-color-on-surface-variant);
+  transition: background-color 150ms ease, color 150ms ease;
+}
+
+.groups-action:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.groups-action-primary:not(:disabled):hover {
+  background: #fff3bd;
+  color: #7e5600;
+}
+
+.groups-action-violet:not(:disabled):hover {
+  background: #ede9fe;
+  color: #6d28d9;
+}
+
+.groups-action-orange:not(:disabled):hover {
+  background: #ffedd5;
+  color: #c2410c;
+}
+
+.groups-action-danger:not(:disabled):hover {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+
+/* ---------- Phone cards ---------- */
+.groups-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.875rem;
+}
+
+.groups-card-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+}
+
+.groups-card-platform {
+  display: inline-flex;
+  width: 2.25rem;
+  height: 2.25rem;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.875rem;
+  color: color-mix(in srgb, var(--chip-accent) 70%, #3f3420);
+  background: color-mix(in srgb, var(--chip-accent) 14%, var(--md-sys-color-surface));
+}
+
+.groups-card .groups-description {
+  display: -webkit-box;
+  margin-top: 0.125rem;
+  white-space: normal;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.groups-card-stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+
+.groups-card-stats > div {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.25rem;
+  padding: 0.625rem 0.75rem;
+  border-radius: 0.875rem;
+  background: #fffbe8;
+}
+
+.groups-card-stats dt {
+  font-size: 0.6875rem;
+  color: var(--md-sys-color-on-surface-variant);
+}
+
+.groups-card-stats dd {
+  font-size: 0.875rem;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  color: var(--md-sys-color-on-surface);
+}
+
+.groups-card-tags {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.375rem;
+}
+
+.groups-card-actions {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.25rem;
+  padding-top: 0.625rem;
+  box-shadow: inset 0 1px 0 rgb(215 193 106 / 0.3);
+}
+
+.groups-card-actions .groups-action {
+  flex: 1;
+  min-width: 0;
+  padding-right: 0.125rem;
+  padding-left: 0.125rem;
+}
+
+.groups-card-actions .groups-action span {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (min-width: 640px) {
+  .groups-toolbar-filters {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+
+  .groups-search {
+    width: 16rem;
+  }
+
+  .groups-filter-select {
+    width: 10rem;
+  }
+}
+
+@media (min-width: 768px) {
+  .groups-toolbar {
+    padding: 1.125rem 1.25rem;
+  }
+}
+
+/* Filters and actions share a row when they fit; otherwise the actions wrap
+   below and stay right-aligned instead of squeezing their labels. */
+@media (min-width: 1024px) {
+  .groups-toolbar-main {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .groups-toolbar-filters {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  .groups-toolbar-actions {
+    flex: 0 0 auto;
+    flex-wrap: nowrap;
+    justify-content: flex-end;
+    margin-left: auto;
+  }
+}
+</style>

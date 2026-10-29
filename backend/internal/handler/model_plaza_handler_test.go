@@ -258,7 +258,7 @@ func TestModelPlazaHandler_NilSettingServiceFailsClosed404(t *testing.T) {
 func TestToModelPlazaGroupDTO_UserRateAndFieldWhitelist(t *testing.T) {
 	g := service.PlazaGroup{
 		ID: 2, Name: "vip", Description: "d", Platform: "anthropic",
-		SubscriptionType: "standard", RateMultiplier: 1, IsExclusive: true,
+		SubscriptionType: "standard", RateMultiplier: 1, IsExclusive: true, SortOrder: 5,
 		VideoRateIndependent: true, VideoRateMultiplier: 0.25,
 		Models: []service.PlazaModel{{
 			Name:     "claude-sonnet",
@@ -283,7 +283,7 @@ func TestToModelPlazaGroupDTO_UserRateAndFieldWhitelist(t *testing.T) {
 
 	for _, key := range []string{
 		"id", "name", "description", "platform", "subscription_type",
-		"rate_multiplier", "user_rate_multiplier", "is_exclusive", "models",
+		"rate_multiplier", "user_rate_multiplier", "is_exclusive", "sort_order", "models",
 		"peak_rate_enabled", "peak_start", "peak_end", "peak_rate_multiplier",
 		"image_rate_independent", "image_rate_multiplier",
 		"video_rate_independent", "video_rate_multiplier",
@@ -292,6 +292,7 @@ func TestToModelPlazaGroupDTO_UserRateAndFieldWhitelist(t *testing.T) {
 		require.Truef(t, exists, "plaza group DTO must expose %q", key)
 	}
 	require.InDelta(t, 0.5, decoded["user_rate_multiplier"].(float64), 1e-9)
+	require.Equal(t, float64(5), decoded["sort_order"])
 	require.Equal(t, true, decoded["video_rate_independent"])
 	require.Equal(t, 0.25, decoded["video_rate_multiplier"])
 

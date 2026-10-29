@@ -103,6 +103,20 @@ describe('ModelPlazaContent', () => {
     expect(sections[0].props('group')).toEqual(custom)
   })
 
+  it('lists groups in the admin sort order instead of by rate', () => {
+    const wrapper = mountContent([
+      group({ id: 1, name: 'Cheap', rate_multiplier: 0.2, sort_order: 30 }),
+      group({ id: 2, name: 'Pinned', rate_multiplier: 3, sort_order: 10 }),
+      group({ id: 3, name: 'Middle', rate_multiplier: 1, sort_order: 20 }),
+      group({ id: 4, name: 'Middle twin', rate_multiplier: 0.5, sort_order: 20 })
+    ])
+
+    const names = wrapper.findAllComponents(PlazaGroupSection).map((section) => section.props('group').name)
+    expect(names).toEqual(['Pinned', 'Middle', 'Middle twin', 'Cheap'])
+    const groupChips = wrapper.getComponent(PlazaFilterBar).props('groups').map((item: { name: string }) => item.name)
+    expect(groupChips).toEqual(['Pinned', 'Middle', 'Middle twin', 'Cheap'])
+  })
+
   it('retains Custom pricing when searching for its model', async () => {
     const custom = group()
     const wrapper = mountContent([

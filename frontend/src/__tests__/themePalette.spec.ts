@@ -83,10 +83,15 @@ describe('light-only Monet palette', () => {
     expect(styleSource).toContain('color: var(--md-sys-color-placeholder) !important;')
   })
 
-  it('uses brand gold for toast progress while keeping the success status green', () => {
-    expect(toastSource).toContain("success: 'bg-primary-600'")
-    expect(toastSource).toContain("info: 'bg-primary-600'")
-    expect(toastSource).toContain('border-left: 4px solid var(--md-sys-color-secondary)')
+  it('keeps success toasts garden green and info toasts brand gold', () => {
+    const toneAccent = (tone: string) => {
+      const match = toastSource.match(new RegExp(`\\.toast-tone-${tone}\\s*\\{[^}]*--toast-accent:\\s*(#[0-9a-f]{6})`, 'i'))
+      if (!match) throw new Error(`Missing toast accent: ${tone}`)
+      return match[1].toLowerCase()
+    }
+
+    expect(toneAccent('success')).toBe('#5c9865')
+    expect(toneAccent('info')).toBe(getVariable(root, '--md-sys-color-primary').toLowerCase())
     expect(toastSource).not.toContain('#39c5bb')
   })
 })

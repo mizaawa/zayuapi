@@ -244,6 +244,7 @@
               >
                 {{ accountDisplayEmail(row) }}
               </span>
+              <AccountSourceBadge :account="row" class="mt-1 max-w-[220px] self-start" />
             </div>
           </template>
           <template #cell-notes="{ value }">
@@ -435,6 +436,103 @@
               </button>
             </div>
           </template>
+          <template #mobile-card="{ row }">
+            <article class="account-card" :data-account-id="row.id">
+              <header class="account-card-head">
+                <input
+                  type="checkbox"
+                  class="account-card-check h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                  :checked="isSelected(row.id)"
+                  :aria-label="row.name"
+                  @change="toggleSel(row.id)"
+                />
+                <div class="min-w-0 flex-1">
+                  <p class="account-card-name">{{ row.name }}</p>
+                  <p v-if="accountDisplayEmail(row)" class="account-card-email">{{ accountDisplayEmail(row) }}</p>
+                </div>
+                <AccountStatusIndicator :account="row" @show-temp-unsched="handleShowTempUnsched" />
+              </header>
+
+              <div class="account-card-tags">
+                <PlatformTypeBadge :platform="row.platform" :type="row.type"
+                  :auth-mode="getOpenAIAuthMode(row)"
+                  :plan-type="getAccountPlanType(row)"
+                  :privacy-mode="row.extra?.privacy_mode || row.parent_privacy_mode"
+                  :subscription-expires-at="row.credentials?.subscription_expires_at || row.parent_subscription_expires_at" />
+                <AccountSourceBadge :account="row" />
+              </div>
+
+              <div class="account-card-stats">
+                <div class="account-card-stat">
+                  <span class="account-card-label">{{ t('admin.accounts.card.concurrency') }}</span>
+                  <AccountCapacityCell :account="row" />
+                </div>
+                <div class="account-card-stat">
+                  <span class="account-card-label">{{ t('admin.accounts.card.today') }}</span>
+                  <AccountTodayStatsCell
+                    :stats="todayStatsByAccountId[String(row.id)] ?? null"
+                    :loading="todayStatsLoading"
+                    :error="todayStatsError"
+                  />
+                </div>
+              </div>
+
+              <div v-if="row.groups?.length" class="account-card-groups">
+                <GroupBadge
+                  v-for="group in row.groups"
+                  :key="group.id"
+                  class="max-w-full"
+                  :name="group.name"
+                  :platform="group.platform"
+                  :subscription-type="group.subscription_type"
+                  :rate-multiplier="group.rate_multiplier"
+                  :show-rate="false"
+                  :max-name-length="18"
+                />
+              </div>
+
+              <div v-if="cardShowsUsageCell(row)" class="account-card-usage">
+                <AccountUsageCell
+                  :account="row"
+                  :today-stats="todayStatsByAccountId[String(row.id)] ?? null"
+                  :today-stats-loading="todayStatsLoading"
+                  :manual-refresh-token="usageManualRefreshToken"
+                  @account-updated="handleAccountUpdated"
+                />
+              </div>
+
+              <footer class="account-card-foot">
+                <label class="account-card-switch">
+                  <button
+                    type="button"
+                    role="switch"
+                    :aria-checked="row.schedulable"
+                    :disabled="togglingSchedulable === row.id"
+                    class="relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary-500 disabled:cursor-not-allowed disabled:opacity-50"
+                    :class="[row.schedulable ? 'bg-primary-500' : 'bg-gray-200']"
+                    @click="handleToggleSchedulable(row)"
+                  >
+                    <span class="pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out" :class="[row.schedulable ? 'translate-x-4' : 'translate-x-0']" />
+                  </button>
+                  <span>{{ t('admin.accounts.card.schedulable') }}</span>
+                </label>
+                <div class="account-card-actions">
+                  <button type="button" class="account-card-action" @click="handleEdit(row)">
+                    <Icon name="edit" size="sm" />
+                    <span>{{ t('common.edit') }}</span>
+                  </button>
+                  <button type="button" class="account-card-action is-danger" @click="handleDelete(row)">
+                    <Icon name="trash" size="sm" />
+                    <span>{{ t('common.delete') }}</span>
+                  </button>
+                  <button type="button" class="account-card-action" @click="openMenu(row, $event)">
+                    <Icon name="more" size="sm" />
+                    <span>{{ t('common.more') }}</span>
+                  </button>
+                </div>
+              </footer>
+            </article>
+          </template>
         </DataTable>
         </div>
       </template>
@@ -492,6 +590,8 @@ import Pagination from '@/components/common/Pagination.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import { CreateAccountModal, EditAccountModal, BulkEditAccountModal, TempUnschedStatusModal } from '@/components/account'
 import AccountTableActions from '@/components/admin/account/AccountTableActions.vue'
+import AccountSourceBadge from '@/components/account/AccountSourceBadge.vue'
+import GroupBadge from '@/components/common/GroupBadge.vue'
 import AccountTableFilters from '@/components/admin/account/AccountTableFilters.vue'
 import AccountBulkActionsBar from '@/components/admin/account/AccountBulkActionsBar.vue'
 import AccountActionMenu from '@/components/admin/account/AccountActionMenu.vue'
@@ -1427,6 +1527,16 @@ function getAntigravityTierLabel(row: any): string | null {
 
 // 账号显示邮箱:优先账号自身(extra/credentials),影子账号回退母账号 parent_email。
 // 供名称单元格 v-if/标题/文本三处共用,避免同一回退链在模板里重复三次。
+// The phone card already shows today's numbers; the usage cell only earns its
+// place when it adds usage windows, quota bars or provider usage on top.
+const cardShowsUsageCell = (account: Account) =>
+  !(account.type === 'apikey' || account.type === 'bedrock') ||
+  account.platform === 'gemini' ||
+  account.ollama_cloud_usage?.eligible === true ||
+  (account.quota_daily_limit ?? 0) > 0 ||
+  (account.quota_weekly_limit ?? 0) > 0 ||
+  (account.quota_limit ?? 0) > 0
+
 function accountDisplayEmail(row: any): string {
   return row.extra?.email_address || row.extra?.email || row.credentials?.email || row.parent_email || ''
 }
@@ -2287,5 +2397,127 @@ onUnmounted(() => {
 
 .account-tools-menu-icon {
   @apply inline-flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-md;
+}
+/* ---------- Phone account card ---------- */
+.account-card {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.account-card-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.625rem;
+}
+
+.account-card-check {
+  margin-top: 0.1875rem;
+  flex-shrink: 0;
+}
+
+.account-card-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.9375rem;
+  font-weight: 700;
+  color: var(--md-sys-color-on-surface);
+}
+
+.account-card-email {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.75rem;
+  color: var(--md-sys-color-on-surface-variant);
+}
+
+.account-card-tags {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.375rem;
+}
+
+.account-card-stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+
+.account-card-stat {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.375rem;
+  padding: 0.625rem 0.75rem;
+  border-radius: 0.875rem;
+  background: #fffbe8;
+}
+
+.account-card-label {
+  font-size: 0.6875rem;
+  color: var(--md-sys-color-on-surface-variant);
+}
+
+.account-card-groups {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+}
+
+.account-card-usage {
+  min-width: 0;
+  overflow-x: auto;
+}
+
+.account-card-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding-top: 0.625rem;
+  box-shadow: inset 0 1px 0 rgb(215 193 106 / 0.3);
+}
+
+.account-card-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.8125rem;
+  color: var(--md-sys-color-on-surface-variant);
+}
+
+.account-card-actions {
+  display: flex;
+  gap: 0.25rem;
+}
+
+.account-card-action {
+  display: inline-flex;
+  min-width: 2.75rem;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.125rem;
+  padding: 0.375rem 0.5rem;
+  border-radius: 0.75rem;
+  font-size: 0.75rem;
+  color: var(--md-sys-color-on-surface-variant);
+  transition: background-color 150ms ease, color 150ms ease;
+}
+
+.account-card-action:hover {
+  background: #fff3bd;
+  color: #7e5600;
+}
+
+.account-card-action.is-danger:hover {
+  background: #fee2e2;
+  color: #b91c1c;
 }
 </style>

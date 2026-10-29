@@ -225,6 +225,11 @@ const (
 	maxAccountLoadBatchCacheEntries = 256
 	apiKeyConcurrencyFetchTimeout   = 3 * time.Second
 	apiKeySlotTrackTimeout          = 2 * time.Second
+
+	// 无并发上限的账号复用普通占槽脚本，上限取一个永远达不到的值：只记录槽位、不做限流，
+	// 让账号/分组的实时并发统计也能覆盖这类账号。
+	unlimitedAccountSlotCeiling  = 1 << 30
+	unlimitedAccountTrackTimeout = 2 * time.Second
 )
 
 // ConcurrencyService 管理账号和用户的并发限制。
@@ -340,12 +345,10 @@ type UserLoadInfo struct {
 // If the account is at max concurrency, it waits until a slot is available or timeout.
 // Returns a release function that MUST be called when the request completes.
 func (s *ConcurrencyService) AcquireAccountSlot(ctx context.Context, accountID int64, maxConcurrency int) (*AcquireResult, error) {
-	// If maxConcurrency is 0 or negative, no limit
+	// If maxConcurrency is 0 or negative, no limit: the slot is only recorded
+	// so live concurrency stays visible, and the request is never blocked.
 	if maxConcurrency <= 0 {
-		return &AcquireResult{
-			Acquired:    true,
-			ReleaseFunc: func() {}, // no-op
-		}, nil
+		return s.trackUnlimitedAccountSlot(ctx, accountID), nil
 	}
 
 	// Generate unique request ID for this slot
@@ -373,6 +376,43 @@ func (s *ConcurrencyService) AcquireAccountSlot(ctx context.Context, accountID i
 		Acquired:    false,
 		ReleaseFunc: nil,
 	}, nil
+}
+
+// trackUnlimitedAccountSlot records an in-flight request for an account without
+// a concurrency limit. It is fail-open: these accounts never depended on Redis
+// to serve traffic, so cache errors only skip the bookkeeping.
+func (s *ConcurrencyService) trackUnlimitedAccountSlot(ctx context.Context, accountID int64) *AcquireResult {
+	untracked := &AcquireResult{Acquired: true, ReleaseFunc: func() {}}
+	if s == nil || s.cache == nil || accountID <= 0 {
+		return untracked
+	}
+
+	requestID := generateRequestID()
+	baseCtx := context.Background()
+	if ctx != nil {
+		baseCtx = context.WithoutCancel(ctx)
+	}
+	trackCtx, cancel := context.WithTimeout(baseCtx, unlimitedAccountTrackTimeout)
+	acquired, err := s.cache.AcquireAccountSlot(trackCtx, accountID, unlimitedAccountSlotCeiling, requestID)
+	cancel()
+	if err != nil {
+		logger.LegacyPrintf("service.concurrency", "Warning: failed to track unlimited account slot for %d (req=%s): %v", accountID, requestID, err)
+		return untracked
+	}
+	if !acquired {
+		return untracked
+	}
+
+	return &AcquireResult{
+		Acquired: true,
+		ReleaseFunc: func() {
+			bgCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			if err := s.cache.ReleaseAccountSlot(bgCtx, accountID, requestID); err != nil {
+				logger.LegacyPrintf("service.concurrency", "Warning: failed to release unlimited account slot for %d (req=%s): %v", accountID, requestID, err)
+			}
+		},
+	}
 }
 
 // AcquireUserSlot attempts to acquire a concurrency slot for a user.
