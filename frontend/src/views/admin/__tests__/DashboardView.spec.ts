@@ -175,6 +175,43 @@ describe('admin DashboardView', () => {
     wrapper.unmount()
   })
 
+  it('flags only the account problems that exist', async () => {
+    getSnapshotV2.mockResolvedValueOnce({
+      stats: { ...createDashboardStats(), total_accounts: 10, normal_accounts: 7, ratelimit_accounts: 2 },
+      trend: [],
+      models: []
+    })
+    const wrapper = mountDashboard()
+    await flushPromises()
+
+    const text = wrapper.text()
+    expect(text).toContain('admin.dashboard.rateLimitedAccounts 2')
+    expect(text).not.toContain('admin.dashboard.errorAccounts')
+    expect(text).not.toContain('admin.dashboard.overloadedAccounts')
+    expect(text).not.toContain('admin.dashboard.accountsHealthy')
+    wrapper.unmount()
+
+    getSnapshotV2.mockResolvedValueOnce({ stats: createDashboardStats(), trend: [], models: [] })
+    const healthy = mountDashboard()
+    await flushPromises()
+    expect(healthy.text()).toContain('admin.dashboard.accountsHealthy')
+    healthy.unmount()
+  })
+
+  it('switches granularity from the segmented control and reloads the charts', async () => {
+    const wrapper = mountDashboard()
+    await flushPromises()
+    getSnapshotV2.mockClear()
+
+    const dayOption = wrapper.findAll('[role="radio"]').find((option) => option.text() === 'admin.dashboard.day')!
+    await dayOption.trigger('click')
+    await flushPromises()
+
+    expect(getSnapshotV2).toHaveBeenCalledWith(expect.objectContaining({ granularity: 'day', include_stats: false }))
+    expect(dayOption.attributes('aria-checked')).toBe('true')
+    wrapper.unmount()
+  })
+
   it('renders the dashboard without legacy financial totals', async () => {
     const stats: Partial<DashboardStats> = createDashboardStats()
     delete stats.total_recharged

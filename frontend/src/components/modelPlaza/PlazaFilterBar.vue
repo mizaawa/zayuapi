@@ -9,13 +9,12 @@
           :key="`platform-${p}`"
           type="button"
           class="plaza-chip"
-          :class="p === 'all' ? chipClass(platform === 'all') : platform === p ? 'chip-tinted-active' : 'chip-tinted'"
-          :style="p === 'all' ? undefined : { '--chip-accent': platformAccentColor(p) }"
+          :class="chipClass(platform === p)"
           :disabled="p !== 'all' && !platformEnabled(p)"
           :aria-pressed="platform === p"
           @click="$emit('update:platform', p)"
         >
-          <PlatformIcon v-if="p !== 'all'" :platform="p as GroupPlatform" size="xs" />
+          <PlatformIcon v-if="p !== 'all'" :platform="p as GroupPlatform" size="xs" class="plaza-chip-icon" />
           {{ p === 'all' ? t('modelPlaza.filters.all') : platformLabel(p) }}
         </button>
       </div>
@@ -39,12 +38,12 @@
           :key="`group-${g.id}`"
           type="button"
           class="plaza-chip"
-          :class="groupId === g.id ? 'chip-tinted-active' : 'chip-tinted'"
-          :style="{ '--chip-accent': platformAccentColor(g.platform) }"
+          :class="chipClass(groupId === g.id)"
           :disabled="!groupEnabled(g)"
           :aria-pressed="groupId === g.id"
           @click="$emit('update:groupId', g.id)"
         >
+          <PlatformIcon :platform="g.platform as GroupPlatform" size="xs" class="plaza-chip-icon" />
           {{ g.name }}
         </button>
       </div>
@@ -112,7 +111,7 @@
 import { useI18n } from 'vue-i18n'
 import Icon from '@/components/icons/Icon.vue'
 import PlatformIcon from '@/components/common/PlatformIcon.vue'
-import { platformAccentColor, platformLabel } from '@/utils/platformColors'
+import { platformLabel } from '@/utils/platformColors'
 import type { GroupPlatform } from '@/types'
 
 const props = defineProps<{
@@ -240,22 +239,15 @@ function chipClass(active: boolean): string {
   box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.4), 0 4px 10px -6px rgb(151 104 0 / 0.55);
 }
 
-/* 平台/分组 chip 的配色统一从 --chip-accent(平台主色)派生,新增平台无需扩展样式。
-   激活态与非激活态在模板上互斥挂载,避免选择器优先级互相覆盖。 */
-.chip-tinted {
-  color: color-mix(in srgb, var(--chip-accent) 70%, #3f3420);
-  background-color: color-mix(in srgb, var(--chip-accent) 10%, var(--md-sys-color-surface));
+/* Every chip shares the theme: warm neutral at rest, honey when chosen.
+   Platform identity rides on the small icon glyph only. */
+.plaza-chip-icon {
+  flex-shrink: 0;
+  opacity: 0.75;
 }
 
-.chip-tinted:not(:disabled):hover {
-  background-color: color-mix(in srgb, var(--chip-accent) 18%, var(--md-sys-color-surface));
-}
-
-.chip-tinted-active {
-  font-weight: 650;
-  color: color-mix(in srgb, var(--chip-accent) 72%, #3f3420);
-  background-color: color-mix(in srgb, var(--chip-accent) 20%, var(--md-sys-color-surface));
-  box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--chip-accent) 60%, transparent);
+.chip-neutral-active .plaza-chip-icon {
+  opacity: 1;
 }
 
 .plaza-search {

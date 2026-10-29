@@ -1,17 +1,16 @@
 <template>
-  <header
-    class="glass sticky top-0 z-30 border-b border-gray-200/50 dark:border-dark-700/50"
-  >
-    <div class="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-3.5 sm:px-6">
+  <!-- Floating surface like the console header, on the same canvas. -->
+  <div class="plaza-nav-shell sticky top-0 z-30 px-3 pt-3 sm:px-4">
+    <header class="plaza-nav mx-auto flex max-w-7xl items-center justify-between gap-4 px-3 py-2.5 sm:px-4">
       <!-- 左:站点 logo + 名称 -->
       <div class="flex min-w-0 items-center gap-3">
         <template v-if="settings">
           <span
-            class="flex h-9 w-9 flex-shrink-0 items-center justify-center overflow-hidden rounded-xl bg-white shadow-sm ring-1 ring-gray-200 dark:bg-dark-800 dark:ring-dark-700"
+            class="plaza-nav-logo flex h-9 w-9 flex-shrink-0 items-center justify-center overflow-hidden rounded-xl"
           >
             <img :src="siteLogo || '/logo.svg'" alt="Logo" class="h-full w-full object-contain" />
           </span>
-          <span class="truncate text-base font-semibold text-gray-950 dark:text-white">
+          <span class="truncate text-base font-bold text-gray-900">
             {{ siteName }}
           </span>
         </template>
@@ -36,8 +35,8 @@
       >
         {{ t('modelPlaza.nav.login') }}
       </RouterLink>
-    </div>
-  </header>
+    </header>
+  </div>
 </template>
 
 <script setup lang="ts">
@@ -59,3 +58,25 @@ const siteLogo = computed(() =>
 const isAuthenticated = computed(() => authStore.isAuthenticated)
 const backTarget = computed(() => (authStore.isAdmin ? '/admin/dashboard' : '/dashboard'))
 </script>
+
+<style scoped>
+/* The shell paints the canvas behind the sticky header so content scrolling
+   under it never shows in the gap above the floating surface. */
+.plaza-nav-shell {
+  background: var(--md-sys-color-background);
+}
+
+.plaza-nav {
+  border-radius: 1.375rem;
+  background: color-mix(in srgb, var(--md-sys-color-surface) 88%, transparent);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.75),
+    0 0.625rem 1.75rem -0.5rem rgb(63 52 32 / 0.16);
+  backdrop-filter: blur(18px) saturate(1.08);
+}
+
+.plaza-nav-logo {
+  background: #fff7d6;
+  box-shadow: inset 0 0 0 1px rgb(215 193 106 / 0.35);
+}
+</style>

@@ -11,6 +11,10 @@ export default {
       card: {
         today: '今日',
         concurrency: '并发',
+        requests: '今日请求',
+        tokens: '今日 Token',
+        cost: '今日计费',
+        userCost: '用户 {cost}',
         schedulable: '参与调度'
       },
       createAccount: '添加账号',
@@ -237,6 +241,8 @@ export default {
       // 容量状态提示
       capacity: {
         concurrencyUnlimited: '并发不限制',
+        concurrencyNoLimit: '不限',
+        concurrencyTooltip: '正在处理 {current} 个请求，上限 {max}',
         windowCost: {
           blocked: '5h窗口费用超限，账号暂停调度',
           stickyOnly: '5h窗口费用达阈值，仅允许粘性会话',

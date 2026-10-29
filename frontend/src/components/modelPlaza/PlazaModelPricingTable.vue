@@ -1,5 +1,5 @@
 <template>
-  <div class="plaza-pricing-table overflow-x-auto" :style="accentStyle">
+  <div class="plaza-pricing-table overflow-x-auto">
     <table class="w-full min-w-[860px] table-fixed border-collapse text-sm tabular-nums">
       <colgroup>
         <col class="w-[22%]" />
@@ -68,12 +68,10 @@
               <span class="font-medium text-gray-900 dark:text-white">{{ m.name }}</span>
               <span
                 v-if="platform && m.platform !== platform"
-                :class="[
-                  'inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-medium',
-                  platformBadgeLightClass(m.platform)
-                ]"
+                class="pz-platform inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-medium"
               >
-                {{ platformLabel(m.platform) }}
+                <PlatformIcon :platform="m.platform as GroupPlatform" size="xs" />
+                <span>{{ platformLabel(m.platform) }}</span>
               </span>
               <span
                 v-if="billingMode(m) !== BILLING_MODE_TOKEN"
@@ -228,7 +226,9 @@
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { formatScaled } from '@/utils/pricing'
-import { platformAccentColor, platformBadgeLightClass, platformLabel } from '@/utils/platformColors'
+import PlatformIcon from '@/components/common/PlatformIcon.vue'
+import { platformLabel } from '@/utils/platformColors'
+import type { GroupPlatform } from '@/types'
 import {
   BILLING_MODE_TOKEN,
   BILLING_MODE_IMAGE,
@@ -240,7 +240,7 @@ import type { UserPricingInterval } from '@/api/channels'
 
 const props = defineProps<{
   models: PlazaModel[]
-  /** 分组平台;实付分区底色随平台着色,未知平台回退品牌青。 */
+  /** 分组平台;Composite 分组里与分组平台不同的模型会标出各自平台。 */
   platform?: string
   /** 分组默认倍率。 */
   rateMultiplier: number
@@ -254,9 +254,6 @@ const props = defineProps<{
 }>()
 
 const { t } = useI18n()
-
-/** 实付分区只从平台拿一个主色,浅底/标题/下划线全部由 scoped CSS 用 color-mix 派生。 */
-const accentStyle = computed(() => ({ '--plaza-accent': platformAccentColor(props.platform ?? '') }))
 
 const PER_MILLION = 1_000_000
 
@@ -402,17 +399,11 @@ function trimZero(n: number): string {
 </script>
 
 <style scoped>
-/* 实付分区配色统一从 --plaza-accent(平台主色)派生,新增平台无需扩展样式 */
+/* 实付分区使用主题蜂蜜色,与全站配色一致;平台身份只由模型旁的小图标表达。 */
 .plaza-pricing-table {
-  --pz-title: color-mix(in srgb, var(--plaza-accent) 88%, black);
-  --pz-bg: color-mix(in srgb, var(--plaza-accent) 7%, transparent);
-  --pz-bg-hover: color-mix(in srgb, var(--plaza-accent) 13%, transparent);
-}
-
-.dark .plaza-pricing-table {
-  --pz-title: color-mix(in srgb, var(--plaza-accent) 70%, white);
-  --pz-bg: color-mix(in srgb, var(--plaza-accent) 6%, transparent);
-  --pz-bg-hover: color-mix(in srgb, var(--plaza-accent) 10%, transparent);
+  --pz-title: #7e5600;
+  --pz-bg: rgb(255 243 189 / 0.42);
+  --pz-bg-hover: rgb(255 231 138 / 0.42);
 }
 
 .pz-bg,
@@ -437,13 +428,17 @@ tbody tr:hover .pz-cell {
 }
 
 .pz-title {
-  /* color-mix 不可用的老浏览器回退为平台原色 */
-  color: var(--plaza-accent);
   color: var(--pz-title);
-  border-color: color-mix(in srgb, var(--pz-title) 30%, transparent);
+  border-color: rgb(201 154 18 / 0.35);
 }
 
 .pz-unit {
-  color: color-mix(in srgb, var(--pz-title) 62%, transparent);
+  color: #976800;
+  opacity: 0.75;
+}
+
+.pz-platform {
+  background: #faf6e8;
+  color: #5b5238;
 }
 </style>

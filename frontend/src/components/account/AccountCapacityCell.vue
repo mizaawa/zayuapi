@@ -2,15 +2,15 @@
   <div class="flex flex-col gap-0.5">
     <!-- 并发槽位 -->
     <CapacityBadge
+      v-if="!hideConcurrency"
       :color-class="concurrencyClass"
       :current="currentConcurrency"
       :max="concurrencyUnlimited ? '∞' : account.concurrency"
       :max-title="concurrencyUnlimited ? t('admin.accounts.capacity.concurrencyUnlimited') : undefined"
+      :tooltip="concurrencyTooltip"
       data-testid="account-concurrency-capacity"
     >
-      <svg class="h-2.5 w-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-        <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V6zM3.75 15.75A2.25 2.25 0 016 13.5h2.25a2.25 2.25 0 012.25 2.25V18a2.25 2.25 0 01-2.25 2.25H6A2.25 2.25 0 013.75 18v-2.25zM13.5 6a2.25 2.25 0 012.25-2.25H18A2.25 2.25 0 0120.25 6v2.25A2.25 2.25 0 0118 10.5h-2.25a2.25 2.25 0 01-2.25-2.25V6zM13.5 15.75a2.25 2.25 0 012.25-2.25H18a2.25 2.25 0 012.25 2.25V18A2.25 2.25 0 0118 20.25h-2.25A2.25 2.25 0 0113.5 18v-2.25z" />
-      </svg>
+      <span class="h-1.5 w-1.5 shrink-0 rounded-full bg-current" :class="{ 'opacity-40': currentConcurrency === 0 }" aria-hidden="true"></span>
     </CapacityBadge>
 
     <!-- 5h窗口费用限制 -->
@@ -51,27 +51,44 @@ import { isUnlimitedConcurrency } from '@/utils/accountConcurrency'
 
 const props = defineProps<{
   account: Account
+  /** Phone cards show live concurrency in their own metric strip. */
+  hideConcurrency?: boolean
 }>()
 
 const { t } = useI18n()
+
+// Theme tones shared by every capacity pill on this cell.
+const TONE = {
+  idle: 'bg-gray-100 text-gray-600',
+  ok: 'bg-accent-100 text-accent-800',
+  warn: 'bg-amber-100 text-amber-800',
+  hot: 'bg-orange-100 text-orange-800',
+  full: 'bg-red-100 text-red-700'
+} as const
 
 // ====== 并发 ======
 const currentConcurrency = computed(() => props.account.current_concurrency || 0)
 // 并发数为 0（留空）表示不限制
 const concurrencyUnlimited = computed(() => isUnlimitedConcurrency(props.account.concurrency))
 
+// Idle reads neutral, serving reads green, and only a limited account near or
+// at its limit warms up. An unlimited account is never shown as full.
 const concurrencyClass = computed(() => {
   const current = currentConcurrency.value
   const max = props.account.concurrency
-  if (concurrencyUnlimited.value) {
-    return current > 0
-      ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400'
-      : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400'
-  }
-  if (current >= max) return 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
-  if (current > 0) return 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400'
-  return 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400'
+  if (current <= 0) return TONE.idle
+  if (concurrencyUnlimited.value) return TONE.ok
+  if (current >= max) return TONE.full
+  if (current >= max * 0.8) return TONE.warn
+  return TONE.ok
 })
+
+const concurrencyTooltip = computed(() =>
+  t('admin.accounts.capacity.concurrencyTooltip', {
+    current: currentConcurrency.value,
+    max: concurrencyUnlimited.value ? t('admin.accounts.capacity.concurrencyNoLimit') : props.account.concurrency
+  })
+)
 
 // ====== 窗口费用 ======
 const isAnthropicOAuthOrSetupToken = computed(() =>
@@ -92,10 +109,10 @@ const windowCostClass = computed(() => {
   const current = currentWindowCost.value
   const limit = props.account.window_cost_limit || 0
   const reserve = props.account.window_cost_sticky_reserve || 10
-  if (current >= limit + reserve) return 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
-  if (current >= limit) return 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400'
-  if (current >= limit * 0.8) return 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400'
-  return 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400'
+  if (current >= limit + reserve) return TONE.full
+  if (current >= limit) return TONE.hot
+  if (current >= limit * 0.8) return TONE.warn
+  return TONE.ok
 })
 
 const windowCostTooltip = computed(() => {
@@ -121,9 +138,9 @@ const sessionLimitClass = computed(() => {
   if (!showSessionLimit.value) return ''
   const current = activeSessions.value
   const max = props.account.max_sessions || 0
-  if (current >= max) return 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
-  if (current >= max * 0.8) return 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400'
-  return 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400'
+  if (current >= max) return TONE.full
+  if (current >= max * 0.8) return TONE.warn
+  return TONE.ok
 })
 
 const sessionLimitTooltip = computed(() => {
@@ -157,13 +174,13 @@ const rpmClass = computed(() => {
   const base = props.account.base_rpm ?? 0
   const buffer = rpmBuffer.value
   if (rpmStrategy.value === 'tiered') {
-    if (current >= base + buffer) return 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
-    if (current >= base) return 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400'
+    if (current >= base + buffer) return TONE.full
+    if (current >= base) return TONE.hot
   } else {
-    if (current >= base) return 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400'
+    if (current >= base) return TONE.hot
   }
-  if (current >= base * 0.8) return 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400'
-  return 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400'
+  if (current >= base * 0.8) return TONE.warn
+  return TONE.ok
 })
 
 const rpmTooltip = computed(() => {

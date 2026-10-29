@@ -83,7 +83,27 @@ export default {
       groupPricingDesc: 'Configure batch discount and hold ratio',
       systemSettings: 'System Settings',
       configureSystem: 'Configure system settings',
-      failedToLoad: 'Failed to load dashboard statistics'
+      failedToLoad: 'Failed to load dashboard statistics',
+      today: 'Today',
+      liveThroughput: 'Last 5 min: {rpm} RPM, {tpm} TPM',
+      statsUpdatedAt: 'Updated {time}',
+      statsStale: 'Statistics delayed, updated {time}',
+      todayActualCost: 'Spend today',
+      todayAccountCost: 'Account cost today',
+      tokenMix: 'Token mix today',
+      noTokensToday: 'No usage yet today',
+      cacheWrite: 'Cache write',
+      cacheRead: 'Cache read',
+      newToday: 'new today',
+      activeToday: 'active today',
+      activeThisHour: 'active this hour',
+      schedulableAccounts: 'schedulable',
+      rateLimitedAccounts: 'Rate limited',
+      overloadedAccounts: 'Overloaded',
+      errorAccounts: 'Errors',
+      accountsHealthy: 'No accounts need attention',
+      activeKeys: 'active',
+      usageTrends: 'Usage trends'
     },
 
     operations: {

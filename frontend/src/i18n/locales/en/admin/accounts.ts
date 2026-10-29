@@ -10,7 +10,11 @@ export default {
       },
       card: {
         today: 'Today',
-        concurrency: 'Concurrency',
+        concurrency: 'Live',
+        requests: 'Requests',
+        tokens: 'Tokens',
+        cost: 'Billed',
+        userCost: 'User {cost}',
         schedulable: 'Schedulable'
       },
       createAccount: 'Create Account',
@@ -292,6 +296,8 @@ export default {
       // Capacity status tooltips
       capacity: {
         concurrencyUnlimited: 'Unlimited concurrency',
+        concurrencyNoLimit: 'unlimited',
+        concurrencyTooltip: '{current} requests in flight, limit {max}',
         windowCost: {
           blocked: '5h window cost exceeded, account scheduling paused',
           stickyOnly: '5h window cost at threshold, only sticky sessions allowed',

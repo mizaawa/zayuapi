@@ -83,7 +83,27 @@ export default {
       groupPricingDesc: '设置批量折扣和冻结比例',
       systemSettings: '系统设置',
       configureSystem: '配置系统设置',
-      failedToLoad: '加载仪表盘数据失败'
+      failedToLoad: '加载仪表盘数据失败',
+      today: '今日',
+      liveThroughput: '近 5 分钟 {rpm} RPM，{tpm} TPM',
+      statsUpdatedAt: '数据更新于 {time}',
+      statsStale: '统计有延迟，更新于 {time}',
+      todayActualCost: '今日实际消费',
+      todayAccountCost: '今日账号成本',
+      tokenMix: '今日 Token 构成',
+      noTokensToday: '今天还没有用量',
+      cacheWrite: '缓存写入',
+      cacheRead: '缓存读取',
+      newToday: '今日新增',
+      activeToday: '今日活跃',
+      activeThisHour: '本小时活跃',
+      schedulableAccounts: '可调度',
+      rateLimitedAccounts: '限流',
+      overloadedAccounts: '过载',
+      errorAccounts: '异常',
+      accountsHealthy: '没有异常账号',
+      activeKeys: '已启用',
+      usageTrends: '用量趋势'
     },
 
     operations: {

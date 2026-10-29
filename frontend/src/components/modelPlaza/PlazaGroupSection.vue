@@ -2,7 +2,6 @@
   <section
     class="plaza-group"
     :class="{ 'is-expanded': expanded }"
-    :style="{ '--plaza-accent': platformAccentColor(group.platform) }"
   >
     <!-- 分组摘要:价格明细默认收起,原生 button 同时支持鼠标与键盘操作。 -->
     <header>
@@ -56,7 +55,6 @@
           <!-- 收起时先露出前几个模型,不用展开也知道这个分组里有什么。 -->
           <span v-if="!expanded && previewModels.length > 0" class="plaza-group-preview">
             <span v-for="model in previewModels" :key="`${model.platform}:${model.name}`" class="plaza-model-chip">
-              <ModelIcon :model="model.name" size="13px" />
               {{ model.name }}
             </span>
             <span v-if="hiddenModelCount > 0" class="plaza-model-more">
@@ -102,12 +100,10 @@
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Icon from '@/components/icons/Icon.vue'
-import ModelIcon from '@/components/common/ModelIcon.vue'
 import PlatformIcon from '@/components/common/PlatformIcon.vue'
 import PlazaModelPricingTable from './PlazaModelPricingTable.vue'
 import type { ModelPlazaGroup } from '@/api/modelPlaza'
 import type { GroupPlatform } from '@/types'
-import { platformAccentColor } from '@/utils/platformColors'
 import { hasPeakRate, formatPeakRateWindow, serverTimezoneLabel } from '@/utils/peak-rate'
 import { useAppStore } from '@/stores/app'
 
@@ -180,7 +176,7 @@ const peakNote = computed(() => {
 }
 
 .plaza-group-toggle:hover {
-  background: color-mix(in srgb, var(--plaza-accent) 4%, var(--md-sys-color-surface));
+  background: #fffdf6;
 }
 
 .plaza-group-toggle:focus-visible {
@@ -196,8 +192,8 @@ const peakNote = computed(() => {
   align-items: center;
   justify-content: center;
   border-radius: 0.875rem;
-  color: color-mix(in srgb, var(--plaza-accent) 72%, #3f3420);
-  background: color-mix(in srgb, var(--plaza-accent) 14%, var(--md-sys-color-surface));
+  color: #7e5600;
+  background: #fff3bd;
 }
 
 .plaza-group-main {
@@ -240,8 +236,8 @@ const peakNote = computed(() => {
 }
 
 .plaza-badge-subscription {
-  background: #ede9fe;
-  color: #6d28d9;
+  background: #e4f0df;
+  color: #2e5038;
 }
 
 .plaza-group-description {
@@ -267,18 +263,16 @@ const peakNote = computed(() => {
 }
 
 .plaza-model-chip {
-  display: inline-flex;
+  display: inline-block;
   max-width: 100%;
-  align-items: center;
-  gap: 0.3125rem;
   overflow: hidden;
-  padding: 0.1875rem 0.5625rem;
+  padding: 0.1875rem 0.625rem;
   border-radius: 999px;
-  background: #fffbe8;
+  background: #faf6e8;
   font-size: 0.75rem;
   white-space: nowrap;
   text-overflow: ellipsis;
-  color: var(--md-sys-color-on-surface);
+  color: #48402d;
 }
 
 .plaza-model-more {

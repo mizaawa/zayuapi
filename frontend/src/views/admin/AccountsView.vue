@@ -462,20 +462,48 @@
                 <AccountSourceBadge :account="row" />
               </div>
 
-              <div class="account-card-stats">
-                <div class="account-card-stat">
-                  <span class="account-card-label">{{ t('admin.accounts.card.concurrency') }}</span>
-                  <AccountCapacityCell :account="row" />
+              <!-- One strip, one type scale: live concurrency first, then today's work. -->
+              <dl class="account-card-metrics">
+                <div class="account-card-metric">
+                  <dt>{{ t('admin.accounts.card.concurrency') }}</dt>
+                  <dd>
+                    <span
+                      class="account-card-live"
+                      :class="'is-' + cardConcurrencyTone(row)"
+                      :title="cardConcurrencyTitle(row)"
+                      data-testid="account-card-concurrency"
+                    >
+                      <span class="account-card-live-dot" aria-hidden="true"></span>{{ row.current_concurrency || 0 }}<span class="account-card-live-max">/{{ isUnlimitedConcurrency(row.concurrency) ? '∞' : row.concurrency }}</span>
+                    </span>
+                  </dd>
                 </div>
-                <div class="account-card-stat">
-                  <span class="account-card-label">{{ t('admin.accounts.card.today') }}</span>
-                  <AccountTodayStatsCell
-                    :stats="todayStatsByAccountId[String(row.id)] ?? null"
-                    :loading="todayStatsLoading"
-                    :error="todayStatsError"
-                  />
+                <div class="account-card-metric">
+                  <dt>{{ t('admin.accounts.card.requests') }}</dt>
+                  <dd>{{ cardTodayValue(row, 'requests') }}</dd>
                 </div>
-              </div>
+                <div class="account-card-metric">
+                  <dt>{{ t('admin.accounts.card.tokens') }}</dt>
+                  <dd>{{ cardTodayValue(row, 'tokens') }}</dd>
+                </div>
+                <div class="account-card-metric">
+                  <dt>{{ t('admin.accounts.card.cost') }}</dt>
+                  <dd :title="t('usage.accountBilled')">{{ cardTodayValue(row, 'cost') }}</dd>
+                  <dd
+                    v-if="todayStatsByAccountId[String(row.id)]?.user_cost != null"
+                    class="account-card-metric-sub"
+                    :title="t('usage.userBilled')"
+                  >
+                    {{ t('admin.accounts.card.userCost', { cost: cardTodayValue(row, 'user_cost') }) }}
+                  </dd>
+                </div>
+              </dl>
+
+              <AccountCapacityCell
+                v-if="cardHasLiveLimits(row)"
+                :account="row"
+                hide-concurrency
+                class="account-card-limits"
+              />
 
               <div v-if="row.groups?.length" class="account-card-groups">
                 <GroupBadge
@@ -612,7 +640,8 @@ import ErrorPassthroughRulesModal from '@/components/admin/ErrorPassthroughRules
 import TLSFingerprintProfilesModal from '@/components/admin/TLSFingerprintProfilesModal.vue'
 import { fetchAllAccountIds } from '@/utils/accountSelection'
 import { buildGrokUsageRefreshKey, buildOpenAIUsageRefreshKey } from '@/utils/accountUsageRefresh'
-import { formatDateTime, formatRelativeTime } from '@/utils/format'
+import { formatCompactNumber, formatDateTime, formatRelativeTime } from '@/utils/format'
+import { isUnlimitedConcurrency } from '@/utils/accountConcurrency'
 import { proxyExpiryBadgeClass, proxyExpiryLabelKey } from '@/utils/proxyExpiry'
 import { extractApiErrorMessage } from '@/utils/apiError'
 import { sanitizeUrl } from '@/utils/url'
@@ -1527,6 +1556,36 @@ function getAntigravityTierLabel(row: any): string | null {
 
 // 账号显示邮箱:优先账号自身(extra/credentials),影子账号回退母账号 parent_email。
 // 供名称单元格 v-if/标题/文本三处共用,避免同一回退链在模板里重复三次。
+const cardConcurrencyTone = (account: Account): 'idle' | 'ok' | 'warn' | 'full' => {
+  const current = account.current_concurrency || 0
+  if (current <= 0) return 'idle'
+  if (isUnlimitedConcurrency(account.concurrency)) return 'ok'
+  if (current >= account.concurrency) return 'full'
+  if (current >= account.concurrency * 0.8) return 'warn'
+  return 'ok'
+}
+
+const cardConcurrencyTitle = (account: Account) =>
+  t('admin.accounts.capacity.concurrencyTooltip', {
+    current: account.current_concurrency || 0,
+    max: isUnlimitedConcurrency(account.concurrency) ? t('admin.accounts.capacity.concurrencyNoLimit') : account.concurrency
+  })
+
+const cardTodayValue = (account: Account, field: 'requests' | 'tokens' | 'cost' | 'user_cost'): string => {
+  const stats = todayStatsByAccountId.value[String(account.id)]
+  if (!stats) return todayStatsLoading.value ? '…' : '-'
+  const value = Number(stats[field] ?? 0)
+  if (field === 'requests') return formatCompactNumber(value, { allowBillions: false })
+  if (field === 'tokens') return formatCompactNumber(value)
+  return '$' + value.toFixed(2)
+}
+
+// Window-cost, session and RPM limits only exist on Anthropic OAuth and setup-token accounts.
+const cardHasLiveLimits = (account: Account) =>
+  account.platform === 'anthropic' &&
+  (account.type === 'oauth' || account.type === 'setup-token') &&
+  ((account.window_cost_limit ?? 0) > 0 || (account.max_sessions ?? 0) > 0 || (account.base_rpm ?? 0) > 0)
+
 // The phone card already shows today's numbers; the usage cell only earns its
 // place when it adds usage windows, quota bars or provider usage on top.
 const cardShowsUsageCell = (account: Account) =>
@@ -2442,26 +2501,95 @@ onUnmounted(() => {
   gap: 0.375rem;
 }
 
-.account-card-stats {
+.account-card-metrics {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.5rem;
-}
-
-.account-card-stat {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 0.375rem;
-  padding: 0.625rem 0.75rem;
-  border-radius: 0.875rem;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.25rem;
+  padding: 0.75rem 0.875rem;
+  border-radius: 1rem;
   background: #fffbe8;
 }
 
-.account-card-label {
+.account-card-metric {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.account-card-metric + .account-card-metric {
+  padding-left: 0.625rem;
+  box-shadow: inset 1px 0 0 rgb(215 193 106 / 0.35);
+}
+
+.account-card-metric dt {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-size: 0.6875rem;
   color: var(--md-sys-color-on-surface-variant);
+}
+
+.account-card-metric dd {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.9375rem;
+  font-weight: 700;
+  line-height: 1.25rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--md-sys-color-on-surface);
+}
+
+.account-card-metric .account-card-metric-sub {
+  font-size: 0.6875rem;
+  font-weight: 500;
+  line-height: 1rem;
+  color: var(--md-sys-color-on-surface-variant);
+}
+
+/* Live concurrency: the dot carries state, the number stays in ink. */
+.account-card-live {
+  display: inline-flex;
+  align-items: baseline;
+}
+
+.account-card-live-dot {
+  width: 0.4375rem;
+  height: 0.4375rem;
+  flex-shrink: 0;
+  align-self: center;
+  margin-right: 0.375rem;
+  border-radius: 999px;
+  background: #b9ab82;
+}
+
+.account-card-live.is-ok .account-card-live-dot {
+  background: #5c9865;
+  box-shadow: 0 0 0 3px rgb(92 152 101 / 0.22);
+}
+
+.account-card-live.is-warn .account-card-live-dot {
+  background: #d48a06;
+  box-shadow: 0 0 0 3px rgb(212 138 6 / 0.2);
+}
+
+.account-card-live.is-full .account-card-live-dot {
+  background: #c73545;
+  box-shadow: 0 0 0 3px rgb(199 53 69 / 0.18);
+}
+
+.account-card-live-max {
+  margin-left: 0.125rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--md-sys-color-on-surface-variant);
+}
+
+.account-card-limits {
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: 0.375rem;
 }
 
 .account-card-groups {
