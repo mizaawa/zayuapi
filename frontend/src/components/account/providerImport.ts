@@ -100,6 +100,7 @@ interface ProviderRequestError {
   status?: unknown
   reason?: unknown
   message?: unknown
+  metadata?: unknown
 }
 
 export function providerErrorReason(error: unknown): string {
@@ -122,17 +123,34 @@ const localizedReasons = new Set([
   'PROVIDER_KEY_NOT_FOUND',
   'PROVIDER_KEY_UNAVAILABLE',
   'PROVIDER_KEY_SECRET_UNAVAILABLE',
-  'PROVIDER_LOGIN_UNAVAILABLE'
+  'PROVIDER_LOGIN_UNAVAILABLE',
+  'PROVIDER_LOGIN_FAILED',
+  'PROVIDER_TOKEN_EXPIRED',
+  'PROVIDER_TOKEN_RETIRED',
+  'PROVIDER_SCOPE_DENIED'
 ])
+
+/** The permission a New API access token lacked, such as api_key:reveal. */
+function providerErrorScope(error: unknown): string {
+  const metadata = (error as ProviderRequestError | null)?.metadata
+  const scope = metadata && typeof metadata === 'object' ? (metadata as Record<string, unknown>).scope : undefined
+  return typeof scope === 'string' ? scope : ''
+}
 
 /**
  * Describes a provider-import failure reported by the server. Any other error
  * yields an empty string, so callers keep their existing fallback message.
  */
-export function providerImportErrorMessage(error: unknown, translate: (key: string) => string): string {
+export function providerImportErrorMessage(
+  error: unknown,
+  translate: (key: string, params?: Record<string, unknown>) => string
+): string {
   const reason = providerErrorReason(error)
   if (!reason.startsWith('PROVIDER_')) return ''
-  return localizedReasons.has(reason)
-    ? translate(`admin.providerImport.errors.${reason}`)
-    : providerErrorText(error, '')
+  if (!localizedReasons.has(reason)) return providerErrorText(error, '')
+  if (reason === 'PROVIDER_SCOPE_DENIED') {
+    const scope = providerErrorScope(error)
+    return scope ? translate(`admin.providerImport.errors.${reason}`, { scope }) : providerErrorText(error, '')
+  }
+  return translate(`admin.providerImport.errors.${reason}`)
 }

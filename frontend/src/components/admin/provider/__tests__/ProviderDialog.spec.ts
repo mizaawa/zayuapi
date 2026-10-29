@@ -96,6 +96,41 @@ describe('ProviderDialog login forms', () => {
     wrapper.unmount()
   })
 
+  it('lets a New API personal access token omit the user ID and lists the scopes it needs', async () => {
+    const wrapper = mountDialog()
+    await wrapper.get('input[name="provider-kind"][value="newapi"]').setValue()
+    await wrapper.get('input[name="provider-auth"][value="token"]').setValue()
+    const guide = wrapper.get('[data-testid="provider-newapi-token-guide"]').text()
+    for (const scope of ['profile:read', 'usage:read', 'api_key:read', 'api_key:reveal']) expect(guide).toContain(scope)
+    const userId = wrapper.get('input[placeholder="admin.upstream.userIdPlaceholder"]')
+    const token = wrapper.get('input[placeholder="admin.upstream.systemTokenPlaceholder"]')
+    await token.setValue('legacy-system-token')
+    expect(userId.attributes('required')).toBeDefined()
+    await token.setValue('nap_EXAMPLE_PERSONAL_ACCESS_TOKEN')
+    expect(userId.attributes('required')).toBeUndefined()
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+    expect(mocks.create).toHaveBeenCalledWith(expect.objectContaining({
+      site_type: 'newapi', auth_mode: 'token', user_id: '', system_access_token: 'nap_EXAMPLE_PERSONAL_ACCESS_TOKEN'
+    }))
+    wrapper.unmount()
+  })
+
+  it('keeps the saved New API token of a provider without a user ID', async () => {
+    mocks.update.mockResolvedValue({ id: 'relay', status: 'connected' })
+    const provider = {
+      id: 'relay', name: 'Relay', site_type: 'newapi' as const, base_url: 'https://relay.example.com', auth_mode: 'token' as const,
+      exchange_rate: 1, status: 'connected' as const, metrics: { balance: 1, today_spend: 0, total_recharge: null, total_spend: 0, currency: 'USD' }
+    }
+    const wrapper = mount(ProviderDialog, { props: { show: true, provider }, global: { stubs: { BaseDialog: Dialog, Icon: true } } })
+    const token = wrapper.get('input[placeholder="admin.upstream.keepSecret"]')
+    expect(token.attributes('required')).toBeUndefined()
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+    expect(mocks.update).toHaveBeenCalledWith('relay', expect.objectContaining({ user_id: '', system_access_token: '' }))
+    wrapper.unmount()
+  })
+
   it('renders the server failure reason inline and in a toast', async () => {
     mocks.create.mockRejectedValueOnce({ message: 'TURNSTILE_VERIFICATION_FAILED' })
     const wrapper = mountDialog()

@@ -86,10 +86,9 @@ func (h *AccountHandler) refreshProviderBalances(ctx context.Context, settings *
 			probeErr := probe(probeCtx, &updated, "")
 			cancel()
 			if probeErr != nil {
-				updated.Status = "disconnected"
-				updated.LastError = providerPublicError(probeErr)
 				// A remote failure does not invalidate the last known balance or
 				// start a new alert episode.
+				markProviderDisconnected(&updated, probeErr)
 			}
 			results <- providerProbeResult{original: original, updated: updated, err: probeErr}
 		}(original)
@@ -124,6 +123,7 @@ func (h *AccountHandler) refreshProviderBalances(ctx context.Context, settings *
 			}
 			current[i].Status = result.updated.Status
 			current[i].LastError = result.updated.LastError
+			current[i].ErrorKind = result.updated.ErrorKind
 			if result.err == nil {
 				// Persist the observed balance and badge before attempting email.
 				// SMTP can be slow; it must not hold the provider write lock.

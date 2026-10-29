@@ -356,7 +356,7 @@ func TestCreateProviderKeyUsesChosenGroupAndNeverRetriesCreation(t *testing.T) {
 func TestCreateNewAPIKeyFindsAcknowledgedTokenByName(t *testing.T) {
 	var created atomic.Bool
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/api/user/login" {
+		if r.URL.Path != "/api/user/login" && r.URL.Path != "/api/user/login/encryption-key" {
 			assert.True(t, strings.Contains(r.Header.Get("Cookie"), "session=signed-in"))
 			assert.Equal(t, "5", r.Header.Get("New-Api-User"))
 		}

@@ -24,6 +24,22 @@ var errProviderResponse = errors.New("provider returned an unsupported response"
 var errProviderTurnstile = errors.New("provider requires Turnstile verification; use an existing dashboard Access Token or complete verification on the provider site")
 var errProviderTwoFactor = errors.New("provider requires two-factor verification; use an existing dashboard Access Token")
 
+// Current New API releases name why they refused a dashboard credential. The
+// expired and retired cases are still failed logins.
+var errProviderTokenExpired = fmt.Errorf("%w: the access token has expired", errProviderAuthentication)
+var errProviderTokenRetired = fmt.Errorf("%w: legacy system access tokens have been retired", errProviderAuthentication)
+
+// providerScopeError is a New API personal access token that signs in but
+// lacks the permission a request needs. It is not a failed login.
+type providerScopeError struct{ scope string }
+
+func (e *providerScopeError) Error() string {
+	if e.scope == "" {
+		return "provider access token lacks a required permission"
+	}
+	return "provider access token lacks the " + e.scope + " permission"
+}
+
 type providerToken struct {
 	AccessToken  string `json:"access_token"`
 	RefreshToken string `json:"refresh_token,omitempty"`
@@ -89,11 +105,24 @@ func decodeProviderToken(secret string) (providerToken, error) {
 }
 
 func providerPublicError(err error) string {
+	var scope *providerScopeError
 	switch {
 	case errors.Is(err, errProviderTurnstile):
 		return errProviderTurnstile.Error()
 	case errors.Is(err, errProviderTwoFactor):
 		return errProviderTwoFactor.Error()
+	case errors.As(err, &scope):
+		permission := "a required permission"
+		if scope.scope != "" {
+			permission = "the " + scope.scope + " permission"
+		}
+		return "Provider access token lacks " + permission + "; grant it to the token on the provider site"
+	case errors.Is(err, errProviderTokenExpired):
+		return "Provider login failed: the access token has expired; create a new one on the provider site"
+	case errors.Is(err, errProviderTokenRetired):
+		return "Provider login failed: legacy system access tokens have been retired; create a personal access token (nap_…) in the provider's security settings"
+	case errors.Is(err, errProviderStoredLogin):
+		return "The saved provider login could not be read; edit the provider and sign in again"
 	case errors.Is(err, errProviderAuthentication):
 		return "Provider login failed: invalid or expired dashboard credential"
 	case errors.Is(err, errProviderResponse):
@@ -213,7 +242,32 @@ type providerRemote struct {
 	base      string
 	token     string
 	tokenType string
-	userID    string
+	// userID is sent as New-Api-User, which only older New API sign-ins need.
+	userID string
+}
+
+// authorize adds the dashboard credential chosen at sign-in to a request.
+func (r *providerRemote) authorize(req *http.Request) {
+	if r.token != "" {
+		tokenType := r.tokenType
+		if tokenType == "" {
+			tokenType = "Bearer"
+		}
+		req.Header.Set("Authorization", tokenType+" "+r.token)
+	}
+	if r.userID != "" {
+		req.Header.Set("New-Api-User", r.userID)
+	}
+}
+
+// providerAnonymousPath lists requests that never carry the dashboard
+// credential: the Sub2API refresh exchange and New API's public endpoints.
+func providerAnonymousPath(path string) bool {
+	switch path {
+	case "/api/v1/auth/refresh", "/api/status", "/api/user/login/encryption-key":
+		return true
+	}
+	return false
 }
 
 func (r *providerRemote) request(ctx context.Context, method, path string, body any) (map[string]any, error) {
@@ -233,15 +287,8 @@ func (r *providerRemote) request(ctx context.Context, method, path string, body 
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
-	if r.token != "" && path != "/api/v1/auth/refresh" {
-		tokenType := r.tokenType
-		if tokenType == "" {
-			tokenType = "Bearer"
-		}
-		req.Header.Set("Authorization", tokenType+" "+r.token)
-	}
-	if r.userID != "" {
-		req.Header.Set("New-Api-User", r.userID)
+	if !providerAnonymousPath(path) {
+		r.authorize(req)
 	}
 	res, err := r.client.Do(req)
 	if err != nil {
@@ -261,6 +308,9 @@ func (r *providerRemote) request(ctx context.Context, method, path string, body 
 	message, _ := envelope["message"].(string)
 	if envelope["reason"] == "TURNSTILE_VERIFICATION_FAILED" || envelope["code"] == "TURNSTILE_VERIFICATION_FAILED" || strings.Contains(strings.ToLower(message), "turnstile") {
 		return nil, errProviderTurnstile
+	}
+	if err := newAPIAccessError(envelope); err != nil {
+		return nil, err
 	}
 	if res.StatusCode == http.StatusUnauthorized || res.StatusCode == http.StatusForbidden {
 		return nil, errProviderAuthentication
@@ -315,20 +365,29 @@ func divide(value *float64, factor float64) *float64 {
 	return &converted
 }
 
-func probeProvider(ctx context.Context, provider providerRecord, secret string) (providerMetrics, string, error) {
-	client, err := providerHTTPClient()
+// providerProbe is what one balance probe learned about a provider account.
+type providerProbe struct {
+	metrics providerMetrics
+	// secret is a renewed Sub2API token pair; empty when the login is unchanged.
+	secret string
+	// userID is the account ID that New API reports in /api/user/self.
+	userID string
+}
+
+func probeProvider(ctx context.Context, provider providerRecord, secret string) (providerProbe, error) {
+	client, err := providerSessionHTTPClient()
 	if err != nil {
-		return providerMetrics{}, "", err
+		return providerProbe{}, err
 	}
-	return probeProviderWithClientAndSecret(ctx, provider, secret, client)
+	return probeProviderAccount(ctx, provider, secret, client)
 }
 
 func probeProviderWithClient(ctx context.Context, provider providerRecord, secret string, client *http.Client) (providerMetrics, error) {
-	metrics, _, err := probeProviderWithClientAndSecret(ctx, provider, secret, client)
-	return metrics, err
+	probe, err := probeProviderAccount(ctx, provider, secret, client)
+	return probe.metrics, err
 }
 
-func probeProviderWithClientAndSecret(ctx context.Context, provider providerRecord, secret string, client *http.Client) (providerMetrics, string, error) {
+func probeProviderAccount(ctx context.Context, provider providerRecord, secret string, client *http.Client) (providerProbe, error) {
 	r := providerRemote{client: client, base: provider.BaseURL}
 	switch provider.SiteType {
 	case "sub2api":
@@ -337,19 +396,19 @@ func probeProviderWithClientAndSecret(ctx context.Context, provider providerReco
 		if provider.AuthMode == "password" {
 			login, err := r.request(ctx, http.MethodPost, "/api/v1/auth/login", map[string]string{"email": provider.Account, "password": secret})
 			if err != nil {
-				return providerMetrics{}, "", err
+				return providerProbe{}, err
 			}
 			r.token, _ = login["access_token"].(string)
 			if r.token == "" {
 				if required, _ := login["requires_2fa"].(bool); required {
-					return providerMetrics{}, "", errProviderTwoFactor
+					return providerProbe{}, errProviderTwoFactor
 				}
-				return providerMetrics{}, "", errProviderResponse
+				return providerProbe{}, errProviderResponse
 			}
 		} else {
 			token, err := decodeProviderToken(secret)
 			if err != nil {
-				return providerMetrics{}, "", err
+				return providerProbe{}, err
 			}
 			credential = token
 			r.token = token.AccessToken
@@ -386,7 +445,7 @@ func probeProviderWithClientAndSecret(ctx context.Context, provider providerReco
 		}
 		if provider.AuthMode != "password" && r.token == "" {
 			if err := renew(); err != nil {
-				return providerMetrics{}, "", err
+				return providerProbe{}, err
 			}
 		}
 		profile, err := r.request(ctx, http.MethodGet, "/api/v1/user/profile", nil)
@@ -396,7 +455,7 @@ func probeProviderWithClientAndSecret(ctx context.Context, provider providerReco
 			}
 		}
 		if err != nil {
-			return providerMetrics{}, "", err
+			return providerProbe{}, err
 		}
 		stats, err := r.request(ctx, http.MethodGet, "/api/v1/usage/dashboard/stats", nil)
 		if errors.Is(err, errProviderAuthentication) && credential.RefreshToken != "" {
@@ -405,44 +464,31 @@ func probeProviderWithClientAndSecret(ctx context.Context, provider providerReco
 			}
 		}
 		if err != nil {
-			return providerMetrics{}, "", err
+			return providerProbe{}, err
 		}
-		return providerMetrics{
+		return providerProbe{metrics: providerMetrics{
 			Balance:       field(profile, "balance"),
 			TodaySpend:    field(stats, "today_actual_cost", "today_cost"),
 			TotalRecharge: field(profile, "total_recharged"),
 			TotalSpend:    field(stats, "total_actual_cost", "total_cost"),
 			Currency:      "USD",
-		}, rotatedSecret, nil
+		}, secret: rotatedSecret}, nil
 	case "newapi":
-		if provider.AuthMode == "password" {
-			login, err := r.request(ctx, http.MethodPost, "/api/user/login", map[string]string{"username": provider.Account, "password": secret})
-			if err != nil {
-				return providerMetrics{}, "", err
-			}
-			// Current New API uses an in-memory dashboard JWT after login;
-			// older installations keep a session cookie instead.
-			r.token, _ = login["access_token"].(string)
-		} else {
-			token, err := decodeProviderToken(secret)
-			if err != nil {
-				return providerMetrics{}, "", err
-			}
-			r.token = token.AccessToken
-			r.tokenType = token.TokenType
-			r.userID = provider.UserID
+		// The probe signs in exactly as the key operations do.
+		if err := newAPISignIn(ctx, &r, provider, secret); err != nil {
+			return providerProbe{}, err
 		}
 		profile, err := r.request(ctx, http.MethodGet, "/api/user/self", nil)
 		if err != nil {
-			return providerMetrics{}, "", err
+			return providerProbe{}, err
 		}
 		status, err := r.request(ctx, http.MethodGet, "/api/status", nil)
 		if err != nil {
-			return providerMetrics{}, "", err
+			return providerProbe{}, err
 		}
 		quotaPerUnit, ok := number(status["quota_per_unit"])
 		if !ok || quotaPerUnit <= 0 {
-			return providerMetrics{}, "", errors.New("the New API quota conversion is unavailable")
+			return providerProbe{}, errors.New("the New API quota conversion is unavailable")
 		}
 		metrics := providerMetrics{
 			Balance:    divide(field(profile, "quota"), quotaPerUnit),
@@ -458,8 +504,8 @@ func probeProviderWithClientAndSecret(ctx context.Context, provider providerReco
 		}
 		// New API self/profile has no canonical cumulative recharge field.
 		// Leave it unknown instead of presenting quota + spend as payments.
-		return metrics, "", nil
+		return providerProbe{metrics: metrics, userID: newAPIAccountID(profile)}, nil
 	default:
-		return providerMetrics{}, "", errors.New("unsupported provider type")
+		return providerProbe{}, errors.New("unsupported provider type")
 	}
 }

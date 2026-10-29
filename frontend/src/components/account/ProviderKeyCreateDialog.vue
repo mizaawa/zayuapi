@@ -100,6 +100,7 @@ import {
   providerErrorReason,
   providerErrorStatus,
   providerErrorText,
+  providerImportErrorMessage,
   providerPlatformLabel,
   type ProviderPickerOption
 } from './providerImport'
@@ -158,7 +159,7 @@ async function loadGroups() {
     if (current !== request) return
     groups.value = []
     groupId.value = ''
-    error.value = providerErrorText(failure, t('admin.providerImport.loadGroupsFailed'))
+    error.value = providerImportErrorMessage(failure, t) || providerErrorText(failure, t('admin.providerImport.loadGroupsFailed'))
   } finally {
     if (current === request) loading.value = false
   }
@@ -196,8 +197,9 @@ async function create() {
       uncertain.value = true
       error.value = t('admin.providerImport.createUncertain')
     } else {
+      const message = providerImportErrorMessage(failure, t).replace(/[。.]+$/u, '')
       error.value = t('admin.providerImport.createFailed', {
-        message: providerErrorText(failure, t('admin.providerImport.createKeyFailed'))
+        message: message || providerErrorText(failure, t('admin.providerImport.createKeyFailed'))
       })
     }
   } finally {

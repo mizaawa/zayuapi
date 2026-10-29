@@ -50,11 +50,11 @@ func TestSub2APITokenRefreshAndMetrics(t *testing.T) {
 	defer server.Close()
 	secret, err := encodeProviderToken("expired", "refresh", "Bearer")
 	require.NoError(t, err)
-	metrics, rotated, err := probeProviderWithClientAndSecret(context.Background(), providerRecord{SiteType: "sub2api", AuthMode: "token", BaseURL: server.URL}, secret, server.Client())
+	probe, err := probeProviderAccount(context.Background(), providerRecord{SiteType: "sub2api", AuthMode: "token", BaseURL: server.URL}, secret, server.Client())
 	require.NoError(t, err)
-	require.Equal(t, 8.0, *metrics.Balance)
-	require.Contains(t, rotated, "renewed")
-	require.Contains(t, rotated, "rotated")
+	require.Equal(t, 8.0, *probe.metrics.Balance)
+	require.Contains(t, probe.secret, "renewed")
+	require.Contains(t, probe.secret, "rotated")
 }
 
 func TestSub2APIRefreshOnlyExchangesBeforeProfileAndStoresRotatedToken(t *testing.T) {
@@ -79,12 +79,12 @@ func TestSub2APIRefreshOnlyExchangesBeforeProfileAndStoresRotatedToken(t *testin
 	defer server.Close()
 	secret, err := encodeProviderToken("", "refresh-only", "Bearer")
 	require.NoError(t, err)
-	metrics, rotated, err := probeProviderWithClientAndSecret(context.Background(), providerRecord{SiteType: "sub2api", AuthMode: "token", BaseURL: server.URL}, secret, server.Client())
+	probe, err := probeProviderAccount(context.Background(), providerRecord{SiteType: "sub2api", AuthMode: "token", BaseURL: server.URL}, secret, server.Client())
 	require.NoError(t, err)
 	require.Equal(t, []string{"/api/v1/auth/refresh", "/api/v1/user/profile", "/api/v1/usage/dashboard/stats"}, paths)
-	require.Equal(t, 8.0, *metrics.Balance)
-	require.Contains(t, rotated, "renewed")
-	require.Contains(t, rotated, "rotated")
+	require.Equal(t, 8.0, *probe.metrics.Balance)
+	require.Contains(t, probe.secret, "renewed")
+	require.Contains(t, probe.secret, "rotated")
 }
 
 func TestNewAPITokenUsesUserIDAndRejectsModelKey(t *testing.T) {

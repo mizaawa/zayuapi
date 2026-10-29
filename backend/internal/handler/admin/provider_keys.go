@@ -29,7 +29,8 @@ const (
 )
 
 // providerSessionHTTPClient builds the DNS-pinned, redirect-free provider
-// client. Tests replace it to reach a local TLS server.
+// client for balance probes and key sessions. Tests replace it to reach a
+// local TLS server.
 var providerSessionHTTPClient = providerHTTPClient
 
 var (
@@ -68,8 +69,25 @@ type providerOptionView struct {
 	SiteType  string     `json:"site_type"`
 	BaseURL   string     `json:"base_url"`
 	Status    string     `json:"status"`
+	State     string     `json:"state"`
 	LastError string     `json:"last_error,omitempty"`
 	UpdatedAt *time.Time `json:"updated_at,omitempty"`
+}
+
+// providerImportState is the import picker's view of a provider's last
+// observed connection: connected, sync_failed, pending or not_authenticated.
+// Only not_authenticated keeps the provider from being chosen.
+func providerImportState(record providerRecord) string {
+	switch {
+	case record.Status == "connected":
+		return "connected"
+	case record.Status == "":
+		return "pending"
+	case record.ErrorKind == "auth":
+		return "not_authenticated"
+	default:
+		return "sync_failed"
+	}
 }
 
 type providerKeyView struct {
@@ -121,7 +139,7 @@ func (h *AccountHandler) ListProviderOptions(c *gin.Context) {
 	for _, record := range records {
 		options = append(options, providerOptionView{
 			ID: record.ID, Name: record.Name, SiteType: record.SiteType, BaseURL: record.BaseURL,
-			Status: record.Status, LastError: record.LastError, UpdatedAt: record.UpdatedAt,
+			Status: record.Status, State: providerImportState(record), LastError: record.LastError, UpdatedAt: record.UpdatedAt,
 		})
 	}
 	c.Header("Cache-Control", "private, no-store")
@@ -339,7 +357,8 @@ func providerCreateFailure(err error) error {
 	if errors.As(err, &remote) && remote.status >= http.StatusBadRequest && remote.status < http.StatusInternalServerError {
 		return err
 	}
-	if errors.Is(err, errProviderAuthentication) || errors.Is(err, errProviderTurnstile) {
+	var scope *providerScopeError
+	if errors.Is(err, errProviderAuthentication) || errors.Is(err, errProviderTurnstile) || errors.As(err, &scope) {
 		return err
 	}
 	return &providerKeyCreateUncertainError{cause: err}
@@ -353,6 +372,7 @@ func providerKeyError(err error) error {
 		return err
 	}
 	var uncertain *providerKeyCreateUncertainError
+	var scope *providerScopeError
 	switch {
 	case errors.As(err, &uncertain):
 		return infraerrors.New(http.StatusBadGateway, "PROVIDER_KEY_CREATE_UNCERTAIN",
@@ -369,6 +389,18 @@ func providerKeyError(err error) error {
 		return infraerrors.New(http.StatusBadGateway, "PROVIDER_KEY_LIST_TOO_LARGE", "The provider returned too many API keys")
 	case errors.Is(err, errProviderStoredLogin):
 		return infraerrors.New(http.StatusBadGateway, "PROVIDER_LOGIN_UNAVAILABLE", "The saved provider login could not be read; edit the provider and sign in again")
+	case errors.As(err, &scope):
+		denied := infraerrors.New(http.StatusBadGateway, "PROVIDER_SCOPE_DENIED", providerPublicError(err))
+		if scope.scope != "" {
+			denied = denied.WithMetadata(map[string]string{"scope": scope.scope})
+		}
+		return denied
+	case errors.Is(err, errProviderTokenExpired):
+		return infraerrors.New(http.StatusBadGateway, "PROVIDER_TOKEN_EXPIRED", providerPublicError(err))
+	case errors.Is(err, errProviderTokenRetired):
+		return infraerrors.New(http.StatusBadGateway, "PROVIDER_TOKEN_RETIRED", providerPublicError(err))
+	case errors.Is(err, errProviderAuthentication):
+		return infraerrors.New(http.StatusBadGateway, "PROVIDER_LOGIN_FAILED", providerPublicError(err))
 	default:
 		return infraerrors.New(http.StatusBadGateway, "PROVIDER_REMOTE_FAILED", providerFailureMessage(err))
 	}

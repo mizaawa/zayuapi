@@ -7,7 +7,14 @@ export default {
     providerPlaceholder: '选择服务提供商',
     providerHint: '选择在上游管理中添加的站点',
     providerCount: '{count} 个站点',
-    providerDisconnected: '未连接',
+    providerState: {
+      connected: '已连接',
+      sync_failed: '同步失败',
+      pending: '待同步',
+      not_authenticated: '未登录'
+    },
+    providerNeedsLogin: '登录已失效，请在上游管理中重新登录',
+    providerLoggedOut: '所选服务提供商的登录已失效，请在上游管理中重新登录后再选择。',
     refreshProviders: '刷新站点',
     providerMissing: '所选服务提供商已被删除，请重新选择。',
     noProviders: '还没有服务提供商。',
@@ -64,7 +71,11 @@ export default {
       PROVIDER_KEY_NOT_FOUND: '所选 API 密钥已在上游删除，请刷新密钥后重新选择。',
       PROVIDER_KEY_UNAVAILABLE: '所选 API 密钥已停用、过期或额度耗尽，请重新选择。',
       PROVIDER_KEY_SECRET_UNAVAILABLE: '服务提供商未返回完整的 API 密钥，请稍后重试。',
-      PROVIDER_LOGIN_UNAVAILABLE: '无法读取已保存的服务商登录信息，请在上游管理中重新登录该站点。'
+      PROVIDER_LOGIN_UNAVAILABLE: '无法读取已保存的服务商登录信息，请在上游管理中重新登录该站点。',
+      PROVIDER_LOGIN_FAILED: '服务商登录失败：保存的凭据无效或已过期，请在上游管理中重新登录该站点。',
+      PROVIDER_TOKEN_EXPIRED: '服务商访问令牌已过期，请在服务商站点重新创建，并在上游管理中更新。',
+      PROVIDER_TOKEN_RETIRED: '服务商已停用旧版系统访问令牌，请在其「安全设置 → 访问令牌」中创建 nap_ 个人访问令牌，并在上游管理中更新。',
+      PROVIDER_SCOPE_DENIED: '服务商访问令牌缺少 {scope} 权限，请在服务商站点为该令牌授予后重试。'
     }
   }
 }

@@ -25,8 +25,9 @@ const BaseDialogStub = defineComponent({
   template: '<div v-if="show" data-testid="dialog"><slot /><slot name="footer" /></div>'
 })
 
-const provider = { id: 'p1', name: '杂鱼AI', site_type: 'sub2api', base_url: 'https://www.zayuapi.com', status: 'connected' }
-const relay = { id: 'p2', name: 'Relay', site_type: 'newapi', base_url: 'https://relay.example', status: 'disconnected' }
+const provider = { id: 'p1', name: '杂鱼AI', site_type: 'sub2api', base_url: 'https://www.zayuapi.com', status: 'connected', state: 'connected' }
+const relay = { id: 'p2', name: 'Relay', site_type: 'newapi', base_url: 'https://relay.example', status: 'disconnected', state: 'sync_failed' }
+const signedOut = { id: 'p3', name: 'Signed out', site_type: 'newapi', base_url: 'https://old.example', status: 'disconnected', state: 'not_authenticated' }
 const activeKey = {
   id: '11', name: '破甲', group_id: '7', group_name: 'CodexPro-不降智⑤', group_platform: 'openai',
   group_multiplier: 0.2, status: 'active', available: true
@@ -177,7 +178,9 @@ describe('ProviderAccountImport', () => {
 
     await openPicker(wrapper, 'provider-import-provider-picker')
     const providerRows = rows(wrapper, 'provider-import-provider-picker')
-    expect(providerRows[1].text()).toContain('admin.providerImport.providerDisconnected')
+    expect(providerRows[0].text()).toContain('admin.providerImport.providerState.connected')
+    expect(providerRows[1].text()).toContain('admin.providerImport.providerState.sync_failed')
+    expect(providerRows[1].attributes('aria-disabled')).toBe('false')
     await providerRows[0].trigger('click')
     await openPicker(wrapper, 'provider-import-provider-picker')
     await rows(wrapper, 'provider-import-provider-picker')[1].trigger('click')
@@ -216,6 +219,54 @@ describe('ProviderAccountImport', () => {
     expect(wrapper.get('[data-testid="provider-import-empty"]').text()).toContain('admin.providerImport.addProviderLink')
     expect(wrapper.get('[data-testid="provider-import-key-picker"] button').attributes('disabled')).toBeDefined()
     expect(mocks.listProviderKeys).not.toHaveBeenCalled()
+  })
+
+  it('shows each provider state and only blocks a provider that is signed out', async () => {
+    mocks.listProviderOptions.mockResolvedValue([signedOut])
+    const wrapper = mountImport()
+    await flushPromises()
+    expect(mocks.listProviderKeys).not.toHaveBeenCalled()
+
+    mocks.listProviderOptions.mockResolvedValue([signedOut, { ...relay, status: '', state: 'pending' }])
+    await wrapper.get('[data-testid="provider-import-refresh-providers"]').trigger('click')
+    await flushPromises()
+    await openPicker(wrapper, 'provider-import-provider-picker')
+    const providerRows = rows(wrapper, 'provider-import-provider-picker')
+    expect(providerRows[0].text()).toContain('admin.providerImport.providerState.not_authenticated')
+    expect(providerRows[0].text()).toContain('admin.providerImport.providerNeedsLogin')
+    expect(providerRows[0].attributes('aria-disabled')).toBe('true')
+    expect(providerRows[1].text()).toContain('admin.providerImport.providerState.pending')
+    await providerRows[0].trigger('click')
+    expect(mocks.listProviderKeys).not.toHaveBeenCalled()
+  })
+
+  it('clears a selected provider whose login stopped working', async () => {
+    mocks.listProviderOptions.mockResolvedValueOnce([provider]).mockResolvedValueOnce([{ ...provider, status: 'disconnected', state: 'not_authenticated' }])
+    mocks.listProviderKeys.mockResolvedValue(keyList([activeKey]))
+    const wrapper = mountImport()
+    await flushPromises()
+    await openPicker(wrapper, 'provider-import-key-picker')
+    await rows(wrapper, 'provider-import-key-picker')[1].trigger('click')
+    expect(lastSelection(wrapper)).toEqual(expect.objectContaining({ keyId: '11' }))
+
+    await wrapper.get('[data-testid="provider-import-refresh-providers"]').trigger('click')
+    await flushPromises()
+
+    expect(lastSelection(wrapper)).toBeNull()
+    expect(wrapper.text()).toContain('admin.providerImport.providerLoggedOut')
+    expect(mocks.listProviderKeys).toHaveBeenCalledTimes(1)
+  })
+
+  it('names the permission a New API access token lacks', async () => {
+    mocks.listProviderOptions.mockResolvedValue([relay])
+    mocks.listProviderKeys.mockRejectedValue({
+      status: 502, reason: 'PROVIDER_SCOPE_DENIED', message: 'Provider access token lacks the api_key:read permission',
+      metadata: { scope: 'api_key:read' }
+    })
+    const wrapper = mountImport()
+    await flushPromises()
+
+    expect(wrapper.get('[role="alert"]').text()).toBe('admin.providerImport.errors.PROVIDER_SCOPE_DENIED:{"scope":"api_key:read"}')
   })
 
   it('shows the server reason when keys cannot be read', async () => {

@@ -50,6 +50,14 @@
         <p class="mt-1 text-gray-500 dark:text-gray-400">{{ t('admin.upstream.sub2TokenGuideRefresh') }}</p>
       </div>
 
+      <div v-if="form.auth_mode === 'token' && form.site_type === 'newapi'" class="rounded-2xl bg-primary-50 p-3.5 text-xs leading-relaxed text-gray-700 dark:border-primary-700 dark:bg-primary-900/20 dark:text-gray-200" data-testid="provider-newapi-token-guide">
+        <p class="font-semibold">{{ t('admin.upstream.newapiTokenGuideTitle') }}</p>
+        <p class="mt-1">{{ t('admin.upstream.newapiTokenGuide') }}</p>
+        <p class="mt-1.5 flex flex-wrap gap-1.5"><code v-for="scope in newapiScopes" :key="scope" class="rounded-md bg-white/70 px-1.5 py-0.5 font-mono text-[11px] dark:bg-black/20">{{ scope }}</code></p>
+        <p class="mt-1.5 text-gray-500 dark:text-gray-400">{{ t('admin.upstream.newapiTokenGuideWrite') }}</p>
+        <p class="mt-1 text-gray-500 dark:text-gray-400">{{ t('admin.upstream.newapiTokenGuideLegacy') }}</p>
+      </div>
+
       <div v-if="form.auth_mode === 'password'" class="grid gap-3 sm:grid-cols-2">
         <label class="block"><span class="input-label">{{ t('admin.upstream.loginAccount') }}</span><input v-model.trim="form.account" class="input provider-input" autocomplete="username" required :placeholder="form.site_type === 'sub2api' ? 'name@example.com' : t('admin.upstream.newapiAccountPlaceholder')" /></label>
         <label class="block"><span class="input-label">{{ t('admin.upstream.loginPassword') }}</span>
@@ -72,11 +80,11 @@
       </template>
 
       <div v-else class="grid gap-3 sm:grid-cols-2">
-        <label class="block"><span class="input-label">{{ t('admin.upstream.userId') }}</span><input v-model.trim="form.user_id" class="input provider-input" type="text" maxlength="128" required :placeholder="t('admin.upstream.userIdPlaceholder')" /><span class="input-hint block">{{ t('admin.upstream.userIdHint') }}</span></label>
         <label class="block"><span class="input-label">{{ t('admin.upstream.systemAccessToken') }}</span>
           <span class="provider-secret"><input v-model.trim="form.system_access_token" class="input provider-input pr-10" :type="visible.system ? 'text' : 'password'" :required="secretRequired" :placeholder="provider && !secretRequired ? t('admin.upstream.keepSecret') : t('admin.upstream.systemTokenPlaceholder')" autocomplete="off" /><button type="button" :aria-label="visible.system ? t('admin.upstream.hideSecret') : t('admin.upstream.showSecret')" @click="visible.system = !visible.system"><Icon :name="visible.system ? 'eyeOff' : 'eye'" size="sm" /></button></span>
           <span class="input-hint block">{{ t('admin.upstream.systemTokenHint') }}</span>
         </label>
+        <label class="block"><span class="input-label">{{ t('admin.upstream.userId') }} <small class="font-normal text-gray-400">{{ t('admin.upstream.userIdLegacyOnly') }}</small></span><input v-model.trim="form.user_id" class="input provider-input" type="text" maxlength="128" :required="userIdRequired" :placeholder="t('admin.upstream.userIdPlaceholder')" /><span class="input-hint block">{{ t('admin.upstream.userIdHint') }}</span></label>
       </div>
 
       <div class="grid gap-3 pt-1 sm:grid-cols-2">
@@ -126,7 +134,15 @@ const probing = ref(false)
 const saving = ref(false)
 const probeMessage = ref('')
 const probeOk = ref(false)
-const secretRequired = computed(() => !props.provider || props.provider.site_type !== form.site_type || props.provider.auth_mode !== form.auth_mode || props.provider.base_url.replace(/\/$/, '') !== form.base_url.replace(/\/$/, '') || (form.auth_mode === 'password' && props.provider.account !== form.account) || (form.site_type === 'newapi' && form.auth_mode === 'token' && props.provider.user_id !== form.user_id))
+const secretRequired = computed(() => !props.provider || props.provider.site_type !== form.site_type || props.provider.auth_mode !== form.auth_mode || props.provider.base_url.replace(/\/$/, '') !== form.base_url.replace(/\/$/, '') || (form.auth_mode === 'password' && props.provider.account !== form.account) || (form.site_type === 'newapi' && form.auth_mode === 'token' && (props.provider.user_id ?? '') !== form.user_id))
+// New API scopes needed to read the balance, usage and keys and to import a key.
+const newapiScopes = ['profile:read', 'usage:read', 'api_key:read', 'api_key:reveal']
+// A personal access token (nap_…) identifies its account; only a legacy system
+// access token is sent with the user ID. A kept token keeps its saved ID.
+const userIdRequired = computed(() => {
+  const token = form.system_access_token?.trim() ?? ''
+  return token !== '' && !token.startsWith('nap_')
+})
 watch(() => [props.show, props.provider] as const, ([show]) => {
   if (!show) return
   const provider = props.provider

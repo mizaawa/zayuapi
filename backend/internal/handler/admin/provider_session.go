@@ -119,15 +119,7 @@ func (s *providerSession) authenticate(ctx context.Context) error {
 		}
 		return nil
 	case "newapi":
-		if password {
-			return s.newAPILogin(ctx)
-		}
-		token, err := decodeProviderToken(s.secret)
-		if err != nil {
-			return errProviderStoredLogin
-		}
-		s.remote.token, s.remote.tokenType, s.remote.userID = token.AccessToken, token.TokenType, s.record.UserID
-		return nil
+		return newAPISignIn(ctx, &s.remote, s.record, s.secret)
 	default:
 		return infraerrors.BadRequest("PROVIDER_TYPE_UNSUPPORTED", "Unsupported provider type")
 	}
@@ -151,22 +143,6 @@ func (s *providerSession) sub2apiLogin(ctx context.Context) error {
 		tokenType = "Bearer"
 	}
 	s.remote.token, s.remote.tokenType = token, tokenType
-	return nil
-}
-
-func (s *providerSession) newAPILogin(ctx context.Context) error {
-	s.remote.token, s.remote.userID = "", ""
-	login, err := s.remote.request(ctx, http.MethodPost, "/api/user/login", map[string]string{"username": s.record.Account, "password": s.secret})
-	if err != nil {
-		return err
-	}
-	if required, _ := login["require_2fa"].(bool); required {
-		return errProviderTwoFactor
-	}
-	// The session cookie stays in the client's jar. Current releases also
-	// require the signed-in user's ID on every dashboard request.
-	s.remote.token, _ = login["access_token"].(string)
-	s.remote.userID = providerText(login["id"])
 	return nil
 }
 
@@ -246,16 +222,7 @@ func (r *providerRemote) requestData(ctx context.Context, method, path string, b
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
-	if r.token != "" {
-		tokenType := r.tokenType
-		if tokenType == "" {
-			tokenType = "Bearer"
-		}
-		req.Header.Set("Authorization", tokenType+" "+r.token)
-	}
-	if r.userID != "" {
-		req.Header.Set("New-Api-User", r.userID)
-	}
+	r.authorize(req)
 	res, err := r.client.Do(req)
 	if err != nil {
 		return nil, nil, fmt.Errorf("provider request failed: %w", err)
@@ -278,6 +245,9 @@ func (r *providerRemote) requestData(ctx context.Context, method, path string, b
 	message := providerMessage(envelope)
 	if envelope["reason"] == "TURNSTILE_VERIFICATION_FAILED" || envelope["code"] == "TURNSTILE_VERIFICATION_FAILED" || strings.Contains(strings.ToLower(message), "turnstile") {
 		return nil, nil, errProviderTurnstile
+	}
+	if err := newAPIAccessError(envelope); err != nil {
+		return nil, nil, err
 	}
 	// A 403 with a message is an application refusal (for example a group
 	// the user may not bind), not a failed login.

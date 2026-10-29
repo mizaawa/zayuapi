@@ -7,7 +7,14 @@ export default {
     providerPlaceholder: 'Choose a provider',
     providerHint: 'Sites added in Upstream Management',
     providerCount: 'Sites: {count}',
-    providerDisconnected: 'Disconnected',
+    providerState: {
+      connected: 'Connected',
+      sync_failed: 'Sync failed',
+      pending: 'Pending sync',
+      not_authenticated: 'Signed out'
+    },
+    providerNeedsLogin: 'Login no longer works; sign in again in Upstream Management',
+    providerLoggedOut: 'The selected provider’s login no longer works. Sign in again in Upstream Management, then choose it.',
     refreshProviders: 'Refresh sites',
     providerMissing: 'The selected provider was deleted. Choose another one.',
     noProviders: 'No providers yet.',
@@ -64,7 +71,11 @@ export default {
       PROVIDER_KEY_NOT_FOUND: 'The selected API key was deleted upstream. Refresh the keys and choose again.',
       PROVIDER_KEY_UNAVAILABLE: 'The selected API key is disabled, expired or out of quota. Choose another key.',
       PROVIDER_KEY_SECRET_UNAVAILABLE: 'The provider did not return the complete API key. Try again later.',
-      PROVIDER_LOGIN_UNAVAILABLE: 'The saved provider login could not be read. Sign in to the site again in Upstream Management.'
+      PROVIDER_LOGIN_UNAVAILABLE: 'The saved provider login could not be read. Sign in to the site again in Upstream Management.',
+      PROVIDER_LOGIN_FAILED: 'Provider login failed: the saved credential is invalid or expired. Sign in to the site again in Upstream Management.',
+      PROVIDER_TOKEN_EXPIRED: 'The provider access token has expired. Create a new one on the provider site and update it in Upstream Management.',
+      PROVIDER_TOKEN_RETIRED: 'The provider has retired legacy system access tokens. Create a nap_ personal access token under its Security settings → Access tokens and update it in Upstream Management.',
+      PROVIDER_SCOPE_DENIED: 'The provider access token lacks the {scope} permission. Grant it to the token on the provider site and try again.'
     }
   }
 }

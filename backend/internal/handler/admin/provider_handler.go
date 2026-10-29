@@ -40,6 +40,7 @@ type providerRecord struct {
 	Metrics                 providerMetrics `json:"metrics"`
 	UpdatedAt               *time.Time      `json:"updated_at,omitempty"`
 	LastError               string          `json:"last_error,omitempty"`
+	ErrorKind               string          `json:"error_kind,omitempty"`
 	SuppressLowBalanceAlert bool            `json:"suppress_low_balance_alert"`
 	LowBalanceAlert         bool            `json:"low_balance_alert"`
 	AlertSent               bool            `json:"alert_sent,omitempty"`
@@ -135,10 +136,18 @@ func validateProviderInput(input *providerInput, previous *providerRecord) (prov
 	if input.AuthMode == "password" && strings.TrimSpace(input.Account) == "" {
 		return providerRecord{}, "", errors.New("login account is required")
 	}
-	userID := strings.TrimSpace(input.UserID)
+	userID := ""
 	if input.SiteType == "newapi" && input.AuthMode == "token" {
-		if userID == "" || len(userID) > 128 || strings.IndexFunc(userID, unicode.IsControl) >= 0 {
-			return providerRecord{}, "", errors.New("the New API user ID must be a nonempty identifier without control characters (up to 128 bytes)")
+		userID = strings.TrimSpace(input.UserID)
+		if len(userID) > 128 || strings.IndexFunc(userID, unicode.IsControl) >= 0 {
+			return providerRecord{}, "", errors.New("the New API user ID must be an identifier without control characters (up to 128 bytes)")
+		}
+		// A personal access token (nap_…) identifies its account by itself; only
+		// a legacy system access token is sent with the account's user ID. A kept
+		// token still carries the user ID it was saved with.
+		token := strings.TrimSpace(input.SystemAccessToken)
+		if userID == "" && token != "" && !newAPIPersonalToken(token) {
+			return providerRecord{}, "", errors.New("a legacy New API system access token requires the user ID; personal access tokens (nap_…) do not")
 		}
 	}
 	if math.IsNaN(input.ExchangeRate) || math.IsInf(input.ExchangeRate, 0) || input.ExchangeRate < 0 || input.ExchangeRate > 1e6 {
@@ -219,13 +228,14 @@ func (h *AccountHandler) probeRecordContext(ctx context.Context, record *provide
 		var err error
 		secret, err = h.providerEncryptor.Decrypt(record.SecretEncrypted)
 		if err != nil {
-			return errors.New("stored provider login is unavailable")
+			return errProviderStoredLogin
 		}
 	}
-	metrics, effectiveSecret, err := probeProvider(ctx, *record, secret)
+	probe, err := probeProvider(ctx, *record, secret)
 	if err != nil {
 		return err
 	}
+	effectiveSecret := probe.secret
 	if effectiveSecret == "" {
 		effectiveSecret = secret
 	}
@@ -239,12 +249,43 @@ func (h *AccountHandler) probeRecordContext(ctx context.Context, record *provide
 		}
 		record.SecretEncrypted = ciphertext
 	}
-	record.Metrics = metrics
+	if record.SiteType == "newapi" && record.AuthMode == "token" && record.UserID == "" {
+		// Shown in the form; a personal access token never sends it. A
+		// configured ID is kept even when the site reports another or none.
+		record.UserID = probe.userID
+	}
+	record.Metrics = probe.metrics
 	record.Status = "connected"
 	record.LastError = ""
+	record.ErrorKind = ""
 	now := time.Now().UTC()
 	record.UpdatedAt = &now
 	return nil
+}
+
+// markProviderDisconnected records a failed probe. The last observed balance
+// is kept; a remote failure does not invalidate it.
+func markProviderDisconnected(record *providerRecord, err error) {
+	record.Status = "disconnected"
+	record.LastError = providerPublicError(err)
+	record.ErrorKind = providerFailureKind(err)
+}
+
+// providerFailureKind classifies a failed probe for providerRecord.ErrorKind:
+// a login the provider no longer accepts is "auth", a token that signs in but
+// lacks a permission is "scope", and other failures, such as an unreachable
+// site, are "".
+func providerFailureKind(err error) string {
+	var scope *providerScopeError
+	switch {
+	case errors.As(err, &scope):
+		return "scope"
+	case errors.Is(err, errProviderAuthentication), errors.Is(err, errProviderStoredLogin),
+		errors.Is(err, errProviderTwoFactor), errors.Is(err, errProviderTurnstile):
+		return "auth"
+	default:
+		return ""
+	}
 }
 
 // Protect the submitted credential before contacting a remote site. A failed
@@ -378,8 +419,7 @@ func (h *AccountHandler) CreateProvider(c *gin.Context) {
 		return
 	}
 	if err := h.probeRecord(c, &record, secret); err != nil {
-		record.Status = "disconnected"
-		record.LastError = providerPublicError(err)
+		markProviderDisconnected(&record, err)
 	} else {
 		h.updateCachedProviderWarning(c.Request.Context(), &record)
 	}
@@ -429,8 +469,7 @@ func (h *AccountHandler) UpdateProvider(c *gin.Context) {
 			return
 		}
 		if err := h.probeRecord(c, &record, secret); err != nil {
-			record.Status = "disconnected"
-			record.LastError = providerPublicError(err)
+			markProviderDisconnected(&record, err)
 		} else {
 			h.updateCachedProviderWarning(c.Request.Context(), &record)
 		}
@@ -459,8 +498,7 @@ func (h *AccountHandler) RefreshProvider(c *gin.Context) {
 		}
 		probeErr := h.probeRecord(c, &records[index], "")
 		if probeErr != nil {
-			records[index].Status = "disconnected"
-			records[index].LastError = providerPublicError(probeErr)
+			markProviderDisconnected(&records[index], probeErr)
 		} else {
 			h.updateCachedProviderWarning(c.Request.Context(), &records[index])
 		}

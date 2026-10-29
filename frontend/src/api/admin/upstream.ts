@@ -15,7 +15,10 @@ export interface ProviderInput {
   access_token?: string
   refresh_token?: string
   token_type?: string
-  /** New API dashboard account id and system access token. */
+  /**
+   * New API access token: a personal access token (nap_…) or a legacy system
+   * access token. Only a legacy token needs the account's user_id.
+   */
   user_id?: string
   system_access_token?: string
   exchange_rate: number
@@ -82,6 +85,9 @@ export async function refreshProvider(id: string): Promise<Provider> {
   return data
 }
 
+/** The last observed connection of a provider, as the import picker shows it. */
+export type ProviderImportState = 'connected' | 'sync_failed' | 'pending' | 'not_authenticated'
+
 /** A provider offered as an account import source. */
 export interface ProviderOption {
   id: string
@@ -89,6 +95,8 @@ export interface ProviderOption {
   site_type: ProviderKind
   base_url: string
   status: 'connected' | 'disconnected' | ''
+  /** Only not_authenticated keeps the provider from being chosen. */
+  state: ProviderImportState
   last_error?: string
   updated_at?: string
 }

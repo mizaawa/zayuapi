@@ -36,6 +36,10 @@
         <Icon name="exclamationCircle" size="sm" />
         <span>{{ t('admin.providerImport.providerMissing') }}</span>
       </p>
+      <p v-else-if="providerLoggedOut" class="provider-import-note is-error" role="alert">
+        <Icon name="exclamationCircle" size="sm" />
+        <span>{{ t('admin.providerImport.providerLoggedOut') }}</span>
+      </p>
       <p v-else-if="providersLoaded && !providersLoading && !providers.length" class="provider-import-note is-info" data-testid="provider-import-empty">
         <Icon name="infoCircle" size="sm" />
         <span>
@@ -124,6 +128,7 @@ import ProviderKeyCreateDialog from './ProviderKeyCreateDialog.vue'
 import {
   listProviderKeys,
   listProviderOptions,
+  type ProviderImportState,
   type ProviderKey,
   type ProviderKeyCreated,
   type ProviderKeyList,
@@ -134,6 +139,7 @@ import {
   formatProviderSyncedAt,
   providerAccountEndpoint,
   providerErrorText,
+  providerImportErrorMessage,
   providerPlatformLabel,
   type ProviderAccountSelection,
   type ProviderPickerOption
@@ -159,6 +165,7 @@ const providersLoading = ref(false)
 const providersLoaded = ref(false)
 const providersError = ref('')
 const providerVanished = ref(false)
+const providerLoggedOut = ref(false)
 const providerId = ref('')
 const keyList = ref<ProviderKeyList | null>(null)
 const keysLoading = ref(false)
@@ -175,18 +182,25 @@ const selectedKey = computed(() => keyList.value?.keys.find((key) => key.id === 
 const siteTypeLabel = (kind: string) => (kind === 'newapi' ? 'New API' : 'Sub2API')
 const unnamed = (name: string) => name || t('admin.providerImport.unnamedKey')
 
-const providerOptions = computed<ProviderPickerOption[]>(() => providers.value.map((provider) => {
-  const disconnected = provider.status === 'disconnected'
-  return {
-    id: provider.id,
-    name: provider.name,
-    detail: provider.base_url,
-    badge: disconnected
-      ? `${siteTypeLabel(provider.site_type)} · ${t('admin.providerImport.providerDisconnected')}`
-      : siteTypeLabel(provider.site_type),
-    badgeTone: disconnected ? 'warning' : 'honey'
-  }
-}))
+const providerStateTones: Record<ProviderImportState, ProviderPickerOption['badgeTone']> = {
+  connected: 'success',
+  sync_failed: 'warning',
+  pending: 'neutral',
+  not_authenticated: 'warning'
+}
+
+// Keys and their bindings are checked separately; only a saved login that the
+// provider no longer accepts rules out the whole site.
+const selectable = (provider: ProviderOption) => provider.state !== 'not_authenticated'
+
+const providerOptions = computed<ProviderPickerOption[]>(() => providers.value.map((provider) => ({
+  id: provider.id,
+  name: provider.name,
+  detail: selectable(provider) ? provider.base_url : t('admin.providerImport.providerNeedsLogin'),
+  badge: `${siteTypeLabel(provider.site_type)} · ${t(`admin.providerImport.providerState.${provider.state}`)}`,
+  badgeTone: providerStateTones[provider.state],
+  available: selectable(provider)
+})))
 
 function keyStatusLabel(key: ProviderKey): string {
   if (key.available) return t('admin.providerImport.keyStatus.available')
@@ -267,11 +281,16 @@ async function loadProviders() {
     if (request !== providerRequest) return
     providers.value = list
     providersLoaded.value = true
-    if (providerId.value && !list.some((provider) => provider.id === providerId.value)) {
+    const current = list.find((provider) => provider.id === providerId.value)
+    if (providerId.value && !current) {
       providerVanished.value = true
       providerId.value = ''
       resetKeys()
-    } else if (!providerId.value && list.length === 1) {
+    } else if (current && !selectable(current)) {
+      providerLoggedOut.value = true
+      providerId.value = ''
+      resetKeys()
+    } else if (!providerId.value && list.length === 1 && selectable(list[0])) {
       // A single provider is the obvious choice.
       chooseProvider(list[0].id)
     }
@@ -297,7 +316,7 @@ async function loadKeys(preferredKeyId = '') {
   } catch (error) {
     if (request !== keyRequest) return
     keyList.value = null
-    keysError.value = providerErrorText(error, t('admin.providerImport.loadKeysFailed'))
+    keysError.value = providerImportErrorMessage(error, t) || providerErrorText(error, t('admin.providerImport.loadKeysFailed'))
   } finally {
     if (request === keyRequest) keysLoading.value = false
   }
@@ -307,6 +326,7 @@ function chooseProvider(id: string) {
   if (id === providerId.value) return
   providerId.value = id
   providerVanished.value = false
+  providerLoggedOut.value = false
   notice.value = null
   resetKeys()
   void loadKeys()
