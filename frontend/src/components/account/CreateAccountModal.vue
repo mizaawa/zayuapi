@@ -3,13 +3,14 @@
     :show="show"
     :title="t('admin.accounts.createAccount')"
     width="wide"
-    @close="handleClose"
+    @close="requestClose"
   >
     <!-- API Key account configuration -->
     <form
       id="create-account-form"
       @submit.prevent="handleSubmit"
       class="space-y-5"
+      autocomplete="off"
     >
       <div>
         <label class="input-label">{{ t('admin.accounts.accountName') }}</label>
@@ -18,6 +19,7 @@
           type="text"
           required
           class="input"
+          autocomplete="off"
           :placeholder="t('admin.accounts.enterAccountName')"
           data-tour="account-form-name"
         />
@@ -151,6 +153,10 @@
             type="password"
             required
             class="input font-mono"
+            autocomplete="new-password"
+            data-1p-ignore
+            data-lpignore="true"
+            data-bwignore="true"
             placeholder="sk-..."
           />
           <p class="input-hint">{{ t('admin.accounts.upstream.apiKeyHint') }}</p>
@@ -301,11 +307,18 @@
         </div>
         <div v-if="importSource === 'api'">
           <label class="input-label">{{ t('admin.accounts.apiKeyRequired') }}</label>
+          <!-- Without these, browser password managers treat the key as a
+               login password and refill a saved "username" into another
+               field of this form (e.g. the concurrency box). -->
           <input
             v-model="apiKeyValue"
             type="password"
             required
             class="input font-mono"
+            autocomplete="new-password"
+            data-1p-ignore
+            data-lpignore="true"
+            data-bwignore="true"
             :placeholder="
               form.platform === 'openai'
                 ? 'sk-proj-...'
@@ -1039,6 +1052,7 @@
           <label class="input-label">{{ t('admin.accounts.concurrency') }}</label>
           <input v-model.number="form.concurrency" type="number" min="1" step="1" class="input"
             data-testid="account-concurrency-input"
+            autocomplete="off" data-1p-ignore data-lpignore="true" data-bwignore="true"
             :placeholder="t('admin.accounts.concurrencyUnlimitedPlaceholder')"
             @input="form.concurrency = normalizeConcurrencyInput(form.concurrency)" />
           <p class="input-hint">{{ t('admin.accounts.concurrencyUnlimitedHint') }}</p>
@@ -1046,6 +1060,7 @@
         <div>
           <label class="input-label">{{ t('admin.accounts.loadFactor') }}</label>
           <input v-model.number="form.load_factor" type="number" min="1"
+            autocomplete="off"
             class="input" :placeholder="form.concurrency ? String(form.concurrency) : '1'"
             @input="form.load_factor = (form.load_factor &amp;&amp; form.load_factor >= 1) ? form.load_factor : null" />
           <p class="input-hint">{{ t('admin.accounts.loadFactorHint') }}</p>
@@ -1057,13 +1072,14 @@
             type="number"
             min="1"
             class="input"
+            autocomplete="off"
             data-tour="account-form-priority"
           />
           <p class="input-hint">{{ t('admin.accounts.priorityHint') }}</p>
         </div>
         <div>
           <label class="input-label">{{ t('admin.accounts.billingRateMultiplier') }}</label>
-          <input v-model.number="form.rate_multiplier" type="number" min="0" step="0.001" class="input" />
+          <input v-model.number="form.rate_multiplier" type="number" min="0" step="0.001" class="input" autocomplete="off" />
           <p class="input-hint">{{ t('admin.accounts.billingRateMultiplierHint') }}</p>
         </div>
       </div>
@@ -1108,17 +1124,19 @@
         v-if="form.platform === 'openai'"
         class="border-t border-gray-200 pt-4 dark:border-dark-600"
       >
-        <div class="flex items-center justify-between">
-          <div>
+        <!-- Phones stack the select under its description; the description
+             holds a long config key that must wrap instead of widening the dialog. -->
+        <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+          <div class="min-w-0">
             <label class="input-label mb-0">{{ t('admin.accounts.openai.wsMode') }}</label>
-            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+            <p class="mt-1 break-words text-xs text-gray-500 dark:text-gray-400">
               {{ t('admin.accounts.openai.wsModeDesc') }}
             </p>
-            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+            <p class="mt-1 break-words text-xs text-gray-500 dark:text-gray-400">
               {{ t(openAIWSModeConcurrencyHintKey) }}
             </p>
           </div>
-          <div class="w-52">
+          <div class="w-full sm:w-52 sm:flex-shrink-0">
             <Select v-model="openaiResponsesWebSocketV2Mode" :options="openAIWSModeOptions" />
           </div>
         </div>
@@ -1158,14 +1176,14 @@
         v-if="form.platform === 'anthropic'"
         class="border-t border-gray-200 pt-4 dark:border-dark-600"
       >
-        <div class="flex items-center justify-between gap-4">
-          <div>
+        <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+          <div class="min-w-0">
             <label class="input-label mb-0">{{ t('admin.accounts.anthropic.apiKeyAuthScheme') }}</label>
-            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+            <p class="mt-1 break-words text-xs text-gray-500 dark:text-gray-400">
               {{ t('admin.accounts.anthropic.apiKeyAuthSchemeDesc') }}
             </p>
           </div>
-          <select v-model="anthropicAPIKeyAuthScheme" class="input w-52 text-sm">
+          <select v-model="anthropicAPIKeyAuthScheme" class="input w-full text-sm sm:w-52 sm:flex-shrink-0">
             <option value="x_api_key">{{ t('admin.accounts.anthropic.apiKeyAuthSchemeXApiKey') }}</option>
             <option value="authorization_bearer">{{ t('admin.accounts.anthropic.apiKeyAuthSchemeBearer') }}</option>
           </select>
@@ -1230,14 +1248,14 @@
         v-if="form.platform === 'openai'"
         class="border-t border-gray-200 pt-4 dark:border-dark-600 space-y-4"
       >
-        <div class="flex items-center justify-between">
-          <div>
+        <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+          <div class="min-w-0">
             <label class="input-label mb-0">{{ t('admin.accounts.openai.compactMode') }}</label>
-            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+            <p class="mt-1 break-words text-xs text-gray-500 dark:text-gray-400">
               {{ t('admin.accounts.openai.compactModeDesc') }}
             </p>
           </div>
-          <div class="w-44">
+          <div class="w-full sm:w-44 sm:flex-shrink-0">
             <Select v-model="openAICompactMode" :options="openAICompactModeOptions" />
           </div>
         </div>
@@ -1269,14 +1287,14 @@
         v-if="form.platform === 'openai'"
         class="space-y-4 border-t border-gray-200 pt-4 dark:border-dark-600"
       >
-        <div class="flex items-center justify-between gap-4">
-          <div>
+        <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+          <div class="min-w-0">
             <label class="input-label mb-0">{{ t('admin.accounts.openai.responsesMode') }}</label>
-            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+            <p class="mt-1 break-words text-xs text-gray-500 dark:text-gray-400">
               {{ t('admin.accounts.openai.responsesModeDesc') }}
             </p>
           </div>
-          <div class="w-56">
+          <div class="w-full sm:w-56 sm:flex-shrink-0">
             <Select
               v-model="openAIResponsesMode"
               :options="openAIResponsesModeOptions"
@@ -1415,8 +1433,17 @@
 
     <template #footer>
       <div class="flex justify-end gap-3">
-        <button @click="handleClose" type="button" class="btn btn-secondary">{{ t('common.cancel') }}</button>
-        <button type="submit" form="create-account-form" :disabled="submitting" class="btn btn-primary" data-tour="account-form-submit">
+        <button @click="requestClose" type="button" class="btn btn-secondary" :disabled="submitting">{{ t('common.cancel') }}</button>
+        <button
+          type="submit"
+          form="create-account-form"
+          :disabled="submitting"
+          :aria-busy="submitting"
+          class="btn btn-primary"
+          data-testid="account-create-submit"
+          data-tour="account-form-submit"
+        >
+          <Icon v-if="submitting" name="refresh" size="sm" class="animate-spin" />
           {{ submitting ? t('admin.accounts.creating') : t('common.create') }}
         </button>
       </div>
@@ -2273,6 +2300,13 @@ const handleClose = () => {
   emit('close')
 }
 
+// Cancel, the close button and Escape wait for a running create: closing
+// mid-request and reopening the form is how duplicate accounts got made.
+const requestClose = () => {
+  if (submitting.value) return
+  handleClose()
+}
+
 const buildOpenAIExtra = (): Record<string, unknown> | undefined => {
   if (form.platform !== 'openai') return undefined
   const extra: Record<string, unknown> = {
@@ -2358,8 +2392,20 @@ const normalizePoolModeRetryCount = (value: number) => {
   return normalized
 }
 
+// The button stays busy for the whole submit, including the mixed-channel
+// pre-check that runs before the create request, so a second click cannot
+// start another create.
 const handleSubmit = async () => {
   if (submitting.value) return
+  submitting.value = true
+  try {
+    await submitForm()
+  } finally {
+    submitting.value = false
+  }
+}
+
+const submitForm = async () => {
   if (!form.name.trim()) {
     appStore.showError(t('admin.accounts.pleaseEnterAccountName'))
     return

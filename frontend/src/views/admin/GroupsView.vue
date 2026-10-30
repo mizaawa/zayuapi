@@ -364,7 +364,11 @@
                 :disabled="action.disabled?.(row)"
                 @click="action.run(row)"
               >
-                <Icon :name="action.icon" size="sm" />
+                <Icon
+                  :name="action.busy?.(row) ? 'refresh' : action.icon"
+                  size="sm"
+                  :class="{ 'animate-spin': action.busy?.(row) }"
+                />
                 <span class="text-xs">{{ action.label(row) }}</span>
               </button>
             </div>
@@ -484,7 +488,11 @@
                   :disabled="action.disabled?.(row)"
                   @click="action.run(row)"
                 >
-                  <Icon :name="action.icon" size="sm" />
+                  <Icon
+                    :name="action.busy?.(row) ? 'refresh' : action.icon"
+                    size="sm"
+                    :class="{ 'animate-spin': action.busy?.(row) }"
+                  />
                   <span class="text-xs">{{ action.label(row) }}</span>
                 </button>
               </div>
@@ -519,7 +527,7 @@
       :show="showCreateModal"
       :title="t('admin.groups.createGroup')"
       width="normal"
-      @close="closeCreateModal"
+      @close="requestCloseCreateModal"
     >
       <form
         id="create-group-form"
@@ -2147,9 +2155,10 @@
       <template #footer>
         <div class="flex justify-end gap-3 pt-4">
           <button
-            @click="closeCreateModal"
+            @click="requestCloseCreateModal"
             type="button"
             class="btn btn-secondary"
+            :disabled="submitting"
           >
             {{ t("common.cancel") }}
           </button>
@@ -3863,6 +3872,7 @@
       :confirm-text="t('common.delete')"
       :cancel-text="t('common.cancel')"
       :danger="true"
+      :loading="deletingGroupBusy"
       @confirm="confirmDelete"
       @cancel="showDeleteDialog = false"
     />
@@ -4916,6 +4926,7 @@ const submitting = ref(false);
 const sortSubmitting = ref(false);
 const editingGroup = ref<AdminGroup | null>(null);
 const deletingGroup = ref<AdminGroup | null>(null);
+const deletingGroupBusy = ref(false);
 const duplicatingGroupIds = reactive(new Set<number>());
 const showRateMultipliersModal = ref(false);
 const rateMultipliersGroup = ref<AdminGroup | null>(null);
@@ -5832,6 +5843,13 @@ const openCreateModal = () => {
   loadModelsListCandidates("create", 0, createForm.platform);
 };
 
+// Cancel, the close button and Escape wait for a running create; closing
+// mid-request and submitting again is how duplicate groups got made.
+const requestCloseCreateModal = () => {
+  if (submitting.value) return;
+  closeCreateModal();
+};
+
 const closeCreateModal = () => {
   showCreateModal.value = false;
   createModelRoutingRules.value.forEach((rule) => {
@@ -5932,6 +5950,7 @@ const validateProfitControlForm = (form: ProfitControlFormState): boolean => {
 };
 
 const handleCreateGroup = async () => {
+  if (submitting.value) return;
   if (!createForm.name.trim()) {
     appStore.showError(t("admin.groups.nameRequired"));
     return;
@@ -6491,15 +6510,20 @@ const previewCompositeRoute = async () => {
 };
 
 const handleDelete = (group: AdminGroup) => {
+  if (deletingGroupBusy.value) return;
   deletingGroup.value = group;
   showDeleteDialog.value = true;
 };
 
+// The confirm button spins and stays disabled until the delete settles, so a
+// repeated click cannot send a second request for the same group.
 const confirmDelete = async () => {
-  if (!deletingGroup.value) return;
+  const target = deletingGroup.value;
+  if (!target || deletingGroupBusy.value) return;
 
+  deletingGroupBusy.value = true;
   try {
-    await adminAPI.groups.delete(deletingGroup.value.id);
+    await adminAPI.groups.delete(target.id);
     appStore.showSuccess(t("admin.groups.groupDeleted"));
     showDeleteDialog.value = false;
     deletingGroup.value = null;
@@ -6509,6 +6533,8 @@ const confirmDelete = async () => {
       error.response?.data?.detail || t("admin.groups.failedToDelete"),
     );
     console.error("Error deleting group:", error);
+  } finally {
+    deletingGroupBusy.value = false;
   }
 };
 
@@ -6705,6 +6731,8 @@ type GroupRowAction = {
   label: (group: AdminGroup) => string;
   title?: (group: AdminGroup) => string;
   disabled?: (group: AdminGroup) => boolean;
+  /** Shows a spinner in place of the icon while the action runs. */
+  busy?: (group: AdminGroup) => boolean;
   testId?: string;
   run: (group: AdminGroup) => void;
 };
@@ -6729,6 +6757,7 @@ const groupRowActions: GroupRowAction[] = [
     label: duplicateActionLabel,
     title: duplicateActionLabel,
     disabled: (group) => duplicatingGroupIds.has(group.id),
+    busy: (group) => duplicatingGroupIds.has(group.id),
     testId: "group-duplicate",
     run: (group) => void handleDuplicate(group),
   },
@@ -6751,6 +6780,9 @@ const groupRowActions: GroupRowAction[] = [
     icon: "trash",
     tone: "danger",
     label: () => t("common.delete"),
+    disabled: (group) => deletingGroupBusy.value && deletingGroup.value?.id === group.id,
+    busy: (group) => deletingGroupBusy.value && deletingGroup.value?.id === group.id,
+    testId: "group-delete",
     run: (group) => handleDelete(group),
   },
 ];

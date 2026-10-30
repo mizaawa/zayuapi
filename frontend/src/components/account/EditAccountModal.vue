@@ -690,6 +690,10 @@
             v-model="editApiKey"
             type="password"
             class="input font-mono"
+            autocomplete="new-password"
+            data-1p-ignore
+            data-lpignore="true"
+            data-bwignore="true"
             placeholder="sk-..."
           />
           <p class="input-hint">{{ t('admin.accounts.leaveEmptyToKeep') }}</p>
@@ -930,6 +934,10 @@
               v-model="editBedrockSecretAccessKey"
               type="password"
               class="input font-mono"
+              autocomplete="new-password"
+              data-1p-ignore
+              data-lpignore="true"
+              data-bwignore="true"
               :placeholder="t('admin.accounts.bedrockSecretKeyLeaveEmpty')"
             />
             <p class="input-hint">{{ t('admin.accounts.bedrockSecretKeyLeaveEmpty') }}</p>
@@ -940,6 +948,10 @@
               v-model="editBedrockSessionToken"
               type="password"
               class="input font-mono"
+              autocomplete="new-password"
+              data-1p-ignore
+              data-lpignore="true"
+              data-bwignore="true"
               :placeholder="t('admin.accounts.bedrockSecretKeyLeaveEmpty')"
             />
             <p class="input-hint">{{ t('admin.accounts.bedrockSessionTokenHint') }}</p>
@@ -953,6 +965,10 @@
             v-model="editBedrockApiKeyValue"
             type="password"
             class="input font-mono"
+            autocomplete="new-password"
+            data-1p-ignore
+            data-lpignore="true"
+            data-bwignore="true"
             :placeholder="t('admin.accounts.bedrockApiKeyLeaveEmpty')"
           />
           <p class="input-hint">{{ t('admin.accounts.bedrockApiKeyLeaveEmpty') }}</p>
@@ -1426,6 +1442,7 @@
           <label class="input-label">{{ t('admin.accounts.concurrency') }}</label>
           <input v-model.number="form.concurrency" type="number" min="1" step="1" class="input"
             data-testid="account-concurrency-input"
+            autocomplete="off" data-1p-ignore data-lpignore="true" data-bwignore="true"
             :placeholder="t('admin.accounts.concurrencyUnlimitedPlaceholder')"
             @input="form.concurrency = normalizeConcurrencyInput(form.concurrency)" />
           <p class="input-hint">{{ t('admin.accounts.concurrencyUnlimitedHint') }}</p>
@@ -1621,17 +1638,19 @@
         v-if="account?.platform === 'openai' && (account?.type === 'oauth' || account?.type === 'setup-token' || account?.type === 'apikey')"
         class="border-t border-gray-200 pt-4 dark:border-dark-600"
       >
-        <div class="flex items-center justify-between">
-          <div>
+        <!-- Phones stack the select under its description; the description
+             holds a long config key that must wrap instead of widening the dialog. -->
+        <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+          <div class="min-w-0">
             <label class="input-label mb-0">{{ t('admin.accounts.openai.wsMode') }}</label>
-            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+            <p class="mt-1 break-words text-xs text-gray-500 dark:text-gray-400">
               {{ t('admin.accounts.openai.wsModeDesc') }}
             </p>
-            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+            <p class="mt-1 break-words text-xs text-gray-500 dark:text-gray-400">
               {{ t(openAIWSModeConcurrencyHintKey) }}
             </p>
           </div>
-          <div class="w-52">
+          <div class="w-full sm:w-52 sm:flex-shrink-0">
             <Select v-model="openaiResponsesWebSocketV2Mode" data-testid="edit-openai-ws-mode-select" :options="openAIWSModeOptions" />
           </div>
         </div>
@@ -1642,14 +1661,14 @@
         v-if="account?.platform === 'openai' && account?.type === 'apikey'"
         class="space-y-4 border-t border-gray-200 pt-4 dark:border-dark-600"
       >
-        <div class="flex items-center justify-between gap-4">
-          <div>
+        <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+          <div class="min-w-0">
             <label class="input-label mb-0">{{ t('admin.accounts.openai.responsesMode') }}</label>
-            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+            <p class="mt-1 break-words text-xs text-gray-500 dark:text-gray-400">
               {{ t('admin.accounts.openai.responsesModeDesc') }}
             </p>
           </div>
-          <div class="w-56">
+          <div class="w-full sm:w-56 sm:flex-shrink-0">
             <Select
               v-model="openAIResponsesMode"
               :options="openAIResponsesModeOptions"
@@ -1751,14 +1770,14 @@
         v-if="account?.platform === 'anthropic' && account?.type === 'apikey'"
         class="border-t border-gray-200 pt-4 dark:border-dark-600"
       >
-        <div class="flex items-center justify-between gap-4">
-          <div>
+        <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+          <div class="min-w-0">
             <label class="input-label mb-0">{{ t('admin.accounts.anthropic.apiKeyAuthScheme') }}</label>
-            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+            <p class="mt-1 break-words text-xs text-gray-500 dark:text-gray-400">
               {{ t('admin.accounts.anthropic.apiKeyAuthSchemeDesc') }}
             </p>
           </div>
-          <select v-model="anthropicAPIKeyAuthScheme" class="input w-52 text-sm">
+          <select v-model="anthropicAPIKeyAuthScheme" class="input w-full text-sm sm:w-52 sm:flex-shrink-0">
             <option value="x_api_key">{{ t('admin.accounts.anthropic.apiKeyAuthSchemeXApiKey') }}</option>
             <option value="authorization_bearer">{{ t('admin.accounts.anthropic.apiKeyAuthSchemeBearer') }}</option>
           </select>
@@ -1926,14 +1945,14 @@
         v-if="account?.platform === 'openai' && account?.type === 'oauth' && !isSparkShadow"
         class="border-t border-gray-200 pt-4 dark:border-dark-600"
       >
-        <div class="flex items-center justify-between gap-4">
+        <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
           <div class="min-w-0">
             <label class="input-label mb-0">{{ t('admin.accounts.openai.planType') }}</label>
-            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+            <p class="mt-1 break-words text-xs text-gray-500 dark:text-gray-400">
               {{ t('admin.accounts.openai.planTypeDesc') }}
             </p>
           </div>
-          <div class="w-44 flex-shrink-0">
+          <div class="w-full sm:w-44 sm:flex-shrink-0">
             <Select v-model="editPlanType" :options="planTypeOptions" />
           </div>
         </div>
@@ -1943,14 +1962,14 @@
         v-if="account?.platform === 'openai' && (account?.type === 'oauth' || account?.type === 'setup-token' || account?.type === 'apikey')"
         class="border-t border-gray-200 pt-4 dark:border-dark-600 space-y-4"
       >
-        <div class="flex items-center justify-between">
-          <div>
+        <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+          <div class="min-w-0">
             <label class="input-label mb-0">{{ t('admin.accounts.openai.compactMode') }}</label>
-            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+            <p class="mt-1 break-words text-xs text-gray-500 dark:text-gray-400">
               {{ t('admin.accounts.openai.compactModeDesc') }}
             </p>
           </div>
-          <div class="w-44">
+          <div class="w-full sm:w-44 sm:flex-shrink-0">
             <Select v-model="openAICompactMode" :options="openAICompactModeOptions" />
           </div>
         </div>

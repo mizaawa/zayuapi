@@ -2,9 +2,12 @@
   <AppLayout>
     <TablePageLayout>
       <template #filters>
-        <div class="flex flex-wrap items-center gap-3">
+        <!-- Phones: the actions come first (square refresh button, the create
+             button fills the rest of the row), then search and the status
+             filter side by side. From sm up: one wrapping row, actions right. -->
+        <div class="grid grid-cols-2 gap-3 sm:flex sm:flex-wrap sm:items-center">
           <!-- Left: Search + Filters -->
-          <div class="flex-1 sm:max-w-64">
+          <div class="min-w-0 sm:min-w-[10rem] sm:max-w-64 sm:flex-1">
             <input
               v-model="searchQuery"
               type="text"
@@ -16,22 +19,30 @@
           <Select
             v-model="filters.status"
             :options="statusFilterOptions"
-            class="w-40"
+            class="min-w-0 sm:w-40"
             @change="handleStatusChange"
           />
 
           <!-- Right: Action buttons -->
-          <div class="flex flex-1 flex-wrap items-center justify-end gap-2">
+          <div
+            class="col-span-2 flex items-center gap-2 max-sm:order-first sm:ml-auto sm:flex-none"
+            data-testid="announcement-toolbar-actions"
+          >
             <button
               @click="loadAnnouncements"
               :disabled="loading"
-              class="btn btn-secondary"
+              class="btn btn-secondary max-sm:h-11 max-sm:w-11 max-sm:shrink-0 max-sm:p-0"
               :title="t('common.refresh')"
+              :aria-label="t('common.refresh')"
             >
               <Icon name="refresh" size="md" :class="loading ? 'animate-spin' : ''" />
             </button>
-            <button @click="openCreateDialog" class="btn btn-primary">
-              <Icon name="plus" size="md" class="mr-1" />
+            <button
+              @click="openCreateDialog"
+              class="btn btn-primary whitespace-nowrap max-sm:h-11 max-sm:min-w-0 max-sm:flex-1"
+              data-testid="announcement-create-open"
+            >
+              <Icon name="plus" size="md" />
               {{ t('admin.announcements.createAnnouncement') }}
             </button>
           </div>

@@ -22,9 +22,16 @@
               <Icon name="clock" size="sm" class="text-orange-500" />
               {{ t('admin.scheduledTests.schedule') }}
             </button>
-            <button v-if="canDuplicate" @click="$emit('duplicate', account); $emit('close')" class="flex w-full items-center gap-2 px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-dark-700">
-              <Icon name="copy" size="sm" class="text-sky-500" />
-              {{ t('admin.accounts.duplicateAccount') }}
+            <button
+              v-if="canDuplicate"
+              type="button"
+              :disabled="duplicating"
+              data-testid="account-menu-duplicate"
+              @click="$emit('duplicate', account); $emit('close')"
+              class="flex w-full items-center gap-2 px-4 py-2 text-sm hover:bg-gray-100 disabled:cursor-wait disabled:opacity-60 disabled:hover:bg-transparent dark:hover:bg-dark-700"
+            >
+              <Icon :name="duplicating ? 'refresh' : 'copy'" size="sm" :class="duplicating ? 'animate-spin text-sky-500' : 'text-sky-500'" />
+              {{ duplicating ? t('admin.accounts.duplicatingShort') : t('admin.accounts.duplicateAccount') }}
             </button>
             <!-- 影子账号不持凭据:刷新 token 对其无效(后端拒绝),故隐藏(外审 G4)。 -->
             <template v-if="(account.type === 'oauth' || account.type === 'setup-token') && !isShadow">
@@ -59,7 +66,13 @@ import { useI18n } from 'vue-i18n'
 import { Icon } from '@/components/icons'
 import type { Account } from '@/types'
 
-const props = defineProps<{ show: boolean; account: Account | null; position: { top: number; left: number } | null }>()
+const props = defineProps<{
+  show: boolean
+  account: Account | null
+  position: { top: number; left: number } | null
+  /** A copy of this account is still being created. */
+  duplicating?: boolean
+}>()
 const emit = defineEmits(['close', 'test', 'stats', 'schedule', 'duplicate', 'refresh-token', 'recover-state', 'reset-quota', 'set-privacy'])
 const { t } = useI18n()
 const canDuplicate = computed(() => {

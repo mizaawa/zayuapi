@@ -51,7 +51,7 @@ vi.mock('@/api/admin', () => ({
 }))
 
 vi.mock('@/stores/app', () => ({
-  useAppStore: () => ({ showError, showSuccess, showInfo: vi.fn() })
+  useAppStore: () => ({ showError, showSuccess, showInfo: vi.fn(), showToast: vi.fn(() => 'toast-pending'), hideToast: vi.fn() })
 }))
 
 vi.mock('@/stores/auth', () => ({

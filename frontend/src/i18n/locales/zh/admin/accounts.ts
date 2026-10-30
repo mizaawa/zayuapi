@@ -550,6 +550,8 @@ export default {
       duplicateAccount: '复制账号',
       duplicateSuccess: '账号已复制为「{name}」，已暂停调度，请确认凭据后再启用',
       duplicateFailed: '复制账号失败',
+      duplicatingAccount: '正在复制账号「{name}」…',
+      duplicatingShort: '复制中…',
       resetStatus: '重置状态',
       statusReset: '账号状态已重置',
       failedToResetStatus: '重置账号状态失败',

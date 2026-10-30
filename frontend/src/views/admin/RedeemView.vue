@@ -2,9 +2,12 @@
   <AppLayout>
     <TablePageLayout>
       <template #filters>
-        <div class="flex flex-wrap items-center gap-3">
+        <!-- Phones: the actions come first (square icon buttons, the generate
+             button fills the rest of the row), then search, then both filters
+             side by side. From sm up: one wrapping row, actions on the right. -->
+        <div class="grid grid-cols-2 gap-3 sm:flex sm:flex-wrap sm:items-center">
           <!-- Left: Search + Filters -->
-          <div class="flex-1 sm:max-w-64">
+          <div class="col-span-2 sm:min-w-[10rem] sm:max-w-64 sm:flex-1">
             <input
               v-model="searchQuery"
               type="text"
@@ -16,39 +19,56 @@
           <Select
             v-model="filters.type"
             :options="filterTypeOptions"
-            class="w-36"
+            class="min-w-0 sm:w-36"
             @change="loadCodes"
           />
           <Select
             v-model="filters.status"
             :options="filterStatusOptions"
-            class="w-36"
+            class="min-w-0 sm:w-36"
             @change="loadCodes"
           />
 
           <!-- Right: Action buttons -->
-          <div class="flex flex-1 flex-wrap items-center justify-end gap-2">
+          <div
+            class="col-span-2 flex items-center gap-2 max-sm:order-first sm:ml-auto sm:flex-none"
+            data-test="redeem-toolbar-actions"
+          >
             <button
               @click="loadCodes"
               :disabled="loading"
-              class="btn btn-secondary"
+              class="btn btn-secondary max-sm:h-11 max-sm:w-11 max-sm:shrink-0 max-sm:p-0"
               :title="t('common.refresh')"
+              :aria-label="t('common.refresh')"
             >
               <Icon name="refresh" size="md" :class="loading ? 'animate-spin' : ''" />
             </button>
-            <button @click="handleExportCodes" class="btn btn-secondary">
-              {{ t('admin.redeem.exportCsv') }}
+            <button
+              @click="handleExportCodes"
+              class="btn btn-secondary whitespace-nowrap max-sm:h-11 max-sm:w-11 max-sm:shrink-0 max-sm:p-0"
+              :title="t('admin.redeem.exportCsv')"
+              :aria-label="t('admin.redeem.exportCsv')"
+            >
+              <Icon name="download" size="md" class="sm:hidden" />
+              <span class="max-sm:hidden">{{ t('admin.redeem.exportCsv') }}</span>
             </button>
             <button
               data-test="batch-update-open"
               @click="openBatchUpdateDialog"
               :disabled="selectedCount === 0 || batchUpdating"
-              class="btn btn-secondary"
+              class="btn btn-secondary whitespace-nowrap max-sm:h-11 max-sm:w-11 max-sm:shrink-0 max-sm:p-0"
+              :title="t('admin.redeem.batchUpdate')"
+              :aria-label="t('admin.redeem.batchUpdate')"
             >
-              <Icon name="edit" size="md" class="mr-2" />
-              {{ t('admin.redeem.batchUpdate') }}
+              <Icon name="edit" size="md" />
+              <span class="max-sm:hidden">{{ t('admin.redeem.batchUpdate') }}</span>
             </button>
-            <button data-test="generate-open" @click="showGenerateDialog = true" class="btn btn-primary">
+            <button
+              data-test="generate-open"
+              @click="showGenerateDialog = true"
+              class="btn btn-primary whitespace-nowrap max-sm:h-11 max-sm:min-w-0 max-sm:flex-1"
+            >
+              <Icon name="plus" size="md" />
               {{ t('admin.redeem.generateCodes') }}
             </button>
           </div>

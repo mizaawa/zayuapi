@@ -175,6 +175,7 @@
           :total-results="pagination.total"
           :selecting-all="selectingAllResults"
           :all-results-selected="allResultsSelected"
+          :busy-action="bulkBusyAction"
           @delete="handleBulkDelete"
           @reset-status="handleBulkResetStatus"
           @refresh-token="handleBulkRefreshToken"
@@ -589,7 +590,7 @@
     <AccountTestModal :show="showTest" :account="testingAcc" @close="closeTestModal" />
     <AccountStatsModal :show="showStats" :account="statsAcc" @close="closeStatsModal" />
     <ScheduledTestsPanel :show="showSchedulePanel" :account-id="scheduleAcc?.id ?? null" :model-options="scheduleModelOptions" @close="closeSchedulePanel" />
-    <AccountActionMenu :show="menu.show" :account="menu.acc" :position="menu.pos" @close="menu.show = false" @test="handleTest" @stats="handleViewStats" @schedule="handleSchedule" @duplicate="handleDuplicateAccount" @refresh-token="handleRefresh" @recover-state="handleRecoverState" @reset-quota="handleResetQuota" @set-privacy="handleSetPrivacy" />
+    <AccountActionMenu :show="menu.show" :account="menu.acc" :position="menu.pos" :duplicating="!!menu.acc && duplicatingAccountIDs.has(menu.acc.id)" @close="menu.show = false" @test="handleTest" @stats="handleViewStats" @schedule="handleSchedule" @duplicate="handleDuplicateAccount" @refresh-token="handleRefresh" @recover-state="handleRecoverState" @reset-quota="handleResetQuota" @set-privacy="handleSetPrivacy" />
     <ImportDataModal :show="showImportData" @close="showImportData = false" @imported="handleDataImported" />
     <BulkEditAccountModal
       :show="showBulkEdit"
@@ -603,7 +604,7 @@
       @updated="handleBulkUpdated"
     />
     <TempUnschedStatusModal :show="showTempUnsched" :account="tempUnschedAcc" @close="showTempUnsched = false" @reset="handleTempUnschedReset" />
-    <ConfirmDialog :show="showDeleteDialog" :title="t('admin.accounts.deleteAccount')" :message="t('admin.accounts.deleteConfirm', { name: deletingAcc?.name })" :confirm-text="t('common.delete')" :cancel-text="t('common.cancel')" :danger="true" @confirm="confirmDelete" @cancel="showDeleteDialog = false" />
+    <ConfirmDialog :show="showDeleteDialog" :title="t('admin.accounts.deleteAccount')" :message="t('admin.accounts.deleteConfirm', { name: deletingAcc?.name })" :confirm-text="t('common.delete')" :cancel-text="t('common.cancel')" :danger="true" :loading="deletingAccount" @confirm="confirmDelete" @cancel="showDeleteDialog = false" />
     <ConfirmDialog :show="showExportDataDialog" :title="t('admin.accounts.dataExport')" :message="t('admin.accounts.dataExportConfirmMessage')" :confirm-text="t('admin.accounts.dataExportConfirm')" :cancel-text="t('common.cancel')" @confirm="handleExportData" @cancel="showExportDataDialog = false">
       <label class="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
         <input type="checkbox" class="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500" v-model="includeProxyOnExport" />
@@ -639,7 +640,7 @@ import AccountTableActions from '@/components/admin/account/AccountTableActions.
 import AccountSourceBadge from '@/components/account/AccountSourceBadge.vue'
 import GroupBadge from '@/components/common/GroupBadge.vue'
 import AccountTableFilters from '@/components/admin/account/AccountTableFilters.vue'
-import AccountBulkActionsBar from '@/components/admin/account/AccountBulkActionsBar.vue'
+import AccountBulkActionsBar, { type AccountBulkActionKey } from '@/components/admin/account/AccountBulkActionsBar.vue'
 import AccountActionMenu from '@/components/admin/account/AccountActionMenu.vue'
 import ImportDataModal from '@/components/admin/account/ImportDataModal.vue'
 import AccountTestModal from '@/components/admin/account/AccountTestModal.vue'
@@ -723,6 +724,10 @@ const showBulkEdit = ref(false)
 const bulkEditTarget = ref<AccountBulkEditTarget | null>(null)
 const showTempUnsched = ref(false)
 const showDeleteDialog = ref(false)
+// Delete / bulk operations in flight: their buttons stay disabled with a
+// spinner until the server answers, so a repeated click cannot fire twice.
+const deletingAccount = ref(false)
+const bulkBusyAction = ref<AccountBulkActionKey | null>(null)
 const showTest = ref(false)
 const showStats = ref(false)
 const showErrorPassthrough = ref(false)
@@ -1780,60 +1785,83 @@ const toggleSelectAllVisible = (event: Event) => {
   const target = event.target as HTMLInputElement
   toggleVisible(target.checked)
 }
+// One bulk action at a time: the bar keeps every action disabled and the
+// running one spinning until the server answers.
+const runBulkAction = async (key: AccountBulkActionKey, action: () => Promise<void>) => {
+  if (bulkBusyAction.value) return
+  bulkBusyAction.value = key
+  try {
+    await action()
+  } finally {
+    bulkBusyAction.value = null
+  }
+}
 const handleBulkDelete = async () => {
+  if (bulkBusyAction.value) return
   const accountIds = [...selIds.value]
   if (!confirm(t('admin.accounts.bulkActions.confirmDelete', { count: accountIds.length }))) return
-  try {
-    const result = await adminAPI.accounts.batchDelete(accountIds)
-    if (result.failed > 0) {
-      appStore.showError(t('admin.accounts.bulkActions.partialSuccess', {
-        success: result.success,
-        failed: result.failed
-      }))
-      setSelectedIds(result.failed_ids?.length ? result.failed_ids : accountIds)
-    } else {
-      appStore.showSuccess(t('admin.accounts.bulkActions.deleteSuccess', { count: result.success }))
-      clearSelection()
+  await runBulkAction('delete', async () => {
+    try {
+      const result = await adminAPI.accounts.batchDelete(accountIds)
+      if (result.failed > 0) {
+        appStore.showError(t('admin.accounts.bulkActions.partialSuccess', {
+          success: result.success,
+          failed: result.failed
+        }))
+        setSelectedIds(result.failed_ids?.length ? result.failed_ids : accountIds)
+      } else {
+        appStore.showSuccess(t('admin.accounts.bulkActions.deleteSuccess', { count: result.success }))
+        clearSelection()
+      }
+      await reload()
+    } catch (error) {
+      console.error('Failed to bulk delete accounts:', error)
+      appStore.showError(String(error))
     }
-    await reload()
-  } catch (error) {
-    console.error('Failed to bulk delete accounts:', error)
-    appStore.showError(String(error))
-  }
+  })
 }
 const handleBulkResetStatus = async () => {
+  if (bulkBusyAction.value) return
   if (!confirm(t('common.confirm'))) return
-  try {
-    const result = await adminAPI.accounts.batchClearError(selIds.value)
-    if (result.failed > 0) {
-      appStore.showError(t('admin.accounts.bulkActions.partialSuccess', { success: result.success, failed: result.failed }))
-    } else {
-      appStore.showSuccess(t('admin.accounts.bulkActions.resetStatusSuccess', { count: result.success }))
-      clearSelection()
+  const accountIds = [...selIds.value]
+  await runBulkAction('reset-status', async () => {
+    try {
+      const result = await adminAPI.accounts.batchClearError(accountIds)
+      if (result.failed > 0) {
+        appStore.showError(t('admin.accounts.bulkActions.partialSuccess', { success: result.success, failed: result.failed }))
+      } else {
+        appStore.showSuccess(t('admin.accounts.bulkActions.resetStatusSuccess', { count: result.success }))
+        clearSelection()
+      }
+      reload()
+    } catch (error) {
+      console.error('Failed to bulk reset status:', error)
+      appStore.showError(String(error))
     }
-    reload()
-  } catch (error) {
-    console.error('Failed to bulk reset status:', error)
-    appStore.showError(String(error))
-  }
+  })
 }
 const handleBulkRefreshToken = async () => {
+  if (bulkBusyAction.value) return
   if (!confirm(t('common.confirm'))) return
-  try {
-    const result = await adminAPI.accounts.batchRefresh(selIds.value)
-    if (result.failed > 0) {
-      appStore.showError(t('admin.accounts.bulkActions.partialSuccess', { success: result.success, failed: result.failed }))
-    } else {
-      appStore.showSuccess(t('admin.accounts.bulkActions.refreshTokenSuccess', { count: result.success }))
-      clearSelection()
+  const accountIds = [...selIds.value]
+  await runBulkAction('refresh-token', async () => {
+    try {
+      const result = await adminAPI.accounts.batchRefresh(accountIds)
+      if (result.failed > 0) {
+        appStore.showError(t('admin.accounts.bulkActions.partialSuccess', { success: result.success, failed: result.failed }))
+      } else {
+        appStore.showSuccess(t('admin.accounts.bulkActions.refreshTokenSuccess', { count: result.success }))
+        clearSelection()
+      }
+      reload()
+    } catch (error) {
+      console.error('Failed to bulk refresh token:', error)
+      appStore.showError(String(error))
     }
-    reload()
-  } catch (error) {
-    console.error('Failed to bulk refresh token:', error)
-    appStore.showError(String(error))
-  }
+  })
 }
 const handleBulkProbeUpstreamBilling = async () => {
+  if (bulkBusyAction.value) return
   const accountIDs = [...selIds.value]
   if (accountIDs.length === 0) {
     appStore.showError(t('admin.accounts.upstreamBilling.noEligibleAccounts'))
@@ -1843,6 +1871,9 @@ const handleBulkProbeUpstreamBilling = async () => {
     appStore.showError(t('admin.accounts.upstreamBilling.batchLimit'))
     return
   }
+  await runBulkAction('probe-upstream-billing', () => probeUpstreamBillingBatch(accountIDs))
+}
+const probeUpstreamBillingBatch = async (accountIDs: number[]) => {
   accountIDs.forEach(id => probingUpstreamBilling.add(id))
   try {
     const results = await adminAPI.accounts.probeUpstreamBillingBatch(accountIDs)
@@ -1950,7 +1981,9 @@ const normalizeBulkSchedulableResult = (
     hasCounts: hasExplicitCounts
   }
 }
-const handleBulkToggleSchedulable = async (schedulable: boolean) => {
+const handleBulkToggleSchedulable = (schedulable: boolean) =>
+  runBulkAction(schedulable ? 'enable-scheduling' : 'disable-scheduling', () => bulkToggleSchedulable(schedulable))
+const bulkToggleSchedulable = async (schedulable: boolean) => {
   const accountIds = [...selIds.value]
   try {
     const result = await adminAPI.accounts.bulkUpdate(accountIds, { schedulable })
@@ -2268,16 +2301,21 @@ const handleSchedule = async (a: Account) => {
   }
 }
 const closeSchedulePanel = () => { showSchedulePanel.value = false; scheduleAcc.value = null; scheduleModelOptions.value = [] }
-const duplicatingAccountIDs = new Set<number>()
+// The action menu closes on click, so a pinned toast shows the copy is
+// running and the menu offers it as "duplicating" until it settles.
+const duplicatingAccountIDs = reactive(new Set<number>())
 const handleDuplicateAccount = async (a: Account) => {
   if (a.type !== 'apikey' || a.parent_account_id != null || duplicatingAccountIDs.has(a.id)) return
   duplicatingAccountIDs.add(a.id)
+  const pendingToast = appStore.showToast('info', t('admin.accounts.duplicatingAccount', { name: a.name }))
   try {
     const duplicate = await adminAPI.accounts.duplicate(a.id)
+    appStore.hideToast(pendingToast)
     appStore.showSuccess(t('admin.accounts.duplicateSuccess', { name: duplicate.name }))
     reload()
   } catch (error: any) {
     console.error('Failed to duplicate account:', error)
+    appStore.hideToast(pendingToast)
     appStore.showError(error?.message || t('admin.accounts.duplicateFailed'))
   } finally {
     duplicatingAccountIDs.delete(a.id)
@@ -2361,8 +2399,28 @@ const onRevertFallback = async (a: Account) => {
     appStore.showError(error?.response?.data?.message || t('admin.accounts.revertProxyFailed'))
   }
 }
-const handleDelete = (a: Account) => { deletingAcc.value = a; showDeleteDialog.value = true }
-const confirmDelete = async () => { if(!deletingAcc.value) return; try { await adminAPI.accounts.delete(deletingAcc.value.id); showDeleteDialog.value = false; deletingAcc.value = null; reload() } catch (error) { console.error('Failed to delete account:', error) } }
+const handleDelete = (a: Account) => {
+  if (deletingAccount.value) return
+  deletingAcc.value = a
+  showDeleteDialog.value = true
+}
+const confirmDelete = async () => {
+  const target = deletingAcc.value
+  if (!target || deletingAccount.value) return
+  deletingAccount.value = true
+  try {
+    await adminAPI.accounts.delete(target.id)
+    showDeleteDialog.value = false
+    deletingAcc.value = null
+    appStore.showSuccess(t('admin.accounts.accountDeleted'))
+    reload()
+  } catch (error) {
+    console.error('Failed to delete account:', error)
+    appStore.showError(extractApiErrorMessage(error, t('admin.accounts.failedToDelete')))
+  } finally {
+    deletingAccount.value = false
+  }
+}
 const handleToggleSchedulable = async (a: Account) => {
   const nextSchedulable = !a.schedulable
   togglingSchedulable.value = a.id

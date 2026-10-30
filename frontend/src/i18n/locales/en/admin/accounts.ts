@@ -478,6 +478,8 @@ export default {
       duplicateAccount: 'Duplicate Account',
       duplicateSuccess: 'Account duplicated as "{name}" and paused. Review its credentials before enabling it.',
       duplicateFailed: 'Failed to duplicate account',
+      duplicatingAccount: 'Duplicating "{name}"…',
+      duplicatingShort: 'Duplicating…',
       resetStatus: 'Reset Status',
       statusReset: 'Account status reset successfully',
       failedToResetStatus: 'Failed to reset account status',
