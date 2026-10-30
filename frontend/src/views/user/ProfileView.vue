@@ -2,7 +2,7 @@
   <AppLayout>
     <div
       data-testid="profile-shell"
-      class="mx-auto max-w-[950px] space-y-6"
+      class="profile-page"
     >
       <ProfileInfoCard
         :user="user"
@@ -15,24 +15,9 @@
         :wechat-mp-enabled="wechatOAuthMPEnabled"
       />
 
-      <div
-        v-if="contactInfo"
-        class="card border-primary-200 bg-primary-50 p-6 dark:bg-primary-900/20"
-      >
-        <div class="flex items-center gap-4">
-          <div class="rounded-xl bg-primary-100 p-3 text-primary-600">
-            <Icon name="chat" size="lg" />
-          </div>
-          <div>
-            <h3 class="font-semibold text-primary-800 dark:text-primary-200">
-              {{ t('common.contactSupport') }}
-            </h3>
-            <p class="text-sm font-medium">{{ contactInfo }}</p>
-          </div>
-        </div>
-      </div>
-
       <ProfilePasswordForm />
+      <ProfileTotpCard />
+      <ProfilePasskeyCard :enabled="passkeyEnabled" />
 
       <ProfileBalanceNotifyCard
         v-if="user && balanceLowNotifyEnabled"
@@ -43,13 +28,30 @@
         :user-email="user.email"
       />
 
-      <ProfileTotpCard />
-      <ProfilePasskeyCard :enabled="passkeyEnabled" />
+      <section
+        v-if="contactInfo"
+        class="profile-panel"
+        data-testid="profile-contact-panel"
+      >
+        <header class="profile-panel-head">
+          <span class="profile-panel-icon is-garden" aria-hidden="true">
+            <Icon name="chat" size="md" />
+          </span>
+          <div class="min-w-0">
+            <h2 class="profile-panel-title">{{ t('common.contactSupport') }}</h2>
+            <p class="profile-panel-desc">{{ t('profile.contactDescription') }}</p>
+          </div>
+        </header>
+        <div class="profile-panel-body">
+          <p class="profile-contact">{{ contactInfo }}</p>
+        </div>
+      </section>
     </div>
   </AppLayout>
 </template>
 
 <script setup lang="ts">
+import '@/styles/profile.css'
 import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Icon } from '@/components/icons'
@@ -113,3 +115,17 @@ onMounted(async () => {
   await Promise.all([profileRefresh, settingsLoad])
 })
 </script>
+
+<style scoped>
+.profile-contact {
+  padding: 0.875rem 1rem;
+  border-radius: 1.125rem;
+  background: #f2f8ef;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+  white-space: pre-line;
+  color: #2e5038;
+}
+</style>

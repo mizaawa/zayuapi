@@ -1,40 +1,31 @@
 <template>
-  <div :class="props.embedded ? 'space-y-4' : 'card'">
-    <div
-      v-if="!props.embedded"
-      class="border-b border-gray-100 px-6 py-4 dark:border-dark-700"
-    >
-      <h2 class="text-lg font-medium text-gray-900 dark:text-white">
-        {{ t('profile.editProfile') }}
-      </h2>
-    </div>
-    <div :class="props.embedded ? '' : 'px-6 py-6'">
-      <form @submit.prevent="handleUpdateProfile" class="space-y-4">
-        <div v-if="props.embedded">
-          <p class="text-sm font-semibold text-gray-900 dark:text-white">
-            {{ t('profile.editProfile') }}
-          </p>
-        </div>
-        <div>
-          <label for="username" class="input-label">
-            {{ t('profile.username') }}
-          </label>
-          <input
-            id="username"
-            v-model="username"
-            type="text"
-            class="input"
-            :placeholder="t('profile.enterUsername')"
-          />
-        </div>
+  <div :class="props.embedded ? '' : 'profile-panel'">
+    <header v-if="!props.embedded" class="profile-panel-head">
+      <div class="min-w-0">
+        <h2 class="profile-panel-title">{{ t('profile.editProfile') }}</h2>
+      </div>
+    </header>
+    <form class="profile-edit-form" @submit.prevent="handleUpdateProfile">
+      <div>
+        <label for="username" class="profile-box-title mb-2 block">
+          {{ t('profile.username') }}
+        </label>
+        <input
+          id="username"
+          v-model="username"
+          type="text"
+          class="input"
+          autocomplete="nickname"
+          :placeholder="t('profile.enterUsername')"
+        />
+      </div>
 
-        <div class="flex justify-end pt-4">
-          <button type="submit" :disabled="loading" class="btn btn-primary">
-            {{ loading ? t('profile.updating') : t('profile.updateProfile') }}
-          </button>
-        </div>
-      </form>
-    </div>
+      <div class="profile-actions">
+        <button type="submit" :disabled="loading" class="btn btn-primary btn-sm">
+          {{ loading ? t('profile.updating') : t('profile.updateProfile') }}
+        </button>
+      </div>
+    </form>
   </div>
 </template>
 
@@ -88,3 +79,16 @@ const handleUpdateProfile = async () => {
   }
 }
 </script>
+
+<style scoped>
+.profile-edit-form {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 0.875rem;
+}
+
+.profile-edit-form .input {
+  background: var(--md-sys-color-surface);
+}
+</style>

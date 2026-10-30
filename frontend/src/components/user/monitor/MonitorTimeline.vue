@@ -112,47 +112,63 @@ function normalizeStatus(point: MonitorTimelinePoint): TimelineStatus {
   grid-template-columns: repeat(v-bind(safeLength), minmax(1px, 1fr));
   gap: 1px;
   width: 100%;
-  height: 20px;
+  height: 1.375rem;
 }
 
 .monitor-status-bar__segment {
   width: 100%;
   min-width: 1px;
-  height: 20px;
-  border-radius: 1px;
-  background: #e5e7eb;
-  transition: filter 150ms ease;
+  height: 100%;
+  border-radius: 2px;
+  background: #ebe2c4;
+  transition: filter 150ms ease, transform 150ms ease;
 }
 
 .monitor-status-bar__segment:hover {
-  filter: brightness(0.92);
+  filter: brightness(0.9);
+  transform: scaleY(1.12);
 }
 
 .monitor-status-bar__segment--operational {
-  background: #20bf8f;
+  background: #4f9a66;
 }
 
 .monitor-status-bar__segment--degraded {
-  background: #f5b82e;
+  background: #e2a417;
 }
 
 .monitor-status-bar__segment--failed,
 .monitor-status-bar__segment--error {
-  background: #ef6b5b;
+  background: #d4614a;
 }
 
 .monitor-status-bar__segment--empty {
-  background: #e5e7eb;
+  background: #ebe2c4;
+}
+
+@media (min-width: 1280px) {
+  .monitor-status-bar {
+    gap: 2px;
+  }
 }
 
 @media (max-width: 639px) {
   .monitor-status-bar {
-    gap: 1px;
-    height: 18px;
+    height: 1.125rem;
   }
 
   .monitor-status-bar__segment {
-    height: 18px;
+    border-radius: 1px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .monitor-status-bar__segment {
+    transition: none;
+  }
+
+  .monitor-status-bar__segment:hover {
+    transform: none;
   }
 }
 </style>

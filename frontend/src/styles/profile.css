@@ -1,0 +1,242 @@
+/* Profile page panels. Each panel puts its title beside the controls once the
+ * page is wide enough, and stacks them on phones. */
+.profile-page {
+  container: profile / inline-size;
+  display: flex;
+  width: 100%;
+  max-width: 66rem;
+  flex-direction: column;
+  gap: 1rem;
+  margin: 0 auto;
+  color: #3f3420;
+}
+
+.profile-panel {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1.125rem;
+  padding: 1.25rem;
+  border-radius: 1.5rem;
+  background: var(--md-sys-color-surface);
+  box-shadow: var(--theme-highlight), var(--theme-elevation-1);
+}
+
+.profile-panel-head {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  gap: 0.75rem;
+}
+
+.profile-panel-icon {
+  display: inline-flex;
+  width: 2.5rem;
+  height: 2.5rem;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.875rem;
+  background: #fff3bd;
+  color: #7e5600;
+}
+
+.profile-panel-icon.is-garden { background: #e4f0df; color: #386344; }
+.profile-panel-icon.is-coral { background: #fce7df; color: #a44f3b; }
+.profile-panel-icon.is-slate { background: #e5eff5; color: #456a7a; }
+.profile-panel-icon.is-plum { background: #eee8f5; color: #6e5d84; }
+
+.profile-panel-title {
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 1.5rem;
+  color: #3f3420;
+}
+
+.profile-panel-desc {
+  margin-top: 0.125rem;
+  font-size: 0.8125rem;
+  line-height: 1.25rem;
+  color: #6b6045;
+}
+
+.profile-panel-head-actions {
+  margin-top: 0.75rem;
+}
+
+.profile-panel-body {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+/* A quiet cream box for one setting inside a panel. */
+.profile-box {
+  min-width: 0;
+  padding: 1rem;
+  border-radius: 1.125rem;
+  background: #fffbe8;
+}
+
+.profile-box-title {
+  font-size: 0.875rem;
+  font-weight: 700;
+  color: #3f3420;
+}
+
+.profile-box-hint {
+  margin-top: 0.125rem;
+  font-size: 0.75rem;
+  line-height: 1.125rem;
+  color: #6b6045;
+}
+
+.profile-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+/* Status line used by two-step verification and similar on/off settings. */
+.profile-state {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.875rem 1rem;
+  padding: 1rem;
+  border-radius: 1.125rem;
+  background: #fffbe8;
+}
+
+.profile-state-main {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 14rem;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.profile-state-mark {
+  display: inline-flex;
+  width: 2.5rem;
+  height: 2.5rem;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: #eee6cb;
+  color: #8a7a4f;
+}
+
+.profile-state-mark.is-on { background: #e4f0df; color: #386344; }
+.profile-state-mark.is-warn { background: #fff3bd; color: #976800; }
+
+.profile-state-title {
+  font-size: 0.875rem;
+  font-weight: 700;
+  color: #3f3420;
+}
+
+.profile-state-hint {
+  margin-top: 0.125rem;
+  font-size: 0.75rem;
+  line-height: 1.125rem;
+  color: #6b6045;
+}
+
+.profile-chip {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0 0.5rem;
+  border-radius: 999px;
+  background: #fff3bd;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  line-height: 1.25rem;
+  color: #7e5600;
+}
+
+.profile-chip.is-on { background: #e4f0df; color: #386344; }
+.profile-chip.is-off { background: #f3eedd; color: #6b6045; }
+.profile-chip.is-warn { background: #fff3bd; color: #976800; }
+.profile-chip.is-danger { background: #fce7df; color: #a44f3b; }
+
+.profile-link-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.25rem 0.5rem;
+  border-radius: 0.625rem;
+  font-size: 0.75rem;
+  font-weight: 650;
+  color: #7e5600;
+  transition: background-color 150ms ease, color 150ms ease;
+}
+
+.profile-link-button:hover:not(:disabled) {
+  background: #fff3bd;
+}
+
+.profile-link-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.profile-link-button.is-danger {
+  color: #a44f3b;
+}
+
+.profile-link-button.is-danger:hover:not(:disabled) {
+  background: #fce7df;
+}
+
+.profile-link-button.is-muted {
+  color: #6b6045;
+}
+
+/* Shells for the two-step verification dialogs opened from this page. */
+.profile-dialog-scrim {
+  background: var(--theme-scrim);
+  backdrop-filter: blur(6px) saturate(1.05);
+}
+
+.profile-dialog {
+  border-radius: 2rem;
+  background: var(--md-sys-color-surface);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.8),
+    0 0 0 1px rgb(215 193 106 / 0.2),
+    0 1.75rem 3.5rem -1rem rgb(63 52 32 / 0.32),
+    0 0.35rem 1rem rgb(63 52 32 / 0.08);
+}
+
+@container profile (min-width: 52rem) {
+  .profile-panel {
+    grid-template-columns: 15rem minmax(0, 1fr);
+    gap: 2rem;
+    padding: 1.5rem 1.75rem;
+  }
+
+  .profile-panel-head {
+    flex-direction: column;
+    gap: 0.875rem;
+  }
+}
+
+@media (max-width: 639px) {
+  .profile-panel {
+    padding: 1rem;
+    border-radius: 1.25rem;
+  }
+
+  .profile-box,
+  .profile-state {
+    padding: 0.875rem;
+  }
+}

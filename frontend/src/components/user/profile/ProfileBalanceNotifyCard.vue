@@ -1,40 +1,45 @@
 <template>
-  <div class="card">
-    <div class="border-b border-gray-100 px-6 py-4 dark:border-dark-700">
-      <h2 class="text-lg font-medium text-gray-900 dark:text-white">
-        {{ t('profile.balanceNotify.title') }}
-      </h2>
-      <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
-        {{ t('profile.balanceNotify.description') }}
-      </p>
-    </div>
-    <div class="px-6 py-6 space-y-6">
-      <!-- Enable toggle -->
-      <div class="flex items-center justify-between">
-        <label class="input-label mb-0">{{ t('profile.balanceNotify.enabled') }}</label>
-        <label class="relative inline-flex items-center cursor-pointer">
-          <input type="checkbox" v-model="notifyEnabled" @change="handleToggle" class="sr-only peer" />
-          <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary-300 dark:peer-focus:ring-primary-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:after:border-gray-600 peer-checked:bg-primary-600"></div>
-        </label>
+  <section class="profile-panel" data-testid="profile-balance-notify-panel">
+    <header class="profile-panel-head">
+      <span class="profile-panel-icon" aria-hidden="true">
+        <Icon name="bell" size="md" />
+      </span>
+      <div class="min-w-0">
+        <h2 class="profile-panel-title">{{ t('profile.balanceNotify.title') }}</h2>
+        <p class="profile-panel-desc">{{ t('profile.balanceNotify.description') }}</p>
       </div>
+    </header>
+
+    <div class="profile-panel-body">
+      <!-- Enable toggle -->
+      <label class="profile-state notify-toggle">
+        <span class="profile-state-title">{{ t('profile.balanceNotify.enabled') }}</span>
+        <span class="notify-switch">
+          <input type="checkbox" v-model="notifyEnabled" @change="handleToggle" class="sr-only peer" />
+          <span class="notify-switch-track" aria-hidden="true"></span>
+        </span>
+      </label>
 
       <template v-if="notifyEnabled">
         <!-- Custom threshold with save button -->
-        <div>
-          <label class="input-label">
+        <div class="notify-section">
+          <label for="balance-notify-threshold" class="notify-label">
             {{ t('profile.balanceNotify.threshold') }}
-            <span class="text-xs text-gray-400 ml-2">{{ t('profile.balanceNotify.thresholdHint') }}</span>
+            <span class="notify-label-hint">{{ t('profile.balanceNotify.thresholdHint') }}</span>
           </label>
-          <div class="flex items-center gap-2">
-            <span class="text-gray-500">$</span>
-            <input
-              v-model.number="customThreshold"
-              type="number"
-              min="0"
-              step="0.01"
-              class="input flex-1"
-              :placeholder="systemDefaultThreshold > 0 ? `${t('profile.balanceNotify.systemDefault')} $${systemDefaultThreshold}` : t('profile.balanceNotify.thresholdPlaceholder')"
-            />
+          <div class="notify-threshold">
+            <div class="notify-money">
+              <span aria-hidden="true">$</span>
+              <input
+                id="balance-notify-threshold"
+                v-model.number="customThreshold"
+                type="number"
+                min="0"
+                step="0.01"
+                class="notify-money-input"
+                :placeholder="systemDefaultThreshold > 0 ? `${t('profile.balanceNotify.systemDefault')} $${systemDefaultThreshold}` : t('profile.balanceNotify.thresholdPlaceholder')"
+              />
+            </div>
             <button
               @click="handleThresholdUpdate"
               :disabled="savingThreshold"
@@ -46,92 +51,98 @@
         </div>
 
         <!-- Email list with toggles -->
-        <div>
-          <label class="input-label">{{ t('profile.balanceNotify.extraEmails') }}</label>
-          <p class="mb-2 text-xs text-yellow-600 dark:text-yellow-400">{{ t('profile.balanceNotify.extraEmailsHint') }}</p>
+        <div class="notify-section">
+          <p class="notify-label">{{ t('profile.balanceNotify.extraEmails') }}</p>
+          <p class="notify-note">
+            <Icon name="infoCircle" size="sm" class="shrink-0" />
+            <span>{{ t('profile.balanceNotify.extraEmailsHint') }}</span>
+          </p>
 
           <!-- Saved email entries -->
-          <div v-if="emailEntries.length > 0" class="space-y-2 mb-3">
-            <div v-for="(entry, idx) in emailEntries" :key="idx"
-              class="flex items-center justify-between px-3 py-2 bg-gray-50 dark:bg-dark-700 rounded-lg">
-              <div class="flex items-center gap-2 min-w-0 flex-1">
-                <label class="relative inline-flex items-center cursor-pointer shrink-0">
-                  <input type="checkbox" :checked="!entry.disabled" @change="handleEmailToggle(entry)" class="sr-only peer" />
-                  <div class="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-gray-600 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all dark:after:border-gray-500 peer-checked:bg-primary-600"></div>
+          <ul v-if="emailEntries.length > 0" class="notify-emails">
+            <li v-for="(entry, idx) in emailEntries" :key="idx" class="notify-email">
+              <div class="notify-email-main">
+                <label class="notify-switch is-small">
+                  <input type="checkbox" :checked="!entry.disabled" @change="handleEmailToggle(entry)" class="sr-only peer" :aria-label="entry.email" />
+                  <span class="notify-switch-track" aria-hidden="true"></span>
                 </label>
-                <span class="text-sm text-gray-700 dark:text-gray-300 truncate">{{ entry.email }}</span>
+                <span class="notify-email-address" :class="{ 'is-off': entry.disabled }">{{ entry.email }}</span>
+                <span v-if="entry.verified" class="profile-chip is-on">{{ t('profile.balanceNotify.verified') }}</span>
+                <span v-else class="profile-chip is-warn">{{ t('profile.balanceNotify.unverified') }}</span>
               </div>
-              <div class="flex items-center gap-2 shrink-0">
+              <div class="notify-email-actions">
                 <template v-if="!entry.verified">
                   <!-- Inline verify flow for saved unverified emails -->
                   <template v-if="verifyingEmail === entry.email">
                     <input
                       v-model="verifyCode"
                       type="text"
+                      inputmode="numeric"
                       maxlength="6"
-                      class="w-20 rounded border border-gray-300 px-2 py-1 text-xs dark:border-dark-500 dark:bg-dark-700"
+                      class="notify-code-input"
                       :placeholder="t('profile.balanceNotify.codePlaceholder')"
                     />
-                    <button @click="verifySavedEmail(entry.email)" :disabled="!verifyCode || verifyCode.length !== 6 || verifyingSaved" class="text-xs text-primary-600 hover:text-primary-700">
+                    <button @click="verifySavedEmail(entry.email)" :disabled="!verifyCode || verifyCode.length !== 6 || verifyingSaved" class="profile-link-button">
                       {{ t('profile.balanceNotify.verify') }}
                     </button>
-                    <span v-if="verifyCountdown > 0" class="text-xs text-gray-400">{{ verifyCountdown }}s</span>
-                    <button v-else @click="sendCodeForSaved(entry.email)" :disabled="sendingSavedCode" class="text-xs text-gray-500 hover:text-gray-700">
+                    <span v-if="verifyCountdown > 0" class="notify-countdown">{{ verifyCountdown }}s</span>
+                    <button v-else @click="sendCodeForSaved(entry.email)" :disabled="sendingSavedCode" class="profile-link-button is-muted">
                       {{ t('profile.balanceNotify.resend') }}
                     </button>
-                    <button @click="verifyingEmail = ''" class="text-xs text-gray-400 hover:text-gray-600">
+                    <button @click="verifyingEmail = ''" class="profile-link-button is-muted">
                       {{ t('common.cancel') }}
                     </button>
                   </template>
                   <template v-else>
-                    <button @click="sendCodeForSaved(entry.email)" :disabled="sendingSavedCode" class="text-xs text-primary-600 hover:text-primary-700">
+                    <button @click="sendCodeForSaved(entry.email)" :disabled="sendingSavedCode" class="profile-link-button">
                       {{ t('profile.balanceNotify.verify') }}
                     </button>
-                    <span class="text-xs text-yellow-500">{{ t('profile.balanceNotify.unverified') }}</span>
                   </template>
                 </template>
-                <span v-else class="text-xs text-green-500">{{ t('profile.balanceNotify.verified') }}</span>
-                <button @click="handleRemoveEmail(entry.email)" class="text-red-500 hover:text-red-700 text-xs">
+                <button @click="handleRemoveEmail(entry.email)" class="profile-link-button is-danger">
                   {{ t('profile.balanceNotify.removeEmail') }}
                 </button>
               </div>
-            </div>
-          </div>
+            </li>
+          </ul>
 
           <!-- Pending (unverified) emails in verification flow -->
-          <div v-if="pendingEmails.length > 0" class="space-y-2 mb-3">
-            <div v-for="(pe, idx) in pendingEmails" :key="pe.email"
-              class="flex items-center gap-2 px-3 py-2 bg-yellow-50 dark:bg-yellow-900/10 rounded-lg border border-yellow-200 dark:border-yellow-800">
-              <span class="flex-1 text-sm text-gray-700 dark:text-gray-300">{{ pe.email }}</span>
-              <div v-if="!pe.codeSent" class="flex items-center gap-1">
-                <button @click="sendCodeFor(idx)" :disabled="pe.sending" class="text-xs text-primary-600 hover:text-primary-700">
+          <ul v-if="pendingEmails.length > 0" class="notify-emails">
+            <li v-for="(pe, idx) in pendingEmails" :key="pe.email" class="notify-email is-pending">
+              <div class="notify-email-main">
+                <Icon name="mail" size="sm" class="shrink-0 text-primary-700" />
+                <span class="notify-email-address">{{ pe.email }}</span>
+              </div>
+              <div v-if="!pe.codeSent" class="notify-email-actions">
+                <button @click="sendCodeFor(idx)" :disabled="pe.sending" class="profile-link-button">
                   {{ t('profile.balanceNotify.sendCode') }}
                 </button>
-                <button @click="pendingEmails.splice(idx, 1)" class="text-xs text-red-500 hover:text-red-700 ml-1">
+                <button @click="pendingEmails.splice(idx, 1)" class="profile-link-button is-danger">
                   {{ t('profile.balanceNotify.removeEmail') }}
                 </button>
               </div>
-              <div v-else class="flex items-center gap-1">
+              <div v-else class="notify-email-actions">
                 <input
                   v-model="pe.code"
                   type="text"
+                  inputmode="numeric"
                   maxlength="6"
-                  class="w-20 rounded border border-gray-300 px-2 py-1 text-xs dark:border-dark-500 dark:bg-dark-700"
+                  class="notify-code-input"
                   :placeholder="t('profile.balanceNotify.codePlaceholder')"
                 />
-                <button @click="verifyPending(idx)" :disabled="!pe.code || pe.code.length !== 6 || pe.verifying" class="text-xs text-primary-600 hover:text-primary-700">
+                <button @click="verifyPending(idx)" :disabled="!pe.code || pe.code.length !== 6 || pe.verifying" class="profile-link-button">
                   {{ t('profile.balanceNotify.verify') }}
                 </button>
-                <span v-if="pe.countdown > 0" class="text-xs text-gray-400">{{ pe.countdown }}s</span>
-                <button v-else @click="sendCodeFor(idx)" :disabled="pe.sending" class="text-xs text-gray-500 hover:text-gray-700">
+                <span v-if="pe.countdown > 0" class="notify-countdown">{{ pe.countdown }}s</span>
+                <button v-else @click="sendCodeFor(idx)" :disabled="pe.sending" class="profile-link-button is-muted">
                   {{ t('profile.balanceNotify.resend') }}
                 </button>
               </div>
-            </div>
-          </div>
+            </li>
+          </ul>
 
           <!-- Add new email input (hidden when at limit) -->
-          <div v-if="canAddMore" class="flex gap-2">
+          <div v-if="canAddMore" class="notify-add">
             <input
               v-model="newEmail"
               type="email"
@@ -147,13 +158,13 @@
               {{ t('common.add') }}
             </button>
           </div>
-          <p v-else class="text-xs text-gray-400">
+          <p v-else class="notify-limit">
             {{ t('profile.balanceNotify.maxEmailsReached') }}
           </p>
         </div>
       </template>
     </div>
-  </div>
+  </section>
 </template>
 
 <script setup lang="ts">
@@ -162,6 +173,7 @@ import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth'
 import { useAppStore } from '@/stores/app'
 import { userAPI } from '@/api'
+import Icon from '@/components/icons/Icon.vue'
 import { extractApiErrorMessage } from '@/utils/apiError'
 import type { NotifyEmailEntry } from '@/types'
 
@@ -376,3 +388,241 @@ async function verifySavedEmail(email: string) {
   }
 }
 </script>
+
+<style scoped>
+.notify-toggle {
+  cursor: pointer;
+}
+
+.notify-switch {
+  position: relative;
+  display: inline-flex;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+.notify-switch-track {
+  position: relative;
+  width: 2.75rem;
+  height: 1.5rem;
+  border-radius: 999px;
+  background: #e3d9b8;
+  transition: background-color 180ms ease;
+}
+
+.notify-switch-track::after {
+  position: absolute;
+  top: 0.1875rem;
+  left: 0.1875rem;
+  width: 1.125rem;
+  height: 1.125rem;
+  border-radius: 999px;
+  background: #fff;
+  box-shadow: 0 1px 2px rgb(63 52 32 / 0.3);
+  content: '';
+  transition: transform 200ms var(--theme-ease-out);
+}
+
+.peer:checked + .notify-switch-track {
+  background: #e9b824;
+}
+
+.peer:checked + .notify-switch-track::after {
+  transform: translateX(1.25rem);
+}
+
+.peer:focus-visible + .notify-switch-track {
+  outline: 3px solid rgb(233 184 36 / 0.45);
+  outline-offset: 2px;
+}
+
+.notify-switch.is-small .notify-switch-track {
+  width: 2.25rem;
+  height: 1.25rem;
+}
+
+.notify-switch.is-small .notify-switch-track::after {
+  top: 0.125rem;
+  left: 0.125rem;
+  width: 1rem;
+  height: 1rem;
+}
+
+.notify-switch.is-small .peer:checked + .notify-switch-track::after {
+  transform: translateX(1rem);
+}
+
+.notify-section {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.notify-label {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.25rem 0.5rem;
+  font-size: 0.875rem;
+  font-weight: 700;
+  color: #3f3420;
+}
+
+.notify-label-hint {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: #6b6045;
+}
+
+.notify-threshold {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.notify-money {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 12rem;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0 0.875rem;
+  border-radius: 1rem;
+  background: var(--md-sys-color-surface-container);
+  font-weight: 700;
+  color: #7e5600;
+  box-shadow: inset 0 1px 2px rgb(63 52 32 / 0.06);
+  transition: background-color 160ms ease, box-shadow 160ms ease;
+}
+
+.notify-money:focus-within {
+  background: var(--md-sys-color-surface);
+  box-shadow: inset 0 1px 2px rgb(63 52 32 / 0.04), 0 0 0 4px rgb(233 184 36 / 0.16), 0 0 0 1px rgb(201 154 18 / 0.5);
+}
+
+.notify-money-input {
+  min-width: 0;
+  flex: 1;
+  height: 2.75rem;
+  border: 0;
+  background: transparent;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: #3f3420;
+  outline: none;
+}
+
+.notify-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.375rem;
+  padding: 0.625rem 0.75rem;
+  border-radius: 0.875rem;
+  background: #fff3bd;
+  font-size: 0.75rem;
+  line-height: 1.125rem;
+  color: #65460b;
+}
+
+.notify-emails {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.notify-email {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem 0.75rem;
+  padding: 0.625rem 0.75rem;
+  border-radius: 1rem;
+  background: #fffbe8;
+}
+
+.notify-email.is-pending {
+  background: #fff3bd;
+}
+
+.notify-email-main {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 14rem;
+  align-items: center;
+  gap: 0.625rem;
+}
+
+.notify-email-address {
+  min-width: 0;
+  font-size: 0.875rem;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+  color: #3f3420;
+}
+
+.notify-email-address.is-off {
+  color: #9b8c62;
+}
+
+.notify-email-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.25rem;
+  margin-left: auto;
+}
+
+.notify-code-input {
+  width: 6.5rem;
+  height: 2rem;
+  padding: 0 0.625rem;
+  border-radius: 0.75rem;
+  background: var(--md-sys-color-surface);
+  font-size: 0.8125rem;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.08em;
+  color: #3f3420;
+  box-shadow: inset 0 0 0 1px rgb(215 193 106 / 0.55);
+  outline: none;
+}
+
+.notify-code-input:focus {
+  box-shadow: inset 0 0 0 1px rgb(201 154 18 / 0.8), 0 0 0 3px rgb(233 184 36 / 0.18);
+}
+
+.notify-countdown {
+  padding: 0 0.375rem;
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+  color: #9b8c62;
+}
+
+.notify-add {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.notify-add .input {
+  min-width: 12rem;
+}
+
+.notify-limit {
+  font-size: 0.75rem;
+  color: #9b8c62;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .notify-switch-track,
+  .notify-switch-track::after {
+    transition: none;
+  }
+}
+</style>

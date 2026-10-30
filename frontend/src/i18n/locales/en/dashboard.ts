@@ -117,6 +117,23 @@ export default {
     tokens: 'Tokens',
     loadFailed: 'Failed to load leaderboard',
     updating: 'Updating...',
+    todayTitle: "Today's ranking",
+    stageNote: 'Counted in Beijing time (UTC+8), refreshed every 5 minutes',
+    nextUpdate: 'Next update in',
+    podiumLabel: 'Top three',
+    vacant: 'Open spot',
+    me: 'You',
+    myToday: 'You today',
+    requestsCount: '{count} request | {count} requests',
+    tokensCount: '{count} tokens',
+    restTitle: 'Ranks {from}–{to}',
+    leading: "You're first today",
+    gapToNext: '{amount} behind #{rank}',
+    gapToTop: '{amount} short of the top {n}',
+    noUsage: 'No usage yet today',
+    participationLabel: 'Show me on the leaderboard',
+    participationOnHint: 'Other users can see your name, avatar and usage today',
+    participationOffHint: "You're hidden from the leaderboard and your usage isn't ranked",
   },
 
   // Groups (shared)
@@ -589,6 +606,26 @@ export default {
     uptimeUnavailable: '-- uptime',
     timelineLabel: '{n} recent status checks',
     announcementTitle: 'Channel status announcement',
+    summary: {
+      operational: 'Channels are operational',
+      degraded: 'Some channels are slow',
+      outage: 'Some channels are failing',
+      unknown: 'No check results yet',
+      empty: 'No channels are monitored yet',
+      loading: 'Loading channel status…',
+      detail: '{total} channel, checked {time} | {total} channels, checked {time}',
+      detailNoCheck: '{total} channel | {total} channels'
+    },
+    counts: {
+      label: 'Channels by status',
+      operational: 'Operational',
+      degraded: 'Degraded',
+      down: 'Down',
+      unknown: 'No data'
+    },
+    legend: 'Each bar is one check, newest on the right',
+    refreshIn: 'Refreshing in {n}s',
+    latencyTitle: 'First-token latency of the latest check',
     providers: {
       openai: 'OpenAI',
       anthropic: 'Anthropic',
@@ -868,6 +905,8 @@ export default {
     passwordTooShort: 'Password must be at least 8 characters long',
     passwordChangeSuccess: 'Password changed successfully',
     passwordChangeFailed: 'Failed to change password',
+    passwordDescription: 'Change the password you sign in with',
+    contactDescription: 'Reach us here if anything goes wrong',
     // TOTP 2FA
     totp: {
       title: 'Two-Factor Authentication (2FA)',
@@ -978,6 +1017,7 @@ export default {
       compressFailed: 'Failed to compress the selected image.',
       readFailed: 'Failed to read the selected image.',
       emptyDeleteHint: 'Avatar is already empty',
+      unsaved: 'Unsaved',
     },
     authBindings: {
       title: 'Connected Sign-In Methods',

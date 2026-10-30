@@ -100,6 +100,29 @@ describe('HomeView compact mode', () => {
     expect(wrapper.find('.terminal-container').exists()).toBe(true)
   })
 
+  it('compares the platform with official subscriptions row by row', () => {
+    const wrapper = mountHome()
+
+    const table = wrapper.get('[data-testid="home-comparison"] table')
+    expect(table.findAll('thead th').map(th => th.text())).toEqual([
+      'home.comparison.headers.feature',
+      'home.comparison.headers.official',
+      'home.comparison.headers.us',
+    ])
+    const rows = table.findAll('tbody tr')
+    expect(rows.map(row => row.get('th').text())).toEqual([
+      'home.comparison.items.pricing.feature',
+      'home.comparison.items.models.feature',
+      'home.comparison.items.management.feature',
+      'home.comparison.items.stability.feature',
+      'home.comparison.items.control.feature',
+    ])
+    expect(rows[0].findAll('td').map(td => td.text())).toEqual([
+      'home.comparison.items.pricing.official',
+      'home.comparison.items.pricing.us',
+    ])
+  })
+
   it('links the public home only to the upstream GitHub repository', () => {
     const wrapper = mountHome()
 

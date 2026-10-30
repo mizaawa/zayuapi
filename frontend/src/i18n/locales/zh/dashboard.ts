@@ -117,6 +117,23 @@ export default {
     tokens: 'Token',
     loadFailed: '排行榜加载失败',
     updating: '更新中...',
+    todayTitle: '今日排行',
+    stageNote: '按北京时间（UTC+8）统计，每 5 分钟更新',
+    nextUpdate: '距下次更新',
+    podiumLabel: '前三名',
+    vacant: '虚位以待',
+    me: '我',
+    myToday: '我的今日',
+    requestsCount: '{count} 次请求',
+    tokensCount: '{count} Token',
+    restTitle: '第 {from}–{to} 名',
+    leading: '你是今天的第一名',
+    gapToNext: '距第 {rank} 名还差 {amount}',
+    gapToTop: '距前 {n} 名还差 {amount}',
+    noUsage: '今天还没有产生用量',
+    participationLabel: '参与排行',
+    participationOnHint: '其他用户能看到你的昵称、头像和今日用量',
+    participationOffHint: '你不会出现在榜单上，用量也不参与排名',
   },
 
   // Groups (shared)
@@ -594,6 +611,26 @@ export default {
     uptimeUnavailable: '-- 可用率',
     timelineLabel: '最近 {n} 次状态记录',
     announcementTitle: '渠道状态公告',
+    summary: {
+      operational: '渠道运行正常',
+      degraded: '部分渠道响应变慢',
+      outage: '部分渠道出现故障',
+      unknown: '还没有检查结果',
+      empty: '暂未监控任何渠道',
+      loading: '正在获取渠道状态…',
+      detail: '共 {total} 个渠道，{time}检查过',
+      detailNoCheck: '共 {total} 个渠道'
+    },
+    counts: {
+      label: '各状态渠道数',
+      operational: '正常',
+      degraded: '降级',
+      down: '故障',
+      unknown: '无数据'
+    },
+    legend: '每一格是一次检查，越靠右越新',
+    refreshIn: '{n} 秒后刷新',
+    latencyTitle: '最近一次检查的首字延迟',
     providers: {
       openai: 'OpenAI',
       anthropic: 'Anthropic',
@@ -873,6 +910,8 @@ export default {
     passwordTooShort: '密码至少需要 8 个字符',
     passwordChangeSuccess: '密码修改成功',
     passwordChangeFailed: '密码修改失败',
+    passwordDescription: '修改登录时使用的密码',
+    contactDescription: '有问题可以通过这里联系我们',
     // TOTP 2FA
     totp: {
       title: '双因素认证 (2FA)',
@@ -983,6 +1022,7 @@ export default {
       compressFailed: '压缩所选图片失败',
       readFailed: '读取所选图片失败',
       emptyDeleteHint: '当前没有可删除的头像',
+      unsaved: '未保存',
     },
     authBindings: {
       title: '登录方式绑定',

@@ -1,79 +1,68 @@
 <template>
-  <div :class="props.embedded ? 'space-y-4' : 'card'">
-    <div
-      v-if="!props.embedded"
-      class="border-b border-gray-100 px-6 py-4 dark:border-dark-700"
-    >
-      <h2 class="text-lg font-medium text-gray-900 dark:text-white">
-        {{ t('profile.avatar.title') }}
-      </h2>
-      <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
-        {{ t('profile.avatar.description') }}
-      </p>
-    </div>
+  <div :class="props.embedded ? 'profile-avatar' : 'profile-panel'">
+    <header v-if="!props.embedded" class="profile-panel-head">
+      <span class="profile-panel-icon" aria-hidden="true">
+        <Icon name="user" size="md" />
+      </span>
+      <div class="min-w-0">
+        <h2 class="profile-panel-title">{{ t('profile.avatar.title') }}</h2>
+        <p class="profile-panel-desc">{{ t('profile.avatar.description') }}</p>
+      </div>
+    </header>
 
-    <div :class="props.embedded ? 'space-y-3' : 'flex flex-col gap-5 px-6 py-6 sm:flex-row sm:items-start'">
-      <div
-        :class="props.embedded
-          ? 'flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-gradient-to-br from-primary-500 to-primary-600 text-xl font-bold text-white shadow-lg shadow-primary-500/20'
-          : 'flex h-24 w-24 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-gradient-to-br from-primary-500 to-primary-600 text-3xl font-bold text-white shadow-lg shadow-primary-500/20'"
-      >
+    <div class="profile-avatar-row">
+      <div class="profile-avatar-preview">
         <img
           v-if="avatarPreviewUrl"
           data-testid="profile-avatar-preview"
           :src="avatarPreviewUrl"
           :alt="displayName"
-          class="h-full w-full object-cover"
         >
-        <span v-else>{{ avatarInitial }}</span>
+        <span v-else aria-hidden="true">{{ avatarInitial }}</span>
+        <span v-if="avatarDraft" class="profile-avatar-draft">{{ t('profile.avatar.unsaved') }}</span>
       </div>
 
-      <div :class="props.embedded ? 'space-y-3' : 'min-w-0 flex-1 space-y-4'">
-        <div class="space-y-1">
-          <p v-if="props.embedded" class="text-sm font-semibold text-gray-900 dark:text-white">
-            {{ t('profile.avatar.title') }}
-          </p>
-          <p v-else class="text-sm font-medium text-gray-900 dark:text-white">
-            {{ displayName }}
-          </p>
-          <p class="text-sm text-gray-500 dark:text-gray-400">
-            {{ t('profile.avatar.uploadHint') }}
-          </p>
-        </div>
-
-        <div class="flex flex-wrap items-center gap-3">
-          <label class="btn btn-secondary btn-sm cursor-pointer">
-            <input
-              data-testid="profile-avatar-file-input"
-              type="file"
-              accept="image/*"
-              class="hidden"
-              @change="handleAvatarFileChange"
-            >
-            {{ t('profile.avatar.uploadAction') }}
-          </label>
-
-          <button
-            data-testid="profile-avatar-save"
-            type="button"
-            class="btn btn-primary btn-sm"
-            :disabled="avatarSaving || !avatarDraft"
-            @click="handleAvatarSave"
-          >
-            {{ t('common.save') }}
-          </button>
-
-          <button
-            data-testid="profile-avatar-delete"
-            type="button"
-            class="btn btn-secondary btn-sm"
-            :disabled="avatarSaving"
-            @click="handleAvatarDelete"
-          >
-            {{ t('common.delete') }}
-          </button>
-        </div>
+      <div class="min-w-0 flex-1">
+        <p class="profile-box-title">
+          {{ props.embedded ? t('profile.avatar.title') : displayName }}
+        </p>
+        <p class="profile-box-hint">{{ t('profile.avatar.uploadHint') }}</p>
       </div>
+    </div>
+
+    <div class="profile-avatar-actions">
+      <label class="btn btn-secondary btn-sm cursor-pointer">
+        <input
+          data-testid="profile-avatar-file-input"
+          type="file"
+          accept="image/*"
+          class="hidden"
+          @change="handleAvatarFileChange"
+        >
+        <Icon name="upload" size="sm" />
+        {{ t('profile.avatar.uploadAction') }}
+      </label>
+
+      <button
+        data-testid="profile-avatar-save"
+        type="button"
+        class="btn btn-primary btn-sm"
+        :disabled="avatarSaving || !avatarDraft"
+        @click="handleAvatarSave"
+      >
+        {{ t('common.save') }}
+      </button>
+
+      <button
+        data-testid="profile-avatar-delete"
+        type="button"
+        class="profile-link-button is-danger"
+        :disabled="avatarSaving"
+        @click="handleAvatarDelete"
+      >
+        <Icon name="trash" size="sm" />
+        {{ t('common.delete') }}
+      </button>
     </div>
   </div>
 </template>
@@ -82,6 +71,7 @@
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { userAPI } from '@/api'
+import Icon from '@/components/icons/Icon.vue'
 import { useAppStore } from '@/stores/app'
 import { useAuthStore } from '@/stores/auth'
 import type { User } from '@/types'
@@ -105,7 +95,7 @@ const avatarDraft = ref('')
 const avatarSaving = ref(false)
 
 const displayName = computed(() => props.user?.username?.trim() || props.user?.email?.trim() || t('profile.user'))
-const avatarInitial = computed(() => displayName.value.charAt(0).toUpperCase() || 'U')
+const avatarInitial = computed(() => Array.from(displayName.value)[0]?.toUpperCase() || 'U')
 const avatarPreviewUrl = computed(() => avatarDraft.value.trim() || props.user?.avatar_url?.trim() || '')
 
 watch(
@@ -268,3 +258,69 @@ async function handleAvatarDelete() {
   }
 }
 </script>
+
+<style scoped>
+.profile-avatar {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 0.875rem;
+}
+
+.profile-panel .profile-avatar-row,
+.profile-panel .profile-avatar-actions {
+  grid-column: -2 / -1;
+}
+
+.profile-avatar-row {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 0.875rem;
+}
+
+.profile-avatar-preview {
+  position: relative;
+  display: flex;
+  width: 4rem;
+  height: 4rem;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  border-radius: 1.25rem;
+  background: linear-gradient(145deg, #f0c43d, #c99a12);
+  font-size: 1.375rem;
+  font-weight: 800;
+  color: #fffef8;
+  box-shadow: 0 0 0 3px #fffef8, 0 10px 20px -12px rgb(126 86 0 / 0.6);
+}
+
+.profile-avatar-preview img {
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  object-fit: cover;
+}
+
+/* An unsaved pick gets a small tag so it is not mistaken for the saved avatar. */
+.profile-avatar-draft {
+  position: absolute;
+  right: -0.375rem;
+  bottom: -0.375rem;
+  padding: 0 0.375rem;
+  border-radius: 999px;
+  background: #e9b824;
+  font-size: 0.625rem;
+  font-weight: 750;
+  line-height: 1.125rem;
+  color: #3f3420;
+  box-shadow: 0 0 0 2px #fffef8;
+}
+
+.profile-avatar-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+</style>

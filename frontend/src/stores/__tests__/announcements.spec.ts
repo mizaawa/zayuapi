@@ -175,6 +175,26 @@ describe('announcement popup delivery', () => {
     expect(store.announcements).toHaveLength(2)
   })
 
+  it('counts the popups still waiting behind the one on screen', async () => {
+    await store.fetchAnnouncements()
+    api.list.mockResolvedValue([
+      announcement(1, { updated_at: NEW_REVISION }),
+      announcement(2, { updated_at: NEW_REVISION }),
+      announcement(3, { updated_at: NEW_REVISION }),
+    ])
+    await store.fetchAnnouncements(true)
+    expect(store.currentPopup?.id).toBe(1)
+    expect(store.queuedPopupCount).toBe(2)
+
+    await store.dismissPopup()
+    await vi.advanceTimersByTimeAsync(300)
+    expect(store.currentPopup?.id).toBe(2)
+    expect(store.queuedPopupCount).toBe(1)
+
+    store.reset()
+    expect(store.queuedPopupCount).toBe(0)
+  })
+
   it('waits between popups and removes pending announcements that are no longer visible', async () => {
     await store.fetchAnnouncements()
     api.list.mockResolvedValue([announcement(1, { updated_at: NEW_REVISION }), announcement(2, { updated_at: NEW_REVISION })])

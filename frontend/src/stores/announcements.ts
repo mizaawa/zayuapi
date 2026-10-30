@@ -53,6 +53,8 @@ export const useAnnouncementStore = defineStore('announcements', () => {
   const unreadCount = computed(() =>
     announcements.value.filter((a) => !a.read_at).length
   )
+  // Popups still waiting behind the one on screen.
+  const queuedPopupCount = computed(() => popupQueue.value.length)
 
   function authenticatedUserId() {
     return authStore.isAuthenticated ? authStore.user?.id ?? null : null
@@ -233,6 +235,7 @@ export const useAnnouncementStore = defineStore('announcements', () => {
     currentPopup,
     // Getters
     unreadCount,
+    queuedPopupCount,
     // Actions
     fetchAnnouncements,
     dismissPopup,

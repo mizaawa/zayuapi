@@ -1,73 +1,68 @@
 <template>
-  <div :class="props.embedded ? 'space-y-4' : 'card'">
-    <div
-      v-if="!props.embedded"
-      class="border-b border-gray-100 px-6 py-4 dark:border-dark-700"
-    >
-      <h2 class="text-lg font-medium text-gray-900 dark:text-white">
-        {{ t('profile.changePassword') }}
-      </h2>
-    </div>
-    <div :class="props.embedded ? '' : 'px-6 py-6'">
-      <form @submit.prevent="handleChangePassword" class="space-y-4">
-        <div v-if="props.embedded">
-          <p class="text-sm font-semibold text-gray-900 dark:text-white">
-            {{ t('profile.changePassword') }}
-          </p>
-        </div>
-        <div>
-          <label for="old_password" class="input-label">
-            {{ t('profile.currentPassword') }}
-          </label>
-          <input
-            id="old_password"
-            v-model="form.old_password"
-            type="password"
-            required
-            autocomplete="current-password"
-            class="input"
-          />
-        </div>
+  <section :class="props.embedded ? '' : 'profile-panel'" data-testid="profile-password-panel">
+    <header v-if="!props.embedded" class="profile-panel-head">
+      <span class="profile-panel-icon is-coral" aria-hidden="true">
+        <Icon name="lock" size="md" />
+      </span>
+      <div class="min-w-0">
+        <h2 class="profile-panel-title">{{ t('profile.changePassword') }}</h2>
+        <p class="profile-panel-desc">{{ t('profile.passwordDescription') }}</p>
+      </div>
+    </header>
 
-        <div>
-          <label for="new_password" class="input-label">
-            {{ t('profile.newPassword') }}
-          </label>
-          <input
-            id="new_password"
-            v-model="form.new_password"
-            type="password"
-            required
-            autocomplete="new-password"
-            class="input"
-          />
-          <p class="input-hint">
-            {{ t('profile.passwordHint') }}
-          </p>
-        </div>
+    <form class="profile-password-form" @submit.prevent="handleChangePassword">
+      <div class="profile-password-current">
+        <label for="old_password" class="input-label">
+          {{ t('profile.currentPassword') }}
+        </label>
+        <input
+          id="old_password"
+          v-model="form.old_password"
+          type="password"
+          required
+          autocomplete="current-password"
+          class="input"
+        />
+      </div>
 
-        <div>
-          <label for="confirm_password" class="input-label">
-            {{ t('profile.confirmNewPassword') }}
-          </label>
-          <input
-            id="confirm_password"
-            v-model="form.confirm_password"
-            type="password"
-            required
-            autocomplete="new-password"
-            class="input"
-          />
-        </div>
+      <div>
+        <label for="new_password" class="input-label">
+          {{ t('profile.newPassword') }}
+        </label>
+        <input
+          id="new_password"
+          v-model="form.new_password"
+          type="password"
+          required
+          autocomplete="new-password"
+          class="input"
+        />
+        <p class="input-hint">
+          {{ t('profile.passwordHint') }}
+        </p>
+      </div>
 
-        <div class="flex justify-end pt-4">
-          <button type="submit" :disabled="loading" class="btn btn-primary">
-            {{ loading ? t('profile.changingPassword') : t('profile.changePasswordButton') }}
-          </button>
-        </div>
-      </form>
-    </div>
-  </div>
+      <div>
+        <label for="confirm_password" class="input-label">
+          {{ t('profile.confirmNewPassword') }}
+        </label>
+        <input
+          id="confirm_password"
+          v-model="form.confirm_password"
+          type="password"
+          required
+          autocomplete="new-password"
+          class="input"
+        />
+      </div>
+
+      <div class="profile-actions profile-password-submit">
+        <button type="submit" :disabled="loading" class="btn btn-primary">
+          {{ loading ? t('profile.changingPassword') : t('profile.changePasswordButton') }}
+        </button>
+      </div>
+    </form>
+  </section>
 </template>
 
 <script setup lang="ts">
@@ -75,6 +70,7 @@ import { ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAppStore } from '@/stores/app'
 import { userAPI } from '@/api'
+import Icon from '@/components/icons/Icon.vue'
 
 const { t } = useI18n()
 const appStore = useAppStore()
@@ -114,3 +110,28 @@ const handleChangePassword = async () => {
   }
 }
 </script>
+
+<style scoped>
+.profile-password-form {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1rem;
+}
+
+@container profile (min-width: 40rem) {
+  .profile-password-form {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: start;
+  }
+
+  .profile-password-current,
+  .profile-password-submit {
+    grid-column: 1 / -1;
+  }
+
+  .profile-password-current {
+    max-width: calc(50% - 0.5rem);
+  }
+}
+</style>

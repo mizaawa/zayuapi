@@ -62,6 +62,16 @@ vi.mock('vue-i18n', async () => {
     'channelStatus.title': 'Channel Status',
     'channelStatus.poweredBy': 'Powered by',
     'channelStatus.announcementTitle': 'Channel status announcement',
+    'channelStatus.loadError': 'Failed to load channel status',
+    'channelStatus.summary.operational': 'Channels are operational',
+    'channelStatus.summary.degraded': 'Some channels are slow',
+    'channelStatus.summary.outage': 'Some channels are failing',
+    'channelStatus.summary.empty': 'No channels are monitored yet',
+    'channelStatus.counts.operational': 'Operational',
+    'channelStatus.counts.degraded': 'Degraded',
+    'channelStatus.counts.down': 'Down',
+    'channelStatus.counts.unknown': 'No data',
+    'common.refresh': 'Refresh',
     'channelStatus.emptyProvider': 'No monitored channels configured',
     'channelStatus.uptimeUnavailable': '-- uptime',
     'channelStatus.providers.openai': 'OpenAI',
@@ -180,10 +190,9 @@ describe('ChannelStatusView', () => {
     expect(wrapper.get('[data-testid="monitor-provider-custom"]').classes()).toContain('lg:col-span-2')
     expect(wrapper.get('[data-testid="monitor-provider-openai"]').classes()).toEqual(expect.arrayContaining([
       'monitor-provider-card',
-      'bg-white/75',
-      'ring-white/90',
-      'backdrop-blur-md',
+      'is-open',
     ]))
+    expect(wrapper.get('[data-testid="monitor-provider-toggle-openai"]').element.parentElement?.tagName).toBe('H2')
 
     const openAISection = wrapper.get('[data-testid="monitor-provider-openai"]')
     expect(openAISection.text()).toContain('Chat Completions')
@@ -212,10 +221,10 @@ describe('ChannelStatusView', () => {
     expect(wrapper.text()).not.toContain('7 days')
     expect(wrapper.text()).not.toContain('System status')
     const notice = wrapper.get('[data-testid="channel-status-notice"]')
-    expect(notice.get('h1').text()).toBe('Channel status announcement')
+    expect(notice.get('h2').text()).toBe('Channel status announcement')
     expect(notice.text()).toContain('Scheduled maintenance tonight.')
     expect(notice.text()).toContain('Brief interruptions may occur.')
-    expect(notice.classes()).toEqual(expect.arrayContaining(['border-amber-300', 'bg-amber-50']))
+    expect(notice.classes()).toContain('cs-notice')
     expect(wrapper.get('[data-testid="channel-status-grid"]').text()).not.toContain(
       'Scheduled maintenance tonight.'
     )
@@ -281,13 +290,13 @@ describe('ChannelStatusView', () => {
     const statusIcon = (id: number) =>
       wrapper.get(`[data-testid="monitor-status-row-${id}"] [role="img"]`)
 
-    expect(statusIcon(1).classes()).toContain('bg-emerald-500')
+    expect(statusIcon(1).classes()).toContain('is-operational')
     expect(statusIcon(1).attributes('title')).toBe('Operational')
-    expect(statusIcon(2).classes()).toContain('bg-amber-500')
+    expect(statusIcon(2).classes()).toContain('is-degraded')
     expect(statusIcon(2).attributes('title')).toBe('Degraded')
-    expect(statusIcon(3).classes()).toContain('bg-red-500')
+    expect(statusIcon(3).classes()).toContain('is-down')
     expect(statusIcon(3).attributes('title')).toBe('Failed')
-    expect(statusIcon(4).classes()).toContain('bg-red-500')
+    expect(statusIcon(4).classes()).toContain('is-down')
     expect(statusIcon(4).attributes('title')).toBe('Error')
     wrapper.unmount()
   })
@@ -300,6 +309,65 @@ describe('ChannelStatusView', () => {
     expect(showError).toHaveBeenCalledWith('status unavailable')
     expect(wrapper.findAll('[data-testid^="monitor-provider-empty-"]')).toHaveLength(5)
     expect(wrapper.findAll('[data-testid^="monitor-provider-loading-"]')).toHaveLength(0)
+    const summary = wrapper.get('[data-testid="channel-status-summary"]')
+    expect(summary.classes()).toContain('is-error')
+    expect(summary.get('h2').text()).toBe('Failed to load channel status')
+    wrapper.unmount()
+  })
+
+  it('sums up the channels with the same latency rules as the rows', async () => {
+    listMonitors.mockResolvedValue({
+      items: [
+        makeMonitor({ id: 1, name: 'Fast', primary_status: 'operational', primary_latency_ms: 800 }),
+        makeMonitor({ id: 2, name: 'Slow', primary_status: 'operational', primary_latency_ms: 12_000 }),
+        makeMonitor({ id: 3, name: 'Broken', provider: 'anthropic', primary_status: 'error', primary_latency_ms: null }),
+        makeMonitor({ id: 4, name: 'Fresh', provider: 'gemini', primary_status: '', timeline: [] }),
+      ],
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const summary = wrapper.get('[data-testid="channel-status-summary"]')
+    expect(summary.classes()).toContain('is-outage')
+    expect(summary.get('h2').text()).toBe('Some channels are failing')
+    expect(summary.findAll('.cs-count').map(count => count.text())).toEqual([
+      'Operational1',
+      'Degraded1',
+      'Down1',
+      'No data1',
+    ])
+    expect(wrapper.get('[data-testid="monitor-provider-openai"]').findAll('.monitor-provider-dot').map(dot => dot.classes()))
+      .toEqual([
+        expect.arrayContaining(['is-operational']),
+        expect.arrayContaining(['is-degraded']),
+      ])
+    expect(wrapper.get('[data-testid="monitor-status-row-1"] [data-testid="monitor-status-latency"]').text()).toBe('800 ms')
+    expect(wrapper.get('[data-testid="monitor-status-row-2"] [data-testid="monitor-status-latency"]').text()).toBe('12 s')
+    expect(wrapper.find('[data-testid="monitor-status-row-3"] [data-testid="monitor-status-latency"]').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('reports an all-clear and refreshes in place without the loading skeleton', async () => {
+    listMonitors.mockResolvedValue({ items: [makeMonitor()] })
+    const wrapper = mountView()
+    await flushPromises()
+
+    expect(wrapper.get('[data-testid="channel-status-summary"]').classes()).toContain('is-operational')
+
+    let resolveRefresh!: (value: { items: UserMonitorView[] }) => void
+    listMonitors.mockReturnValueOnce(new Promise((resolve) => { resolveRefresh = resolve }))
+    await wrapper.get('button[aria-label="Refresh"]').trigger('click')
+
+    expect(listMonitors).toHaveBeenCalledTimes(2)
+    expect(wrapper.findAll('[data-testid^="monitor-provider-loading-"]')).toHaveLength(0)
+    expect(wrapper.get('button[aria-label="Refresh"]').attributes('disabled')).toBeDefined()
+
+    resolveRefresh({ items: [makeMonitor({ primary_status: 'degraded', primary_latency_ms: 15_000 })] })
+    await flushPromises()
+
+    expect(wrapper.get('[data-testid="channel-status-summary"]').classes()).toContain('is-degraded')
+    expect(wrapper.get('button[aria-label="Refresh"]').attributes('disabled')).toBeUndefined()
     wrapper.unmount()
   })
 })
