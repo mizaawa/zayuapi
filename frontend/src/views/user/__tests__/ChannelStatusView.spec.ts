@@ -322,6 +322,8 @@ describe('ChannelStatusView', () => {
         makeMonitor({ id: 2, name: 'Slow', primary_status: 'operational', primary_latency_ms: 12_000 }),
         makeMonitor({ id: 3, name: 'Broken', provider: 'anthropic', primary_status: 'error', primary_latency_ms: null }),
         makeMonitor({ id: 4, name: 'Fresh', provider: 'gemini', primary_status: '', timeline: [] }),
+        makeMonitor({ id: 5, name: 'Steady', provider: 'gemini', primary_status: 'operational', primary_latency_ms: 2_345 }),
+        makeMonitor({ id: 6, name: 'Crawling', provider: 'grok', primary_status: 'degraded', primary_latency_ms: 12_480 }),
       ],
     })
 
@@ -332,8 +334,8 @@ describe('ChannelStatusView', () => {
     expect(summary.classes()).toContain('is-outage')
     expect(summary.get('h2').text()).toBe('Some channels are failing')
     expect(summary.findAll('.cs-count').map(count => count.text())).toEqual([
-      'Operational1',
-      'Degraded1',
+      'Operational2',
+      'Degraded2',
       'Down1',
       'No data1',
     ])
@@ -344,6 +346,8 @@ describe('ChannelStatusView', () => {
       ])
     expect(wrapper.get('[data-testid="monitor-status-row-1"] [data-testid="monitor-status-latency"]').text()).toBe('800 ms')
     expect(wrapper.get('[data-testid="monitor-status-row-2"] [data-testid="monitor-status-latency"]').text()).toBe('12 s')
+    expect(wrapper.get('[data-testid="monitor-status-row-5"] [data-testid="monitor-status-latency"]').text()).toBe('2345 ms')
+    expect(wrapper.get('[data-testid="monitor-status-row-6"] [data-testid="monitor-status-latency"]').text()).toBe('12.4 s')
     expect(wrapper.find('[data-testid="monitor-status-row-3"] [data-testid="monitor-status-latency"]').exists()).toBe(false)
     wrapper.unmount()
   })

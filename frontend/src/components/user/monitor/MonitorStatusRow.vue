@@ -94,10 +94,11 @@ const statusIcon = computed<'check' | 'exclamationTriangle' | 'x' | 'infoCircle'
 const latencyLabel = computed(() => {
   const ms = props.item.primary_latency_ms
   if (ms == null || !Number.isFinite(ms)) return ''
-  if (ms < 1000) return `${Math.round(ms)} ms`
-  // Round down so a check just under a threshold never reads as the threshold itself.
-  if (ms < 10_000) return `${(Math.floor(ms / 100) / 10).toFixed(1)} s`
-  return `${Math.floor(ms / 1000)} s`
+  if (ms < 10_000) return `${Math.round(ms)} ms`
+  // Slow checks switch to seconds, rounded down so a check just under a
+  // threshold never reads as the threshold itself.
+  const seconds = Math.floor(ms / 100) / 10
+  return `${Number.isInteger(seconds) ? seconds.toFixed(0) : seconds.toFixed(1)} s`
 })
 
 const latencyTone = computed(() => {

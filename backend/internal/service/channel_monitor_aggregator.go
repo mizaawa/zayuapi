@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+	"time"
 )
 
 func monitorDisplayName(m *ChannelMonitor) string {
@@ -234,6 +235,8 @@ func buildStatusSummary(
 }
 
 // SimulatedMonitorStatusSummary reports the configured simulated result without changing stored history.
+// Latencies stay zero here (the admin list shows that no request was sent); the
+// user view replaces them through applySimulatedFirstTokenLatency.
 func SimulatedMonitorStatusSummary(m *ChannelMonitor) MonitorStatusSummary {
 	zero := 0
 	summary := MonitorStatusSummary{
@@ -260,8 +263,10 @@ func buildUserViewFromSummary(
 	primaryLatest *ChannelMonitorLatest,
 	timelineEntries []*ChannelMonitorHistoryEntry,
 ) *UserMonitorView {
+	timeline := buildTimelinePoints(timelineEntries)
 	if m.SimulateRequests {
 		summary = SimulatedMonitorStatusSummary(m)
+		applySimulatedFirstTokenLatency(m, &summary, timeline, simulatedLatencyReferenceTime(m, primaryLatest, timelineEntries))
 	}
 	view := &UserMonitorView{
 		ID:                  m.ID,
@@ -275,7 +280,7 @@ func buildUserViewFromSummary(
 		PrimaryLatencyMs:    summary.PrimaryLatencyMs,
 		Availability7d:      summary.Availability7d,
 		ExtraModels:         summary.ExtraModels,
-		Timeline:            buildTimelinePoints(timelineEntries),
+		Timeline:            timeline,
 	}
 	if m.SimulateRequests {
 		zero := 0
@@ -324,13 +329,18 @@ func mergeModelDetails(
 	for _, model := range all {
 		d := ModelDetail{Model: model}
 		if m.SimulateRequests {
-			zero := 0
+			var lastCheckedAt time.Time
+			if m.LastCheckedAt != nil {
+				lastCheckedAt = *m.LastCheckedAt
+			}
+			latestLatency := simulatedFirstTokenLatencyMs(m.ID, model, lastCheckedAt)
+			avgLatency := simulatedFirstTokenBaseMs(m.ID, model)
 			d.LatestStatus = MonitorStatusOperational
-			d.LatestLatencyMs = &zero
+			d.LatestLatencyMs = &latestLatency
 			d.Availability7d = 100
 			d.Availability15d = 100
 			d.Availability30d = 100
-			d.AvgLatency7dMs = &zero
+			d.AvgLatency7dMs = &avgLatency
 			out = append(out, d)
 			continue
 		}
