@@ -15,7 +15,9 @@ export default {
         tokens: 'Tokens',
         cost: 'Billed',
         userCost: 'User {cost}',
-        schedulable: 'Schedulable'
+        schedulable: 'Schedulable',
+        rateMultiplier: 'Account rate',
+        rateMultiplierHint: "The account's billing multiplier, i.e. what the upstream charges for this account; it only affects account billing and 0 means free"
       },
       createAccount: 'Create Account',
       autoRefresh: 'Auto Refresh',

@@ -15,7 +15,9 @@ export default {
         tokens: '今日 Token',
         cost: '今日计费',
         userCost: '用户 {cost}',
-        schedulable: '参与调度'
+        schedulable: '参与调度',
+        rateMultiplier: '账号倍率',
+        rateMultiplierHint: '账号计费倍率，即上游对这个账号的计费倍率；只影响账号计费，0 表示不计费'
       },
       createAccount: '添加账号',
       autoRefresh: '自动刷新',

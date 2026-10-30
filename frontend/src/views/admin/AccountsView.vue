@@ -460,6 +460,24 @@
                   :privacy-mode="row.extra?.privacy_mode || row.parent_privacy_mode"
                   :subscription-expires-at="row.credentials?.subscription_expires_at || row.parent_subscription_expires_at" />
                 <AccountSourceBadge :account="row" />
+                <!-- The account's own billing multiplier (what the upstream charges), not a group rate. -->
+                <span
+                  class="account-card-rate"
+                  :title="t('admin.accounts.card.rateMultiplierHint')"
+                  data-testid="account-card-rate"
+                >
+                  <span>{{ t('admin.accounts.card.rateMultiplier') }}</span>
+                  <strong>{{ formatMultiplier(row.rate_multiplier ?? 1) }}x</strong>
+                  <span
+                    v-if="row.extra?.upstream_billing_rate_sync_enabled === true"
+                    class="account-card-rate-sync"
+                    :aria-label="t('admin.accounts.upstreamBilling.syncedRateTooltip')"
+                    :title="t('admin.accounts.upstreamBilling.syncedRateTooltip')"
+                    data-testid="account-card-rate-sync"
+                  >
+                    <Icon name="sync" size="xs" />
+                  </span>
+                </span>
               </div>
 
               <!-- One strip, one type scale: live concurrency first, then today's work. -->
@@ -2499,6 +2517,31 @@ onUnmounted(() => {
   flex-wrap: wrap;
   align-items: center;
   gap: 0.375rem;
+}
+
+.account-card-rate {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0 0.5rem;
+  border-radius: 999px;
+  background: #fff3bd;
+  font-size: 0.75rem;
+  line-height: 1.375rem;
+  white-space: nowrap;
+  color: var(--md-sys-color-on-surface-variant);
+}
+
+.account-card-rate strong {
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+  color: var(--md-sys-color-on-surface);
+}
+
+.account-card-rate-sync {
+  display: inline-flex;
+  color: #477b54;
 }
 
 .account-card-metrics {
