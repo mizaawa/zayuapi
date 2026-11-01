@@ -202,8 +202,9 @@ const providerOptions = computed<ProviderPickerOption[]>(() => providers.value.m
   available: selectable(provider)
 })))
 
-function keyStatusLabel(key: ProviderKey): string {
-  if (key.available) return t('admin.providerImport.keyStatus.available')
+// Importable keys show their upstream rate; the others say why they cannot be chosen.
+function keyBadge(key: ProviderKey): string {
+  if (key.available) return t('admin.providerImport.multiplier', { value: formatProviderMultiplier(key.group_multiplier) })
   switch (key.status) {
     case 'disabled':
       return t('admin.providerImport.keyStatus.disabled')
@@ -218,17 +219,15 @@ function keyStatusLabel(key: ProviderKey): string {
 
 function keyDetail(key: ProviderKey): string {
   const group = key.group_name || t('admin.providerImport.defaultGroup')
-  const platform = providerPlatformLabel(key.group_platform)
-  const multiplier = t('admin.providerImport.multiplier', { value: formatProviderMultiplier(key.group_multiplier) })
-  return [group, platform, multiplier].filter(Boolean).join(' · ')
+  return [group, providerPlatformLabel(key.group_platform)].filter(Boolean).join(' · ')
 }
 
 const keyOptions = computed<ProviderPickerOption[]>(() => (keyList.value?.keys ?? []).map((key) => ({
   id: key.id,
   name: unnamed(key.name),
   detail: keyDetail(key),
-  badge: keyStatusLabel(key),
-  badgeTone: key.available ? 'success' : 'neutral',
+  badge: keyBadge(key),
+  badgeTone: key.available ? 'honey' : 'neutral',
   available: key.available
 })))
 

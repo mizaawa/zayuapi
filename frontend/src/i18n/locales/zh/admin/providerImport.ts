@@ -28,10 +28,9 @@ export default {
     loading: '正在读取…',
     unnamedKey: '未命名密钥',
     defaultGroup: '默认分组',
-    multiplier: '倍率 {value}',
+    multiplier: '上游倍率 {value}',
     groupMultiplier: '分组倍率 {value}',
     keyStatus: {
-      available: '可导入',
       disabled: '已停用',
       expired: '已过期',
       quotaExhausted: '额度已用尽',

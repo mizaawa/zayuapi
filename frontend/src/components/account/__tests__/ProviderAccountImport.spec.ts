@@ -79,12 +79,13 @@ describe('ProviderAccountImport', () => {
     const keyRows = rows(wrapper, 'provider-import-key-picker')
     expect(keyRows).toHaveLength(3)
     expect(keyRows[0].text()).toContain('admin.providerImport.createFromProvider')
-    expect(keyRows[1].text()).toContain('破甲')
-    expect(keyRows[1].text()).toContain('CodexPro-不降智⑤')
-    expect(keyRows[1].text()).toContain('0.2×')
-    expect(keyRows[1].text()).toContain('admin.providerImport.keyStatus.available')
+    expect(keyRows[1].get('strong').text()).toBe('破甲')
+    // An importable key's badge is its upstream rate, so the description leaves the rate out.
+    expect(keyRows[1].get('small').text()).toBe('CodexPro-不降智⑤ · OpenAI')
+    expect(keyRows[1].get('.provider-picker-badge').text()).toBe('admin.providerImport.multiplier:{"value":"0.2×"}')
     expect(keyRows[2].attributes('aria-disabled')).toBe('true')
-    expect(keyRows[2].text()).toContain('admin.providerImport.keyStatus.disabled')
+    expect(keyRows[2].get('small').text()).toBe('CodexPro-不降智⑤ · OpenAI')
+    expect(keyRows[2].get('.provider-picker-badge').text()).toBe('admin.providerImport.keyStatus.disabled')
 
     await keyRows[2].trigger('click')
     expect(wrapper.emitted('select')).toBeUndefined()
@@ -95,6 +96,18 @@ describe('ProviderAccountImport', () => {
       groupName: 'CodexPro-不降智⑤', groupMultiplier: 0.2, endpoint: 'https://www.zayuapi.com/v1'
     })
     expect(wrapper.get('[data-testid="provider-import-endpoint"]').text()).toContain('https://www.zayuapi.com/v1')
+  })
+
+  it('shows a dash for an importable key whose provider reported no rate', async () => {
+    mocks.listProviderOptions.mockResolvedValue([provider])
+    mocks.listProviderKeys.mockResolvedValue(keyList([{ ...activeKey, group_name: '', group_platform: '', group_multiplier: null }]))
+    const wrapper = mountImport()
+    await flushPromises()
+
+    await openPicker(wrapper, 'provider-import-key-picker')
+    const row = rows(wrapper, 'provider-import-key-picker')[1]
+    expect(row.get('small').text()).toBe('admin.providerImport.defaultGroup')
+    expect(row.get('.provider-picker-badge').text()).toBe('admin.providerImport.multiplier:{"value":"—"}')
   })
 
   it('updates the bound endpoint when the account platform changes', async () => {

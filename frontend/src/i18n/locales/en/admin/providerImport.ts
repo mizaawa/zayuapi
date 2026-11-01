@@ -28,10 +28,9 @@ export default {
     loading: 'Loading…',
     unnamedKey: 'Unnamed key',
     defaultGroup: 'Default group',
-    multiplier: 'Rate {value}',
+    multiplier: 'Upstream rate {value}',
     groupMultiplier: 'Group rate {value}',
     keyStatus: {
-      available: 'Available',
       disabled: 'Disabled',
       expired: 'Expired',
       quotaExhausted: 'Quota used up',
