@@ -50,6 +50,7 @@ const openDialogs = new Set<string>()
 <script setup lang="ts">
 import { computed, watch, onMounted, onUnmounted, ref, nextTick } from 'vue'
 import Icon from '@/components/icons/Icon.vue'
+import { setDocumentScrollLock } from '@/utils/documentScrollLock'
 
 // 生成唯一ID以避免多个对话框时ID冲突
 const dialogId = `modal-title-${++dialogIdCounter}`
@@ -118,7 +119,7 @@ const handleEscape = (event: KeyboardEvent) => {
 const updateScrollLock = (isOpen: boolean) => {
   if (isOpen) openDialogs.add(dialogId)
   else openDialogs.delete(dialogId)
-  document.body.classList.toggle('modal-open', openDialogs.size > 0)
+  setDocumentScrollLock(openDialogs.size > 0)
 }
 
 // Prevent body scroll when modal is open and manage focus
@@ -141,9 +142,9 @@ watch(
       }
     } else {
       updateScrollLock(false)
-      // 恢复之前的焦点
+      // 恢复之前的焦点（页面滚动位置已由滚动锁还原，聚焦时不再滚动）
       if (previousActiveElement && typeof previousActiveElement.focus === 'function') {
-        previousActiveElement.focus()
+        previousActiveElement.focus({ preventScroll: true })
       }
       previousActiveElement = null
     }

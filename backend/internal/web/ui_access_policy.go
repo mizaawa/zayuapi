@@ -57,8 +57,8 @@ func (s *FrontendServer) allowUIAccess(c *gin.Context, policy uiAccessPolicy) bo
 	retry := isUICountryRetry(c)
 	if !policy.CountryEnabled {
 		if retry {
-			c.Header("Cache-Control", "private, no-store")
-			c.Redirect(http.StatusSeeOther, safeUIReturnPath(c.Request))
+			preventUIAccessCaching(c.Writer.Header())
+			c.Redirect(http.StatusSeeOther, uiRetryReturnPath(c.Request))
 			c.Abort()
 			return false
 		}
@@ -66,8 +66,7 @@ func (s *FrontendServer) allowUIAccess(c *gin.Context, policy uiAccessPolicy) bo
 	}
 	// With the domain switch on, only the official host reaches this point.
 	// With it off, the country policy applies on every UI hostname.
-	c.Header("Cache-Control", "private, no-store")
-	c.Header("Vary", "Host")
+	preventUIAccessCaching(c.Writer.Header())
 	blocked, err := uiaccess.NormalizeCountryCodes(policy.Blocked)
 	if err != nil || blocked == "" {
 		serveUIUnavailable(c)
@@ -94,8 +93,9 @@ func (s *FrontendServer) allowUIAccess(c *gin.Context, policy uiAccessPolicy) bo
 	}
 	if retry {
 		// The notice lives at the original URL. A successful POST retry returns
-		// there as a GET, preserving its query without accepting a return URL.
-		c.Redirect(http.StatusSeeOther, safeUIReturnPath(c.Request))
+		// there as a GET, preserving its query without accepting a return URL,
+		// plus a cache buster so a stored notice cannot answer the GET.
+		c.Redirect(http.StatusSeeOther, uiRetryReturnPath(c.Request))
 		c.Abort()
 		return false
 	}

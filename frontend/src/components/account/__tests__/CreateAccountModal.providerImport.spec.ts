@@ -92,11 +92,16 @@ async function useProviderImport(wrapper: VueWrapper) {
   await flushPromises()
 }
 
-async function chooseFirstKey(wrapper: VueWrapper) {
+async function chooseKey(wrapper: VueWrapper, index: number) {
   await wrapper.get('[data-testid="provider-import-key-picker"] button').trigger('click')
   const options = wrapper.get('[data-testid="provider-import-key-picker"]').findAll('[data-testid="provider-picker-option"]')
-  await options[0].trigger('click')
+  await options[index].trigger('click')
 }
+
+const chooseFirstKey = (wrapper: VueWrapper) => chooseKey(wrapper, 0)
+
+const rateInput = (wrapper: VueWrapper) => wrapper.get('[data-testid="account-rate-multiplier"]').element as HTMLInputElement
+const rateSource = (wrapper: VueWrapper) => wrapper.find('[data-testid="account-rate-multiplier-source"]')
 
 async function submit(wrapper: VueWrapper) {
   await wrapper.get('form#create-account-form').trigger('submit.prevent')
@@ -207,6 +212,65 @@ describe('CreateAccountModal provider import', () => {
 
     expect(mocks.showError).toHaveBeenLastCalledWith('admin.providerImport.errors.PROVIDER_KEY_UNAVAILABLE')
     expect(wrapper.emitted('created')).toBeUndefined()
+  })
+
+  it('bills the account at the chosen key group multiplier', async () => {
+    const wrapper = mountModal()
+    expect(rateInput(wrapper).value).toBe('1')
+    await useProviderImport(wrapper)
+    await chooseFirstKey(wrapper)
+
+    expect(rateInput(wrapper).value).toBe('0.2')
+    expect(rateSource(wrapper).text()).toBe('admin.accounts.billingRateFromProviderGroup')
+    await submit(wrapper)
+    expect(mocks.createAccount.mock.calls[0][0]).toEqual(expect.objectContaining({ rate_multiplier: 0.2, provider_key_id: '11' }))
+  })
+
+  it('keeps a rate typed for the chosen key and takes the next key group multiplier', async () => {
+    mocks.listProviderKeys.mockResolvedValue({
+      provider_id: 'p1', site_type: 'sub2api', endpoint: 'https://www.zayuapi.com', synced_at: '2026-10-28T13:47:00Z',
+      keys: [key, { ...key, id: '12', name: '备用', group_name: 'VIP', group_multiplier: 0.0625 }]
+    })
+    const wrapper = mountModal()
+    await useProviderImport(wrapper)
+    await chooseKey(wrapper, 0)
+    await wrapper.get('[data-testid="account-rate-multiplier"]').setValue('0.35')
+    expect(rateSource(wrapper).exists()).toBe(false)
+
+    // A platform switch emits the same key again with another endpoint.
+    await selectPlatform(wrapper, 'OpenAI')
+    expect(wrapper.get('[data-testid="provider-import-endpoint"]').text()).toContain('https://www.zayuapi.com')
+    expect(rateInput(wrapper).value).toBe('0.35')
+
+    await chooseKey(wrapper, 1)
+    expect(rateInput(wrapper).value).toBe('0.0625')
+    expect(rateInput(wrapper).step).toBe('0.0001')
+    expect(rateSource(wrapper).exists()).toBe(true)
+  })
+
+  it('puts the default rate back for a manually entered key', async () => {
+    const wrapper = mountModal()
+    await useProviderImport(wrapper)
+    await chooseFirstKey(wrapper)
+    expect(rateInput(wrapper).value).toBe('0.2')
+
+    await wrapper.get('[data-testid="account-type-api-key"] input').setValue(true)
+    expect(rateInput(wrapper).value).toBe('1')
+    expect(rateSource(wrapper).exists()).toBe(false)
+  })
+
+  it('leaves the rate alone when the provider reports no group multiplier', async () => {
+    mocks.listProviderKeys.mockResolvedValue({
+      provider_id: 'p1', site_type: 'sub2api', endpoint: 'https://www.zayuapi.com', synced_at: '2026-10-28T13:47:00Z',
+      keys: [{ ...key, group_multiplier: null }]
+    })
+    const wrapper = mountModal()
+    await wrapper.get('[data-testid="account-rate-multiplier"]').setValue('2')
+    await useProviderImport(wrapper)
+    await chooseFirstKey(wrapper)
+
+    expect(rateInput(wrapper).value).toBe('2')
+    expect(rateSource(wrapper).exists()).toBe(false)
   })
 
   it('starts the next account in API Key mode after closing', async () => {

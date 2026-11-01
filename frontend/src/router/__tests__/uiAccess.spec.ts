@@ -1,5 +1,33 @@
 import { describe, expect, it, vi } from 'vitest'
-import { checkUIAccessNavigation, safeUIAccessPath } from '../uiAccess'
+import {
+  checkUIAccessNavigation,
+  removeUIAccessCacheBuster,
+  safeUIAccessPath,
+  withoutUIAccessCacheBuster,
+} from '../uiAccess'
+
+describe('UI access cache buster', () => {
+  it.each([
+    ['?_ui_access=abc', ''],
+    ['?tab=security&_ui_access=abc', '?tab=security'],
+    ['?_ui_access=abc&redirect=%2Fkeys%3Fa%3D1&q=a+b', '?redirect=%2Fkeys%3Fa%3D1&q=a+b'],
+    ['?_ui_access&x=1', '?x=1'],
+    ['?ui_access=keep&x_ui_access=keep', '?ui_access=keep&x_ui_access=keep'],
+    ['', ''],
+  ])('drops only the marker from %s', (search, expected) => {
+    expect(withoutUIAccessCacheBuster(search)).toBe(expected)
+  })
+
+  it('cleans the address bar in place and leaves clean URLs alone', () => {
+    const history = { state: { back: '/home' }, replaceState: vi.fn() } as unknown as History
+    removeUIAccessCacheBuster({ pathname: '/admin/accounts', search: '?page=2&_ui_access=k3', hash: '#top' } as Location, history)
+    expect(history.replaceState).toHaveBeenCalledWith({ back: '/home' }, '', '/admin/accounts?page=2#top')
+
+    const untouched = { state: null, replaceState: vi.fn() } as unknown as History
+    removeUIAccessCacheBuster({ pathname: '/keys', search: '?page=2', hash: '' } as Location, untouched)
+    expect(untouched.replaceState).not.toHaveBeenCalled()
+  })
+})
 
 describe('UI access checks during SPA navigation', () => {
   it('does not add a request to the initial browser navigation', async () => {
@@ -18,7 +46,19 @@ describe('UI access checks during SPA navigation', () => {
   it('uses a same-origin uncached HEAD without transferring the SPA', async () => {
     const request = vi.fn().mockResolvedValue({ ok: true })
     expect(await checkUIAccessNavigation('/admin/settings?tab=security#access', true, request)).toBe(true)
-    expect(request).toHaveBeenCalledWith('/admin/settings?tab=security', expect.objectContaining({ method: 'HEAD', credentials: 'same-origin', cache: 'no-store', redirect: 'manual' }))
+    expect(request).toHaveBeenCalledWith(
+      expect.stringMatching(/^\/admin\/settings\?tab=security&_ui_access=[a-z0-9]+$/),
+      expect.objectContaining({ method: 'HEAD', credentials: 'same-origin', cache: 'no-store', redirect: 'manual' }),
+    )
+  })
+
+  it('gives every probe a URL that no CDN has cached', async () => {
+    const request = vi.fn().mockResolvedValue({ ok: true })
+    await checkUIAccessNavigation('/keys', true, request)
+    await checkUIAccessNavigation('/keys', true, request)
+    const [first, second] = request.mock.calls.map(([url]) => url as string)
+    expect(first).toMatch(/^\/keys\?_ui_access=[a-z0-9]+$/)
+    expect(second).not.toBe(first)
   })
 
   it.each([403, 503, 302])('does not allow client navigation after status %s', async status => {

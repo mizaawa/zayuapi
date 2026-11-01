@@ -1079,8 +1079,11 @@
         </div>
         <div>
           <label class="input-label">{{ t('admin.accounts.billingRateMultiplier') }}</label>
-          <input v-model.number="form.rate_multiplier" type="number" min="0" step="0.001" class="input" autocomplete="off" />
-          <p class="input-hint">{{ t('admin.accounts.billingRateMultiplierHint') }}</p>
+          <!-- step matches the column's 4 decimals, so an upstream group multiplier such as 0.0625 stays valid -->
+          <input v-model.number="form.rate_multiplier" type="number" min="0" step="0.0001" class="input" autocomplete="off"
+            data-testid="account-rate-multiplier" />
+          <p v-if="providerRateHint" class="input-hint" data-testid="account-rate-multiplier-source">{{ providerRateHint }}</p>
+          <p v-else class="input-hint">{{ t('admin.accounts.billingRateMultiplierHint') }}</p>
         </div>
       </div>
       <div class="border-t border-gray-200 pt-4 dark:border-dark-600">
@@ -1506,6 +1509,7 @@ import HeaderOverrideEditor from '@/components/account/HeaderOverrideEditor.vue'
 import AccountImportSourceSwitch from '@/components/account/AccountImportSourceSwitch.vue'
 import ProviderAccountImport from '@/components/account/ProviderAccountImport.vue'
 import {
+  providerAccountRateMultiplier,
   providerImportErrorMessage,
   suggestedProviderAccountName,
   type AccountImportSource,
@@ -1589,6 +1593,9 @@ const upstreamBillingAutoProbeEnabled = ref(true)
 const importSource = ref<AccountImportSource>('api')
 const providerSelection = ref<ProviderAccountSelection | null>(null)
 let providerSuggestedName = ''
+// The billing rate taken from the chosen key's group multiplier (rate is null
+// when the provider reported none).
+const providerRateFill = ref<{ key: string; rate: number | null; groupName: string } | null>(null)
 
 const syncPreviewCredentials = computed((): SyncUpstreamPreviewParams | undefined => {
   if (importSource.value === 'provider') {
@@ -1912,17 +1919,50 @@ watch(() => form.platform, (platform) => {
   antigravityMixedChannelConfirmed.value = false
 })
 
-// Provider import: suggest a name from the chosen key unless one was typed.
+const showsProviderRate = () => {
+  const fill = providerRateFill.value
+  return fill !== null && fill.rate !== null && form.rate_multiplier === fill.rate
+}
+
+// Choosing a key bills the account at the key's group multiplier. A rate typed
+// afterwards is kept while the same key stays selected (list refreshes and
+// platform switches re-emit it); a filled rate the new key cannot replace
+// goes back to the default instead of staying with the wrong key.
+const fillProviderRate = (selection: ProviderAccountSelection) => {
+  const key = `${selection.providerId}\n${selection.keyId}`
+  const rate = providerAccountRateMultiplier(selection.groupMultiplier)
+  const filled = showsProviderRate()
+  if (key !== providerRateFill.value?.key || filled) {
+    if (rate !== null) form.rate_multiplier = rate
+    else if (filled) form.rate_multiplier = 1
+  }
+  providerRateFill.value = { key, rate, groupName: selection.groupName }
+}
+
+const providerRateHint = computed(() => {
+  const fill = providerRateFill.value
+  if (!providerSelection.value || !fill || !showsProviderRate()) return ''
+  return t('admin.accounts.billingRateFromProviderGroup', {
+    group: fill.groupName || t('admin.providerImport.defaultGroup')
+  })
+})
+
+// Provider import: suggest a name from the chosen key unless one was typed,
+// and take the billing rate from its group.
 const handleProviderSelection = (selection: ProviderAccountSelection | null) => {
   providerSelection.value = selection
   if (!selection) return
   const suggested = suggestedProviderAccountName(selection)
   if (!form.name.trim() || form.name === providerSuggestedName) form.name = suggested
   providerSuggestedName = suggested
+  fillProviderRate(selection)
 }
 
 watch(importSource, () => {
   providerSelection.value = null
+  // A rate filled in from a provider key does not apply to a manually entered key.
+  if (showsProviderRate()) form.rate_multiplier = 1
+  providerRateFill.value = null
 })
 
 const providerBindingPayload = (): Pick<CreateAccountRequest, 'provider_id' | 'provider_key_id'> => {
@@ -2246,6 +2286,7 @@ const resetForm = () => {
   importSource.value = 'api'
   providerSelection.value = null
   providerSuggestedName = ''
+  providerRateFill.value = null
   upstreamBillingAutoProbeEnabled.value = true
   editQuotaLimit.value = null
   editQuotaDailyLimit.value = null

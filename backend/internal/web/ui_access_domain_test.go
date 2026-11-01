@@ -44,8 +44,7 @@ func assertUIAccessDomainNotice(t *testing.T, response *httptest.ResponseRecorde
 	require.Equal(t, http.StatusForbidden, response.Code)
 	require.Contains(t, response.Body.String(), "请通过官方合规域名进行站点访问")
 	require.Contains(t, response.Body.String(), `href="//example.com/"`)
-	require.Equal(t, "private, no-store", response.Header().Get("Cache-Control"))
-	require.Equal(t, "Host", response.Header().Get("Vary"))
+	assertUIAccessUncacheable(t, response.Header())
 	require.Equal(t, "no-referrer", response.Header().Get("Referrer-Policy"))
 	require.Empty(t, response.Header().Get("ETag"))
 	for _, forbidden := range []string{"<script", "<link", "<iframe", "window.__APP_CONFIG__", "secret-token", "/assets/", "@import", "url("} {

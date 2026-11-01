@@ -65,7 +65,7 @@ func TestUICountryPolicyHostScopeBrandingAndCache(t *testing.T) {
 		require.NotContains(t, blocked.Body.String(), "<script")
 		require.NotContains(t, blocked.Body.String(), "/assets/")
 		require.Empty(t, blocked.Header().Get("ETag"))
-		require.Equal(t, "private, no-store", blocked.Result().Header.Get("Cache-Control"))
+		assertUIAccessUncacheable(t, blocked.Result().Header)
 		require.Contains(t, blocked.Result().Header.Get("Content-Security-Policy"), "form-action 'self'")
 	}
 	settings["ui_access_domain_enabled"] = false
@@ -136,14 +136,17 @@ func TestUICountryRetryRechecksAndReturnsToOriginalPage(t *testing.T) {
 	country, lookupErr = "US", nil
 	allowed := postRetry()
 	require.Equal(t, http.StatusSeeOther, allowed.Code)
-	require.Equal(t, url, allowed.Result().Header.Get("Location"))
-	require.Equal(t, http.StatusOK, requestUIAccessDomain(router, url, "example.com", nil).Code)
+	assertUIAccessUncacheable(t, allowed.Result().Header)
+	returned := allowed.Result().Header.Get("Location")
+	require.Regexp(t, `^/admin/settings\?tab=security&state=keep-this&_ui_access=[a-z2-7]{26}$`, returned)
+	require.Equal(t, http.StatusOK, requestUIAccessDomain(router, returned, "example.com", nil).Code)
 	require.Equal(t, []bool{false, true, true, true, false}, refreshes)
 	provider.settings = map[string]any{"ui_country_restriction_enabled": false, "ui_blocked_countries": "CN"}
 	server.InvalidateCache()
 	cleared := postRetry()
 	require.Equal(t, http.StatusSeeOther, cleared.Code, "disabling the policy also restores the original GET page")
-	require.Equal(t, url, cleared.Result().Header.Get("Location"))
+	assertUIAccessUncacheable(t, cleared.Result().Header)
+	require.Regexp(t, `^/admin/settings\?tab=security&state=keep-this&_ui_access=[a-z2-7]{26}$`, cleared.Result().Header.Get("Location"))
 	require.Equal(t, []bool{false, true, true, true, false}, refreshes, "disabled policy never calls geo lookup")
 }
 

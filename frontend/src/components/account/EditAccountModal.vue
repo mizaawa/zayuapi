@@ -1471,7 +1471,7 @@
             v-model.number="form.rate_multiplier"
             type="number"
             min="0"
-            step="0.001"
+            step="0.0001"
             class="input disabled:cursor-not-allowed disabled:opacity-60"
             data-testid="account-rate-multiplier"
             :disabled="upstreamBillingRateSyncEnabled"

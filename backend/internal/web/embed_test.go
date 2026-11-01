@@ -426,7 +426,7 @@ func TestFrontendServer_ServeIndexHTML(t *testing.T) {
 		assert.Contains(t, w.Header().Get("Content-Type"), "text/html")
 		assert.NotContains(t, w.Body.String(), "window.__APP_CONFIG__")
 		assert.NotContains(t, w.Body.String(), "<script")
-		assert.Equal(t, "private, no-store", w.Header().Get("Cache-Control"))
+		assertUIAccessUncacheable(t, w.Header())
 	})
 }
 

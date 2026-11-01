@@ -659,7 +659,14 @@
 
   .modal-content {
     @apply w-full;
-    @apply max-h-[95vh] sm:max-h-[90vh];
+    /* dvh follows Safari's toolbars as they expand and collapse; vh (sized for
+     * collapsed toolbars) would push the footer under them. vh stays as the
+     * fallback for browsers without dynamic viewport units. */
+    max-height: 95vh;
+    max-height: 95dvh;
+    /* Centers like the overlay's alignment, but a panel taller than the
+     * screen keeps its header on screen instead of overflowing both ends. */
+    margin: auto;
     background: var(--md-sys-color-surface);
     border: 1px solid transparent;
     @apply overflow-hidden rounded-4xl shadow-card-hover;
@@ -706,11 +713,23 @@
   .modal-close { color: var(--md-sys-color-on-surface-variant); }
   .modal-close:hover { background: var(--md-sys-color-surface-container-high); color: var(--md-sys-color-on-surface); }
 
+  @media (min-width: 640px) {
+    .modal-content {
+      max-height: 90vh;
+      max-height: 90dvh;
+    }
+  }
+
   .modal-body {
     @apply px-4 py-3;
     @apply sm:px-6 sm:py-4;
     @apply flex-1 overflow-y-auto;
     min-width: 0;
+    /* Lets the body shrink inside the panel's max-height in every engine, so
+     * it scrolls instead of growing the panel past the screen. */
+    min-height: 0;
+    /* Reaching either end does not hand the swipe to the page underneath. */
+    overscroll-behavior: contain;
   }
 
   .group-selector-portal {

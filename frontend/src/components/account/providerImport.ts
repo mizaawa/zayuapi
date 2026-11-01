@@ -68,6 +68,21 @@ export function formatProviderMultiplier(value: number | null | undefined): stri
   return `${Number(value.toFixed(4))}×`
 }
 
+// accounts.rate_multiplier is DECIMAL(10,4).
+const ACCOUNT_RATE_SCALE = 10_000
+const ACCOUNT_RATE_MAX = 999_999.9999
+
+/**
+ * The account billing multiplier that mirrors a provider key's group
+ * multiplier, rounded to the column's precision. Null when the provider
+ * reported no usable value.
+ */
+export function providerAccountRateMultiplier(value: number | null | undefined): number | null {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) return null
+  const rate = Math.round(value * ACCOUNT_RATE_SCALE) / ACCOUNT_RATE_SCALE
+  return rate <= ACCOUNT_RATE_MAX ? rate : null
+}
+
 /** Formats a sync time as MM/DD HH:mm in the viewer's time zone. */
 export function formatProviderSyncedAt(value?: string): string {
   if (!value) return ''

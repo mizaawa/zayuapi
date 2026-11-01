@@ -15,7 +15,7 @@ import { getSetupStatus } from '@/api/setup'
 import { resolveCompletedSetupRedirectPath } from './setupRedirect'
 import { resolveRouteDocumentTitle } from './title'
 import { notFoundLocation } from './notFound'
-import { checkUIAccessNavigation, safeUIAccessPath } from './uiAccess'
+import { checkUIAccessNavigation, removeUIAccessCacheBuster, safeUIAccessPath } from './uiAccess'
 import { warmRouteComponents } from './warmRoute'
 
 /**
@@ -800,6 +800,9 @@ const routes: RouteRecordRaw[] = [
     }
   }
 ]
+
+// A region retry returns with a one-time cache buster; the history must not read it.
+removeUIAccessCacheBuster()
 
 /**
  * Create router instance

@@ -25,8 +25,7 @@ func allowUIHost(c *gin.Context, policy uiAccessPolicy) bool {
 	}
 	// The actual authority is checked before ETag handling. Forwarded host
 	// headers cannot grant UI access on an API/CDN hostname.
-	c.Header("Cache-Control", "private, no-store")
-	c.Header("Vary", "Host")
+	preventUIAccessCaching(c.Writer.Header())
 	if uiaccess.RequestHostMatches(c.Request.Host, domain) {
 		return true
 	}
@@ -105,8 +104,7 @@ func uiNoticeScene(kind string) string {
 }
 
 func serveUINoticeWithPolicy(c *gin.Context, status int, body, policy string) {
-	c.Header("Cache-Control", "private, no-store")
-	c.Header("Vary", "Host")
+	preventUIAccessCaching(c.Writer.Header())
 	c.Header("Referrer-Policy", "no-referrer")
 	c.Header("X-Content-Type-Options", "nosniff")
 	c.Header("Content-Security-Policy", policy)

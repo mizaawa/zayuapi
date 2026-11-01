@@ -214,6 +214,18 @@ origin access is blocked and Caddy trusts only those TCP peers. Configure
 Sub2API `server.trusted_proxies` with the Caddy address/private subnet so the
 application accepts only Caddy's rewritten headers.
 
+With the web UI domain or region restriction enabled, every UI page depends on
+the visitor's host and region. The application marks those pages, their access
+notices and the region retry redirect as uncacheable: `Cache-Control: private,
+no-store`, `Pragma`, `Expires`, `CDN-Cache-Control`,
+`Cloudflare-CDN-Cache-Control`, `Surrogate-Control`, `X-Accel-Expires`,
+`Vary: *` and an already-expired cookie. Do not override them at the CDN.
+Exclude UI documents from "cache everything", "ignore origin cache headers" or
+forced-cache rules, and from status-code caching for 403 and 503; otherwise one
+visitor's region notice is replayed to everyone opening that page. A retry and
+each in-app navigation check add a one-time `_ui_access` query parameter, so
+keep query strings in the cache key.
+
 Caddy core does not provide a general request-rate limiter; use a trusted
 CDN/WAF, a supported rate-limit module, or host firewall controls.
 
