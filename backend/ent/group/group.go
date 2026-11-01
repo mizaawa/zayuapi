@@ -132,6 +132,10 @@ const (
 	FieldProfitMinMargin = "profit_min_margin"
 	// FieldProfitSafetyBuffer holds the string denoting the profit_safety_buffer field in the database.
 	FieldProfitSafetyBuffer = "profit_safety_buffer"
+	// FieldCyberAutoChargeEnabled holds the string denoting the cyber_auto_charge_enabled field in the database.
+	FieldCyberAutoChargeEnabled = "cyber_auto_charge_enabled"
+	// FieldCyberAutoChargeAmount holds the string denoting the cyber_auto_charge_amount field in the database.
+	FieldCyberAutoChargeAmount = "cyber_auto_charge_amount"
 	// EdgeAPIKeys holds the string denoting the api_keys edge name in mutations.
 	EdgeAPIKeys = "api_keys"
 	// EdgeChannelMonitors holds the string denoting the channel_monitors edge name in mutations.
@@ -274,6 +278,8 @@ var Columns = []string{
 	FieldProfitControlEnabled,
 	FieldProfitMinMargin,
 	FieldProfitSafetyBuffer,
+	FieldCyberAutoChargeEnabled,
+	FieldCyberAutoChargeAmount,
 }
 
 var (
@@ -403,6 +409,10 @@ var (
 	DefaultProfitMinMargin float64
 	// DefaultProfitSafetyBuffer holds the default value on creation for the "profit_safety_buffer" field.
 	DefaultProfitSafetyBuffer float64
+	// DefaultCyberAutoChargeEnabled holds the default value on creation for the "cyber_auto_charge_enabled" field.
+	DefaultCyberAutoChargeEnabled bool
+	// DefaultCyberAutoChargeAmount holds the default value on creation for the "cyber_auto_charge_amount" field.
+	DefaultCyberAutoChargeAmount float64
 )
 
 // OrderOption defines the ordering options for the Group queries.
@@ -671,6 +681,16 @@ func ByProfitMinMargin(opts ...sql.OrderTermOption) OrderOption {
 // ByProfitSafetyBuffer orders the results by the profit_safety_buffer field.
 func ByProfitSafetyBuffer(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldProfitSafetyBuffer, opts...).ToFunc()
+}
+
+// ByCyberAutoChargeEnabled orders the results by the cyber_auto_charge_enabled field.
+func ByCyberAutoChargeEnabled(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldCyberAutoChargeEnabled, opts...).ToFunc()
+}
+
+// ByCyberAutoChargeAmount orders the results by the cyber_auto_charge_amount field.
+func ByCyberAutoChargeAmount(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldCyberAutoChargeAmount, opts...).ToFunc()
 }
 
 // ByAPIKeysCount orders the results by api_keys count.

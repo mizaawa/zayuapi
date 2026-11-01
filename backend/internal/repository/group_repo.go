@@ -93,7 +93,6 @@ func createGroupRecord(ctx context.Context, client *dbent.Client, groupIn *servi
 		SetMcpXMLInject(groupIn.MCPXMLInject).
 		SetAllowMessagesDispatch(groupIn.AllowMessagesDispatch).
 		SetAllowLive(groupIn.AllowLive).
-		SetRequireOauthOnly(groupIn.RequireOAuthOnly).
 		SetRequirePrivacySet(groupIn.RequirePrivacySet).
 		SetDefaultMappedModel(groupIn.DefaultMappedModel).
 		SetMessagesDispatchModelConfig(groupIn.MessagesDispatchModelConfig).
@@ -108,7 +107,9 @@ func createGroupRecord(ctx context.Context, client *dbent.Client, groupIn *servi
 		SetPeakRateMultiplier(groupIn.PeakRateMultiplier).
 		SetProfitControlEnabled(groupIn.ProfitControlEnabled).
 		SetProfitMinMargin(groupIn.ProfitMinMargin).
-		SetProfitSafetyBuffer(groupIn.ProfitSafetyBuffer)
+		SetProfitSafetyBuffer(groupIn.ProfitSafetyBuffer).
+		SetCyberAutoChargeEnabled(groupIn.CyberAutoChargeEnabled).
+		SetCyberAutoChargeAmount(groupIn.CyberAutoChargeAmount)
 	if groupIn.DuplicateOperationID != "" {
 		builder = builder.SetDuplicateOperationID(groupIn.DuplicateOperationID)
 	}
@@ -180,12 +181,9 @@ func (r *groupRepository) CreateFromSource(ctx context.Context, groupIn *service
 		 JOIN accounts a ON a.id = ag.account_id
 		 WHERE ag.group_id = $1
 		   AND a.deleted_at IS NULL
-		   AND (NOT $3 OR a.type <> $4)
 		 ON CONFLICT (account_id, group_id) DO NOTHING`,
 		sourceGroupID,
 		groupIn.ID,
-		groupIn.RequireOAuthOnly,
-		service.AccountTypeAPIKey,
 	)
 	if err != nil {
 		return err
@@ -265,7 +263,6 @@ func (r *groupRepository) Update(ctx context.Context, groupIn *service.Group) er
 		SetMcpXMLInject(groupIn.MCPXMLInject).
 		SetAllowMessagesDispatch(groupIn.AllowMessagesDispatch).
 		SetAllowLive(groupIn.AllowLive).
-		SetRequireOauthOnly(groupIn.RequireOAuthOnly).
 		SetRequirePrivacySet(groupIn.RequirePrivacySet).
 		SetDefaultMappedModel(groupIn.DefaultMappedModel).
 		SetMessagesDispatchModelConfig(groupIn.MessagesDispatchModelConfig).
@@ -279,7 +276,9 @@ func (r *groupRepository) Update(ctx context.Context, groupIn *service.Group) er
 		SetPeakRateMultiplier(groupIn.PeakRateMultiplier).
 		SetProfitControlEnabled(groupIn.ProfitControlEnabled).
 		SetProfitMinMargin(groupIn.ProfitMinMargin).
-		SetProfitSafetyBuffer(groupIn.ProfitSafetyBuffer)
+		SetProfitSafetyBuffer(groupIn.ProfitSafetyBuffer).
+		SetCyberAutoChargeEnabled(groupIn.CyberAutoChargeEnabled).
+		SetCyberAutoChargeAmount(groupIn.CyberAutoChargeAmount)
 	if groupIn.ModelPricing != nil {
 		builder = builder.SetModelPricing(groupIn.ModelPricing)
 	} else {

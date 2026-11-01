@@ -255,6 +255,23 @@ describe('OperationsView', () => {
     wrapper.unmount()
   })
 
+  it('shows deleted groups as one row and filters models with -2', async () => {
+    const deletedRow = { group_id: -2, group_name: 'Deleted groups', platform: 'custom' as const, rate_multiplier: 1, user_cost: 6, upstream_cost: 2 }
+    getOperationsDashboard.mockResolvedValue({ ...fixture(), groups: [...fixture().groups, deletedRow] })
+    const wrapper = mountPage()
+    await flushPromises()
+    const row = wrapper.get('[data-group="-2"]')
+    expect(row.text()).toContain('admin.operations.deletedGroups')
+    expect(row.text()).not.toContain('Deleted groups')
+    expect(row.text()).not.toContain('×')
+    expect(row.attributes('title')).toBe('admin.operations.deletedGroupsHint')
+    expect(wrapper.get('[data-group="all"]').text()).toContain('$58.00')
+    await row.trigger('click')
+    await flushPromises()
+    expect(getOperationsDashboard.mock.lastCall?.[0].group_id).toBe(-2)
+    wrapper.unmount()
+  })
+
   it('uses a seven-day trend on narrow screens and ignores a late response', async () => {
     window.innerWidth = 600
     const wrapper = mountPage()

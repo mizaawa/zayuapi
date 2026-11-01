@@ -14,7 +14,7 @@ import (
 	"github.com/dgraph-io/ristretto"
 )
 
-const apiKeyAuthSnapshotVersion = 25 // v25: include the group video-workbench declaration
+const apiKeyAuthSnapshotVersion = 26 // v26: include the group cyber auto-charge settings
 
 type apiKeyAuthCacheConfig struct {
 	l1Size        int
@@ -437,6 +437,8 @@ func (s *APIKeyService) snapshotFromAPIKey(ctx context.Context, apiKey *APIKey) 
 			ProfitControlEnabled:            apiKey.Group.ProfitControlEnabled,
 			ProfitMinMargin:                 apiKey.Group.ProfitMinMargin,
 			ProfitSafetyBuffer:              apiKey.Group.ProfitSafetyBuffer,
+			CyberAutoChargeEnabled:          apiKey.Group.CyberAutoChargeEnabled,
+			CyberAutoChargeAmount:           apiKey.Group.CyberAutoChargeAmount,
 		}
 	}
 	return snapshot
@@ -541,6 +543,8 @@ func (s *APIKeyService) snapshotToAPIKey(key string, snapshot *APIKeyAuthSnapsho
 			ProfitControlEnabled:            snapshot.Group.ProfitControlEnabled,
 			ProfitMinMargin:                 snapshot.Group.ProfitMinMargin,
 			ProfitSafetyBuffer:              snapshot.Group.ProfitSafetyBuffer,
+			CyberAutoChargeEnabled:          snapshot.Group.CyberAutoChargeEnabled,
+			CyberAutoChargeAmount:           snapshot.Group.CyberAutoChargeAmount,
 		}
 	}
 	s.compileAPIKeyIPRules(apiKey)

@@ -53,13 +53,11 @@ func TestAdminService_CreateCustomGroupCopiesAccountsFromCustomGroups(t *testing
 		ReasoningEffortMappings: []ReasoningEffortMapping{
 			{From: "max", To: "xhigh"},
 		},
-		RequireOAuthOnly:         true,
 		CopyAccountsFromGroupIDs: []int64{10, 20, 10},
 	})
 
 	require.NoError(t, err)
 	require.Equal(t, PlatformComposite, groupRepo.created.Platform)
-	require.False(t, groupRepo.created.RequireOAuthOnly)
 	require.Empty(t, groupRepo.created.MaxReasoningEffort)
 	require.Empty(t, groupRepo.created.ReasoningEffortMappings)
 	require.Equal(t, int64(99), group.ID)
@@ -105,7 +103,7 @@ func TestAdminService_UpdateCustomGroupCopiesAccountsFromCustomGroups(t *testing
 		getByIDByID: map[int64]*Group{
 			10: {ID: 10, Platform: PlatformComposite},
 			20: {ID: 20, Platform: PlatformComposite},
-			99: {ID: 99, Platform: PlatformComposite, RateMultiplier: 1, SubscriptionType: SubscriptionTypeStandard, RequireOAuthOnly: true},
+			99: {ID: 99, Platform: PlatformComposite, RateMultiplier: 1, SubscriptionType: SubscriptionTypeStandard},
 		},
 		deleteAccountGroupsByGroupIDFn: func(groupID int64) (int64, error) {
 			clearedGroupID = groupID
@@ -137,7 +135,6 @@ func TestAdminService_UpdateCustomGroupCopiesAccountsFromCustomGroups(t *testing
 
 	require.NoError(t, err)
 	require.Equal(t, PlatformComposite, group.Platform)
-	require.False(t, group.RequireOAuthOnly)
 	require.Empty(t, group.MaxReasoningEffort)
 	require.Empty(t, group.ReasoningEffortMappings)
 	require.Equal(t, int64(99), clearedGroupID)

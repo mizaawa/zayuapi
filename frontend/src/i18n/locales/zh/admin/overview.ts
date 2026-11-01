@@ -159,6 +159,8 @@ export default {
       models: '模型',
       allGroups: '全部分组',
       unassigned: '未分组',
+      deletedGroups: '已删除分组',
+      deletedGroupsHint: '已删除分组在该时段内的消耗合计',
       multiplier: '倍率',
       profit: '盈利',
       userCost: '用户消耗',
@@ -1073,8 +1075,6 @@ export default {
       rateLabel: '倍率',
       accountFilters: {
         title: '账号过滤控制',
-        oauthOnly: '仅允许 OAuth 账号',
-        oauthOnlyEnabled: '已启用 — 排除 API Key 类型账号',
         privacySetOnly: '仅允许隐私保护已设置的账号',
         privacySetOnlyEnabled: '已启用 — Privacy 未设置的账号将被排除',
         disabled: '未启用'
@@ -1195,6 +1195,13 @@ export default {
         marginRangeError: '最低毛利率应在 0 到 99.99 之间',
         bufferRangeError: '安全缓冲应在 0 到 99.99 之间',
         sumTooHigh: '最低毛利率与安全缓冲之和必须小于 100%，否则将排除全部账号'
+      },
+      cyberAutoCharge: {
+        title: 'Cyber 自动扣款',
+        hint: '开启后，用户请求被上游 cyber_policy（网络安全策略）拦截时，按下方金额执行一次扣款。',
+        amount: '扣款金额（USD）',
+        amountHint: '每命中一次 cyber 扣一次，记入该请求的用量费用；订阅分组从订阅额度中扣除。',
+        amountRequired: '开启 Cyber 自动扣款时，请填写大于 0 的扣款金额'
       },
       videoWorkbench: {
         title: '声明分组视频功能',

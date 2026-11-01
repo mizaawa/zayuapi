@@ -23,11 +23,30 @@ type operationsUsersRepoCapture struct {
 type operationsDashboardTimezoneCapture struct {
 	service.UsageLogRepository
 	timezone string
+	groupID  int64
 }
 
-func (r *operationsDashboardTimezoneCapture) GetOperationsDashboardData(_ context.Context, _, _, _, _, _, _ time.Time, timezone string, _ int64) (*service.OperationsDashboardData, error) {
+func (r *operationsDashboardTimezoneCapture) GetOperationsDashboardData(_ context.Context, _, _, _, _, _, _ time.Time, timezone string, groupID int64) (*service.OperationsDashboardData, error) {
 	r.timezone = timezone
+	r.groupID = groupID
 	return &service.OperationsDashboardData{}, nil
+}
+
+func TestGetOperationsDashboardAcceptsDeletedGroupsFilter(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	repo := &operationsDashboardTimezoneCapture{}
+	h := NewDashboardHandler(service.NewDashboardService(repo, nil, nil, nil), nil)
+	router := gin.New()
+	router.GET("/admin/dashboard/operations", h.GetOperationsDashboard)
+
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/admin/dashboard/operations?group_id=-2", nil))
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Equal(t, int64(-2), repo.groupID)
+
+	rec = httptest.NewRecorder()
+	router.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/admin/dashboard/operations?group_id=-3", nil))
+	require.Equal(t, http.StatusBadRequest, rec.Code)
 }
 
 func TestGetOperationsDashboardDefaultsEmptyTimezone(t *testing.T) {

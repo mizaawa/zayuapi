@@ -802,6 +802,34 @@ func (_c *GroupCreate) SetNillableProfitSafetyBuffer(v *float64) *GroupCreate {
 	return _c
 }
 
+// SetCyberAutoChargeEnabled sets the "cyber_auto_charge_enabled" field.
+func (_c *GroupCreate) SetCyberAutoChargeEnabled(v bool) *GroupCreate {
+	_c.mutation.SetCyberAutoChargeEnabled(v)
+	return _c
+}
+
+// SetNillableCyberAutoChargeEnabled sets the "cyber_auto_charge_enabled" field if the given value is not nil.
+func (_c *GroupCreate) SetNillableCyberAutoChargeEnabled(v *bool) *GroupCreate {
+	if v != nil {
+		_c.SetCyberAutoChargeEnabled(*v)
+	}
+	return _c
+}
+
+// SetCyberAutoChargeAmount sets the "cyber_auto_charge_amount" field.
+func (_c *GroupCreate) SetCyberAutoChargeAmount(v float64) *GroupCreate {
+	_c.mutation.SetCyberAutoChargeAmount(v)
+	return _c
+}
+
+// SetNillableCyberAutoChargeAmount sets the "cyber_auto_charge_amount" field if the given value is not nil.
+func (_c *GroupCreate) SetNillableCyberAutoChargeAmount(v *float64) *GroupCreate {
+	if v != nil {
+		_c.SetCyberAutoChargeAmount(*v)
+	}
+	return _c
+}
+
 // AddAPIKeyIDs adds the "api_keys" edge to the APIKey entity by IDs.
 func (_c *GroupCreate) AddAPIKeyIDs(ids ...int64) *GroupCreate {
 	_c.mutation.AddAPIKeyIDs(ids...)
@@ -1110,6 +1138,14 @@ func (_c *GroupCreate) defaults() error {
 		v := group.DefaultProfitSafetyBuffer
 		_c.mutation.SetProfitSafetyBuffer(v)
 	}
+	if _, ok := _c.mutation.CyberAutoChargeEnabled(); !ok {
+		v := group.DefaultCyberAutoChargeEnabled
+		_c.mutation.SetCyberAutoChargeEnabled(v)
+	}
+	if _, ok := _c.mutation.CyberAutoChargeAmount(); !ok {
+		v := group.DefaultCyberAutoChargeAmount
+		_c.mutation.SetCyberAutoChargeAmount(v)
+	}
 	return nil
 }
 
@@ -1282,6 +1318,12 @@ func (_c *GroupCreate) check() error {
 	}
 	if _, ok := _c.mutation.ProfitSafetyBuffer(); !ok {
 		return &ValidationError{Name: "profit_safety_buffer", err: errors.New(`ent: missing required field "Group.profit_safety_buffer"`)}
+	}
+	if _, ok := _c.mutation.CyberAutoChargeEnabled(); !ok {
+		return &ValidationError{Name: "cyber_auto_charge_enabled", err: errors.New(`ent: missing required field "Group.cyber_auto_charge_enabled"`)}
+	}
+	if _, ok := _c.mutation.CyberAutoChargeAmount(); !ok {
+		return &ValidationError{Name: "cyber_auto_charge_amount", err: errors.New(`ent: missing required field "Group.cyber_auto_charge_amount"`)}
 	}
 	return nil
 }
@@ -1541,6 +1583,14 @@ func (_c *GroupCreate) createSpec() (*Group, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.ProfitSafetyBuffer(); ok {
 		_spec.SetField(group.FieldProfitSafetyBuffer, field.TypeFloat64, value)
 		_node.ProfitSafetyBuffer = value
+	}
+	if value, ok := _c.mutation.CyberAutoChargeEnabled(); ok {
+		_spec.SetField(group.FieldCyberAutoChargeEnabled, field.TypeBool, value)
+		_node.CyberAutoChargeEnabled = value
+	}
+	if value, ok := _c.mutation.CyberAutoChargeAmount(); ok {
+		_spec.SetField(group.FieldCyberAutoChargeAmount, field.TypeFloat64, value)
+		_node.CyberAutoChargeAmount = value
 	}
 	if nodes := _c.mutation.APIKeysIDs(); len(nodes) > 0 {
 		edge := &sqlgraph.EdgeSpec{
@@ -2617,6 +2667,36 @@ func (u *GroupUpsert) UpdateProfitSafetyBuffer() *GroupUpsert {
 // AddProfitSafetyBuffer adds v to the "profit_safety_buffer" field.
 func (u *GroupUpsert) AddProfitSafetyBuffer(v float64) *GroupUpsert {
 	u.Add(group.FieldProfitSafetyBuffer, v)
+	return u
+}
+
+// SetCyberAutoChargeEnabled sets the "cyber_auto_charge_enabled" field.
+func (u *GroupUpsert) SetCyberAutoChargeEnabled(v bool) *GroupUpsert {
+	u.Set(group.FieldCyberAutoChargeEnabled, v)
+	return u
+}
+
+// UpdateCyberAutoChargeEnabled sets the "cyber_auto_charge_enabled" field to the value that was provided on create.
+func (u *GroupUpsert) UpdateCyberAutoChargeEnabled() *GroupUpsert {
+	u.SetExcluded(group.FieldCyberAutoChargeEnabled)
+	return u
+}
+
+// SetCyberAutoChargeAmount sets the "cyber_auto_charge_amount" field.
+func (u *GroupUpsert) SetCyberAutoChargeAmount(v float64) *GroupUpsert {
+	u.Set(group.FieldCyberAutoChargeAmount, v)
+	return u
+}
+
+// UpdateCyberAutoChargeAmount sets the "cyber_auto_charge_amount" field to the value that was provided on create.
+func (u *GroupUpsert) UpdateCyberAutoChargeAmount() *GroupUpsert {
+	u.SetExcluded(group.FieldCyberAutoChargeAmount)
+	return u
+}
+
+// AddCyberAutoChargeAmount adds v to the "cyber_auto_charge_amount" field.
+func (u *GroupUpsert) AddCyberAutoChargeAmount(v float64) *GroupUpsert {
+	u.Add(group.FieldCyberAutoChargeAmount, v)
 	return u
 }
 
@@ -3722,6 +3802,41 @@ func (u *GroupUpsertOne) AddProfitSafetyBuffer(v float64) *GroupUpsertOne {
 func (u *GroupUpsertOne) UpdateProfitSafetyBuffer() *GroupUpsertOne {
 	return u.Update(func(s *GroupUpsert) {
 		s.UpdateProfitSafetyBuffer()
+	})
+}
+
+// SetCyberAutoChargeEnabled sets the "cyber_auto_charge_enabled" field.
+func (u *GroupUpsertOne) SetCyberAutoChargeEnabled(v bool) *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.SetCyberAutoChargeEnabled(v)
+	})
+}
+
+// UpdateCyberAutoChargeEnabled sets the "cyber_auto_charge_enabled" field to the value that was provided on create.
+func (u *GroupUpsertOne) UpdateCyberAutoChargeEnabled() *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.UpdateCyberAutoChargeEnabled()
+	})
+}
+
+// SetCyberAutoChargeAmount sets the "cyber_auto_charge_amount" field.
+func (u *GroupUpsertOne) SetCyberAutoChargeAmount(v float64) *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.SetCyberAutoChargeAmount(v)
+	})
+}
+
+// AddCyberAutoChargeAmount adds v to the "cyber_auto_charge_amount" field.
+func (u *GroupUpsertOne) AddCyberAutoChargeAmount(v float64) *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.AddCyberAutoChargeAmount(v)
+	})
+}
+
+// UpdateCyberAutoChargeAmount sets the "cyber_auto_charge_amount" field to the value that was provided on create.
+func (u *GroupUpsertOne) UpdateCyberAutoChargeAmount() *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.UpdateCyberAutoChargeAmount()
 	})
 }
 
@@ -4993,6 +5108,41 @@ func (u *GroupUpsertBulk) AddProfitSafetyBuffer(v float64) *GroupUpsertBulk {
 func (u *GroupUpsertBulk) UpdateProfitSafetyBuffer() *GroupUpsertBulk {
 	return u.Update(func(s *GroupUpsert) {
 		s.UpdateProfitSafetyBuffer()
+	})
+}
+
+// SetCyberAutoChargeEnabled sets the "cyber_auto_charge_enabled" field.
+func (u *GroupUpsertBulk) SetCyberAutoChargeEnabled(v bool) *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.SetCyberAutoChargeEnabled(v)
+	})
+}
+
+// UpdateCyberAutoChargeEnabled sets the "cyber_auto_charge_enabled" field to the value that was provided on create.
+func (u *GroupUpsertBulk) UpdateCyberAutoChargeEnabled() *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.UpdateCyberAutoChargeEnabled()
+	})
+}
+
+// SetCyberAutoChargeAmount sets the "cyber_auto_charge_amount" field.
+func (u *GroupUpsertBulk) SetCyberAutoChargeAmount(v float64) *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.SetCyberAutoChargeAmount(v)
+	})
+}
+
+// AddCyberAutoChargeAmount adds v to the "cyber_auto_charge_amount" field.
+func (u *GroupUpsertBulk) AddCyberAutoChargeAmount(v float64) *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.AddCyberAutoChargeAmount(v)
+	})
+}
+
+// UpdateCyberAutoChargeAmount sets the "cyber_auto_charge_amount" field to the value that was provided on create.
+func (u *GroupUpsertBulk) UpdateCyberAutoChargeAmount() *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.UpdateCyberAutoChargeAmount()
 	})
 }
 

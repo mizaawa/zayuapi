@@ -61,7 +61,7 @@
                 </button>
                 <div
                   v-if="showColumnDropdown"
-                  class="groups-column-menu absolute right-0 top-full z-50 mt-1.5 max-h-80 w-52 overflow-y-auto py-1.5"
+                  class="groups-column-menu absolute left-0 top-full z-50 mt-1.5 max-h-80 w-52 overflow-y-auto py-1.5 lg:left-auto lg:right-0"
                 >
                   <button
                     v-for="col in toggleableColumns"
@@ -570,11 +570,11 @@
         </div>
         <!-- 从分组复制账号 -->
         <div v-if="copyAccountsGroupOptions.length > 0">
-          <div class="mb-1.5 flex items-center gap-1">
+          <div class="relative mb-1.5 flex items-center gap-1">
             <label class="text-sm font-medium text-gray-700 dark:text-gray-300">
               {{ t("admin.groups.copyAccounts.title") }}
             </label>
-            <div class="group relative inline-flex">
+            <div class="group inline-flex sm:relative">
               <Icon
                 name="questionCircle"
                 size="sm"
@@ -582,7 +582,7 @@
                 class="cursor-help text-gray-400 transition-colors hover:text-primary-500 dark:text-gray-500 dark:hover:text-primary-400"
               />
               <div
-                class="pointer-events-none absolute bottom-full left-0 z-50 mb-2 w-72 opacity-0 transition-all duration-200 group-hover:pointer-events-auto group-hover:opacity-100"
+                class="pointer-events-none absolute bottom-full left-0 z-50 mb-2 w-72 max-w-full sm:max-w-none opacity-0 transition-all duration-200 group-hover:pointer-events-auto group-hover:opacity-100"
               >
                 <div
                   class="rounded-lg bg-gray-900 p-3 text-white shadow-lg dark:bg-gray-800"
@@ -591,7 +591,7 @@
                     {{ t("admin.groups.copyAccounts.tooltip") }}
                   </p>
                   <div
-                    class="absolute -bottom-1.5 left-3 h-3 w-3 rotate-45 bg-gray-900 dark:bg-gray-800"
+                    class="absolute -bottom-1.5 left-3 hidden h-3 w-3 rotate-45 sm:block bg-gray-900 dark:bg-gray-800"
                   ></div>
                 </div>
               </div>
@@ -688,12 +688,12 @@
           v-if="createForm.subscription_type !== 'subscription'"
           data-tour="group-form-exclusive"
         >
-          <div class="mb-1.5 flex items-center gap-1">
+          <div class="relative mb-1.5 flex items-center gap-1">
             <label class="text-sm font-medium text-gray-700 dark:text-gray-300">
               {{ t("admin.groups.form.exclusive") }}
             </label>
             <!-- Help Tooltip -->
-            <div class="group relative inline-flex">
+            <div class="group inline-flex sm:relative">
               <Icon
                 name="questionCircle"
                 size="sm"
@@ -702,7 +702,7 @@
               />
               <!-- Tooltip Popover -->
               <div
-                class="pointer-events-none absolute bottom-full left-0 z-50 mb-2 w-72 opacity-0 transition-all duration-200 group-hover:pointer-events-auto group-hover:opacity-100"
+                class="pointer-events-none absolute bottom-full left-0 z-50 mb-2 w-72 max-w-full sm:max-w-none opacity-0 transition-all duration-200 group-hover:pointer-events-auto group-hover:opacity-100"
               >
                 <div
                   class="rounded-lg bg-gray-900 p-3 text-white shadow-lg dark:bg-gray-800"
@@ -725,7 +725,7 @@
                   </div>
                   <!-- Arrow -->
                   <div
-                    class="absolute -bottom-1.5 left-3 h-3 w-3 rotate-45 bg-gray-900 dark:bg-gray-800"
+                    class="absolute -bottom-1.5 left-3 hidden h-3 w-3 rotate-45 sm:block bg-gray-900 dark:bg-gray-800"
                   ></div>
                 </div>
               </div>
@@ -1327,14 +1327,66 @@
           </div>
         </div>
 
+        <!-- Cyber 自动扣款（走 OpenAI 网关的分组） -->
+        <div
+          v-if="isCyberAutoChargePlatform(createForm.platform)"
+          class="border-t pt-4"
+          data-testid="cyber-auto-charge"
+        >
+          <div class="flex items-start justify-between gap-4">
+            <div class="min-w-0">
+              <label class="text-sm font-medium text-gray-700 dark:text-gray-300">
+                {{ t("admin.groups.cyberAutoCharge.title") }}
+              </label>
+              <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                {{ t("admin.groups.cyberAutoCharge.hint") }}
+              </p>
+            </div>
+            <button
+              type="button"
+              role="switch"
+              :aria-checked="createForm.cyber_auto_charge_enabled"
+              :aria-label="t('admin.groups.cyberAutoCharge.title')"
+              data-testid="cyber-auto-charge-toggle"
+              @click="createForm.cyber_auto_charge_enabled = !createForm.cyber_auto_charge_enabled"
+              :class="[
+                'relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors',
+                createForm.cyber_auto_charge_enabled
+                  ? 'bg-primary-500'
+                  : 'bg-gray-300 dark:bg-dark-600',
+              ]"
+            >
+              <span
+                :class="[
+                  'inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform',
+                  createForm.cyber_auto_charge_enabled ? 'translate-x-6' : 'translate-x-1',
+                ]"
+              />
+            </button>
+          </div>
+          <div v-if="createForm.cyber_auto_charge_enabled" class="mt-3">
+            <label class="input-label">{{ t("admin.groups.cyberAutoCharge.amount") }}</label>
+            <input
+              v-model.number="createForm.cyber_auto_charge_amount"
+              type="number"
+              step="0.0001"
+              min="0"
+              class="input"
+              placeholder="0.5"
+              data-testid="cyber-auto-charge-amount"
+            />
+            <p class="input-hint">{{ t("admin.groups.cyberAutoCharge.amountHint") }}</p>
+          </div>
+        </div>
+
         <!-- 支持的模型系列（仅 antigravity 平台） -->
         <div v-if="createForm.platform === 'antigravity'" class="border-t pt-4">
-          <div class="mb-1.5 flex items-center gap-1">
+          <div class="relative mb-1.5 flex items-center gap-1">
             <label class="text-sm font-medium text-gray-700 dark:text-gray-300">
               {{ t("admin.groups.supportedScopes.title") }}
             </label>
             <!-- Help Tooltip -->
-            <div class="group relative inline-flex">
+            <div class="group inline-flex sm:relative">
               <Icon
                 name="questionCircle"
                 size="sm"
@@ -1342,7 +1394,7 @@
                 class="cursor-help text-gray-400 transition-colors hover:text-primary-500 dark:text-gray-500 dark:hover:text-primary-400"
               />
               <div
-                class="pointer-events-none absolute bottom-full left-0 z-50 mb-2 w-72 opacity-0 transition-all duration-200 group-hover:pointer-events-auto group-hover:opacity-100"
+                class="pointer-events-none absolute bottom-full left-0 z-50 mb-2 w-72 max-w-full sm:max-w-none opacity-0 transition-all duration-200 group-hover:pointer-events-auto group-hover:opacity-100"
               >
                 <div
                   class="rounded-lg bg-gray-900 p-3 text-white shadow-lg dark:bg-gray-800"
@@ -1351,7 +1403,7 @@
                     {{ t("admin.groups.supportedScopes.tooltip") }}
                   </p>
                   <div
-                    class="absolute -bottom-1.5 left-3 h-3 w-3 rotate-45 bg-gray-900 dark:bg-gray-800"
+                    class="absolute -bottom-1.5 left-3 hidden h-3 w-3 rotate-45 sm:block bg-gray-900 dark:bg-gray-800"
                   ></div>
                 </div>
               </div>
@@ -1403,11 +1455,11 @@
 
         <!-- MCP XML 协议注入（仅 antigravity 平台） -->
         <div v-if="createForm.platform === 'antigravity'" class="border-t pt-4">
-          <div class="mb-1.5 flex items-center gap-1">
+          <div class="relative mb-1.5 flex items-center gap-1">
             <label class="text-sm font-medium text-gray-700 dark:text-gray-300">
               {{ t("admin.groups.mcpXml.title") }}
             </label>
-            <div class="group relative inline-flex">
+            <div class="group inline-flex sm:relative">
               <Icon
                 name="questionCircle"
                 size="sm"
@@ -1415,7 +1467,7 @@
                 class="cursor-help text-gray-400 transition-colors hover:text-primary-500 dark:text-gray-500 dark:hover:text-primary-400"
               />
               <div
-                class="pointer-events-none absolute bottom-full left-0 z-50 mb-2 w-72 opacity-0 transition-all duration-200 group-hover:pointer-events-auto group-hover:opacity-100"
+                class="pointer-events-none absolute bottom-full left-0 z-50 mb-2 w-72 max-w-full sm:max-w-none opacity-0 transition-all duration-200 group-hover:pointer-events-auto group-hover:opacity-100"
               >
                 <div
                   class="rounded-lg bg-gray-900 p-3 text-white shadow-lg dark:bg-gray-800"
@@ -1424,7 +1476,7 @@
                     {{ t("admin.groups.mcpXml.tooltip") }}
                   </p>
                   <div
-                    class="absolute -bottom-1.5 left-3 h-3 w-3 rotate-45 bg-gray-900 dark:bg-gray-800"
+                    class="absolute -bottom-1.5 left-3 hidden h-3 w-3 rotate-45 sm:block bg-gray-900 dark:bg-gray-800"
                   ></div>
                 </div>
               </div>
@@ -1460,12 +1512,12 @@
 
         <!-- Claude Code 客户端限制（仅 anthropic 平台） -->
         <div v-if="createForm.platform === 'anthropic'" class="border-t pt-4">
-          <div class="mb-1.5 flex items-center gap-1">
+          <div class="relative mb-1.5 flex items-center gap-1">
             <label class="text-sm font-medium text-gray-700 dark:text-gray-300">
               {{ t("admin.groups.claudeCode.title") }}
             </label>
             <!-- Help Tooltip -->
-            <div class="group relative inline-flex">
+            <div class="group inline-flex sm:relative">
               <Icon
                 name="questionCircle"
                 size="sm"
@@ -1473,7 +1525,7 @@
                 class="cursor-help text-gray-400 transition-colors hover:text-primary-500 dark:text-gray-500 dark:hover:text-primary-400"
               />
               <div
-                class="pointer-events-none absolute bottom-full left-0 z-50 mb-2 w-72 opacity-0 transition-all duration-200 group-hover:pointer-events-auto group-hover:opacity-100"
+                class="pointer-events-none absolute bottom-full left-0 z-50 mb-2 w-72 max-w-full sm:max-w-none opacity-0 transition-all duration-200 group-hover:pointer-events-auto group-hover:opacity-100"
               >
                 <div
                   class="rounded-lg bg-gray-900 p-3 text-white shadow-lg dark:bg-gray-800"
@@ -1482,7 +1534,7 @@
                     {{ t("admin.groups.claudeCode.tooltip") }}
                   </p>
                   <div
-                    class="absolute -bottom-1.5 left-3 h-3 w-3 rotate-45 bg-gray-900 dark:bg-gray-800"
+                    class="absolute -bottom-1.5 left-3 hidden h-3 w-3 rotate-45 sm:block bg-gray-900 dark:bg-gray-800"
                   ></div>
                 </div>
               </div>
@@ -1535,12 +1587,12 @@
         </div>
 
         <div class="border-t border-gray-200 pt-4 mt-4 dark:border-dark-400">
-          <div class="flex items-start justify-between gap-4">
-            <div>
+          <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+            <div class="min-w-0">
               <h4 class="text-sm font-medium text-gray-700 dark:text-gray-300">{{ t("admin.groups.modelPricing.title") }}</h4>
               <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ t("admin.groups.modelPricing.description") }}</p>
             </div>
-            <button type="button" class="btn btn-secondary" @click="addGroupPricing(createForm.model_pricing)">
+            <button type="button" class="btn btn-secondary shrink-0 self-start whitespace-nowrap" @click="addGroupPricing(createForm.model_pricing)">
               <Icon name="plus" size="sm" class="mr-1" />{{ t("admin.groups.modelPricing.add") }}
             </button>
           </div>
@@ -1861,43 +1913,6 @@
             {{ t("admin.groups.accountFilters.title") }}
           </h4>
 
-          <!-- require_oauth_only toggle -->
-          <div class="flex items-center justify-between">
-            <div>
-              <label class="text-sm text-gray-600 dark:text-gray-400"
-                >{{ t("admin.groups.accountFilters.oauthOnly") }}</label
-              >
-              <p class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                {{
-                  createForm.require_oauth_only
-                    ? t("admin.groups.accountFilters.oauthOnlyEnabled")
-                    : t("admin.groups.accountFilters.disabled")
-                }}
-              </p>
-            </div>
-            <button
-              type="button"
-              @click="
-                createForm.require_oauth_only = !createForm.require_oauth_only
-              "
-              class="relative inline-flex h-6 w-12 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none"
-              :class="
-                createForm.require_oauth_only
-                  ? 'bg-primary-500'
-                  : 'bg-gray-300 dark:bg-dark-600'
-              "
-            >
-              <span
-                class="pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out"
-                :class="
-                  createForm.require_oauth_only
-                    ? 'translate-x-6'
-                    : 'translate-x-1'
-                "
-              />
-            </button>
-          </div>
-
           <!-- require_privacy_set toggle -->
           <div class="flex items-center justify-between">
             <div>
@@ -1959,12 +1974,12 @@
 
         <!-- 模型路由配置（仅 anthropic 平台） -->
         <div v-if="createForm.platform === 'anthropic'" class="border-t pt-4">
-          <div class="mb-1.5 flex items-center gap-1">
+          <div class="relative mb-1.5 flex items-center gap-1">
             <label class="text-sm font-medium text-gray-700 dark:text-gray-300">
               {{ t("admin.groups.modelRouting.title") }}
             </label>
             <!-- Help Tooltip -->
-            <div class="group relative inline-flex">
+            <div class="group inline-flex sm:relative">
               <Icon
                 name="questionCircle"
                 size="sm"
@@ -1972,7 +1987,7 @@
                 class="cursor-help text-gray-400 transition-colors hover:text-primary-500 dark:text-gray-500 dark:hover:text-primary-400"
               />
               <div
-                class="pointer-events-none absolute bottom-full left-0 z-50 mb-2 w-80 opacity-0 transition-all duration-200 group-hover:pointer-events-auto group-hover:opacity-100"
+                class="pointer-events-none absolute bottom-full left-0 z-50 mb-2 w-80 max-w-full sm:max-w-none opacity-0 transition-all duration-200 group-hover:pointer-events-auto group-hover:opacity-100"
               >
                 <div
                   class="rounded-lg bg-gray-900 p-3 text-white shadow-lg dark:bg-gray-800"
@@ -1981,7 +1996,7 @@
                     {{ t("admin.groups.modelRouting.tooltip") }}
                   </p>
                   <div
-                    class="absolute -bottom-1.5 left-3 h-3 w-3 rotate-45 bg-gray-900 dark:bg-gray-800"
+                    class="absolute -bottom-1.5 left-3 hidden h-3 w-3 rotate-45 sm:block bg-gray-900 dark:bg-gray-800"
                   ></div>
                 </div>
               </div>
@@ -2242,11 +2257,11 @@
         </div>
         <!-- 从分组复制账号（编辑时） -->
         <div v-if="copyAccountsGroupOptionsForEdit.length > 0">
-          <div class="mb-1.5 flex items-center gap-1">
+          <div class="relative mb-1.5 flex items-center gap-1">
             <label class="text-sm font-medium text-gray-700 dark:text-gray-300">
               {{ t("admin.groups.copyAccounts.title") }}
             </label>
-            <div class="group relative inline-flex">
+            <div class="group inline-flex sm:relative">
               <Icon
                 name="questionCircle"
                 size="sm"
@@ -2254,7 +2269,7 @@
                 class="cursor-help text-gray-400 transition-colors hover:text-primary-500 dark:text-gray-500 dark:hover:text-primary-400"
               />
               <div
-                class="pointer-events-none absolute bottom-full left-0 z-50 mb-2 w-72 opacity-0 transition-all duration-200 group-hover:pointer-events-auto group-hover:opacity-100"
+                class="pointer-events-none absolute bottom-full left-0 z-50 mb-2 w-72 max-w-full sm:max-w-none opacity-0 transition-all duration-200 group-hover:pointer-events-auto group-hover:opacity-100"
               >
                 <div
                   class="rounded-lg bg-gray-900 p-3 text-white shadow-lg dark:bg-gray-800"
@@ -2263,7 +2278,7 @@
                     {{ t("admin.groups.copyAccounts.tooltipEdit") }}
                   </p>
                   <div
-                    class="absolute -bottom-1.5 left-3 h-3 w-3 rotate-45 bg-gray-900 dark:bg-gray-800"
+                    class="absolute -bottom-1.5 left-3 hidden h-3 w-3 rotate-45 sm:block bg-gray-900 dark:bg-gray-800"
                   ></div>
                 </div>
               </div>
@@ -2358,12 +2373,12 @@
           <p class="input-hint">{{ t("admin.groups.form.rpmLimitHint") }}</p>
         </div>
         <div v-if="editForm.subscription_type !== 'subscription'">
-          <div class="mb-1.5 flex items-center gap-1">
+          <div class="relative mb-1.5 flex items-center gap-1">
             <label class="text-sm font-medium text-gray-700 dark:text-gray-300">
               {{ t("admin.groups.form.exclusive") }}
             </label>
             <!-- Help Tooltip -->
-            <div class="group relative inline-flex">
+            <div class="group inline-flex sm:relative">
               <Icon
                 name="questionCircle"
                 size="sm"
@@ -2372,7 +2387,7 @@
               />
               <!-- Tooltip Popover -->
               <div
-                class="pointer-events-none absolute bottom-full left-0 z-50 mb-2 w-72 opacity-0 transition-all duration-200 group-hover:pointer-events-auto group-hover:opacity-100"
+                class="pointer-events-none absolute bottom-full left-0 z-50 mb-2 w-72 max-w-full sm:max-w-none opacity-0 transition-all duration-200 group-hover:pointer-events-auto group-hover:opacity-100"
               >
                 <div
                   class="rounded-lg bg-gray-900 p-3 text-white shadow-lg dark:bg-gray-800"
@@ -2395,7 +2410,7 @@
                   </div>
                   <!-- Arrow -->
                   <div
-                    class="absolute -bottom-1.5 left-3 h-3 w-3 rotate-45 bg-gray-900 dark:bg-gray-800"
+                    class="absolute -bottom-1.5 left-3 hidden h-3 w-3 rotate-45 sm:block bg-gray-900 dark:bg-gray-800"
                   ></div>
                 </div>
               </div>
@@ -3002,14 +3017,66 @@
           </div>
         </div>
 
+        <!-- Cyber 自动扣款（走 OpenAI 网关的分组） -->
+        <div
+          v-if="isCyberAutoChargePlatform(editForm.platform)"
+          class="border-t pt-4"
+          data-testid="cyber-auto-charge"
+        >
+          <div class="flex items-start justify-between gap-4">
+            <div class="min-w-0">
+              <label class="text-sm font-medium text-gray-700 dark:text-gray-300">
+                {{ t("admin.groups.cyberAutoCharge.title") }}
+              </label>
+              <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                {{ t("admin.groups.cyberAutoCharge.hint") }}
+              </p>
+            </div>
+            <button
+              type="button"
+              role="switch"
+              :aria-checked="editForm.cyber_auto_charge_enabled"
+              :aria-label="t('admin.groups.cyberAutoCharge.title')"
+              data-testid="cyber-auto-charge-toggle"
+              @click="editForm.cyber_auto_charge_enabled = !editForm.cyber_auto_charge_enabled"
+              :class="[
+                'relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors',
+                editForm.cyber_auto_charge_enabled
+                  ? 'bg-primary-500'
+                  : 'bg-gray-300 dark:bg-dark-600',
+              ]"
+            >
+              <span
+                :class="[
+                  'inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform',
+                  editForm.cyber_auto_charge_enabled ? 'translate-x-6' : 'translate-x-1',
+                ]"
+              />
+            </button>
+          </div>
+          <div v-if="editForm.cyber_auto_charge_enabled" class="mt-3">
+            <label class="input-label">{{ t("admin.groups.cyberAutoCharge.amount") }}</label>
+            <input
+              v-model.number="editForm.cyber_auto_charge_amount"
+              type="number"
+              step="0.0001"
+              min="0"
+              class="input"
+              placeholder="0.5"
+              data-testid="cyber-auto-charge-amount"
+            />
+            <p class="input-hint">{{ t("admin.groups.cyberAutoCharge.amountHint") }}</p>
+          </div>
+        </div>
+
         <!-- 支持的模型系列（仅 antigravity 平台） -->
         <div v-if="editForm.platform === 'antigravity'" class="border-t pt-4">
-          <div class="mb-1.5 flex items-center gap-1">
+          <div class="relative mb-1.5 flex items-center gap-1">
             <label class="text-sm font-medium text-gray-700 dark:text-gray-300">
               {{ t("admin.groups.supportedScopes.title") }}
             </label>
             <!-- Help Tooltip -->
-            <div class="group relative inline-flex">
+            <div class="group inline-flex sm:relative">
               <Icon
                 name="questionCircle"
                 size="sm"
@@ -3017,7 +3084,7 @@
                 class="cursor-help text-gray-400 transition-colors hover:text-primary-500 dark:text-gray-500 dark:hover:text-primary-400"
               />
               <div
-                class="pointer-events-none absolute bottom-full left-0 z-50 mb-2 w-72 opacity-0 transition-all duration-200 group-hover:pointer-events-auto group-hover:opacity-100"
+                class="pointer-events-none absolute bottom-full left-0 z-50 mb-2 w-72 max-w-full sm:max-w-none opacity-0 transition-all duration-200 group-hover:pointer-events-auto group-hover:opacity-100"
               >
                 <div
                   class="rounded-lg bg-gray-900 p-3 text-white shadow-lg dark:bg-gray-800"
@@ -3026,7 +3093,7 @@
                     {{ t("admin.groups.supportedScopes.tooltip") }}
                   </p>
                   <div
-                    class="absolute -bottom-1.5 left-3 h-3 w-3 rotate-45 bg-gray-900 dark:bg-gray-800"
+                    class="absolute -bottom-1.5 left-3 hidden h-3 w-3 rotate-45 sm:block bg-gray-900 dark:bg-gray-800"
                   ></div>
                 </div>
               </div>
@@ -3078,11 +3145,11 @@
 
         <!-- MCP XML 协议注入（仅 antigravity 平台） -->
         <div v-if="editForm.platform === 'antigravity'" class="border-t pt-4">
-          <div class="mb-1.5 flex items-center gap-1">
+          <div class="relative mb-1.5 flex items-center gap-1">
             <label class="text-sm font-medium text-gray-700 dark:text-gray-300">
               {{ t("admin.groups.mcpXml.title") }}
             </label>
-            <div class="group relative inline-flex">
+            <div class="group inline-flex sm:relative">
               <Icon
                 name="questionCircle"
                 size="sm"
@@ -3090,7 +3157,7 @@
                 class="cursor-help text-gray-400 transition-colors hover:text-primary-500 dark:text-gray-500 dark:hover:text-primary-400"
               />
               <div
-                class="pointer-events-none absolute bottom-full left-0 z-50 mb-2 w-72 opacity-0 transition-all duration-200 group-hover:pointer-events-auto group-hover:opacity-100"
+                class="pointer-events-none absolute bottom-full left-0 z-50 mb-2 w-72 max-w-full sm:max-w-none opacity-0 transition-all duration-200 group-hover:pointer-events-auto group-hover:opacity-100"
               >
                 <div
                   class="rounded-lg bg-gray-900 p-3 text-white shadow-lg dark:bg-gray-800"
@@ -3099,7 +3166,7 @@
                     {{ t("admin.groups.mcpXml.tooltip") }}
                   </p>
                   <div
-                    class="absolute -bottom-1.5 left-3 h-3 w-3 rotate-45 bg-gray-900 dark:bg-gray-800"
+                    class="absolute -bottom-1.5 left-3 hidden h-3 w-3 rotate-45 sm:block bg-gray-900 dark:bg-gray-800"
                   ></div>
                 </div>
               </div>
@@ -3135,12 +3202,12 @@
 
         <!-- Claude Code 客户端限制（仅 anthropic 平台） -->
         <div v-if="editForm.platform === 'anthropic'" class="border-t pt-4">
-          <div class="mb-1.5 flex items-center gap-1">
+          <div class="relative mb-1.5 flex items-center gap-1">
             <label class="text-sm font-medium text-gray-700 dark:text-gray-300">
               {{ t("admin.groups.claudeCode.title") }}
             </label>
             <!-- Help Tooltip -->
-            <div class="group relative inline-flex">
+            <div class="group inline-flex sm:relative">
               <Icon
                 name="questionCircle"
                 size="sm"
@@ -3148,7 +3215,7 @@
                 class="cursor-help text-gray-400 transition-colors hover:text-primary-500 dark:text-gray-500 dark:hover:text-primary-400"
               />
               <div
-                class="pointer-events-none absolute bottom-full left-0 z-50 mb-2 w-72 opacity-0 transition-all duration-200 group-hover:pointer-events-auto group-hover:opacity-100"
+                class="pointer-events-none absolute bottom-full left-0 z-50 mb-2 w-72 max-w-full sm:max-w-none opacity-0 transition-all duration-200 group-hover:pointer-events-auto group-hover:opacity-100"
               >
                 <div
                   class="rounded-lg bg-gray-900 p-3 text-white shadow-lg dark:bg-gray-800"
@@ -3157,7 +3224,7 @@
                     {{ t("admin.groups.claudeCode.tooltip") }}
                   </p>
                   <div
-                    class="absolute -bottom-1.5 left-3 h-3 w-3 rotate-45 bg-gray-900 dark:bg-gray-800"
+                    class="absolute -bottom-1.5 left-3 hidden h-3 w-3 rotate-45 sm:block bg-gray-900 dark:bg-gray-800"
                   ></div>
                 </div>
               </div>
@@ -3206,12 +3273,12 @@
         </div>
 
         <div class="border-t border-gray-200 pt-4 mt-4 dark:border-dark-400">
-          <div class="flex items-start justify-between gap-4">
-            <div>
+          <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+            <div class="min-w-0">
               <h4 class="text-sm font-medium text-gray-700 dark:text-gray-300">{{ t("admin.groups.modelPricing.title") }}</h4>
               <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ t("admin.groups.modelPricing.description") }}</p>
             </div>
-            <button type="button" class="btn btn-secondary" @click="addGroupPricing(editForm.model_pricing)">
+            <button type="button" class="btn btn-secondary shrink-0 self-start whitespace-nowrap" @click="addGroupPricing(editForm.model_pricing)">
               <Icon name="plus" size="sm" class="mr-1" />{{ t("admin.groups.modelPricing.add") }}
             </button>
           </div>
@@ -3532,43 +3599,6 @@
             {{ t("admin.groups.accountFilters.title") }}
           </h4>
 
-          <!-- require_oauth_only toggle -->
-          <div class="flex items-center justify-between">
-            <div>
-              <label class="text-sm text-gray-600 dark:text-gray-400"
-                >{{ t("admin.groups.accountFilters.oauthOnly") }}</label
-              >
-              <p class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                {{
-                  editForm.require_oauth_only
-                    ? t("admin.groups.accountFilters.oauthOnlyEnabled")
-                    : t("admin.groups.accountFilters.disabled")
-                }}
-              </p>
-            </div>
-            <button
-              type="button"
-              @click="
-                editForm.require_oauth_only = !editForm.require_oauth_only
-              "
-              class="relative inline-flex h-6 w-12 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none"
-              :class="
-                editForm.require_oauth_only
-                  ? 'bg-primary-500'
-                  : 'bg-gray-300 dark:bg-dark-600'
-              "
-            >
-              <span
-                class="pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out"
-                :class="
-                  editForm.require_oauth_only
-                    ? 'translate-x-6'
-                    : 'translate-x-1'
-                "
-              />
-            </button>
-          </div>
-
           <!-- require_privacy_set toggle -->
           <div class="flex items-center justify-between">
             <div>
@@ -3630,12 +3660,12 @@
 
         <!-- 模型路由配置（仅 anthropic 平台） -->
         <div v-if="editForm.platform === 'anthropic'" class="border-t pt-4">
-          <div class="mb-1.5 flex items-center gap-1">
+          <div class="relative mb-1.5 flex items-center gap-1">
             <label class="text-sm font-medium text-gray-700 dark:text-gray-300">
               {{ t("admin.groups.modelRouting.title") }}
             </label>
             <!-- Help Tooltip -->
-            <div class="group relative inline-flex">
+            <div class="group inline-flex sm:relative">
               <Icon
                 name="questionCircle"
                 size="sm"
@@ -3643,7 +3673,7 @@
                 class="cursor-help text-gray-400 transition-colors hover:text-primary-500 dark:text-gray-500 dark:hover:text-primary-400"
               />
               <div
-                class="pointer-events-none absolute bottom-full left-0 z-50 mb-2 w-80 opacity-0 transition-all duration-200 group-hover:pointer-events-auto group-hover:opacity-100"
+                class="pointer-events-none absolute bottom-full left-0 z-50 mb-2 w-80 max-w-full sm:max-w-none opacity-0 transition-all duration-200 group-hover:pointer-events-auto group-hover:opacity-100"
               >
                 <div
                   class="rounded-lg bg-gray-900 p-3 text-white shadow-lg dark:bg-gray-800"
@@ -3652,7 +3682,7 @@
                     {{ t("admin.groups.modelRouting.tooltip") }}
                   </p>
                   <div
-                    class="absolute -bottom-1.5 left-3 h-3 w-3 rotate-45 bg-gray-900 dark:bg-gray-800"
+                    class="absolute -bottom-1.5 left-3 hidden h-3 w-3 rotate-45 sm:block bg-gray-900 dark:bg-gray-800"
                   ></div>
                 </div>
               </div>
@@ -4441,6 +4471,12 @@ import {
 import { createModelsListCandidatesTracker } from "./groupsModelsListCandidates";
 import { normalizeSupportedModelScopesForPlatform } from "./groupsSupportedModelScopes";
 import {
+  cyberAutoChargePayload,
+  isCyberAutoChargePlatform,
+  validateCyberAutoChargeFormState,
+  type CyberAutoChargeFormState,
+} from "./groupsCyberAutoCharge";
+import {
   isProfitControlPlatform,
   profitPercentToDecimal,
   profitDecimalToPercent,
@@ -5021,6 +5057,9 @@ const createForm = reactive({
   profit_control_enabled: false,
   profit_min_margin_percent: 0,
   profit_safety_buffer_percent: 0,
+  // Cyber 自动扣款（命中上游 cyber_policy 时按固定金额扣款一次）
+  cyber_auto_charge_enabled: false,
+  cyber_auto_charge_amount: null as number | string | null,
   // Claude Code 客户端限制（仅 anthropic 平台使用）
   claude_code_only: false,
   fallback_group_id: null as number | null,
@@ -5033,7 +5072,6 @@ const createForm = reactive({
   haiku_mapped_model: createMessagesDispatchDefaults.haiku_mapped_model,
   exact_model_mappings: [] as MessagesDispatchMappingRow[],
   // 账号过滤控制（OpenAI/Antigravity 平台）
-  require_oauth_only: false,
   require_privacy_set: false,
   // 模型路由开关
   model_routing_enabled: false,
@@ -5378,6 +5416,9 @@ const editForm = reactive({
   profit_control_enabled: false,
   profit_min_margin_percent: 0,
   profit_safety_buffer_percent: 0,
+  // Cyber 自动扣款（命中上游 cyber_policy 时按固定金额扣款一次）
+  cyber_auto_charge_enabled: false,
+  cyber_auto_charge_amount: null as number | string | null,
   // Claude Code 客户端限制（仅 anthropic 平台使用）
   claude_code_only: false,
   fallback_group_id: null as number | null,
@@ -5391,7 +5432,6 @@ const editForm = reactive({
   haiku_mapped_model: editMessagesDispatchDefaults.haiku_mapped_model,
   exact_model_mappings: [] as MessagesDispatchMappingRow[],
   // 账号过滤控制（OpenAI/Antigravity 平台）
-  require_oauth_only: false,
   require_privacy_set: false,
   // 模型路由开关
   model_routing_enabled: false,
@@ -5892,12 +5932,13 @@ const closeCreateModal = () => {
   createForm.profit_control_enabled = false;
   createForm.profit_min_margin_percent = 0;
   createForm.profit_safety_buffer_percent = 0;
+  createForm.cyber_auto_charge_enabled = false;
+  createForm.cyber_auto_charge_amount = null;
   createForm.claude_code_only = false;
   createForm.fallback_group_id = null;
   createForm.fallback_group_id_on_invalid_request = null;
   resetMessagesDispatchFormState(createForm);
   createForm.allow_live = false;
-  createForm.require_oauth_only = false;
   createForm.require_privacy_set = false;
   createForm.supported_model_scopes = ["claude", "gemini_text", "gemini_image"];
   createForm.mcp_xml_inject = true;
@@ -5949,6 +5990,15 @@ const validateProfitControlForm = (form: ProfitControlFormState): boolean => {
   return true;
 };
 
+const validateCyberAutoChargeForm = (form: CyberAutoChargeFormState): boolean => {
+  const errorKey = validateCyberAutoChargeFormState(form);
+  if (errorKey) {
+    appStore.showError(t(`admin.groups.cyberAutoCharge.${errorKey}`));
+    return false;
+  }
+  return true;
+};
+
 const handleCreateGroup = async () => {
   if (submitting.value) return;
   if (!createForm.name.trim()) {
@@ -5956,6 +6006,9 @@ const handleCreateGroup = async () => {
     return;
   }
   if (!validateProfitControlForm(createForm)) {
+    return;
+  }
+  if (!validateCyberAutoChargeForm(createForm)) {
     return;
   }
   submitting.value = true;
@@ -6002,6 +6055,7 @@ const handleCreateGroup = async () => {
       profit_safety_buffer: percentToDecimal(
         createForm.profit_safety_buffer_percent,
       ),
+      ...cyberAutoChargePayload(createForm),
     };
     delete (requestData as Record<string, unknown>).profit_min_margin_percent;
     delete (requestData as Record<string, unknown>).profit_safety_buffer_percent;
@@ -6104,6 +6158,9 @@ const handleEdit = async (group: AdminGroup) => {
   editForm.profit_safety_buffer_percent = decimalToPercent(
     group.profit_safety_buffer ?? 0,
   );
+  editForm.cyber_auto_charge_enabled = group.cyber_auto_charge_enabled ?? false;
+  editForm.cyber_auto_charge_amount =
+    group.cyber_auto_charge_amount > 0 ? group.cyber_auto_charge_amount : null;
   editForm.claude_code_only = group.claude_code_only || false;
   editForm.fallback_group_id = group.fallback_group_id;
   editForm.fallback_group_id_on_invalid_request =
@@ -6120,7 +6177,6 @@ const handleEdit = async (group: AdminGroup) => {
   editForm.haiku_mapped_model = messagesDispatchFormState.haiku_mapped_model;
   editForm.exact_model_mappings =
     messagesDispatchFormState.exact_model_mappings;
-  editForm.require_oauth_only = group.require_oauth_only ?? false;
   editForm.require_privacy_set = group.require_privacy_set ?? false;
   editForm.model_routing_enabled = group.model_routing_enabled || false;
   editForm.supported_model_scopes = group.supported_model_scopes || [
@@ -6156,6 +6212,8 @@ const closeEditModal = () => {
   editForm.profit_control_enabled = false;
   editForm.profit_min_margin_percent = 0;
   editForm.profit_safety_buffer_percent = 0;
+  editForm.cyber_auto_charge_enabled = false;
+  editForm.cyber_auto_charge_amount = null;
   editForm.video_rate_independent = false;
   editForm.video_rate_multiplier = 1;
   editForm.video_price_480p = null;
@@ -6177,6 +6235,9 @@ const handleUpdateGroup = async () => {
     return;
   }
   if (!validateProfitControlForm(editForm)) {
+    return;
+  }
+  if (!validateCyberAutoChargeForm(editForm)) {
     return;
   }
 
@@ -6230,6 +6291,7 @@ const handleUpdateGroup = async () => {
       profit_safety_buffer: percentToDecimal(
         editForm.profit_safety_buffer_percent,
       ),
+      ...cyberAutoChargePayload(editForm),
     };
     delete (payload as Record<string, unknown>).profit_min_margin_percent;
     delete (payload as Record<string, unknown>).profit_safety_buffer_percent;
@@ -6585,7 +6647,6 @@ watch(
       createForm.profit_safety_buffer_percent = 0;
     }
     if (!["openai", "antigravity", "anthropic", "gemini"].includes(newVal)) {
-      createForm.require_oauth_only = false;
       createForm.require_privacy_set = false;
     }
     resetDisabledBatchImagePricing(createForm);
@@ -6626,7 +6687,6 @@ watch(
       editForm.profit_safety_buffer_percent = 0;
     }
     if (!["openai", "antigravity", "anthropic", "gemini"].includes(newVal)) {
-      editForm.require_oauth_only = false;
       editForm.require_privacy_set = false;
     }
     resetDisabledBatchImagePricing(editForm);

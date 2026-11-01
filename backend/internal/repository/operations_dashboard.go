@@ -132,6 +132,9 @@ func (r *usageLogRepository) GetOperationsDashboardData(
 		return nil, fmt.Errorf("close operations dashboard trend rows: %w", err)
 	}
 
+	// Deleted groups are not listed one by one; any spend they still have in the
+	// range is folded into a single row with the synthetic id -2 so the group
+	// totals keep matching the model totals.
 	groupQuery := `
 		WITH usage_by_group AS (
 			SELECT COALESCE(ul.group_id, 0) AS group_id,
@@ -145,9 +148,15 @@ func (r *usageLogRepository) GetOperationsDashboardData(
 		SELECT g.id, g.name, g.platform, g.rate_multiplier::double precision,
 			COALESCE(ug.user_cost, 0), COALESCE(ug.upstream_cost, 0)
 		FROM groups g LEFT JOIN usage_by_group ug ON ug.group_id = g.id
+		WHERE g.deleted_at IS NULL
 		UNION ALL
 		SELECT 0, 'Unassigned', 'custom', 1::double precision, COALESCE(ug.user_cost, 0), COALESCE(ug.upstream_cost, 0)
 		FROM usage_by_group ug WHERE ug.group_id = 0
+		UNION ALL
+		SELECT -2, 'Deleted groups', 'custom', 1::double precision, SUM(ug.user_cost), SUM(ug.upstream_cost)
+		FROM usage_by_group ug LEFT JOIN groups g ON g.id = ug.group_id
+		WHERE ug.group_id <> 0 AND (g.id IS NULL OR g.deleted_at IS NOT NULL)
+		HAVING SUM(ug.user_cost) <> 0 OR SUM(ug.upstream_cost) <> 0
 		ORDER BY 1 ASC
 	`
 	rows, err = r.sql.QueryContext(ctx, groupQuery, rangeStart, rangeEnd)
@@ -178,7 +187,9 @@ func (r *usageLogRepository) GetOperationsDashboardData(
 		FROM usage_logs ul JOIN users u ON u.id = ul.user_id
 		LEFT JOIN groups g ON g.id = ul.group_id
 		WHERE u.role = 'user' AND ul.created_at >= $1 AND ul.created_at < $2
-		  AND (($3 = 0) OR ($3 = -1 AND COALESCE(ul.group_id, 0) = 0) OR COALESCE(ul.group_id, 0) = $3)
+		  AND (($3 = 0) OR ($3 = -1 AND COALESCE(ul.group_id, 0) = 0)
+			OR ($3 = -2 AND COALESCE(ul.group_id, 0) <> 0 AND (g.id IS NULL OR g.deleted_at IS NOT NULL))
+			OR COALESCE(ul.group_id, 0) = $3)
 		  AND NOT EXISTS (SELECT 1 FROM api_keys mk WHERE mk.id = ul.api_key_id AND mk.purpose = 'channel_monitor')
 		GROUP BY 1 ORDER BY 1
 	`

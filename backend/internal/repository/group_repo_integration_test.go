@@ -86,7 +86,7 @@ func (s *GroupRepoSuite) TestCreate() {
 	s.Require().Equal("test-create", got.Name)
 }
 
-func (s *GroupRepoSuite) TestCreateFromSourcePreservesPriorityAndFiltersIneligibleAccounts() {
+func (s *GroupRepoSuite) TestCreateFromSourcePreservesPriorityAndSkipsDeletedAccounts() {
 	inputPrice := 0.000002
 	source := &service.Group{
 		Name:             "duplicate-source",
@@ -94,7 +94,6 @@ func (s *GroupRepoSuite) TestCreateFromSourcePreservesPriorityAndFiltersIneligib
 		RateMultiplier:   1,
 		Status:           service.StatusActive,
 		SubscriptionType: service.SubscriptionTypeStandard,
-		RequireOAuthOnly: true,
 		ModelPricing: []service.ChannelModelPricing{{
 			Platform: service.PlatformOpenAI, Models: []string{"custom-model"},
 			BillingMode: service.BillingModeToken, InputPrice: &inputPrice,
@@ -140,12 +139,11 @@ func (s *GroupRepoSuite) TestCreateFromSourcePreservesPriorityAndFiltersIneligib
 		RateMultiplier:       source.RateMultiplier,
 		Status:               "inactive",
 		SubscriptionType:     source.SubscriptionType,
-		RequireOAuthOnly:     true,
 		DuplicateOperationID: strings.Repeat("a", 64),
 		ModelPricing:         source.ModelPricing,
 	}
 	s.Require().NoError(s.repo.CreateFromSource(s.ctx, duplicate, source.ID))
-	s.Require().EqualValues(1, duplicate.AccountCount)
+	s.Require().EqualValues(2, duplicate.AccountCount)
 
 	rows, err := s.tx.QueryContext(
 		s.ctx,
@@ -154,13 +152,15 @@ func (s *GroupRepoSuite) TestCreateFromSourcePreservesPriorityAndFiltersIneligib
 	)
 	s.Require().NoError(err)
 	defer func() { _ = rows.Close() }()
-	s.Require().True(rows.Next())
-	var copiedAccountID int64
-	var copiedPriority int
-	s.Require().NoError(rows.Scan(&copiedAccountID, &copiedPriority))
-	s.Require().Equal(oauthID, copiedAccountID)
-	s.Require().Equal(37, copiedPriority)
-	s.Require().False(rows.Next(), "API-key and soft-deleted accounts must not be copied")
+	copied := map[int64]int{}
+	for rows.Next() {
+		var accountID int64
+		var priority int
+		s.Require().NoError(rows.Scan(&accountID, &priority))
+		copied[accountID] = priority
+	}
+	s.Require().NoError(rows.Err())
+	s.Require().Equal(map[int64]int{oauthID: 37, apiKeyID: 8}, copied, "soft-deleted accounts must not be copied")
 
 	recovered, err := s.repo.FindByDuplicateOperationID(s.ctx, duplicate.DuplicateOperationID)
 	s.Require().NoError(err)

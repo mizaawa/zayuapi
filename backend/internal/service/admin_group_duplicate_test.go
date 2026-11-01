@@ -154,6 +154,8 @@ func TestDuplicateGroupCopiesConfigurationDeeplyAndResetsRuntimeState(t *testing
 		VideoPrice720P:                  groupDuplicateTestPointer(0.2),
 		VideoPrice1080P:                 groupDuplicateTestPointer(0.3),
 		WebSearchPricePerCall:           groupDuplicateTestPointer(0.005),
+		CyberAutoChargeEnabled:          true,
+		CyberAutoChargeAmount:           0.45,
 		ClaudeCodeOnly:                  true,
 		FallbackGroupID:                 groupDuplicateTestPointer(int64(7)),
 		FallbackGroupIDOnInvalidRequest: groupDuplicateTestPointer(int64(8)),
@@ -164,7 +166,6 @@ func TestDuplicateGroupCopiesConfigurationDeeplyAndResetsRuntimeState(t *testing
 		SortOrder:                       9,
 		AllowMessagesDispatch:           true,
 		AllowLive:                       true,
-		RequireOAuthOnly:                true,
 		RequirePrivacySet:               true,
 		DefaultMappedModel:              "gpt-5.4",
 		MessagesDispatchModelConfig: OpenAIMessagesDispatchModelConfig{
@@ -206,6 +207,8 @@ func TestDuplicateGroupCopiesConfigurationDeeplyAndResetsRuntimeState(t *testing
 	require.Equal(t, source.DefaultValidityDays, duplicate.DefaultValidityDays)
 	require.Equal(t, source.ImagePrice4K, duplicate.ImagePrice4K)
 	require.Equal(t, source.WebSearchPricePerCall, duplicate.WebSearchPricePerCall)
+	require.True(t, duplicate.CyberAutoChargeEnabled)
+	require.Equal(t, source.CyberAutoChargeAmount, duplicate.CyberAutoChargeAmount)
 	require.Equal(t, source.FallbackGroupID, duplicate.FallbackGroupID)
 	require.Equal(t, source.ModelRouting, duplicate.ModelRouting)
 	require.Equal(t, source.MessagesDispatchModelConfig, duplicate.MessagesDispatchModelConfig)

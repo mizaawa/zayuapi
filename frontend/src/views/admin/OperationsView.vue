@@ -77,8 +77,8 @@
                   <LoadingSpinner size="md" /><span class="sr-only">{{ t('admin.operations.loading') }}</span>
                 </div>
                 <button v-for="group in groups" :key="group.group_id" type="button" class="operations-grid w-full border-b border-gray-100 px-4 py-3 text-left transition-colors last:border-b-0 dark:border-dark-700/70"
-                  :data-group="group.group_id" :aria-pressed="selectedGroup === group.group_id" :class="[selectedGroup === group.group_id ? 'bg-primary-50/70 dark:bg-primary-900/15' : 'hover:bg-gray-50 dark:hover:bg-dark-800/50', loading && selectedGroup === group.group_id ? 'relative z-20' : '']" @click="selectedGroup = group.group_id">
-                  <span class="flex min-w-0 items-center gap-2"><span class="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-gray-100 dark:bg-dark-700" :data-platform="group.platform"><PlatformIcon :platform="group.platform" size="md" :class="platformTextClass(group.platform)" /></span><span class="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1"><span class="break-words text-sm font-bold text-gray-900 dark:text-white">{{ groupName(group) }}</span><span class="inline-flex shrink-0 rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium tabular-nums text-gray-500 dark:bg-dark-700 dark:text-gray-400">{{ group.rate_multiplier }}×</span><LoadingSpinner v-if="loading && selectedGroup === group.group_id" size="sm" data-testid="group-selection-loading" /></span></span>
+                  :data-group="group.group_id" :aria-pressed="selectedGroup === group.group_id" :title="group.group_id === DELETED_GROUPS_ID ? t('admin.operations.deletedGroupsHint') : undefined" :class="[selectedGroup === group.group_id ? 'bg-primary-50/70 dark:bg-primary-900/15' : 'hover:bg-gray-50 dark:hover:bg-dark-800/50', loading && selectedGroup === group.group_id ? 'relative z-20' : '']" @click="selectedGroup = group.group_id">
+                  <span class="flex min-w-0 items-center gap-2"><span class="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-gray-100 dark:bg-dark-700" :data-platform="group.platform"><Icon v-if="group.group_id === DELETED_GROUPS_ID" name="trash" size="sm" class="text-gray-400" /><PlatformIcon v-else :platform="group.platform" size="md" :class="platformTextClass(group.platform)" /></span><span class="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1"><span class="break-words text-sm font-bold" :class="group.group_id === DELETED_GROUPS_ID ? 'text-gray-500 dark:text-gray-400' : 'text-gray-900 dark:text-white'">{{ groupName(group) }}</span><span v-if="group.group_id !== DELETED_GROUPS_ID" class="inline-flex shrink-0 rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium tabular-nums text-gray-500 dark:bg-dark-700 dark:text-gray-400">{{ group.rate_multiplier }}×</span><LoadingSpinner v-if="loading && selectedGroup === group.group_id" size="sm" data-testid="group-selection-loading" /></span></span>
                   <span class="money-cell" :class="profitClass(profitOf(group))">{{ formatMoney(profitOf(group)) }}</span>
                   <span class="money-cell text-gray-700 dark:text-gray-300">{{ formatMoney(group.user_cost) }}</span>
                   <span class="money-cell text-gray-700 dark:text-gray-300">{{ formatMoney(group.upstream_cost) }}</span>
@@ -294,7 +294,14 @@ const userSummaries = computed(() => selectedUser.value ? [
 const groups = computed(() => [...(data.value?.groups ?? [])].sort((a, b) => compareProfit(a, b) || a.group_name.localeCompare(b.group_name)))
 const models = computed(() => [...(data.value?.models ?? [])].sort((a, b) => compareProfit(a, b) || a.model.localeCompare(b.model)))
 const totals = computed(() => groups.value.reduce((sum, group) => ({ user_cost: sum.user_cost + group.user_cost, upstream_cost: sum.upstream_cost + group.upstream_cost }), { user_cost: 0, upstream_cost: 0 }))
-const groupName = (group: OperationsGroupProfitStat) => group.group_id === 0 ? t('admin.operations.unassigned') : group.group_name
+// The backend folds spend of deleted groups into one row with this id; the
+// same id filters the model list down to that spend.
+const DELETED_GROUPS_ID = -2
+const groupName = (group: OperationsGroupProfitStat) => {
+  if (group.group_id === 0) return t('admin.operations.unassigned')
+  if (group.group_id === DELETED_GROUPS_ID) return t('admin.operations.deletedGroups')
+  return group.group_name
+}
 const selectedGroupName = computed(() => {
   const group = groups.value.find(item => item.group_id === selectedGroup.value)
   return group ? groupName(group) : t('admin.operations.allGroups')

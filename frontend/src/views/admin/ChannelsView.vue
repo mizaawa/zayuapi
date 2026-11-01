@@ -371,10 +371,10 @@
 
             <!-- Model Mapping -->
             <div>
-              <div class="mb-1 flex items-center justify-between">
-                <label class="input-label text-xs mb-0">{{ t('admin.channels.form.modelMapping', 'Model Mapping') }}</label>
-                <button type="button" @click="addMappingEntry(sIdx)" class="text-xs text-primary-600 hover:text-primary-700">
-                  + {{ t('common.add', 'Add') }}
+              <div class="mb-1.5 flex flex-wrap items-center justify-between gap-2">
+                <label class="input-label mb-0 min-w-0 text-xs">{{ t('admin.channels.form.modelMapping', 'Model Mapping') }}</label>
+                <button type="button" @click="addMappingEntry(sIdx)" class="btn btn-secondary btn-sm shrink-0 gap-1 whitespace-nowrap">
+                  <Icon name="plus" size="xs" :stroke-width="2" />{{ t('common.add', 'Add') }}
                 </button>
               </div>
               <div
@@ -419,20 +419,20 @@
 
             <!-- Model Pricing -->
             <div>
-              <div class="mb-1 flex items-center justify-between">
-                <label class="input-label text-xs mb-0">{{ t('admin.channels.form.modelPricing', 'Model Pricing') }}</label>
-                <div class="flex items-center gap-2">
+              <div class="mb-1.5 flex flex-wrap items-center justify-between gap-2">
+                <label class="input-label mb-0 min-w-0 text-xs">{{ t('admin.channels.form.modelPricing', 'Model Pricing') }}</label>
+                <div class="flex flex-wrap items-center gap-2">
                   <button
                     v-if="section.platform !== 'custom'"
                     type="button"
                     @click="syncLatestModels(sIdx)"
                     :disabled="!!syncingPlatform"
-                    class="text-xs text-gray-500 hover:text-primary-600 disabled:opacity-50"
+                    class="btn btn-ghost btn-sm shrink-0 gap-1 whitespace-nowrap"
                   >
-                    {{ syncingPlatform === section.platform ? t('admin.channels.form.syncingModels') : t('admin.channels.form.syncLatestModels') }}
+                    <Icon name="refresh" size="xs" :class="{ 'animate-spin': syncingPlatform === section.platform }" />{{ syncingPlatform === section.platform ? t('admin.channels.form.syncingModels') : t('admin.channels.form.syncLatestModels') }}
                   </button>
-                  <button type="button" @click="addPricingEntry(sIdx)" class="text-xs text-primary-600 hover:text-primary-700">
-                    + {{ t('common.add', 'Add') }}
+                  <button type="button" @click="addPricingEntry(sIdx)" class="btn btn-secondary btn-sm shrink-0 gap-1 whitespace-nowrap">
+                    <Icon name="plus" size="xs" :stroke-width="2" />{{ t('common.add', 'Add') }}
                   </button>
                 </div>
               </div>
@@ -456,16 +456,16 @@
 
             <!-- Account Stats Pricing Rules (per-platform, always visible) -->
             <div class="mt-4 border-t border-gray-200 pt-4 dark:border-dark-700 space-y-3">
-              <div class="flex items-center justify-between">
-                <h4 class="text-sm font-medium text-gray-700 dark:text-gray-300">
+              <div class="flex flex-wrap items-center justify-between gap-2">
+                <h4 class="min-w-0 text-sm font-medium text-gray-700 dark:text-gray-300">
                   {{ t('admin.channels.form.accountStatsPricingRules') }}
                 </h4>
                 <button
                   type="button"
                   @click="addAccountStatsRule(sIdx)"
-                  class="rounded-lg border border-primary-300 px-3 py-1 text-xs font-medium text-primary-600 hover:bg-primary-50 dark:border-primary-600 dark:text-primary-400 dark:hover:bg-primary-900/20"
+                  class="btn btn-secondary btn-sm shrink-0 gap-1 whitespace-nowrap"
                 >
-                  + {{ t('admin.channels.form.addRule') }}
+                  <Icon name="plus" size="xs" :stroke-width="2" />{{ t('admin.channels.form.addRule') }}
                 </button>
               </div>
 
@@ -482,13 +482,13 @@
                 :key="ruleIndex"
                 class="space-y-3 rounded-lg border border-gray-200 p-4 dark:border-dark-600"
               >
-                <div class="flex items-center justify-between">
+                <div class="flex items-center justify-between gap-2">
                   <input
                     v-model="rule.name"
                     :placeholder="t('admin.channels.form.ruleName')"
-                    class="bg-transparent text-sm font-medium text-gray-700 placeholder-gray-400 outline-none dark:text-gray-300"
+                    class="min-w-0 flex-1 bg-transparent text-sm font-medium text-gray-700 placeholder-gray-400 outline-none dark:text-gray-300"
                   />
-                  <button type="button" @click="removeAccountStatsRule(sIdx, ruleIndex)" class="text-xs text-red-500 hover:text-red-700">
+                  <button type="button" @click="removeAccountStatsRule(sIdx, ruleIndex)" class="shrink-0 whitespace-nowrap rounded-lg px-2 py-1 text-xs text-red-500 transition-colors hover:bg-red-50 hover:text-red-700 dark:hover:bg-red-900/20">
                     {{ t('common.delete') }}
                   </button>
                 </div>
@@ -563,10 +563,10 @@
                 </div>
 
                 <div>
-                  <div class="mb-1 flex items-center justify-between">
-                    <label class="text-xs text-gray-500 dark:text-gray-400">{{ t('admin.channels.form.ruleModelPricing') }}</label>
-                    <button type="button" @click="addRulePricingEntry(sIdx, ruleIndex)" class="text-xs text-primary-600 hover:text-primary-700">
-                      + {{ t('common.add') }}
+                  <div class="mb-1.5 flex flex-wrap items-center justify-between gap-2">
+                    <label class="min-w-0 text-xs text-gray-500 dark:text-gray-400">{{ t('admin.channels.form.ruleModelPricing') }}</label>
+                    <button type="button" @click="addRulePricingEntry(sIdx, ruleIndex)" class="btn btn-secondary btn-sm shrink-0 gap-1 whitespace-nowrap">
+                      <Icon name="plus" size="xs" :stroke-width="2" />{{ t('common.add') }}
                     </button>
                   </div>
                   <div v-if="rule.pricing.length === 0" class="rounded border border-dashed border-gray-300 p-2 text-center text-xs text-gray-400 dark:border-dark-500">

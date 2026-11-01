@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/domain"
+	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/timezone"
 )
 
@@ -89,7 +90,6 @@ type Group struct {
 	// OpenAI Messages 调度配置（仅 openai 平台使用）
 	AllowMessagesDispatch       bool
 	AllowLive                   bool
-	RequireOAuthOnly            bool // 仅允许非 apikey 类型账号关联（OpenAI/Antigravity/Anthropic/Gemini）
 	RequirePrivacySet           bool // 调度时仅允许 privacy 已成功设置的账号（OpenAI/Antigravity/Anthropic/Gemini）
 	DefaultMappedModel          string
 	MessagesDispatchModelConfig OpenAIMessagesDispatchModelConfig
@@ -110,6 +110,11 @@ type Group struct {
 	ProfitControlEnabled bool
 	ProfitMinMargin      float64 // 最低毛利率，小数存储（0.30=30%）
 	ProfitSafetyBuffer   float64 // 安全缓冲，小数，与 margin 相加后从 D 中扣除
+
+	// Cyber 自动扣款：请求命中上游 cyber_policy 时，在用量费用之外按此金额（USD）
+	// 扣款一次。仅 CyberAutoChargeEnabled 为 true 时生效。
+	CyberAutoChargeEnabled bool
+	CyberAutoChargeAmount  float64
 
 	CreatedAt time.Time
 	UpdatedAt time.Time
@@ -138,6 +143,31 @@ func (g *Group) HasWeeklyLimit() bool {
 
 func (g *Group) HasMonthlyLimit() bool {
 	return g.MonthlyLimitUSD != nil && *g.MonthlyLimitUSD > 0
+}
+
+// CyberAutoCharge returns the fixed amount charged when a request in this group
+// hits the upstream cyber_policy block, or 0 when the charge is off.
+func (g *Group) CyberAutoCharge() float64 {
+	if g == nil || !g.CyberAutoChargeEnabled || !validCyberAutoChargeAmount(g.CyberAutoChargeAmount) {
+		return 0
+	}
+	return g.CyberAutoChargeAmount
+}
+
+func validCyberAutoChargeAmount(amount float64) bool {
+	return amount > 0 && !math.IsInf(amount, 0)
+}
+
+// ValidateCyberAutoChargeConfig rejects a negative or non-finite amount, and an
+// enabled charge without an amount (it would silently charge nothing).
+func ValidateCyberAutoChargeConfig(enabled bool, amount float64) error {
+	if math.IsNaN(amount) || math.IsInf(amount, 0) || amount < 0 {
+		return infraerrors.BadRequest("INVALID_CYBER_AUTO_CHARGE", fmt.Sprintf("cyber_auto_charge_amount must be a non-negative number, got %v", amount))
+	}
+	if enabled && amount == 0 {
+		return infraerrors.BadRequest("INVALID_CYBER_AUTO_CHARGE", "cyber_auto_charge_amount must be greater than 0 when the cyber auto charge is enabled")
+	}
+	return nil
 }
 
 // GetImagePrice 根据 image_size 返回对应的图片生成价格

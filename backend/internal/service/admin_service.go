@@ -258,7 +258,6 @@ type CreateGroupInput struct {
 	AllowMessagesDispatch       bool
 	AllowLive                   bool
 	DefaultMappedModel          string
-	RequireOAuthOnly            bool
 	RequirePrivacySet           bool
 	MessagesDispatchModelConfig OpenAIMessagesDispatchModelConfig
 	ModelsListConfig            GroupModelsListConfig
@@ -271,6 +270,9 @@ type CreateGroupInput struct {
 	ProfitControlEnabled bool
 	ProfitMinMargin      *float64
 	ProfitSafetyBuffer   *float64
+	// Cyber 自动扣款：命中上游 cyber_policy 时按固定金额扣款一次
+	CyberAutoChargeEnabled bool
+	CyberAutoChargeAmount  *float64
 	// 从指定分组复制账号（创建分组后在同一事务内绑定）
 	CopyAccountsFromGroupIDs []int64
 }
@@ -325,7 +327,6 @@ type UpdateGroupInput struct {
 	AllowMessagesDispatch       *bool
 	AllowLive                   *bool
 	DefaultMappedModel          *string
-	RequireOAuthOnly            *bool
 	RequirePrivacySet           *bool
 	MessagesDispatchModelConfig *OpenAIMessagesDispatchModelConfig
 	ModelsListConfig            *GroupModelsListConfig
@@ -335,9 +336,11 @@ type UpdateGroupInput struct {
 	MaxReasoningEffort      *string
 	ReasoningEffortMappings *[]ReasoningEffortMapping
 	// 分组利润控制（nil 表示不修改；margin/buffer 为小数）
-	ProfitControlEnabled *bool
-	ProfitMinMargin      *float64
-	ProfitSafetyBuffer   *float64
+	ProfitControlEnabled   *bool
+	ProfitMinMargin        *float64
+	ProfitSafetyBuffer     *float64
+	CyberAutoChargeEnabled *bool
+	CyberAutoChargeAmount  *float64
 	// 从指定分组复制账号（同步操作：先清空当前分组的账号绑定，再绑定源分组的账号）
 	CopyAccountsFromGroupIDs []int64
 }

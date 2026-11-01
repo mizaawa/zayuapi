@@ -22,13 +22,15 @@ func TestGetByKeyForAuthCarriesProfitControlProjection(t *testing.T) {
 	ctx := context.Background()
 	suffix := time.Now().UnixNano()
 	group := mustCreateGroup(t, integrationEntClient, &service.Group{
-		Name:                  fmt.Sprintf("profit-proj-group-%d", suffix),
-		Platform:              service.PlatformOpenAI,
-		RateMultiplier:        0.06,
-		ProfitControlEnabled:  true,
-		ImageWorkbenchEnabled: true,
-		ProfitMinMargin:       0.2,
-		ProfitSafetyBuffer:    0.05,
+		Name:                   fmt.Sprintf("profit-proj-group-%d", suffix),
+		Platform:               service.PlatformOpenAI,
+		RateMultiplier:         0.06,
+		ProfitControlEnabled:   true,
+		ImageWorkbenchEnabled:  true,
+		ProfitMinMargin:        0.2,
+		ProfitSafetyBuffer:     0.05,
+		CyberAutoChargeEnabled: true,
+		CyberAutoChargeAmount:  0.25,
 	})
 	user := mustCreateUser(t, integrationEntClient, &service.User{
 		Email: fmt.Sprintf("profit-proj-%d@example.com", suffix), Concurrency: 5,
@@ -59,4 +61,6 @@ func TestGetByKeyForAuthCarriesProfitControlProjection(t *testing.T) {
 	require.True(t, got.Group.ProfitControlEnabled, "profit_control_enabled 必须进入认证投影（投影漏列会让门静默失效）")
 	require.InDelta(t, 0.2, got.Group.ProfitMinMargin, 1e-9)
 	require.InDelta(t, 0.05, got.Group.ProfitSafetyBuffer, 1e-9)
+	require.True(t, got.Group.CyberAutoChargeEnabled, "cyber_auto_charge_enabled 必须进入认证投影，否则 cyber 扣款静默失效")
+	require.InDelta(t, 0.25, got.Group.CyberAutoChargeAmount, 1e-9)
 }

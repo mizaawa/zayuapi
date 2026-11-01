@@ -102,7 +102,6 @@ const groupFixture = (overrides: Partial<AdminGroup>): AdminGroup => ({
   fallback_group_id: null,
   fallback_group_id_on_invalid_request: null,
   allow_messages_dispatch: false,
-  require_oauth_only: false,
   require_privacy_set: false,
   created_at: '2026-07-01T00:00:00Z',
   updated_at: '2026-07-01T00:00:00Z',

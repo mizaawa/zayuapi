@@ -107,23 +107,26 @@ type CreateGroupRequest struct {
 	WeeklyLimitUSD   optionalLimitField           `json:"weekly_limit_usd"`
 	MonthlyLimitUSD  optionalLimitField           `json:"monthly_limit_usd"`
 	// 图片生成计费配置（antigravity 和 gemini 平台使用，负数表示清除配置）
-	AllowImageGeneration            bool     `json:"allow_image_generation"`
-	ImageWorkbenchEnabled           bool     `json:"image_workbench_enabled"`
-	VideoWorkbenchEnabled           bool     `json:"video_workbench_enabled"`
-	AllowBatchImageGeneration       bool     `json:"allow_batch_image_generation"`
-	ImageRateIndependent            bool     `json:"image_rate_independent"`
-	ImageRateMultiplier             *float64 `json:"image_rate_multiplier"`
-	BatchImageDiscountMultiplier    *float64 `json:"batch_image_discount_multiplier"`
-	BatchImageHoldMultiplier        *float64 `json:"batch_image_hold_multiplier"`
-	VideoRateIndependent            bool     `json:"video_rate_independent"`
-	VideoRateMultiplier             *float64 `json:"video_rate_multiplier"`
-	PeakRateEnabled                 bool     `json:"peak_rate_enabled"`
-	PeakStart                       string   `json:"peak_start"`
-	PeakEnd                         string   `json:"peak_end"`
-	PeakRateMultiplier              *float64 `json:"peak_rate_multiplier"`
-	ProfitControlEnabled            bool     `json:"profit_control_enabled"`
-	ProfitMinMargin                 *float64 `json:"profit_min_margin"`
-	ProfitSafetyBuffer              *float64 `json:"profit_safety_buffer"`
+	AllowImageGeneration         bool     `json:"allow_image_generation"`
+	ImageWorkbenchEnabled        bool     `json:"image_workbench_enabled"`
+	VideoWorkbenchEnabled        bool     `json:"video_workbench_enabled"`
+	AllowBatchImageGeneration    bool     `json:"allow_batch_image_generation"`
+	ImageRateIndependent         bool     `json:"image_rate_independent"`
+	ImageRateMultiplier          *float64 `json:"image_rate_multiplier"`
+	BatchImageDiscountMultiplier *float64 `json:"batch_image_discount_multiplier"`
+	BatchImageHoldMultiplier     *float64 `json:"batch_image_hold_multiplier"`
+	VideoRateIndependent         bool     `json:"video_rate_independent"`
+	VideoRateMultiplier          *float64 `json:"video_rate_multiplier"`
+	PeakRateEnabled              bool     `json:"peak_rate_enabled"`
+	PeakStart                    string   `json:"peak_start"`
+	PeakEnd                      string   `json:"peak_end"`
+	PeakRateMultiplier           *float64 `json:"peak_rate_multiplier"`
+	ProfitControlEnabled         bool     `json:"profit_control_enabled"`
+	ProfitMinMargin              *float64 `json:"profit_min_margin"`
+	ProfitSafetyBuffer           *float64 `json:"profit_safety_buffer"`
+	// Cyber 自动扣款：请求命中上游 cyber_policy 时按固定金额扣款一次
+	CyberAutoChargeEnabled          bool     `json:"cyber_auto_charge_enabled"`
+	CyberAutoChargeAmount           *float64 `json:"cyber_auto_charge_amount"`
 	ImagePrice1K                    *float64 `json:"image_price_1k"`
 	ImagePrice2K                    *float64 `json:"image_price_2k"`
 	ImagePrice4K                    *float64 `json:"image_price_4k"`
@@ -143,7 +146,6 @@ type CreateGroupRequest struct {
 	// OpenAI Messages 调度配置（仅 openai 平台使用）
 	AllowMessagesDispatch       bool                                      `json:"allow_messages_dispatch"`
 	AllowLive                   bool                                      `json:"allow_live"`
-	RequireOAuthOnly            bool                                      `json:"require_oauth_only"`
 	RequirePrivacySet           bool                                      `json:"require_privacy_set"`
 	DefaultMappedModel          string                                    `json:"default_mapped_model"`
 	MessagesDispatchModelConfig service.OpenAIMessagesDispatchModelConfig `json:"messages_dispatch_model_config"`
@@ -188,6 +190,8 @@ type UpdateGroupRequest struct {
 	ProfitControlEnabled            *bool    `json:"profit_control_enabled"`
 	ProfitMinMargin                 *float64 `json:"profit_min_margin"`
 	ProfitSafetyBuffer              *float64 `json:"profit_safety_buffer"`
+	CyberAutoChargeEnabled          *bool    `json:"cyber_auto_charge_enabled"`
+	CyberAutoChargeAmount           *float64 `json:"cyber_auto_charge_amount"`
 	ImagePrice1K                    *float64 `json:"image_price_1k"`
 	ImagePrice2K                    *float64 `json:"image_price_2k"`
 	ImagePrice4K                    *float64 `json:"image_price_4k"`
@@ -207,7 +211,6 @@ type UpdateGroupRequest struct {
 	// OpenAI Messages 调度配置（仅 openai 平台使用）
 	AllowMessagesDispatch       *bool                                      `json:"allow_messages_dispatch"`
 	AllowLive                   *bool                                      `json:"allow_live"`
-	RequireOAuthOnly            *bool                                      `json:"require_oauth_only"`
 	RequirePrivacySet           *bool                                      `json:"require_privacy_set"`
 	DefaultMappedModel          *string                                    `json:"default_mapped_model"`
 	MessagesDispatchModelConfig *service.OpenAIMessagesDispatchModelConfig `json:"messages_dispatch_model_config"`
@@ -520,6 +523,8 @@ func (h *GroupHandler) Create(c *gin.Context) {
 		ProfitControlEnabled:            req.ProfitControlEnabled,
 		ProfitMinMargin:                 req.ProfitMinMargin,
 		ProfitSafetyBuffer:              req.ProfitSafetyBuffer,
+		CyberAutoChargeEnabled:          req.CyberAutoChargeEnabled,
+		CyberAutoChargeAmount:           req.CyberAutoChargeAmount,
 		ImagePrice1K:                    req.ImagePrice1K,
 		ImagePrice2K:                    req.ImagePrice2K,
 		ImagePrice4K:                    req.ImagePrice4K,
@@ -536,7 +541,6 @@ func (h *GroupHandler) Create(c *gin.Context) {
 		SupportedModelScopes:            req.SupportedModelScopes,
 		AllowMessagesDispatch:           req.AllowMessagesDispatch,
 		AllowLive:                       req.AllowLive,
-		RequireOAuthOnly:                req.RequireOAuthOnly,
 		RequirePrivacySet:               req.RequirePrivacySet,
 		DefaultMappedModel:              req.DefaultMappedModel,
 		MessagesDispatchModelConfig:     req.MessagesDispatchModelConfig,
@@ -650,6 +654,8 @@ func (h *GroupHandler) Update(c *gin.Context) {
 		ProfitControlEnabled:            req.ProfitControlEnabled,
 		ProfitMinMargin:                 req.ProfitMinMargin,
 		ProfitSafetyBuffer:              req.ProfitSafetyBuffer,
+		CyberAutoChargeEnabled:          req.CyberAutoChargeEnabled,
+		CyberAutoChargeAmount:           req.CyberAutoChargeAmount,
 		ImagePrice1K:                    req.ImagePrice1K,
 		ImagePrice2K:                    req.ImagePrice2K,
 		ImagePrice4K:                    req.ImagePrice4K,
@@ -666,7 +672,6 @@ func (h *GroupHandler) Update(c *gin.Context) {
 		SupportedModelScopes:            req.SupportedModelScopes,
 		AllowMessagesDispatch:           req.AllowMessagesDispatch,
 		AllowLive:                       req.AllowLive,
-		RequireOAuthOnly:                req.RequireOAuthOnly,
 		RequirePrivacySet:               req.RequirePrivacySet,
 		DefaultMappedModel:              req.DefaultMappedModel,
 		MessagesDispatchModelConfig:     req.MessagesDispatchModelConfig,

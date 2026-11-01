@@ -1251,6 +1251,14 @@ func init() {
 	groupDescProfitSafetyBuffer := groupFields[54].Descriptor()
 	// group.DefaultProfitSafetyBuffer holds the default value on creation for the profit_safety_buffer field.
 	group.DefaultProfitSafetyBuffer = groupDescProfitSafetyBuffer.Default.(float64)
+	// groupDescCyberAutoChargeEnabled is the schema descriptor for cyber_auto_charge_enabled field.
+	groupDescCyberAutoChargeEnabled := groupFields[55].Descriptor()
+	// group.DefaultCyberAutoChargeEnabled holds the default value on creation for the cyber_auto_charge_enabled field.
+	group.DefaultCyberAutoChargeEnabled = groupDescCyberAutoChargeEnabled.Default.(bool)
+	// groupDescCyberAutoChargeAmount is the schema descriptor for cyber_auto_charge_amount field.
+	groupDescCyberAutoChargeAmount := groupFields[56].Descriptor()
+	// group.DefaultCyberAutoChargeAmount holds the default value on creation for the cyber_auto_charge_amount field.
+	group.DefaultCyberAutoChargeAmount = groupDescCyberAutoChargeAmount.Default.(float64)
 	idempotencyrecordMixin := schema.IdempotencyRecord{}.Mixin()
 	idempotencyrecordMixinFields0 := idempotencyrecordMixin[0].Fields()
 	_ = idempotencyrecordMixinFields0

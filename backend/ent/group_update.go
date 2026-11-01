@@ -1056,6 +1056,41 @@ func (_u *GroupUpdate) AddProfitSafetyBuffer(v float64) *GroupUpdate {
 	return _u
 }
 
+// SetCyberAutoChargeEnabled sets the "cyber_auto_charge_enabled" field.
+func (_u *GroupUpdate) SetCyberAutoChargeEnabled(v bool) *GroupUpdate {
+	_u.mutation.SetCyberAutoChargeEnabled(v)
+	return _u
+}
+
+// SetNillableCyberAutoChargeEnabled sets the "cyber_auto_charge_enabled" field if the given value is not nil.
+func (_u *GroupUpdate) SetNillableCyberAutoChargeEnabled(v *bool) *GroupUpdate {
+	if v != nil {
+		_u.SetCyberAutoChargeEnabled(*v)
+	}
+	return _u
+}
+
+// SetCyberAutoChargeAmount sets the "cyber_auto_charge_amount" field.
+func (_u *GroupUpdate) SetCyberAutoChargeAmount(v float64) *GroupUpdate {
+	_u.mutation.ResetCyberAutoChargeAmount()
+	_u.mutation.SetCyberAutoChargeAmount(v)
+	return _u
+}
+
+// SetNillableCyberAutoChargeAmount sets the "cyber_auto_charge_amount" field if the given value is not nil.
+func (_u *GroupUpdate) SetNillableCyberAutoChargeAmount(v *float64) *GroupUpdate {
+	if v != nil {
+		_u.SetCyberAutoChargeAmount(*v)
+	}
+	return _u
+}
+
+// AddCyberAutoChargeAmount adds value to the "cyber_auto_charge_amount" field.
+func (_u *GroupUpdate) AddCyberAutoChargeAmount(v float64) *GroupUpdate {
+	_u.mutation.AddCyberAutoChargeAmount(v)
+	return _u
+}
+
 // AddAPIKeyIDs adds the "api_keys" edge to the APIKey entity by IDs.
 func (_u *GroupUpdate) AddAPIKeyIDs(ids ...int64) *GroupUpdate {
 	_u.mutation.AddAPIKeyIDs(ids...)
@@ -1714,6 +1749,15 @@ func (_u *GroupUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if value, ok := _u.mutation.AddedProfitSafetyBuffer(); ok {
 		_spec.AddField(group.FieldProfitSafetyBuffer, field.TypeFloat64, value)
+	}
+	if value, ok := _u.mutation.CyberAutoChargeEnabled(); ok {
+		_spec.SetField(group.FieldCyberAutoChargeEnabled, field.TypeBool, value)
+	}
+	if value, ok := _u.mutation.CyberAutoChargeAmount(); ok {
+		_spec.SetField(group.FieldCyberAutoChargeAmount, field.TypeFloat64, value)
+	}
+	if value, ok := _u.mutation.AddedCyberAutoChargeAmount(); ok {
+		_spec.AddField(group.FieldCyberAutoChargeAmount, field.TypeFloat64, value)
 	}
 	if _u.mutation.APIKeysCleared() {
 		edge := &sqlgraph.EdgeSpec{
@@ -3093,6 +3137,41 @@ func (_u *GroupUpdateOne) AddProfitSafetyBuffer(v float64) *GroupUpdateOne {
 	return _u
 }
 
+// SetCyberAutoChargeEnabled sets the "cyber_auto_charge_enabled" field.
+func (_u *GroupUpdateOne) SetCyberAutoChargeEnabled(v bool) *GroupUpdateOne {
+	_u.mutation.SetCyberAutoChargeEnabled(v)
+	return _u
+}
+
+// SetNillableCyberAutoChargeEnabled sets the "cyber_auto_charge_enabled" field if the given value is not nil.
+func (_u *GroupUpdateOne) SetNillableCyberAutoChargeEnabled(v *bool) *GroupUpdateOne {
+	if v != nil {
+		_u.SetCyberAutoChargeEnabled(*v)
+	}
+	return _u
+}
+
+// SetCyberAutoChargeAmount sets the "cyber_auto_charge_amount" field.
+func (_u *GroupUpdateOne) SetCyberAutoChargeAmount(v float64) *GroupUpdateOne {
+	_u.mutation.ResetCyberAutoChargeAmount()
+	_u.mutation.SetCyberAutoChargeAmount(v)
+	return _u
+}
+
+// SetNillableCyberAutoChargeAmount sets the "cyber_auto_charge_amount" field if the given value is not nil.
+func (_u *GroupUpdateOne) SetNillableCyberAutoChargeAmount(v *float64) *GroupUpdateOne {
+	if v != nil {
+		_u.SetCyberAutoChargeAmount(*v)
+	}
+	return _u
+}
+
+// AddCyberAutoChargeAmount adds value to the "cyber_auto_charge_amount" field.
+func (_u *GroupUpdateOne) AddCyberAutoChargeAmount(v float64) *GroupUpdateOne {
+	_u.mutation.AddCyberAutoChargeAmount(v)
+	return _u
+}
+
 // AddAPIKeyIDs adds the "api_keys" edge to the APIKey entity by IDs.
 func (_u *GroupUpdateOne) AddAPIKeyIDs(ids ...int64) *GroupUpdateOne {
 	_u.mutation.AddAPIKeyIDs(ids...)
@@ -3781,6 +3860,15 @@ func (_u *GroupUpdateOne) sqlSave(ctx context.Context) (_node *Group, err error)
 	}
 	if value, ok := _u.mutation.AddedProfitSafetyBuffer(); ok {
 		_spec.AddField(group.FieldProfitSafetyBuffer, field.TypeFloat64, value)
+	}
+	if value, ok := _u.mutation.CyberAutoChargeEnabled(); ok {
+		_spec.SetField(group.FieldCyberAutoChargeEnabled, field.TypeBool, value)
+	}
+	if value, ok := _u.mutation.CyberAutoChargeAmount(); ok {
+		_spec.SetField(group.FieldCyberAutoChargeAmount, field.TypeFloat64, value)
+	}
+	if value, ok := _u.mutation.AddedCyberAutoChargeAmount(); ok {
+		_spec.AddField(group.FieldCyberAutoChargeAmount, field.TypeFloat64, value)
 	}
 	if _u.mutation.APIKeysCleared() {
 		edge := &sqlgraph.EdgeSpec{

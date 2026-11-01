@@ -161,7 +161,6 @@ type Group struct {
 	AllowLive bool `json:"allow_live"`
 
 	// 账号过滤控制（仅 OpenAI/Antigravity 平台有效）
-	RequireOAuthOnly  bool `json:"require_oauth_only"`
 	RequirePrivacySet bool `json:"require_privacy_set"`
 
 	// RPMLimit 分组级每分钟请求数上限（0 = 不限制），设置后覆盖用户级 rpm_limit。
@@ -187,6 +186,10 @@ type AdminGroup struct {
 	ProfitControlEnabled bool    `json:"profit_control_enabled"`
 	ProfitMinMargin      float64 `json:"profit_min_margin"`
 	ProfitSafetyBuffer   float64 `json:"profit_safety_buffer"`
+
+	// Cyber 自动扣款：请求命中上游 cyber_policy 时按固定金额扣款一次。
+	CyberAutoChargeEnabled bool    `json:"cyber_auto_charge_enabled"`
+	CyberAutoChargeAmount  float64 `json:"cyber_auto_charge_amount"`
 
 	// 模型路由配置（仅 anthropic 平台使用）
 	ModelRouting        map[string][]int64 `json:"model_routing"`

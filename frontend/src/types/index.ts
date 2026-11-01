@@ -628,7 +628,6 @@ export interface Group {
   allow_live: boolean
   default_mapped_model?: string
   messages_dispatch_model_config?: OpenAIMessagesDispatchModelConfig
-  require_oauth_only: boolean
   require_privacy_set: boolean
   created_at: string
   updated_at: string
@@ -641,6 +640,9 @@ export interface AdminGroup extends Group {
   profit_control_enabled: boolean
   profit_min_margin: number
   profit_safety_buffer: number
+  // Cyber 自动扣款：请求命中上游 cyber_policy 时按固定金额（USD）扣款一次
+  cyber_auto_charge_enabled: boolean
+  cyber_auto_charge_amount: number
 
   // 模型路由配置（仅管理员可见，内部信息）
   model_routing: Record<string, number[]> | null
@@ -855,6 +857,8 @@ export interface CreateGroupRequest {
   profit_control_enabled?: boolean
   profit_min_margin?: number
   profit_safety_buffer?: number
+  cyber_auto_charge_enabled?: boolean
+  cyber_auto_charge_amount?: number
   claude_code_only?: boolean
   fallback_group_id?: number | null
   fallback_group_id_on_invalid_request?: number | null
@@ -870,7 +874,6 @@ export interface CreateGroupRequest {
   rpm_limit?: number
   max_reasoning_effort?: string // Deprecated: ignored
   reasoning_effort_mappings?: ReasoningEffortMapping[] // Deprecated: ignored
-  require_oauth_only?: boolean
   require_privacy_set?: boolean
   // 从指定分组复制账号
   copy_accounts_from_group_ids?: number[]
@@ -914,6 +917,8 @@ export interface UpdateGroupRequest {
   profit_control_enabled?: boolean
   profit_min_margin?: number
   profit_safety_buffer?: number
+  cyber_auto_charge_enabled?: boolean
+  cyber_auto_charge_amount?: number
   claude_code_only?: boolean
   fallback_group_id?: number | null
   fallback_group_id_on_invalid_request?: number | null
@@ -929,7 +934,6 @@ export interface UpdateGroupRequest {
   rpm_limit?: number
   max_reasoning_effort?: string // Deprecated: ignored
   reasoning_effort_mappings?: ReasoningEffortMapping[] // Deprecated: ignored
-  require_oauth_only?: boolean
   require_privacy_set?: boolean
   copy_accounts_from_group_ids?: number[]
 }

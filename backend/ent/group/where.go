@@ -315,6 +315,16 @@ func ProfitSafetyBuffer(v float64) predicate.Group {
 	return predicate.Group(sql.FieldEQ(FieldProfitSafetyBuffer, v))
 }
 
+// CyberAutoChargeEnabled applies equality check predicate on the "cyber_auto_charge_enabled" field. It's identical to CyberAutoChargeEnabledEQ.
+func CyberAutoChargeEnabled(v bool) predicate.Group {
+	return predicate.Group(sql.FieldEQ(FieldCyberAutoChargeEnabled, v))
+}
+
+// CyberAutoChargeAmount applies equality check predicate on the "cyber_auto_charge_amount" field. It's identical to CyberAutoChargeAmountEQ.
+func CyberAutoChargeAmount(v float64) predicate.Group {
+	return predicate.Group(sql.FieldEQ(FieldCyberAutoChargeAmount, v))
+}
+
 // CreatedAtEQ applies the EQ predicate on the "created_at" field.
 func CreatedAtEQ(v time.Time) predicate.Group {
 	return predicate.Group(sql.FieldEQ(FieldCreatedAt, v))
@@ -2333,6 +2343,56 @@ func ProfitSafetyBufferLT(v float64) predicate.Group {
 // ProfitSafetyBufferLTE applies the LTE predicate on the "profit_safety_buffer" field.
 func ProfitSafetyBufferLTE(v float64) predicate.Group {
 	return predicate.Group(sql.FieldLTE(FieldProfitSafetyBuffer, v))
+}
+
+// CyberAutoChargeEnabledEQ applies the EQ predicate on the "cyber_auto_charge_enabled" field.
+func CyberAutoChargeEnabledEQ(v bool) predicate.Group {
+	return predicate.Group(sql.FieldEQ(FieldCyberAutoChargeEnabled, v))
+}
+
+// CyberAutoChargeEnabledNEQ applies the NEQ predicate on the "cyber_auto_charge_enabled" field.
+func CyberAutoChargeEnabledNEQ(v bool) predicate.Group {
+	return predicate.Group(sql.FieldNEQ(FieldCyberAutoChargeEnabled, v))
+}
+
+// CyberAutoChargeAmountEQ applies the EQ predicate on the "cyber_auto_charge_amount" field.
+func CyberAutoChargeAmountEQ(v float64) predicate.Group {
+	return predicate.Group(sql.FieldEQ(FieldCyberAutoChargeAmount, v))
+}
+
+// CyberAutoChargeAmountNEQ applies the NEQ predicate on the "cyber_auto_charge_amount" field.
+func CyberAutoChargeAmountNEQ(v float64) predicate.Group {
+	return predicate.Group(sql.FieldNEQ(FieldCyberAutoChargeAmount, v))
+}
+
+// CyberAutoChargeAmountIn applies the In predicate on the "cyber_auto_charge_amount" field.
+func CyberAutoChargeAmountIn(vs ...float64) predicate.Group {
+	return predicate.Group(sql.FieldIn(FieldCyberAutoChargeAmount, vs...))
+}
+
+// CyberAutoChargeAmountNotIn applies the NotIn predicate on the "cyber_auto_charge_amount" field.
+func CyberAutoChargeAmountNotIn(vs ...float64) predicate.Group {
+	return predicate.Group(sql.FieldNotIn(FieldCyberAutoChargeAmount, vs...))
+}
+
+// CyberAutoChargeAmountGT applies the GT predicate on the "cyber_auto_charge_amount" field.
+func CyberAutoChargeAmountGT(v float64) predicate.Group {
+	return predicate.Group(sql.FieldGT(FieldCyberAutoChargeAmount, v))
+}
+
+// CyberAutoChargeAmountGTE applies the GTE predicate on the "cyber_auto_charge_amount" field.
+func CyberAutoChargeAmountGTE(v float64) predicate.Group {
+	return predicate.Group(sql.FieldGTE(FieldCyberAutoChargeAmount, v))
+}
+
+// CyberAutoChargeAmountLT applies the LT predicate on the "cyber_auto_charge_amount" field.
+func CyberAutoChargeAmountLT(v float64) predicate.Group {
+	return predicate.Group(sql.FieldLT(FieldCyberAutoChargeAmount, v))
+}
+
+// CyberAutoChargeAmountLTE applies the LTE predicate on the "cyber_auto_charge_amount" field.
+func CyberAutoChargeAmountLTE(v float64) predicate.Group {
+	return predicate.Group(sql.FieldLTE(FieldCyberAutoChargeAmount, v))
 }
 
 // HasAPIKeys applies the HasEdge predicate on the "api_keys" edge.

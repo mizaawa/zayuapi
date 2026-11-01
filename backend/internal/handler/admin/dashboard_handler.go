@@ -187,10 +187,11 @@ func (h *DashboardHandler) GetOperationsDashboard(c *gin.Context) {
 		}
 		trendDays = parsed
 	}
+	// 0 = all groups, -1 = unassigned usage, -2 = usage of deleted groups.
 	groupID := int64(0)
 	if raw := strings.TrimSpace(c.Query("group_id")); raw != "" {
 		parsed, err := strconv.ParseInt(raw, 10, 64)
-		if err != nil || parsed < -1 {
+		if err != nil || parsed < -2 {
 			response.BadRequest(c, "Invalid group_id")
 			return
 		}

@@ -278,7 +278,10 @@ func buildUsageBillingCommand(requestID string, usageLog *UsageLog, p *postUsage
 	// user-specific) rate multiplier consumes subscription quota at the expected
 	// speed. TotalCost remains the raw (pre-multiplier) value; downstream guards
 	// on "> 0" still correctly skip free subscriptions (RateMultiplier == 0).
-	if p.IsSubscriptionBill && p.Subscription != nil && p.Cost.TotalCost > 0 {
+	// A fixed charge with no token cost (the Cyber auto charge) has
+	// ActualCost > 0 with TotalCost == 0 and must still bill the subscription
+	// rather than fall through to the user's balance.
+	if p.IsSubscriptionBill && p.Subscription != nil && (p.Cost.TotalCost > 0 || p.Cost.ActualCost > 0) {
 		cmd.SubscriptionID = &p.Subscription.ID
 		cmd.SubscriptionCost = p.Cost.ActualCost
 	} else if p.Cost.ActualCost > 0 {

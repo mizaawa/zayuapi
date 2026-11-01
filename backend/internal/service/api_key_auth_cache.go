@@ -138,6 +138,10 @@ type APIKeyAuthGroupSnapshot struct {
 	ProfitControlEnabled bool    `json:"profit_control_enabled"`
 	ProfitMinMargin      float64 `json:"profit_min_margin"`
 	ProfitSafetyBuffer   float64 `json:"profit_safety_buffer"`
+
+	// Cyber 自动扣款：cyber 用量行的扣费读的也是这份快照物化出的分组。
+	CyberAutoChargeEnabled bool    `json:"cyber_auto_charge_enabled"`
+	CyberAutoChargeAmount  float64 `json:"cyber_auto_charge_amount"`
 }
 
 // APIKeyAuthCacheEntry 缓存条目，支持负缓存

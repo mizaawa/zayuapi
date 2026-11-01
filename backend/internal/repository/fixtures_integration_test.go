@@ -110,7 +110,9 @@ func mustCreateGroup(t *testing.T, client *dbent.Client, g *service.Group) *serv
 		SetImageWorkbenchEnabled(g.ImageWorkbenchEnabled).
 		SetProfitControlEnabled(g.ProfitControlEnabled).
 		SetProfitMinMargin(g.ProfitMinMargin).
-		SetProfitSafetyBuffer(g.ProfitSafetyBuffer)
+		SetProfitSafetyBuffer(g.ProfitSafetyBuffer).
+		SetCyberAutoChargeEnabled(g.CyberAutoChargeEnabled).
+		SetCyberAutoChargeAmount(g.CyberAutoChargeAmount)
 	if g.Description != "" {
 		create.SetDescription(g.Description)
 	}

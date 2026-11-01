@@ -55,7 +55,9 @@
       <button
         type="button"
         @click.stop="emit('remove')"
-        class="flex-shrink-0 rounded p-1 text-gray-400 hover:text-red-500"
+        class="flex-shrink-0 rounded-lg p-1.5 text-gray-400 transition-colors hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-900/20"
+        :title="t('common.delete')"
+        :aria-label="t('common.delete')"
       >
         <Icon name="trash" size="sm" />
       </button>
@@ -101,7 +103,7 @@
             {{ t('admin.channels.form.defaultPrices') }}
             <span class="ml-1 font-normal text-gray-400">$/MTok</span>
           </label>
-          <div class="mt-1 grid grid-cols-2 gap-2 sm:grid-cols-6">
+          <div class="pricing-price-grid mt-1">
             <div>
               <label class="text-xs text-gray-400">{{ t('admin.channels.form.inputPrice') }}</label>
               <input :value="entry.input_price" @input="emitField('input_price', ($event.target as HTMLInputElement).value)"
@@ -136,13 +138,13 @@
 
           <!-- Token intervals (channel-only; group long-context uses official presets) -->
           <div v-if="!hideTokenIntervals" class="mt-3">
-            <div class="flex items-center justify-between">
-              <label class="text-xs font-medium text-gray-500 dark:text-gray-400">
+            <div class="pricing-section-head">
+              <label class="min-w-0 text-xs font-medium text-gray-500 dark:text-gray-400">
                 {{ t('admin.channels.form.intervals') }}
-                <span class="ml-1 font-normal text-gray-400">(min, max]</span>
+                <span class="ml-1 whitespace-nowrap font-normal text-gray-400">(min, max]</span>
               </label>
-              <button type="button" @click="addInterval" class="text-xs text-primary-600 hover:text-primary-700">
-                + {{ t('admin.channels.form.addInterval') }}
+              <button type="button" @click="addInterval" class="pricing-add-button btn btn-secondary btn-sm">
+                <Icon name="plus" size="xs" :stroke-width="2" />{{ t('admin.channels.form.addInterval') }}
               </button>
             </div>
             <div v-if="entry.intervals && entry.intervals.length > 0" class="mt-2 space-y-2">
@@ -165,18 +167,18 @@
             {{ t('admin.channels.form.defaultPerRequestPrice') }}
             <span class="ml-1 font-normal text-gray-400">$</span>
           </label>
-          <div class="mt-1 w-48">
+          <div class="mt-1 w-full sm:w-48">
             <input :value="entry.per_request_price" @input="emitField('per_request_price', ($event.target as HTMLInputElement).value)"
               type="number" step="any" min="0" class="input text-sm" :placeholder="t('admin.channels.form.pricePlaceholder')" />
           </div>
 
           <!-- Tiers -->
-          <div class="mt-3 flex items-center justify-between">
-            <label class="text-xs font-medium text-gray-500 dark:text-gray-400">
+          <div class="pricing-section-head mt-3">
+            <label class="min-w-0 text-xs font-medium text-gray-500 dark:text-gray-400">
               {{ t('admin.channels.form.requestTiers') }}
             </label>
-            <button type="button" @click="addInterval" class="text-xs text-primary-600 hover:text-primary-700">
-              + {{ t('admin.channels.form.addTier') }}
+            <button type="button" @click="addInterval" class="pricing-add-button btn btn-secondary btn-sm">
+              <Icon name="plus" size="xs" :stroke-width="2" />{{ t('admin.channels.form.addTier') }}
             </button>
           </div>
           <div v-if="entry.intervals && entry.intervals.length > 0" class="mt-2 space-y-2">
@@ -201,18 +203,18 @@
             {{ entry.billing_mode === 'video' ? t('admin.channels.form.defaultVideoPrice') : t('admin.channels.form.defaultImagePrice') }}
             <span class="ml-1 font-normal text-gray-400">$</span>
           </label>
-          <div class="mt-1 w-48">
+          <div class="mt-1 w-full sm:w-48">
             <input :value="entry.per_request_price" @input="emitField('per_request_price', ($event.target as HTMLInputElement).value)"
               type="number" step="any" min="0" class="input text-sm" :placeholder="t('admin.channels.form.pricePlaceholder')" />
           </div>
 
           <!-- Image tiers -->
-          <div class="mt-3 flex items-center justify-between">
-            <label class="text-xs font-medium text-gray-500 dark:text-gray-400">
+          <div class="pricing-section-head mt-3">
+            <label class="min-w-0 text-xs font-medium text-gray-500 dark:text-gray-400">
               {{ entry.billing_mode === 'video' ? t('admin.channels.form.videoTiers') : t('admin.channels.form.imageTiers') }}
             </label>
-            <button type="button" @click="addMediaTier" class="text-xs text-primary-600 hover:text-primary-700">
-              + {{ t('admin.channels.form.addTier') }}
+            <button type="button" @click="addMediaTier" class="pricing-add-button btn btn-secondary btn-sm">
+              <Icon name="plus" size="xs" :stroke-width="2" />{{ t('admin.channels.form.addTier') }}
             </button>
           </div>
           <div v-if="entry.intervals && entry.intervals.length > 0" class="mt-2 space-y-2">
@@ -364,5 +366,25 @@ async function onModelsUpdate(newModels: string[]) {
 
 .collapsible-inner {
   overflow: hidden;
+}
+
+/* As many price columns as fit: two on phones, all six in wide dialogs. */
+.pricing-price-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(7rem, 1fr));
+  gap: 0.5rem;
+}
+
+/* Keep inputs on one line when a neighbouring label wraps. */
+.pricing-price-grid > div {
+  @apply flex min-w-0 flex-col justify-end;
+}
+
+.pricing-section-head {
+  @apply flex flex-wrap items-center justify-between gap-2;
+}
+
+.pricing-add-button {
+  @apply shrink-0 gap-1 whitespace-nowrap;
 }
 </style>

@@ -22956,6 +22956,9 @@ type GroupMutation struct {
 	addprofit_min_margin                    *float64
 	profit_safety_buffer                    *float64
 	addprofit_safety_buffer                 *float64
+	cyber_auto_charge_enabled               *bool
+	cyber_auto_charge_amount                *float64
+	addcyber_auto_charge_amount             *float64
 	clearedFields                           map[string]struct{}
 	api_keys                                map[int64]struct{}
 	removedapi_keys                         map[int64]struct{}
@@ -25908,6 +25911,98 @@ func (m *GroupMutation) ResetProfitSafetyBuffer() {
 	m.addprofit_safety_buffer = nil
 }
 
+// SetCyberAutoChargeEnabled sets the "cyber_auto_charge_enabled" field.
+func (m *GroupMutation) SetCyberAutoChargeEnabled(b bool) {
+	m.cyber_auto_charge_enabled = &b
+}
+
+// CyberAutoChargeEnabled returns the value of the "cyber_auto_charge_enabled" field in the mutation.
+func (m *GroupMutation) CyberAutoChargeEnabled() (r bool, exists bool) {
+	v := m.cyber_auto_charge_enabled
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCyberAutoChargeEnabled returns the old "cyber_auto_charge_enabled" field's value of the Group entity.
+// If the Group object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GroupMutation) OldCyberAutoChargeEnabled(ctx context.Context) (v bool, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCyberAutoChargeEnabled is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCyberAutoChargeEnabled requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCyberAutoChargeEnabled: %w", err)
+	}
+	return oldValue.CyberAutoChargeEnabled, nil
+}
+
+// ResetCyberAutoChargeEnabled resets all changes to the "cyber_auto_charge_enabled" field.
+func (m *GroupMutation) ResetCyberAutoChargeEnabled() {
+	m.cyber_auto_charge_enabled = nil
+}
+
+// SetCyberAutoChargeAmount sets the "cyber_auto_charge_amount" field.
+func (m *GroupMutation) SetCyberAutoChargeAmount(f float64) {
+	m.cyber_auto_charge_amount = &f
+	m.addcyber_auto_charge_amount = nil
+}
+
+// CyberAutoChargeAmount returns the value of the "cyber_auto_charge_amount" field in the mutation.
+func (m *GroupMutation) CyberAutoChargeAmount() (r float64, exists bool) {
+	v := m.cyber_auto_charge_amount
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCyberAutoChargeAmount returns the old "cyber_auto_charge_amount" field's value of the Group entity.
+// If the Group object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GroupMutation) OldCyberAutoChargeAmount(ctx context.Context) (v float64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCyberAutoChargeAmount is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCyberAutoChargeAmount requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCyberAutoChargeAmount: %w", err)
+	}
+	return oldValue.CyberAutoChargeAmount, nil
+}
+
+// AddCyberAutoChargeAmount adds f to the "cyber_auto_charge_amount" field.
+func (m *GroupMutation) AddCyberAutoChargeAmount(f float64) {
+	if m.addcyber_auto_charge_amount != nil {
+		*m.addcyber_auto_charge_amount += f
+	} else {
+		m.addcyber_auto_charge_amount = &f
+	}
+}
+
+// AddedCyberAutoChargeAmount returns the value that was added to the "cyber_auto_charge_amount" field in this mutation.
+func (m *GroupMutation) AddedCyberAutoChargeAmount() (r float64, exists bool) {
+	v := m.addcyber_auto_charge_amount
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetCyberAutoChargeAmount resets all changes to the "cyber_auto_charge_amount" field.
+func (m *GroupMutation) ResetCyberAutoChargeAmount() {
+	m.cyber_auto_charge_amount = nil
+	m.addcyber_auto_charge_amount = nil
+}
+
 // AddAPIKeyIDs adds the "api_keys" edge to the APIKey entity by ids.
 func (m *GroupMutation) AddAPIKeyIDs(ids ...int64) {
 	if m.api_keys == nil {
@@ -26320,7 +26415,7 @@ func (m *GroupMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *GroupMutation) Fields() []string {
-	fields := make([]string, 0, 58)
+	fields := make([]string, 0, 60)
 	if m.created_at != nil {
 		fields = append(fields, group.FieldCreatedAt)
 	}
@@ -26495,6 +26590,12 @@ func (m *GroupMutation) Fields() []string {
 	if m.profit_safety_buffer != nil {
 		fields = append(fields, group.FieldProfitSafetyBuffer)
 	}
+	if m.cyber_auto_charge_enabled != nil {
+		fields = append(fields, group.FieldCyberAutoChargeEnabled)
+	}
+	if m.cyber_auto_charge_amount != nil {
+		fields = append(fields, group.FieldCyberAutoChargeAmount)
+	}
 	return fields
 }
 
@@ -26619,6 +26720,10 @@ func (m *GroupMutation) Field(name string) (ent.Value, bool) {
 		return m.ProfitMinMargin()
 	case group.FieldProfitSafetyBuffer:
 		return m.ProfitSafetyBuffer()
+	case group.FieldCyberAutoChargeEnabled:
+		return m.CyberAutoChargeEnabled()
+	case group.FieldCyberAutoChargeAmount:
+		return m.CyberAutoChargeAmount()
 	}
 	return nil, false
 }
@@ -26744,6 +26849,10 @@ func (m *GroupMutation) OldField(ctx context.Context, name string) (ent.Value, e
 		return m.OldProfitMinMargin(ctx)
 	case group.FieldProfitSafetyBuffer:
 		return m.OldProfitSafetyBuffer(ctx)
+	case group.FieldCyberAutoChargeEnabled:
+		return m.OldCyberAutoChargeEnabled(ctx)
+	case group.FieldCyberAutoChargeAmount:
+		return m.OldCyberAutoChargeAmount(ctx)
 	}
 	return nil, fmt.Errorf("unknown Group field %s", name)
 }
@@ -27159,6 +27268,20 @@ func (m *GroupMutation) SetField(name string, value ent.Value) error {
 		}
 		m.SetProfitSafetyBuffer(v)
 		return nil
+	case group.FieldCyberAutoChargeEnabled:
+		v, ok := value.(bool)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCyberAutoChargeEnabled(v)
+		return nil
+	case group.FieldCyberAutoChargeAmount:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCyberAutoChargeAmount(v)
+		return nil
 	}
 	return fmt.Errorf("unknown Group field %s", name)
 }
@@ -27236,6 +27359,9 @@ func (m *GroupMutation) AddedFields() []string {
 	if m.addprofit_safety_buffer != nil {
 		fields = append(fields, group.FieldProfitSafetyBuffer)
 	}
+	if m.addcyber_auto_charge_amount != nil {
+		fields = append(fields, group.FieldCyberAutoChargeAmount)
+	}
 	return fields
 }
 
@@ -27290,6 +27416,8 @@ func (m *GroupMutation) AddedField(name string) (ent.Value, bool) {
 		return m.AddedProfitMinMargin()
 	case group.FieldProfitSafetyBuffer:
 		return m.AddedProfitSafetyBuffer()
+	case group.FieldCyberAutoChargeAmount:
+		return m.AddedCyberAutoChargeAmount()
 	}
 	return nil, false
 }
@@ -27459,6 +27587,13 @@ func (m *GroupMutation) AddField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.AddProfitSafetyBuffer(v)
+		return nil
+	case group.FieldCyberAutoChargeAmount:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddCyberAutoChargeAmount(v)
 		return nil
 	}
 	return fmt.Errorf("unknown Group numeric field %s", name)
@@ -27765,6 +27900,12 @@ func (m *GroupMutation) ResetField(name string) error {
 		return nil
 	case group.FieldProfitSafetyBuffer:
 		m.ResetProfitSafetyBuffer()
+		return nil
+	case group.FieldCyberAutoChargeEnabled:
+		m.ResetCyberAutoChargeEnabled()
+		return nil
+	case group.FieldCyberAutoChargeAmount:
+		m.ResetCyberAutoChargeAmount()
 		return nil
 	}
 	return fmt.Errorf("unknown Group field %s", name)

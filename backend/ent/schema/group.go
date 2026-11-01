@@ -209,9 +209,11 @@ func (Group) Fields() []ent.Field {
 		field.Bool("allow_live").
 			Default(false).
 			Comment("是否允许此 OpenAI 分组访问 Live 接口"),
+		// Deprecated: the OAuth-only account filter was removed; the column stays
+		// so old rows keep loading, and nothing reads it any more.
 		field.Bool("require_oauth_only").
 			Default(false).
-			Comment("仅允许非 apikey 类型账号关联到此分组"),
+			Comment("已废弃：仅允许 OAuth 账号功能已移除，列保留兼容旧数据"),
 		field.Bool("require_privacy_set").
 			Default(false).
 			Comment("调度时仅允许 privacy 已成功设置的账号"),
@@ -256,6 +258,16 @@ func (Group) Fields() []ent.Field {
 			SchemaType(map[string]string{dialect.Postgres: "decimal(10,4)"}).
 			Default(0).
 			Comment("安全缓冲，小数；与 margin 相加后从下游倍率中扣除，默认 0"),
+
+		// Cyber 自动扣款（migration 224）：请求命中上游 cyber_policy 时，在用量费用
+		// 之外按固定金额扣款一次。
+		field.Bool("cyber_auto_charge_enabled").
+			Default(false).
+			Comment("请求命中上游 cyber_policy 时是否按固定金额扣款"),
+		field.Float("cyber_auto_charge_amount").
+			SchemaType(map[string]string{dialect.Postgres: "decimal(20,8)"}).
+			Default(0).
+			Comment("cyber_policy 命中时的单次扣款金额（USD）"),
 	}
 }
 

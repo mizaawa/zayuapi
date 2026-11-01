@@ -29,10 +29,12 @@ func TestOperationsDashboardDataQueriesAndScans(t *testing.T) {
 	mock.ExpectQuery(`FROM usage_logs ul JOIN users u.*GROUP BY date ORDER BY date ASC`).
 		WithArgs(trendStart, tomorrow, "Asia/Shanghai").
 		WillReturnRows(sqlmock.NewRows([]string{"date", "upstream", "user", "profit"}).AddRow("2026-10-26", 3.0, 8.0, 5.0))
-	mock.ExpectQuery(`WITH usage_by_group AS .*FROM groups g LEFT JOIN usage_by_group ug.*UNION ALL.*ORDER BY 1 ASC`).
+	mock.ExpectQuery(`WITH usage_by_group AS .*FROM groups g LEFT JOIN usage_by_group ug ON ug\.group_id = g\.id WHERE g\.deleted_at IS NULL UNION ALL .*UNION ALL SELECT -2, 'Deleted groups'.*g\.deleted_at IS NOT NULL.*ORDER BY 1 ASC`).
 		WithArgs(rangeStart, tomorrow).
-		WillReturnRows(sqlmock.NewRows([]string{"id", "name", "platform", "rate", "user", "upstream"}).AddRow(2, "标准", "openai", 1.25, 8.0, 3.0))
-	mock.ExpectQuery(`SELECT COALESCE\(NULLIF\(TRIM\(ul\.requested_model\).*GROUP BY 1 ORDER BY 1`).
+		WillReturnRows(sqlmock.NewRows([]string{"id", "name", "platform", "rate", "user", "upstream"}).
+			AddRow(-2, "Deleted groups", "custom", 1.0, 2.0, 1.5).
+			AddRow(2, "标准", "openai", 1.25, 8.0, 3.0))
+	mock.ExpectQuery(`SELECT COALESCE\(NULLIF\(TRIM\(ul\.requested_model\).*\$3 = -2 AND .*g\.deleted_at IS NOT NULL.*GROUP BY 1 ORDER BY 1`).
 		WithArgs(rangeStart, tomorrow, int64(2)).
 		WillReturnRows(sqlmock.NewRows([]string{"model", "user", "upstream", "platforms"}).AddRow("gpt-5", 8.0, 3.0, "anthropic,openai"))
 
@@ -53,8 +55,9 @@ func TestOperationsDashboardDataQueriesAndScans(t *testing.T) {
 	require.Equal(t, -4.0, *data.Metrics.YesterdayUserBalanceChange)
 	require.Equal(t, 1.25, data.Metrics.YesterdayAdminConsumption)
 	require.Len(t, data.Trend, 1)
-	require.Len(t, data.Groups, 1)
-	require.Equal(t, "openai", data.Groups[0].Platform)
+	require.Len(t, data.Groups, 2)
+	require.Equal(t, int64(-2), data.Groups[0].GroupID)
+	require.Equal(t, "openai", data.Groups[1].Platform)
 	require.Len(t, data.Models, 1)
 	require.Equal(t, "gpt-5", data.Models[0].Model)
 	require.Equal(t, []string{"anthropic", "openai"}, data.Models[0].Platforms)

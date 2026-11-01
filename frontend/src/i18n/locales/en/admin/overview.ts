@@ -159,6 +159,8 @@ export default {
       models: 'Models',
       allGroups: 'All groups',
       unassigned: 'Unassigned',
+      deletedGroups: 'Deleted groups',
+      deletedGroupsHint: 'Combined spend of deleted groups in this period',
       multiplier: 'Rate',
       profit: 'Profit',
       userCost: 'User spend',
@@ -1014,8 +1016,6 @@ export default {
       rateLabel: 'rate',
       accountFilters: {
         title: 'Account Filter Controls',
-        oauthOnly: 'Only allow OAuth accounts',
-        oauthOnlyEnabled: 'Enabled — API Key accounts will be excluded',
         privacySetOnly: 'Only allow accounts with privacy protection set',
         privacySetOnlyEnabled: 'Enabled — accounts with unset Privacy will be excluded',
         disabled: 'Disabled'
@@ -1198,6 +1198,13 @@ export default {
         marginRangeError: 'Min gross margin must be between 0 and 99.99',
         bufferRangeError: 'Safety buffer must be between 0 and 99.99',
         sumTooHigh: 'Min gross margin plus safety buffer must be less than 100%, otherwise every account would be excluded'
+      },
+      cyberAutoCharge: {
+        title: 'Cyber auto charge',
+        hint: 'When on, each request blocked by the upstream cyber_policy (cyber-security policy) is charged the amount below once.',
+        amount: 'Charge amount (USD)',
+        amountHint: "Charged once per cyber hit as part of that request's usage cost; subscription groups take it from the subscription quota.",
+        amountRequired: 'Enter a charge amount greater than 0 to turn on the Cyber auto charge'
       },
       videoWorkbench: {
         title: 'Declare video workbench group',
