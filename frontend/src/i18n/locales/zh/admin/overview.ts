@@ -1198,7 +1198,7 @@ export default {
       },
       cyberAutoCharge: {
         title: 'Cyber 自动扣款',
-        hint: '开启后，用户请求被上游 cyber_policy（网络安全策略）拦截时，按下方金额执行一次扣款。',
+        hint: '开启后，上游按协议返回 cyber 拦截时（OpenAI 协议的 cyber_policy、Claude 协议的 cyber 拒答），按下方金额执行一次扣款。只看协议返回的信号，与分组平台无关；Gemini 协议没有 cyber 信号，不会触发。',
         amount: '扣款金额（USD）',
         amountHint: '每命中一次 cyber 扣一次，记入该请求的用量费用；订阅分组从订阅额度中扣除。',
         amountRequired: '开启 Cyber 自动扣款时，请填写大于 0 的扣款金额'

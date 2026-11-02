@@ -115,20 +115,6 @@ func (s *OpenAIGatewayService) RecordCyberPolicyUsageLog(ctx context.Context, in
 	}
 }
 
-// applyCyberAutoCharge adds the group's fixed Cyber charge to a request that hit
-// the upstream cyber_policy block. The user pays it on top of any token cost; it
-// has no upstream counterpart, so only ActualCost grows while TotalCost (account
-// quota, account-stats cost) keeps describing what the upstream consumed.
-// Channel-monitor probes stay free.
-func applyCyberAutoCharge(apiKey *APIKey, cost *CostBreakdown) {
-	if apiKey == nil || cost == nil || apiKey.IsManaged() {
-		return
-	}
-	if charge := apiKey.Group.CyberAutoCharge(); charge > 0 {
-		cost.ActualCost += charge
-	}
-}
-
 // ResolveUserGroupRateMultiplier resolves the same cached multiplier used by OpenAI usage billing.
 func (s *OpenAIGatewayService) ResolveUserGroupRateMultiplier(ctx context.Context, userID, groupID int64, groupDefaultMultiplier float64) float64 {
 	if s == nil {

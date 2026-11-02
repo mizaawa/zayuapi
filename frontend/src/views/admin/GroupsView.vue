@@ -1327,12 +1327,8 @@
           </div>
         </div>
 
-        <!-- Cyber 自动扣款（走 OpenAI 网关的分组） -->
-        <div
-          v-if="isCyberAutoChargePlatform(createForm.platform)"
-          class="border-t pt-4"
-          data-testid="cyber-auto-charge"
-        >
+        <!-- Cyber 自动扣款（按上游协议返回的 cyber 判断，所有平台） -->
+        <div class="border-t pt-4" data-testid="cyber-auto-charge">
           <div class="flex items-start justify-between gap-4">
             <div class="min-w-0">
               <label class="text-sm font-medium text-gray-700 dark:text-gray-300">
@@ -3017,12 +3013,8 @@
           </div>
         </div>
 
-        <!-- Cyber 自动扣款（走 OpenAI 网关的分组） -->
-        <div
-          v-if="isCyberAutoChargePlatform(editForm.platform)"
-          class="border-t pt-4"
-          data-testid="cyber-auto-charge"
-        >
+        <!-- Cyber 自动扣款（按上游协议返回的 cyber 判断，所有平台） -->
+        <div class="border-t pt-4" data-testid="cyber-auto-charge">
           <div class="flex items-start justify-between gap-4">
             <div class="min-w-0">
               <label class="text-sm font-medium text-gray-700 dark:text-gray-300">
@@ -4472,7 +4464,6 @@ import { createModelsListCandidatesTracker } from "./groupsModelsListCandidates"
 import { normalizeSupportedModelScopesForPlatform } from "./groupsSupportedModelScopes";
 import {
   cyberAutoChargePayload,
-  isCyberAutoChargePlatform,
   validateCyberAutoChargeFormState,
   type CyberAutoChargeFormState,
 } from "./groupsCyberAutoCharge";

@@ -35,6 +35,22 @@ func TestGroupCyberAutoCharge(t *testing.T) {
 	require.Equal(t, 0.5, cyberAutoChargeGroup(true, 0.5).CyberAutoCharge())
 }
 
+// The charge follows the cyber block the upstream protocol reported, not the
+// group's platform: every platform's group charges the same way.
+func TestCyberAutoChargeIgnoresGroupPlatform(t *testing.T) {
+	for _, platform := range []string{PlatformOpenAI, PlatformAnthropic, PlatformGemini, PlatformGrok, PlatformComposite} {
+		group := cyberAutoChargeGroup(true, 0.5)
+		group.Platform = platform
+		cost := &CostBreakdown{ActualCost: 1}
+		require.True(t, applyCyberAutoCharge(cyberAutoChargeAPIKey(group), cost), platform)
+		require.InDelta(t, 1.5, cost.ActualCost, 1e-12, platform)
+	}
+	cost := &CostBreakdown{ActualCost: 1}
+	require.False(t, applyCyberAutoCharge(cyberAutoChargeAPIKey(cyberAutoChargeGroup(false, 0.5)), cost))
+	require.False(t, applyCyberAutoCharge(nil, cost))
+	require.InDelta(t, 1, cost.ActualCost, 1e-12)
+}
+
 func TestValidateCyberAutoChargeConfig(t *testing.T) {
 	require.NoError(t, ValidateCyberAutoChargeConfig(false, 0))
 	require.NoError(t, ValidateCyberAutoChargeConfig(false, 0.5), "a kept amount may stay while the charge is off")

@@ -1,8 +1,6 @@
-// 分组 Cyber 自动扣款表单辅助：请求被上游 cyber_policy 拦截时按固定金额扣款一次。
-// 只有走 OpenAI 网关的分组（OpenAI 与 Custom）会命中 cyber_policy。
-
-export const isCyberAutoChargePlatform = (platform: string): boolean =>
-  ["openai", "custom", "composite"].includes(platform);
+// 分组 Cyber 自动扣款表单辅助：上游按协议返回 cyber 拦截时按固定金额扣款一次。
+// 是否命中只看上游协议返回的信号（OpenAI 协议的 cyber_policy、Claude 协议的
+// cyber 拒答），与分组平台无关，所以每个平台的分组都能开启。
 
 export const normalizeCyberAutoChargeAmount = (
   value: number | string | null | undefined,
@@ -12,7 +10,6 @@ export const normalizeCyberAutoChargeAmount = (
 };
 
 export type CyberAutoChargeFormState = {
-  platform: string;
   cyber_auto_charge_enabled: boolean;
   cyber_auto_charge_amount: number | string | null;
 };
@@ -21,7 +18,7 @@ export type CyberAutoChargeFormState = {
 export const validateCyberAutoChargeFormState = (
   form: CyberAutoChargeFormState,
 ): string | null => {
-  if (!isCyberAutoChargePlatform(form.platform) || !form.cyber_auto_charge_enabled) {
+  if (!form.cyber_auto_charge_enabled) {
     return null;
   }
   return normalizeCyberAutoChargeAmount(form.cyber_auto_charge_amount) > 0
@@ -29,10 +26,9 @@ export const validateCyberAutoChargeFormState = (
     : "amountRequired";
 };
 
-// 提交字段：不支持的平台一律关闭；关闭时照常提交金额，再次开启时沿用。
+// 提交字段：关闭时照常提交金额，再次开启时沿用。
 export const cyberAutoChargePayload = (form: CyberAutoChargeFormState) => ({
-  cyber_auto_charge_enabled:
-    isCyberAutoChargePlatform(form.platform) && form.cyber_auto_charge_enabled,
+  cyber_auto_charge_enabled: form.cyber_auto_charge_enabled,
   cyber_auto_charge_amount: normalizeCyberAutoChargeAmount(
     form.cyber_auto_charge_amount,
   ),

@@ -53,6 +53,7 @@ type RecordUsageInput struct {
 	ForceCacheBilling  bool               // 强制缓存计费：将 input_tokens 转为 cache_read 计费（用于粘性会话切换）
 	APIKeyService      APIKeyQuotaUpdater // 可选：用于更新API Key配额
 	QuotaPlatform      string             // user×platform 配额计量平台：handler 在请求 ctx 内经 QuotaPlatform() 算定后传入（后扣运行在 worker 池 background ctx 上，取不到 ForcePlatform）
+	CyberBlocked       bool               // 上游按协议返回了 cyber 拦截：用量行标记 cyber，并按分组设置追加 Cyber 自动扣款
 
 	ChannelUsageFields // 渠道映射信息（由 handler 在 Forward 前解析）
 }
@@ -646,6 +647,7 @@ func (s *GatewayService) RecordUsage(ctx context.Context, input *RecordUsageInpu
 		ForceCacheBilling:  input.ForceCacheBilling,
 		APIKeyService:      input.APIKeyService,
 		QuotaPlatform:      input.QuotaPlatform,
+		CyberBlocked:       input.CyberBlocked,
 		ChannelUsageFields: input.ChannelUsageFields,
 	}, &recordUsageOpts{})
 }
@@ -669,6 +671,7 @@ type RecordUsageLongContextInput struct {
 	ForceCacheBilling     bool               // 强制缓存计费：将 input_tokens 转为 cache_read 计费（用于粘性会话切换）
 	APIKeyService         APIKeyQuotaUpdater // API Key 配额服务（可选）
 	QuotaPlatform         string             // user×platform 配额计量平台：handler 在请求 ctx 内经 QuotaPlatform() 算定后传入（后扣运行在 worker 池 background ctx 上，取不到 ForcePlatform）
+	CyberBlocked          bool               // 上游按协议返回了 cyber 拦截：用量行标记 cyber，并按分组设置追加 Cyber 自动扣款
 
 	ChannelUsageFields // 渠道映射信息（由 handler 在 Forward 前解析）
 }
@@ -691,6 +694,7 @@ func (s *GatewayService) RecordUsageWithLongContext(ctx context.Context, input *
 		ForceCacheBilling:  input.ForceCacheBilling,
 		APIKeyService:      input.APIKeyService,
 		QuotaPlatform:      input.QuotaPlatform,
+		CyberBlocked:       input.CyberBlocked,
 		ChannelUsageFields: input.ChannelUsageFields,
 	}, &recordUsageOpts{
 		LongContextThreshold:  input.LongContextThreshold,
@@ -715,6 +719,7 @@ type recordUsageCoreInput struct {
 	ForceCacheBilling  bool
 	APIKeyService      APIKeyQuotaUpdater
 	QuotaPlatform      string
+	CyberBlocked       bool
 	ChannelUsageFields
 }
 
@@ -814,6 +819,9 @@ func (s *GatewayService) recordUsageCore(ctx context.Context, input *recordUsage
 	// 计算费用
 	cost := s.calculateRecordUsageCost(ctx, result, apiKey, billingModel, multiplier, imageMultiplier, opts)
 	makeManagedMonitorUsageFree(apiKey, cost)
+	if input.CyberBlocked {
+		applyCyberAutoCharge(apiKey, cost)
+	}
 
 	// 判断计费方式：订阅模式 vs 余额模式
 	isSubscriptionBilling := !apiKey.IsManaged() && subscription != nil && apiKey.Group != nil && apiKey.Group.IsSubscriptionType()
@@ -826,6 +834,9 @@ func (s *GatewayService) recordUsageCore(ctx context.Context, input *recordUsage
 	accountRateMultiplier := account.BillingRateMultiplier()
 	usageLog := s.buildRecordUsageLog(ctx, input, result, apiKey, user, account, subscription,
 		requestedModel, multiplier, imageMultiplier, accountRateMultiplier, billingType, cacheTTLOverridden, cost, opts)
+	if input.CyberBlocked {
+		usageLog.RequestType = RequestTypeCyberBlocked
+	}
 
 	// 计算账号统计定价费用（使用最终上游模型匹配自定义规则）
 	if apiKey.GroupID != nil {
@@ -883,6 +894,24 @@ func (s *GatewayService) recordUsageCore(ctx context.Context, input *recordUsage
 	writeUsageLogBestEffort(ctx, s.usageLogRepo, usageLog, "service.gateway")
 
 	return nil
+}
+
+// applyCyberAutoCharge adds the group's fixed Cyber charge to a request whose
+// upstream response carried a protocol-level cyber block (OpenAI cyber_policy,
+// Claude's cyber refusal). The user pays it on top of any token cost; it has no
+// upstream counterpart, so only ActualCost grows while TotalCost (account
+// quota, account-stats cost) keeps describing what the upstream consumed.
+// Channel-monitor probes stay free. It reports whether a charge was added.
+func applyCyberAutoCharge(apiKey *APIKey, cost *CostBreakdown) bool {
+	if apiKey == nil || cost == nil || apiKey.IsManaged() {
+		return false
+	}
+	charge := apiKey.Group.CyberAutoCharge()
+	if charge <= 0 {
+		return false
+	}
+	cost.ActualCost += charge
+	return true
 }
 
 // makeManagedMonitorUsageFree removes customer-facing billing while retaining

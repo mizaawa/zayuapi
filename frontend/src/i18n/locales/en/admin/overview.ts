@@ -1201,7 +1201,7 @@ export default {
       },
       cyberAutoCharge: {
         title: 'Cyber auto charge',
-        hint: 'When on, each request blocked by the upstream cyber_policy (cyber-security policy) is charged the amount below once.',
+        hint: "When on, each request the upstream reports as a cyber block through its protocol (OpenAI's cyber_policy, Claude's cyber refusal) is charged the amount below once. Only the protocol's signal counts, whatever the group's platform; the Gemini protocol has no cyber signal, so it never triggers.",
         amount: 'Charge amount (USD)',
         amountHint: "Charged once per cyber hit as part of that request's usage cost; subscription groups take it from the subscription quota.",
         amountRequired: 'Enter a charge amount greater than 0 to turn on the Cyber auto charge'

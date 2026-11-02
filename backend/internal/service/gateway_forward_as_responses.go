@@ -35,6 +35,9 @@ func (s *GatewayService) ForwardAsResponses(
 	parsed *ParsedRequest,
 ) (*ForwardResult, error) {
 	startTime := time.Now()
+	// Fresh per-attempt observation: the stream loops below record Claude's
+	// cyber block on it for the Cyber auto charge.
+	beginUpstreamResponseModelObservation(c)
 
 	// 1. Lower Codex client-side tools to function tools understood by Anthropic.
 	adaptedBody, clientToolMapping, err := adaptResponsesClientToolsForAnthropic(body)
@@ -402,6 +405,7 @@ func (s *GatewayService) handleResponsesBufferedStreamingResponse(
 		if !ok {
 			continue
 		}
+		observeAnthropicCyberSignal(c, payload)
 		if anthropicCompatibilityEventIsError(eventType, payload) {
 			failure, message := s.anthropicCompatibilityStreamFailure(c, resp, []byte(payload), nil)
 			if !failure.ShouldRetryNextAccount() && !APIKeyFailoverAttemptEnabled(ginRequestContext(c)) {
@@ -658,6 +662,7 @@ func (s *GatewayService) handleResponsesStreamingResponse(
 		if !ok {
 			continue
 		}
+		observeAnthropicCyberSignal(c, payload)
 		if anthropicCompatibilityEventIsError(eventType, payload) {
 			return handleFailure([]byte(payload), nil)
 		}

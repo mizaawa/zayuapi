@@ -139,6 +139,10 @@ type upstreamResponseModelObserver struct {
 	terminal    string
 	conflict    bool
 	serviceTier *string
+	// cyber records that an Anthropic payload of this attempt carried Claude's
+	// cyber block (see anthropicPayloadSignalsCyber); the Cyber auto charge
+	// reads it through UpstreamCyberSignalObserved.
+	cyber bool
 }
 
 func (o *upstreamResponseModelObserver) Observe(model string, terminal bool) {
@@ -207,11 +211,23 @@ func (o *upstreamResponseModelObserver) ObserveAnthropic(payload []byte) {
 	if len(payload) == 0 || !gjson.ValidBytes(payload) {
 		return
 	}
+	o.ObserveAnthropicCyber(payload)
 	model := firstTrimmedGJSONModel(
 		gjson.GetBytes(payload, "message.model"),
 		gjson.GetBytes(payload, "model"),
 	)
 	o.Observe(model, false)
+}
+
+// ObserveAnthropicCyber records only the cyber block of an Anthropic payload.
+func (o *upstreamResponseModelObserver) ObserveAnthropicCyber(payload []byte) {
+	if o != nil && !o.cyber && anthropicPayloadSignalsCyber(payload) {
+		o.cyber = true
+	}
+}
+
+func (o *upstreamResponseModelObserver) CyberSignal() bool {
+	return o != nil && o.cyber
 }
 
 func (o *upstreamResponseModelObserver) ObserveGemini(payload []byte) {
