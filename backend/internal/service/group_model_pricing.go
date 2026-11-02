@@ -70,6 +70,12 @@ func normalizeGroupModelPricing(platform string, pricing []ChannelModelPricing) 
 	return normalized, nil
 }
 
+// ChannelPricingHasTokenPrice reports whether a token-mode pricing entry sets
+// at least one token price, either flat or in an interval.
+func ChannelPricingHasTokenPrice(pricing ChannelModelPricing) bool {
+	return groupPricingHasTokenPrice(pricing)
+}
+
 func groupPricingHasTokenPrice(pricing ChannelModelPricing) bool {
 	if pricing.InputPrice != nil || pricing.OutputPrice != nil ||
 		pricing.CacheWritePrice != nil || pricing.CacheReadPrice != nil ||

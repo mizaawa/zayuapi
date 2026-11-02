@@ -47,8 +47,11 @@ func (r *BatchImageModelPricingResolver) BatchImageUnitPrice(ctx context.Context
 			return *resolved.RequestTiers[0].PerRequestPrice, nil
 		}
 	case BillingModeToken:
-		if resolved.BasePricing != nil && (resolved.BasePricing.ImageOutputPriceExplicit || resolved.BasePricing.ImageOutputPricePerToken > 0) {
-			return resolved.BasePricing.ImageOutputPricePerToken, nil
+		// 价格表里的 output_cost_per_image_token 是每 token 价，不能直接当每张单价
+		// （gemini-3-pro-image 会从 $0.134/张 变成 $0.00012/张）。与交互式生图同口径，
+		// 按每张价（output_cost_per_image，缺失时用内置默认价）计费；批量固定 1K 尺寸。
+		if billing := r.Resolver.billingService; billing != nil && billing.hasCatalogImagePrice(job.Model) {
+			return billing.getDefaultImagePrice(job.Model, ImageBillingSize1K), nil
 		}
 	}
 	return 0, ErrBatchImageSettlementPricingMissing

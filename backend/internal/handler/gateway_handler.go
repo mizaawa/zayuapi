@@ -197,6 +197,8 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 	setOpsRequestContext(c, reqModel, reqStream)
 	setOpsEndpointContext(c, "", int16(service.RequestTypeFromLegacy(reqStream, false)))
 	pricingCtx, pricingAt := service.WithGatewayTokenRequestPricing(c.Request.Context())
+	// 定价准入门：模型在任何价格来源里都查不到价时，不转发上游（否则只能记 $0）。
+	pricingCtx = h.gatewayService.WithModelPricingGate(pricingCtx, apiKey, reqModel, channelMapping)
 	c.Request = c.Request.WithContext(pricingCtx)
 
 	// 验证 model 必填
@@ -981,6 +983,8 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 						}
 						// 兜底重试按"直接请求兜底分组"处理：清除强制平台，允许按分组平台调度
 						ctx := context.WithValue(c.Request.Context(), ctxkey.ForcePlatform, "")
+						// 兜底分组按自己的定价重新装门。
+						ctx = h.gatewayService.WithModelPricingGate(ctx, fallbackAPIKey, reqModel, channelMapping)
 						c.Request = c.Request.WithContext(ctx)
 						currentAPIKey = fallbackAPIKey
 						currentSubscription = nil
@@ -2360,6 +2364,9 @@ func billingErrorDetails(err error) (status int, code, message string, retryAfte
 		// 错误码用 rate_limit_exceeded 与 OpenAI 兼容客户端一致；细分类型由 ErrCode + window_resets_at metadata 区分。
 		msg := pkgerrors.Message(err)
 		return http.StatusTooManyRequests, "rate_limit_exceeded", msg, extractQuotaResetSeconds(err)
+	}
+	if errors.Is(err, service.ErrCustomVideoPricingUnavailable) {
+		return http.StatusForbidden, "billing_error", err.Error(), 0
 	}
 	msg := pkgerrors.Message(err)
 	if msg == "" {

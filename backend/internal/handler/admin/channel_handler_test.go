@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Wei-Shaw/sub2api/internal/config"
 	"github.com/Wei-Shaw/sub2api/internal/service"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
@@ -474,4 +475,35 @@ func TestSyncPricingModels_ValidPlatform_EmptyService(t *testing.T) {
 		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
 		require.NotNil(t, body.Data.Models, "models must not be null for platform=%s", platform)
 	}
+}
+
+// ---------------------------------------------------------------------------
+// validateChannelPricingHasPrices
+// ---------------------------------------------------------------------------
+
+// A token entry that lists a model without any price only falls back to the
+// official price list; for a model that has none, saving it would leave the
+// model unbillable, so the save is rejected with the model named.
+func TestValidateChannelPricingHasPrices(t *testing.T) {
+	h := &ChannelHandler{billingService: service.NewBillingService(&config.Config{}, nil)}
+	price := 2e-6
+
+	err := h.validateChannelPricingHasPrices([]service.ChannelModelPricing{{
+		Platform: service.PlatformGrok, Models: []string{"grok-4.7", "grok-4.7-fast"}, BillingMode: service.BillingModeToken,
+	}})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "grok-4.7-fast")
+
+	require.NoError(t, h.validateChannelPricingHasPrices([]service.ChannelModelPricing{{
+		Platform: service.PlatformGrok, Models: []string{"grok-4.7"}, BillingMode: service.BillingModeToken,
+	}}), "catalog models may keep blank prices")
+	require.NoError(t, h.validateChannelPricingHasPrices([]service.ChannelModelPricing{{
+		Platform: service.PlatformGrok, Models: []string{"grok-4.7-fast"}, BillingMode: service.BillingModeToken, InputPrice: &price,
+	}}))
+	require.NoError(t, h.validateChannelPricingHasPrices([]service.ChannelModelPricing{{
+		Platform: service.PlatformGrok, Models: []string{"grok-*"}, BillingMode: service.BillingModeToken,
+	}}), "wildcards resolve per model at request time")
+	require.NoError(t, h.validateChannelPricingHasPrices([]service.ChannelModelPricing{{
+		Platform: service.PlatformGrok, Models: []string{"grok-4.7-fast"}, BillingMode: service.BillingModePerRequest, PerRequestPrice: &price,
+	}}))
 }

@@ -133,6 +133,14 @@ type LiteLLMModelPricing struct {
 	TokenPricingAbsent bool `json:"-"`
 }
 
+// hasTokenPrice reports whether the entry prices any kind of token. Entries
+// whose token prices are all zero cannot back token billing either.
+func (p *LiteLLMModelPricing) hasTokenPrice() bool {
+	return p != nil && (p.InputCostPerToken > 0 || p.OutputCostPerToken > 0 ||
+		p.CacheCreationInputTokenCost > 0 || p.CacheReadInputTokenCost > 0 ||
+		p.InputCostPerImageToken > 0 || p.OutputCostPerImageToken > 0)
+}
+
 // PricingRemoteClient 远程价格数据获取接口
 type PricingRemoteClient interface {
 	FetchPricingJSON(ctx context.Context, url string) ([]byte, error)

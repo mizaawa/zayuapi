@@ -394,10 +394,10 @@ func TestBillingService_GetModelPricing_FailsClosedForImageOnlyEntries(t *testin
 	_, err = billingSvc.GetModelPricing("imagen-9.0-generate")
 	require.ErrorIs(t, err, ErrModelPricingUnavailable)
 
-	// 显式 0 token 价的免费条目保持历史行为：正常返回。
-	pricing, err := billingSvc.GetModelPricing("gemini-image-with-token-price")
-	require.NoError(t, err)
-	require.Zero(t, pricing.InputPricePerToken)
+	// token 价全为 0 的条目同样不能撑起 token 计费（价格表里多是占位数据），
+	// 也走 fail-closed；真要免费需在分组/渠道里显式配 0。
+	_, err = billingSvc.GetModelPricing("gemini-image-with-token-price")
+	require.ErrorIs(t, err, ErrModelPricingUnavailable)
 
 	// 图片计费路径不受影响：仍能读到 image-only 条目的图片单价。
 	raw := pricingSvc.GetModelPricing("imagen-9.0-generate")

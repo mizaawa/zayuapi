@@ -81,8 +81,15 @@ func (s *GatewayService) GatewayProfitControlVetoLatest(ctx context.Context, sel
 }
 
 func profitControlVetoLatest(ctx context.Context, selected *Account, snapshot *SchedulerSnapshotService) (*Account, bool, string) {
+	if selected == nil {
+		return selected, false, ""
+	}
+	// 定价门与利润门是否装配无关，终检必须先过定价门。
+	if vetoed, reason := modelPricingGateVetoReason(ctx, selected); vetoed {
+		return selected, true, reason
+	}
 	gate, _ := ctx.Value(openAIProfitControlGateCtxKey{}).(*openAIProfitControlGate)
-	if gate == nil || selected == nil {
+	if gate == nil {
 		return selected, false, ""
 	}
 	latest := selected
@@ -101,8 +108,9 @@ func profitControlVetoLatest(ctx context.Context, selected *Account, snapshot *S
 	return latest, vetoed, reason
 }
 
+// isGatewayAccountProfitEligible 是网关调度的逐账号准入点：定价门 + 利润门。
 func (s *GatewayService) isGatewayAccountProfitEligible(ctx context.Context, account *Account) bool {
-	vetoed, _ := openAIProfitControlVetoReason(ctx, account)
+	vetoed, _ := accountAdmissionVetoReason(ctx, account)
 	return !vetoed
 }
 

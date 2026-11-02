@@ -324,7 +324,7 @@ func openAIProfitControlVetoReason(ctx context.Context, account *Account) (bool,
 // 内否决点完全一致。ctx 必须是经 WithOpenAIRequestPricingContext 装配过的
 // 请求上下文，否则视为无门放行。
 func OpenAIProfitControlVeto(ctx context.Context, account *Account) (bool, string) {
-	return openAIProfitControlVetoReason(ctx, account)
+	return accountAdmissionVetoReason(ctx, account)
 }
 
 // ProfitControlVetoLatest performs the handler-side terminal check after a

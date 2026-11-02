@@ -64,6 +64,23 @@ func TestChatUsageToResponsesUsagePreservesReportedTotal(t *testing.T) {
 	require.Equal(t, 15, missingTotal.TotalTokens)
 }
 
+// xAI reports reasoning beside completion_tokens; the converted usage must keep
+// it so billing can charge it at the output rate.
+func TestChatUsageToResponsesUsageKeepsReasoningTokens(t *testing.T) {
+	converted := ChatUsageToResponsesUsage(&ChatUsage{
+		PromptTokens: 663, CompletionTokens: 50, TotalTokens: 837,
+		CompletionTokensDetails: &ChatTokenDetails{ReasoningTokens: 124},
+	})
+	require.NotNil(t, converted)
+	require.NotNil(t, converted.OutputTokensDetails)
+	require.Equal(t, 124, converted.OutputTokensDetails.ReasoningTokens)
+	require.Equal(t, 837, converted.TotalTokens)
+
+	plain := ChatUsageToResponsesUsage(&ChatUsage{PromptTokens: 10, CompletionTokens: 5})
+	require.NotNil(t, plain)
+	require.Nil(t, plain.OutputTokensDetails)
+}
+
 func TestResponsesUsageNestedCacheWritePresenceOverridesTopLevelAlias(t *testing.T) {
 	tests := []struct {
 		name       string

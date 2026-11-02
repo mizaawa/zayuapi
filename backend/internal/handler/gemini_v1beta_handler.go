@@ -218,6 +218,9 @@ func (h *GatewayHandler) GeminiV1BetaModels(c *gin.Context) {
 	if channelMapping.Mapped {
 		modelName = channelMapping.MappedModel
 	}
+	if action != "countTokens" {
+		c.Request = c.Request.WithContext(h.gatewayService.WithModelPricingGate(c.Request.Context(), apiKey, reqModel, channelMapping))
+	}
 
 	// Get subscription (may be nil)
 	subscription, _ := middleware.GetSubscriptionFromContext(c)

@@ -142,7 +142,7 @@ func TestGPT56ExplicitZeroCacheWritePriceIsPreserved(t *testing.T) {
 	})
 
 	t.Run("interval price", func(t *testing.T) {
-		pricing := intervalToModelPricing(&PricingInterval{CacheWritePrice: &zero}, false, nil)
+		pricing := intervalToModelPricing(&PricingInterval{CacheWritePrice: &zero}, &ResolvedPricing{})
 		require.True(t, pricing.CacheCreationPriceExplicit)
 
 		cost, err := bs.CalculateCostUnified(CostInput{
@@ -712,7 +712,9 @@ func TestFilterValidIntervals(t *testing.T) {
 // 9. ImageOutputPriceExplicit tests
 // ===========================================================================
 
-func TestApplyTokenOverrides_FlatSetsImageOutputPriceExplicit(t *testing.T) {
+// A blank image output price no longer means "free": it clears the LiteLLM
+// image price and lets billing fall back to the card's own output price.
+func TestApplyTokenOverrides_FlatBlankImageOutputPriceFallsBackToOutput(t *testing.T) {
 	r := newResolverWithChannel(t, []ChannelModelPricing{{
 		Platform:    "anthropic",
 		Models:      []string{"claude-sonnet-4"},
@@ -727,7 +729,7 @@ func TestApplyTokenOverrides_FlatSetsImageOutputPriceExplicit(t *testing.T) {
 	})
 
 	require.Equal(t, PricingSourceChannel, resolved.Source)
-	require.True(t, resolved.BasePricing.ImageOutputPriceExplicit)
+	require.False(t, resolved.BasePricing.ImageOutputPriceExplicit)
 	require.Equal(t, 0.0, resolved.BasePricing.ImageOutputPricePerToken)
 }
 
@@ -749,7 +751,7 @@ func TestApplyTokenOverrides_FlatWithImageOutputPriceSetsExplicit(t *testing.T) 
 	require.InDelta(t, 50e-6, resolved.BasePricing.ImageOutputPricePerToken, 1e-12)
 }
 
-func TestApplyTokenOverrides_IntervalSetsImageOutputPriceExplicit(t *testing.T) {
+func TestApplyTokenOverrides_IntervalBlankImageOutputPriceFallsBackToOutput(t *testing.T) {
 	r := newResolverWithChannel(t, []ChannelModelPricing{{
 		Platform:    "anthropic",
 		Models:      []string{"claude-sonnet-4"},
@@ -764,14 +766,15 @@ func TestApplyTokenOverrides_IntervalSetsImageOutputPriceExplicit(t *testing.T) 
 		GroupID: groupIDPtr(),
 	})
 
-	// BasePricing should have explicit mark (for interval fallback)
-	require.True(t, resolved.BasePricing.ImageOutputPriceExplicit)
+	// The LiteLLM image price is cleared but not marked explicit, so image
+	// tokens bill at the card's output price instead of $0.
+	require.False(t, resolved.BasePricing.ImageOutputPriceExplicit)
 	require.Equal(t, 0.0, resolved.BasePricing.ImageOutputPricePerToken)
 
-	// intervalToModelPricing should also have explicit mark
 	pricing := r.GetIntervalPricing(resolved, 50000)
-	require.True(t, pricing.ImageOutputPriceExplicit)
+	require.False(t, pricing.ImageOutputPriceExplicit)
 	require.Equal(t, 0.0, pricing.ImageOutputPricePerToken)
+	require.InDelta(t, 15e-6, pricing.OutputPricePerToken, 1e-12)
 }
 
 // ===========================================================================
@@ -814,6 +817,7 @@ func TestApplyTokenOverrides_IntervalDoesNotPolluteFallbackPrices(t *testing.T) 
 		Platform:    "anthropic",
 		Models:      []string{"claude-sonnet-4"},
 		BillingMode: BillingModeToken,
+		InputPrice:  testPtrFloat64(10e-6), // default price, applied to the cloned base
 		Intervals: []PricingInterval{
 			{MinTokens: 0, MaxTokens: testPtrInt(100000), InputPrice: testPtrFloat64(2e-6), OutputPrice: testPtrFloat64(8e-6)},
 		},
@@ -825,7 +829,7 @@ func TestApplyTokenOverrides_IntervalDoesNotPolluteFallbackPrices(t *testing.T) 
 	})
 
 	require.NotNil(t, resolved)
-	require.True(t, resolved.BasePricing.ImageOutputPriceExplicit)
+	require.InDelta(t, 10e-6, resolved.BasePricing.InputPricePerToken, 1e-12)
 
 	// Global fallbackPrices must NOT be polluted
 	fp := r.billingService.fallbackPrices["claude-sonnet-4"]

@@ -56,13 +56,25 @@ type openAIWSTurnChannelMappingSnapshot struct {
 
 var errOpenAIWSUnsupportedModelSwitch = errors.New("selected account does not support websocket model switch")
 
+// errOpenAIWSModelPricingUnavailable marks a turn whose model has no price in
+// the key's group: forwarding it would bill the turn at $0.
+var errOpenAIWSModelPricingUnavailable = errors.New("websocket turn model has no price configured")
+
+// openAIWSModelPricingCloseReason fits the 123-byte WebSocket close reason limit.
+const openAIWSModelPricingCloseReason = "model has no price configured in this group"
+
 func newOpenAIWSUnsupportedModelSwitchError(model string) error {
 	cause := fmt.Errorf("%w: model %q", errOpenAIWSUnsupportedModelSwitch, strings.TrimSpace(model))
 	return service.NewOpenAIWSClientCloseError(coderws.StatusPolicyViolation, "model switch requires reconnect", cause)
 }
 
+func newOpenAIWSModelPricingUnavailableError(model string) error {
+	cause := fmt.Errorf("%w: model %q", errOpenAIWSModelPricingUnavailable, strings.TrimSpace(model))
+	return service.NewOpenAIWSClientCloseError(coderws.StatusPolicyViolation, openAIWSModelPricingCloseReason, cause)
+}
+
 func shouldReportOpenAIWSProxyAccountFailure(err error) bool {
-	return err != nil && !errors.Is(err, errOpenAIWSUnsupportedModelSwitch)
+	return err != nil && !errors.Is(err, errOpenAIWSUnsupportedModelSwitch) && !errors.Is(err, errOpenAIWSModelPricingUnavailable)
 }
 
 func openAIWSTurnBillingModel(result *service.OpenAIForwardResult, mapping service.ChannelMappingResult, requestedModel, upstreamModel string) string {
@@ -535,6 +547,8 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 	// 生图意图只影响能力路由与图片计费，不关门：混合 /v1/responses 请求的
 	// token 计费部分仍受利润门保护，独立图片/视频端点才在门外。
 	pricingCtx, pricingAt := h.gatewayService.WithOpenAIRequestPricingContext(c.Request.Context(), apiKey.GroupID)
+	// 定价准入门：模型在任何价格来源里都查不到价时，不转发上游（否则只能记 $0）。
+	pricingCtx = h.gatewayService.WithModelPricingGate(pricingCtx, apiKey, reqModel, channelMapping)
 	c.Request = c.Request.WithContext(pricingCtx)
 
 	for {
@@ -1150,6 +1164,7 @@ func (h *OpenAIGatewayHandler) Messages(c *gin.Context) {
 
 	// 分组利润控制：Messages 文本入口同样请求级装门并固定 pricingAt。
 	msgPricingCtx, pricingAt := h.gatewayService.WithOpenAIRequestPricingContext(c.Request.Context(), apiKey.GroupID)
+	msgPricingCtx = h.gatewayService.WithModelPricingGate(msgPricingCtx, apiKey, reqModel, channelMappingMsg)
 	c.Request = c.Request.WithContext(msgPricingCtx)
 
 	for {
@@ -2578,7 +2593,7 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 	// 继续按建连时刻的谷价计费。生图意图只影响能力路由与图片计费，不关门。
 	// 建连时刻只用于选号/准入，不作为任何 turn 的计费定价时刻。
 	wsPricingCtx, _ := h.gatewayService.WithOpenAIRequestPricingContext(ctx, apiKey.GroupID)
-	ctx = wsPricingCtx
+	ctx = h.gatewayService.WithModelPricingGate(wsPricingCtx, apiKey, reqModel, channelMappingWS)
 
 	for {
 		if ctx.Err() != nil {
@@ -2604,6 +2619,10 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 				zap.Error(openAICompatibleSelectionErrorForLog(err, requestPlatform)),
 				zap.Int("excluded_account_count", len(failedAccountIDs)),
 			)
+			if _, blocked := service.ModelPricingGateBlocked(ctx); blocked && len(failedAccountIDs) == 0 {
+				closeOpenAIClientWS(wsConn, coderws.StatusPolicyViolation, openAIWSModelPricingCloseReason)
+				return
+			}
 			if lastFailoverErr != nil {
 				closeOpenAIWSFailoverExhausted(wsConn, lastFailoverErr)
 			} else {
@@ -2788,6 +2807,10 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 				if turn > 1 && !mappedModelUnchanged && !account.IsModelSupported(model) && !account.IsModelSupported(mapping.MappedModel) {
 					return "", newOpenAIWSUnsupportedModelSwitchError(mapping.MappedModel)
 				}
+				// 连接内换模型不会重新选号，逐 turn 复核新模型能否定价，不能就断开而不是按 $0 转发。
+				if turn > 1 && !h.gatewayService.ModelPricingBillableForAccount(ctx, turnBillingAPIKeys.forTurn(turn, apiKey), model, mapping, account) {
+					return "", newOpenAIWSModelPricingUnavailableError(model)
+				}
 				turnChannelMapping.Store(&openAIWSTurnChannelMappingSnapshot{turn: turn, mapping: mapping})
 				return mapping.MappedModel, nil
 			},
@@ -2870,7 +2893,7 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 					cyberBlockedThisConn = true
 				}
 				if turnErr != nil {
-					if result == nil || result.ImageCount <= 0 {
+					if result == nil || (result.ImageCount <= 0 && !openAIWSTurnHasBillablePartialUsage(result, turnErr)) {
 						return
 					}
 					// cyber 命中时该 turn 的用量已由 recordCyberPolicyIfMarked(forwardErrored=true)
@@ -2878,9 +2901,11 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 					if service.GetOpsCyberPolicy(c) != nil {
 						return
 					}
-					reqLog.Warn("openai.websocket_partial_error_with_image_result",
+					reqLog.Warn("openai.websocket_partial_error_with_usage",
 						zap.Int64("account_id", account.ID),
 						zap.Int("image_count", result.ImageCount),
+						zap.Int("input_tokens", result.Usage.InputTokens),
+						zap.Int("output_tokens", result.Usage.OutputTokens),
 						zap.Error(turnErr),
 					)
 				}
@@ -3492,6 +3517,16 @@ func shouldLogOpenAIForwardFailureAsWarn(c *gin.Context, wroteFallback bool) boo
 
 // Failed attempts with buffered error responses can still be replayed by group
 // failover. Only retain token usage after successful streaming output commits.
+// openAIWSTurnHasBillablePartialUsage applies the HTTP partial-usage rule to a
+// websocket turn that ended in an error: the upstream already reported token
+// usage and output reached the client, so the consumed tokens are billed
+// instead of being dropped. Failover errors are replayed elsewhere and skipped.
+func openAIWSTurnHasBillablePartialUsage(result *service.OpenAIForwardResult, turnErr error) bool {
+	var failoverErr *service.UpstreamFailoverError
+	return turnErr != nil && result != nil && result.Usage.HasTokens() && result.FirstTokenMs != nil &&
+		!errors.As(turnErr, &failoverErr)
+}
+
 func openAIForwardHasBillablePartialUsage(c *gin.Context, result *service.OpenAIForwardResult, err error, writerSizeBeforeForward int) bool {
 	var failoverErr *service.UpstreamFailoverError
 	return err != nil && c != nil && c.Writer != nil && c.Writer.Status() < 400 &&

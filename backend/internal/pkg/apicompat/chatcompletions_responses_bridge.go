@@ -1215,6 +1215,11 @@ func ChatUsageToResponsesUsage(usage *ChatUsage) *ResponsesUsage {
 			out.CacheCreationInputTokens = usage.PromptTokensDetails.CacheCreationTokens
 		}
 	}
+	// Keep reasoning tokens: providers such as xAI report them beside
+	// completion_tokens (counted only in total_tokens), and billing needs them.
+	if usage.CompletionTokensDetails != nil && usage.CompletionTokensDetails.ReasoningTokens > 0 {
+		out.OutputTokensDetails = &ResponsesOutputTokensDetails{ReasoningTokens: usage.CompletionTokensDetails.ReasoningTokens}
+	}
 	return out
 }
 

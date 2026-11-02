@@ -271,10 +271,15 @@ func isOpenAICompatibleAccountEligibleForRequest(ctx context.Context, account *A
 	if account.IsCustom() {
 		// Custom is a transparent API-key proxy. Model names and endpoint
 		// capabilities belong to the upstream; only account availability and
-		// credentials are checked locally.
-		return account.IsSchedulable() && account.Type == AccountTypeAPIKey &&
-			strings.TrimSpace(account.GetOpenAIApiKey()) != "" &&
-			strings.TrimSpace(account.GetOpenAIBaseURL()) != ""
+		// credentials are checked locally. Billing stays local, so the model
+		// pricing gate still applies.
+		if !account.IsSchedulable() || account.Type != AccountTypeAPIKey ||
+			strings.TrimSpace(account.GetOpenAIApiKey()) == "" ||
+			strings.TrimSpace(account.GetOpenAIBaseURL()) == "" {
+			return false
+		}
+		vetoed, _ := modelPricingGateVetoReason(ctx, account)
+		return !vetoed
 	}
 	if !account.IsSchedulableForModelWithContext(ctx, requestedModel) {
 		return false
@@ -318,7 +323,7 @@ func isOpenAICompatibleAccountEligibleForRequest(ctx context.Context, account *A
 	}
 	// 分组利润控制：legacy 引擎的粘性/候选循环与 DB recheck 共用
 	// 本判定，任何 fallback 都不能把利润不合格账号重新放回候选。
-	if vetoed, _ := openAIProfitControlVetoReason(ctx, account); vetoed {
+	if vetoed, _ := accountAdmissionVetoReason(ctx, account); vetoed {
 		return false
 	}
 	return true

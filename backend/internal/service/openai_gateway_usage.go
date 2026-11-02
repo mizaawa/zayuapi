@@ -228,9 +228,15 @@ func (s *OpenAIGatewayService) RecordUsage(ctx context.Context, input *OpenAIRec
 	)
 	billingAccount := account
 	if account.IsShadow() {
-		billingAccount, err = resolveCredentialAccount(ctx, s.accountRepo, account)
-		if err != nil {
-			return err
+		// 母账号只决定 service tier / 长上下文开关。请求已经发生，查不到母账号
+		// 时按影子账号自身计费，不能直接返回错误让这笔用量不记账也不扣费。
+		if parent, resolveErr := resolveCredentialAccount(ctx, s.accountRepo, account); resolveErr == nil && parent != nil {
+			billingAccount = parent
+		} else {
+			logger.L().With(
+				zap.String("component", "service.openai_gateway"),
+				zap.Int64("account_id", account.ID),
+			).Warn("openai_usage.shadow_parent_unavailable_bill_with_shadow", zap.Error(resolveErr))
 		}
 	}
 	billedServiceTier := resolveOpenAIBillingServiceTier(billingAccount, result.ServiceTier, result.UpstreamServiceTier)
@@ -282,7 +288,7 @@ func (s *OpenAIGatewayService) RecordUsage(ctx context.Context, input *OpenAIRec
 			zap.String("upstream_model", result.UpstreamModel),
 			zap.Int64("api_key_id", apiKey.ID),
 			zap.Int64("account_id", account.ID),
-		).Warn("openai_usage.pricing_missing_record_zero_cost", zap.Error(err))
+		).Error("openai_usage.pricing_missing_record_zero_cost", zap.Error(err))
 		cost = &CostBreakdown{BillingMode: string(BillingModeToken)}
 	}
 	makeManagedMonitorUsageFree(apiKey, cost)

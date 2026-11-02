@@ -645,6 +645,12 @@ func (s *BillingService) initFallbackPricing() {
 		SupportsCacheBreakdown: false,
 	}
 
+	// ---- OpenAI Embedding（官方价，USD/MTok：3-small $0.02 / 3-large $0.13 / ada-002 $0.10）----
+	// 远端与内置价格表都不含这几个型号；缺价时 embeddings 流量会被记成 $0。
+	s.fallbackPrices["text-embedding-3-small"] = &ModelPricing{InputPricePerToken: 0.02e-6}
+	s.fallbackPrices["text-embedding-3-large"] = &ModelPricing{InputPricePerToken: 0.13e-6}
+	s.fallbackPrices["text-embedding-ada-002"] = &ModelPricing{InputPricePerToken: 0.10e-6}
+
 	// ---- 火山方舟 豆包 Embedding（多模态向量化）----
 	// doubao-embedding-vision 图文向量化：上游 usage 回传 prompt_tokens_details.{text_tokens,image_tokens}，
 	// 按量付费官方价 文本 ¥0.7/MTok、图片 ¥1.8/MTok；汇率口径 ÷7.14（与本表其他国产模型一致，¥1≈$0.14）。
@@ -872,6 +878,11 @@ func (s *BillingService) getFallbackPricing(model string) *ModelPricing {
 	if strings.Contains(modelLower, "doubao-embedding-vision") {
 		return s.fallbackPrices["doubao-embedding-vision"]
 	}
+	for _, embedding := range []string{"text-embedding-3-small", "text-embedding-3-large", "text-embedding-ada-002"} {
+		if lastSegment(modelLower) == embedding {
+			return s.fallbackPrices[embedding]
+		}
+	}
 
 	// OpenAI（GPT-5 / Codex 族）：仅匹配已知型号，避免未知 OpenAI 型号误计价。
 	if normalized := normalizeKnownOpenAICodexModel(modelLower); normalized != "" {
@@ -935,7 +946,9 @@ func (s *BillingService) GetModelPricing(model string) (*ModelPricing, error) {
 		// 无 fallback 则 fail-closed（ErrModelPricingUnavailable）。
 		// 图片计费路径（getDefaultImagePrice / getImageUnitPrice）直接读
 		// PricingService，不受影响。
-		if litellmPricing != nil && litellmPricing.TokenPricingAbsent {
+		// 价格表里 token 价全是 0 的条目同理：多是数据占位或已下线的实验模型，
+		// 不能把真实转发的流量按 $0 放行。要免费请在分组/渠道里显式配 0。
+		if litellmPricing != nil && (litellmPricing.TokenPricingAbsent || !litellmPricing.hasTokenPrice()) {
 			litellmPricing = nil
 		}
 		if litellmPricing != nil {
@@ -981,7 +994,7 @@ func (s *BillingService) GetModelPricing(model string) (*ModelPricing, error) {
 }
 
 // GetModelPricingWithChannel 获取模型定价，渠道配置的价格覆盖默认值
-// 渠道存在时，未配置的图片输出价格归零（不回退到 LiteLLM）
+// 渠道存在时，未配置的图片输出价格不再沿用 LiteLLM，而是回退到渠道的输出价
 func (s *BillingService) GetModelPricingWithChannel(model string, channelPricing *ChannelModelPricing) (*ModelPricing, error) {
 	pricing, err := s.GetModelPricing(model)
 	if err != nil {
@@ -1012,12 +1025,7 @@ func (s *BillingService) GetModelPricingWithChannel(model string, channelPricing
 		pricing.CacheReadPricePerToken = *channelPricing.CacheReadPrice
 		pricing.CacheReadPricePerTokenPriority = *channelPricing.CacheReadPrice
 	}
-	if channelPricing.ImageOutputPrice != nil {
-		pricing.ImageOutputPricePerToken = *channelPricing.ImageOutputPrice
-	} else {
-		pricing.ImageOutputPricePerToken = 0
-	}
-	pricing.ImageOutputPriceExplicit = true
+	applyChannelImageOutputPrice(channelPricing, pricing)
 	applyChannelImageInputPrice(channelPricing, pricing)
 	return pricing, nil
 }
@@ -1109,7 +1117,9 @@ func (s *BillingService) calculateTokenCost(resolved *ResolvedPricing, input Cos
 	}
 
 	pricing := input.Resolver.GetIntervalPricing(resolved, totalContext)
-	if pricing == nil {
+	// 自定义条目一个价都没填、模型也没有价卡时只会解析出全 0 的空价：按"无价"处理，
+	// 交给调用方换候选模型或告警，而不是静默记 $0。
+	if pricing == nil || (resolved.hasCustomPricing() && !resolved.Billable()) {
 		return nil, fmt.Errorf("no pricing available for model: %s: %w", input.Model, ErrModelPricingUnavailable)
 	}
 
@@ -1268,13 +1278,11 @@ func (s *BillingService) calculatePerRequestCost(resolved *ResolvedPricing, inpu
 		return nil, fmt.Errorf("%w: request_count=%d", ErrInvalidUsageTokens, input.RequestCount)
 	}
 
-	var unitPrice float64
-
-	if input.SizeTier != "" {
-		unitPrice = input.Resolver.GetRequestTierPrice(resolved, input.SizeTier)
-	}
-
-	if unitPrice == 0 {
+	// 命中顺序：层级标签 → 上下文区间 → 默认单价 → 最贵的层级。
+	// 层级里显式填的 0 也算命中（免费层），只有"没命中任何价"才继续往下找；
+	// 一个价都没有时按无价报错，不能静默记 $0。
+	unitPrice, priced := requestTierPriceByLabel(resolved.RequestTiers, input.SizeTier)
+	if !priced {
 		totalContext, ok := sumNonNegativeInts(
 			input.Tokens.InputTokens,
 			input.Tokens.CacheCreationTokens,
@@ -1283,12 +1291,16 @@ func (s *BillingService) calculatePerRequestCost(resolved *ResolvedPricing, inpu
 		if !ok {
 			return nil, fmt.Errorf("%w: context token total", ErrInvalidUsageTokens)
 		}
-		unitPrice = input.Resolver.GetRequestTierPriceByContext(resolved, totalContext)
+		unitPrice, priced = requestTierPriceByContext(resolved.RequestTiers, totalContext)
 	}
-
-	// 回退到默认按次价格
-	if unitPrice == 0 {
-		unitPrice = resolved.DefaultPerRequestPrice
+	if !priced && resolved.hasDefaultPerRequestPrice() {
+		unitPrice, priced = resolved.DefaultPerRequestPrice, true
+	}
+	if !priced {
+		unitPrice, priced = highestRequestTierPrice(resolved.RequestTiers)
+	}
+	if !priced {
+		return nil, fmt.Errorf("no per-request price configured for model: %s: %w", input.Model, ErrModelPricingUnavailable)
 	}
 
 	totalCost := unitPrice * float64(count)
@@ -1720,6 +1732,16 @@ func (s *BillingService) getVideoUnitPrice(model string, resolution string, grou
 	}
 
 	return s.getDefaultVideoPrice(model, resolution)
+}
+
+// hasCatalogImagePrice reports whether the pricing catalog prices image output
+// for the model (per image or per image token).
+func (s *BillingService) hasCatalogImagePrice(model string) bool {
+	if s == nil || s.pricingService == nil {
+		return false
+	}
+	pricing := s.pricingService.GetModelPricing(model)
+	return pricing != nil && (pricing.OutputCostPerImage > 0 || pricing.OutputCostPerImageToken > 0)
 }
 
 // getDefaultImagePrice 获取 LiteLLM 默认图片价格

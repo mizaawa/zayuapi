@@ -11,6 +11,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/pkg/ctxkey"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/timezone"
+	"go.uber.org/zap"
 )
 
 func (s *GatewayService) getUserGroupRateMultiplier(ctx context.Context, userID, groupID int64, groupDefaultMultiplier float64) float64 {
@@ -807,8 +808,10 @@ func (s *GatewayService) recordUsageCore(ctx context.Context, input *recordUsage
 		billingModel = s.compositeBillableModel(ctx, apiKey, billingModel, concreteBillingModel)
 	}
 	// 通用兜底（与 OpenAI 路径的 usageBillingModelCandidates 语义对齐）：
-	// 选定模型查不到任何价格时回退到实际转发的具体模型。已定价流量不受影响。
-	billingModel = s.billableModelWithFallback(ctx, apiKey, billingModel, result.UpstreamModel, result.Model)
+	// 选定模型查不到任何价格时依次回退到实际转发的具体模型、渠道映射模型和请求模型，
+	// 与定价准入门放行时认可的候选一致。已定价流量不受影响。
+	billingModel = s.billableModelWithFallback(ctx, apiKey, billingModel,
+		result.UpstreamModel, result.Model, input.ChannelMappedModel, input.OriginalModel)
 
 	// 确定 RequestedModel（渠道映射前的原始模型）
 	requestedModel := result.Model
@@ -953,7 +956,7 @@ func (s *GatewayService) compositeBillableModel(ctx context.Context, apiKey *API
 	if concreteBillingModel == "" || billingModel == concreteBillingModel {
 		return billingModel
 	}
-	if s.resolveChannelPricing(ctx, billingModel, apiKey) != nil {
+	if resolved := s.resolveChannelPricing(ctx, billingModel, apiKey); resolved != nil && resolved.Billable() {
 		return billingModel
 	}
 	logger.LegacyPrintf("service.gateway", "[Billing] composite billing model %q has no explicit channel pricing, billing by concrete model %q", billingModel, concreteBillingModel)
@@ -981,12 +984,13 @@ func (s *GatewayService) billableModelWithFallback(ctx context.Context, apiKey *
 }
 
 // hasResolvableTokenPricing 判断模型是否能在渠道定价或全局价格表中解析出 token 价格。
+// 一个价都没填的自定义条目不算有价。
 func (s *GatewayService) hasResolvableTokenPricing(ctx context.Context, model string, apiKey *APIKey) bool {
 	if strings.TrimSpace(model) == "" {
 		return false
 	}
-	if s.resolveChannelPricing(ctx, model, apiKey) != nil {
-		return true
+	if resolved := s.resolveChannelPricing(ctx, model, apiKey); resolved != nil {
+		return resolved.Billable()
 	}
 	if s.billingService == nil {
 		return false
@@ -1040,11 +1044,11 @@ func (s *GatewayService) calculateImageCost(
 			Resolver:       s.resolver,
 			Resolved:       resolved,
 		})
-		if err != nil {
-			logger.LegacyPrintf("service.gateway", "Calculate image token cost failed: %v", err)
-			return &CostBreakdown{ActualCost: 0}
+		if err == nil {
+			return cost
 		}
-		return cost
+		// 渠道价算不出来（如分层都没命中）时退回按张计费，不能记 $0。
+		logger.LegacyPrintf("service.gateway", "Calculate image channel cost failed, falling back to per-image pricing: %v", err)
 	}
 
 	return s.billingService.CalculateImageCost(billingModel, sizeTier, result.ImageCount, groupConfig, multiplier)
@@ -1092,7 +1096,18 @@ func (s *GatewayService) calculateTokenCost(
 		cost, err = s.billingService.CalculateCost(billingModel, tokens, multiplier)
 	}
 	if err != nil {
-		logger.LegacyPrintf("service.gateway", "Calculate cost failed: %v", err)
+		// 准入门已拦下无价模型；走到这里说明用量已发生却查不到价，只能记 $0，必须让运维看见。
+		groupID := int64(0)
+		if apiKey != nil && apiKey.GroupID != nil {
+			groupID = *apiKey.GroupID
+		}
+		logger.L().With(
+			zap.String("component", "service.gateway"),
+			zap.String("billing_model", billingModel),
+			zap.Int64("group_id", groupID),
+			zap.Int("input_tokens", tokens.InputTokens),
+			zap.Int("output_tokens", tokens.OutputTokens),
+		).Error("gateway_usage.pricing_missing_record_zero_cost", zap.Error(err))
 		return &CostBreakdown{ActualCost: 0}
 	}
 	return cost

@@ -1775,7 +1775,7 @@ func (s *defaultOpenAIAccountScheduler) isAccountRequestCompatibleReason(ctx con
 			strings.TrimSpace(account.GetOpenAIBaseURL()) == "" {
 			return false, "custom_credentials_missing"
 		}
-		if vetoed, reason := openAIProfitControlVetoReason(ctx, account); vetoed {
+		if vetoed, reason := accountAdmissionVetoReason(ctx, account); vetoed {
 			return false, reason
 		}
 		return true, ""
@@ -1812,7 +1812,7 @@ func (s *defaultOpenAIAccountScheduler) isAccountRequestCompatibleReason(ctx con
 	}
 	// 分组利润控制：不合格账号在候选过滤与抢槽后终检阶段即被排除，
 	// 排序/评分/粘性/熔断只在合格账号之间工作；named reason 进入 filter stats。
-	if vetoed, reason := openAIProfitControlVetoReason(ctx, account); vetoed {
+	if vetoed, reason := accountAdmissionVetoReason(ctx, account); vetoed {
 		return false, reason
 	}
 	return true, ""

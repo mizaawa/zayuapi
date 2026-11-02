@@ -1227,6 +1227,7 @@ func openAIUsageFromGJSON(value gjson.Result) (OpenAIUsage, bool) {
 	if outputTokens == 0 {
 		outputTokens = value.Get("completion_tokens").Int()
 	}
+	outputTokens += reasoningTokensOutsideOutputGJSON(value, inputTokens, outputTokens)
 	cacheReadTokens := openAICacheReadTokensFromUsage(value)
 	cacheCreationTokens := openAICacheCreationTokensFromUsage(value)
 	imageOutputTokens := value.Get("output_tokens_details.image_tokens").Int()
@@ -1252,6 +1253,37 @@ func openAIUsageFromGJSON(value gjson.Result) (OpenAIUsage, bool) {
 		return OpenAIUsage{}, false
 	}
 	return usage, true
+}
+
+// reasoningTokensOutsideOutputGJSON returns reasoning tokens that an upstream
+// reported beside output/completion tokens instead of inside them. xAI does this
+// (total_tokens = prompt + completion + reasoning) and bills them at the output
+// rate. OpenAI folds reasoning into completion tokens, so its total never
+// exceeds prompt + completion and nothing is added. The reasoning field is
+// best-effort: a malformed value is ignored rather than voiding the usage.
+func reasoningTokensOutsideOutputGJSON(value gjson.Result, inputTokens, outputTokens int64) int64 {
+	total, ok := boundedReportedUsageGJSONInt(value.Get("total_tokens"))
+	if !ok {
+		return 0
+	}
+	for _, path := range []string{"output_tokens_details.reasoning_tokens", "completion_tokens_details.reasoning_tokens"} {
+		if reasoning, ok := boundedReportedUsageGJSONInt(value.Get(path)); ok && reasoning > 0 {
+			return reasoningTokensOutsideOutput(inputTokens, outputTokens, int64(reasoning), int64(total))
+		}
+	}
+	return 0
+}
+
+// reasoningTokensOutsideOutput applies the total_tokens consistency check
+// shared by every usage parser.
+func reasoningTokensOutsideOutput(inputTokens, outputTokens, reasoningTokens, totalTokens int64) int64 {
+	if reasoningTokens <= 0 || totalTokens <= 0 || inputTokens < 0 || outputTokens < 0 {
+		return 0
+	}
+	if totalTokens == inputTokens+outputTokens+reasoningTokens {
+		return reasoningTokens
+	}
+	return 0
 }
 
 func openAICacheReadTokensFromUsage(value gjson.Result) int {

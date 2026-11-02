@@ -26,10 +26,14 @@ import (
 //     after a backoff can plausibly succeed (or, in the empty-pool case, the
 //     operator may be in the middle of adding accounts).
 type noAccountErrorClassification struct {
-	Status        int
-	ErrType       string
-	Message       string
-	ModelNotFound bool // true when this is a 404 model_not_found classification
+	Status  int
+	ErrType string
+	Message string
+	// ModelNotFound is true when the model itself cannot be served by this
+	// group's configuration (404 model_not_found, or 403 for a model without
+	// any price). Handlers then return Message verbatim and skip capacity
+	// bookkeeping, so the failure does not trigger API key failover.
+	ModelNotFound bool
 }
 
 // classifyNoAccountError decides between 404 model_not_found and 503
@@ -68,6 +72,17 @@ func classifyNoAccountError(
 		Status:  http.StatusServiceUnavailable,
 		ErrType: "api_error",
 		Message: "Service temporarily unavailable",
+	}
+
+	// The model pricing gate rejected every account it evaluated: the model
+	// has no price, so forwarding would have billed the request at $0.
+	if model, blocked := service.ModelPricingGateBlocked(ctx); blocked {
+		return noAccountErrorClassification{
+			Status:        http.StatusForbidden,
+			ErrType:       "permission_error",
+			Message:       service.ModelPricingUnavailableMessage(model),
+			ModelNotFound: true,
+		}
 	}
 
 	routingModel = strings.TrimSpace(routingModel)

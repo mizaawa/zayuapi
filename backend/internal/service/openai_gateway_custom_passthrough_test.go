@@ -14,6 +14,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/config"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
+	"github.com/tidwall/gjson"
 )
 
 func customTransparentTestAccount() *Account {
@@ -97,7 +98,11 @@ func TestForwardCustomTransparentResponsesAppliesAccountModelMapping(t *testing.
 	require.JSONEq(t, `{"model":"provider-model","stream":false,"input":"hello","vendor_extension":{"keep":true}}`, string(upstream.lastBody))
 }
 
-func TestForwardAsChatCompletionsCustomTransparentPreservesBodyAndDoesNotInjectUsage(t *testing.T) {
+// A streaming Chat Completions upstream reports usage only when
+// stream_options.include_usage is set. Without it the request could only be
+// billed at $0, so the Custom path forces it exactly like the native path and
+// leaves every other field untouched.
+func TestForwardAsChatCompletionsCustomTransparentForcesStreamUsage(t *testing.T) {
 	body := []byte(`{"model":"vendor/chat-42","stream":true,"messages":[{"role":"user","content":"hello"}],"vendor_extension":{"opaque":[1,2,3]}}`)
 	upstreamBody := []byte("data: {\"id\":\"chat_custom\",\"object\":\"chat.completion.chunk\",\"model\":\"vendor/chat-42\",\"choices\":[]}\n\ndata: [DONE]\n\n")
 	upstream := &httpUpstreamRecorder{resp: &http.Response{
@@ -112,8 +117,9 @@ func TestForwardAsChatCompletionsCustomTransparentPreservesBodyAndDoesNotInjectU
 
 	require.NoError(t, err)
 	require.NotNil(t, result)
-	require.Equal(t, body, upstream.lastBody)
-	require.False(t, bytes.Contains(upstream.lastBody, []byte("stream_options")))
+	require.True(t, gjson.GetBytes(upstream.lastBody, "stream_options.include_usage").Bool())
+	require.Equal(t, `{"opaque":[1,2,3]}`, gjson.GetBytes(upstream.lastBody, "vendor_extension").Raw)
+	require.Equal(t, "vendor/chat-42", gjson.GetBytes(upstream.lastBody, "model").String())
 	require.Equal(t, "http://custom-upstream.test/v1/chat/completions", upstream.lastReq.URL.String())
 	require.Equal(t, "Bearer sk-custom-secret", upstream.lastReq.Header.Get("Authorization"))
 	require.Equal(t, upstreamBody, recorder.Body.Bytes())

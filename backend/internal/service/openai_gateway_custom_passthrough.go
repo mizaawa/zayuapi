@@ -29,8 +29,10 @@ const (
 )
 
 // forwardCustomTransparent dispatches OpenAI-compatible requests without
-// protocol conversion. Account-level model mapping is the only body rewrite;
-// all other request fields and the upstream response remain transparent.
+// protocol conversion. Account-level model mapping and, for streaming Chat
+// Completions, stream_options.include_usage (needed to bill the request) are
+// the only body rewrites; all other request fields and the upstream response
+// remain transparent.
 func (s *OpenAIGatewayService) forwardCustomTransparent(
 	ctx context.Context,
 	c *gin.Context,
@@ -68,6 +70,13 @@ func (s *OpenAIGatewayService) forwardCustomTransparent(
 		return nil, promptErr
 	}
 	stream := gjson.GetBytes(forwardBody, "stream").Bool()
+	if stream && endpoint == customChatCompletionsEndpoint {
+		// Chat Completions 流只有 stream_options.include_usage=true 时上游才回传 usage；
+		// 透明转发同样强制打开，否则客户端不带该选项的流式请求拿不到用量、只能按 $0 记账。
+		if updated, usageErr := ensureOpenAIChatStreamUsage(forwardBody); usageErr == nil {
+			forwardBody = updated
+		}
+	}
 	serviceTier := extractOpenAIServiceTierFromBody(forwardBody)
 	reasoningEffort := extractOpenAIReasoningEffortFromBody(forwardBody, model)
 

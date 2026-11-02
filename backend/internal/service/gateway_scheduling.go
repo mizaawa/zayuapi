@@ -2432,7 +2432,7 @@ func (s *GatewayService) diagnoseSelectionFailure(
 			Detail:   fmt.Sprintf("remaining=%s", remaining),
 		}
 	}
-	if vetoed, reason := openAIProfitControlVetoReason(ctx, acc); vetoed {
+	if vetoed, reason := accountAdmissionVetoReason(ctx, acc); vetoed {
 		return selectionFailureDiagnosis{Category: reason}
 	}
 	return selectionFailureDiagnosis{Category: "eligible"}

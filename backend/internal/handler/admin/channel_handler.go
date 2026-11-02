@@ -358,6 +358,10 @@ func (h *ChannelHandler) Create(c *gin.Context) {
 			pricing[i].Platform = service.PlatformAnthropic
 		}
 	}
+	if err := h.validateChannelPricingHasPrices(pricing); err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
 
 	var statsRules []service.AccountStatsPricingRule
 	for i, r := range req.AccountStatsPricingRules {
@@ -431,6 +435,10 @@ func (h *ChannelHandler) Update(c *gin.Context) {
 				pricing[i].Platform = service.PlatformAnthropic
 			}
 		}
+		if err := h.validateChannelPricingHasPrices(pricing); err != nil {
+			response.ErrorFrom(c, err)
+			return
+		}
 		input.ModelPricing = &pricing
 	}
 	if req.AccountStatsPricingRules != nil {
@@ -477,6 +485,38 @@ func (h *ChannelHandler) Delete(c *gin.Context) {
 	}
 
 	response.Success(c, gin.H{"message": "Channel deleted successfully"})
+}
+
+// validateChannelPricingHasPrices rejects token entries that leave every price
+// empty for a model the pricing catalog cannot price. Empty prices only fall
+// back to the official price list, so such an entry resolves to nothing and the
+// model could never be billed. Wildcard patterns are resolved per model at
+// request time instead.
+func (h *ChannelHandler) validateChannelPricingHasPrices(pricing []service.ChannelModelPricing) error {
+	if h.billingService == nil {
+		return nil
+	}
+	for i := range pricing {
+		entry := pricing[i]
+		if entry.BillingMode != "" && entry.BillingMode != service.BillingModeToken {
+			continue
+		}
+		if service.ChannelPricingHasTokenPrice(entry) {
+			continue
+		}
+		for _, model := range entry.Models {
+			model = strings.TrimSpace(model)
+			if model == "" || strings.HasSuffix(model, "*") {
+				continue
+			}
+			if _, err := h.billingService.GetModelPricing(model); err != nil {
+				return infraerrors.BadRequest("MODEL_PRICE_REQUIRED",
+					fmt.Sprintf("model %q has no official price; fill in its prices, otherwise its requests cannot be billed", model)).
+					WithMetadata(map[string]string{"model": model})
+			}
+		}
+	}
+	return nil
 }
 
 // GetModelDefaultPricing 获取模型的默认定价（用于前端自动填充）
