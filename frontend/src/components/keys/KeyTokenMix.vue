@@ -1,5 +1,5 @@
 <template>
-  <div class="key-mix" :class="`key-mix--${variant}`" data-testid="key-token-mix">
+  <div class="key-mix" data-testid="key-token-mix">
     <div class="key-mix-head">
       <span class="key-mix-label">{{ t('keys.tokenMixWindow') }}</span>
       <span
@@ -52,10 +52,8 @@ export interface KeyTokenUsage {
 
 const props = withDefaults(defineProps<{
   usage?: KeyTokenUsage | null
-  variant?: 'cell' | 'card'
 }>(), {
-  usage: null,
-  variant: 'card'
+  usage: null
 })
 
 const { t } = useI18n()
@@ -72,9 +70,7 @@ const safe = (value: number | null | undefined) => {
   return Number.isFinite(numberValue) && numberValue > 0 ? numberValue : 0
 }
 
-// Table cells use the short labels so the four-part legend fits a narrow column.
-const label = (key: 'input' | 'output' | 'cacheWrite' | 'cacheRead') =>
-  props.variant === 'cell' ? t(`keys.tokenParts.${key}`) : t(`dashboard.${key}`)
+const label = (key: 'input' | 'output' | 'cacheWrite' | 'cacheRead') => t(`dashboard.${key}`)
 
 const parts = computed(() => {
   const usage = props.usage
@@ -115,21 +111,16 @@ const formatTokens = (value: number) => formatCompactNumber(value)
 </script>
 
 <style scoped>
+/* Sized by the card it sits in, not the window: key cards share a row on wide screens. */
 .key-mix {
   display: flex;
   min-width: 0;
   flex-direction: column;
   gap: 0.375rem;
-}
-
-.key-mix--card {
   padding: 0.625rem 0.75rem 0.6875rem;
   border-radius: 0.875rem;
   background: #fffbe8;
-}
-
-.key-mix--cell {
-  width: 11.5rem;
+  container-type: inline-size;
 }
 
 .key-mix-head {
@@ -194,10 +185,6 @@ const formatTokens = (value: number) => formatCompactNumber(value)
   color: var(--md-sys-color-on-surface);
 }
 
-.key-mix--cell .key-mix-total-value {
-  font-size: 0.875rem;
-}
-
 .key-mix-empty {
   overflow: hidden;
   text-overflow: ellipsis;
@@ -215,10 +202,6 @@ const formatTokens = (value: number) => formatCompactNumber(value)
   background: #eee5c9;
 }
 
-.key-mix--cell .key-mix-bar {
-  height: 0.375rem;
-}
-
 .key-mix-segment {
   min-width: 2px;
   height: 100%;
@@ -229,15 +212,6 @@ const formatTokens = (value: number) => formatCompactNumber(value)
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0.1875rem 0.75rem;
   font-size: 0.6875rem;
-}
-
-.key-mix--cell .key-mix-legend {
-  gap: 0.125rem 0.5rem;
-  font-size: 0.65625rem;
-}
-
-.key-mix--cell .key-mix-legend li {
-  gap: 0.25rem;
 }
 
 .key-mix-legend li {
@@ -272,13 +246,14 @@ const formatTokens = (value: number) => formatCompactNumber(value)
   color: var(--md-sys-color-on-surface);
 }
 
-@media (min-width: 400px) {
-  .key-mix--card .key-mix-legend {
+/* Four columns only once each label and value fit without clipping. */
+@container (min-width: 26rem) {
+  .key-mix-legend {
     grid-template-columns: repeat(4, minmax(0, auto));
     justify-content: space-between;
   }
 
-  .key-mix--card .key-mix-value {
+  .key-mix-value {
     margin-left: 0.125rem;
   }
 }

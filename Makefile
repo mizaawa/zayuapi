@@ -18,6 +18,9 @@ FRONTEND_CRITICAL_VITEST := \
 	src/components/keys/__tests__/SystemPromptSettings.spec.ts \
 	src/components/keys/__tests__/UseKeyModal.spec.ts \
 	src/components/keys/__tests__/KeyGroupPicker.spec.ts \
+	src/components/keys/__tests__/KeyCard.spec.ts \
+	src/components/keys/__tests__/keyCards.spec.ts \
+	src/components/keys/__tests__/KeyTokenMix.spec.ts \
 	src/components/account/__tests__/ModelWhitelistSelector.spec.ts \
 	src/components/account/__tests__/EditAccountModal.upstreamModels.spec.ts \
 	src/views/user/__tests__/KeysView.spec.ts \

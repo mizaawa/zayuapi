@@ -39,9 +39,9 @@ describe('KeyTokenMix', () => {
     expect(wrapper.get('[data-testid="key-cache-hit-rate"]').classes()).toContain('is-none')
   })
 
-  it('uses short legend labels inside the table cell', () => {
-    const wrapper = mount(KeyTokenMix, { props: { variant: 'cell', usage: { input_tokens: 1 } } })
-    expect(wrapper.text()).toContain('keys.tokenParts.input')
-    expect(wrapper.text()).not.toContain('dashboard.input')
+  it('labels every part with the dashboard token names', () => {
+    const wrapper = mount(KeyTokenMix, { props: { usage: { input_tokens: 1 } } })
+    expect(wrapper.text()).toContain('dashboard.input')
+    expect(wrapper.text()).toContain('dashboard.cacheRead')
   })
 })
