@@ -54,8 +54,12 @@ import Icon from '@/components/icons/Icon.vue'
 import { useChannelMonitorFormat } from '@/composables/useChannelMonitorFormat'
 import { MONITOR_TIMELINE_POINTS } from '@/constants/channelMonitor'
 import { formatMultiplier } from '@/utils/formatters'
-import { monitorHealthBucket, resolveMonitorStatus } from '@/utils/channelMonitorHealth'
-import { firstTokenSeverity } from '@/utils/latencyHealth'
+import {
+  formatMonitorLatency,
+  monitorHealthBucket,
+  monitorLatencyTone,
+  resolveMonitorStatus,
+} from '@/utils/channelMonitorHealth'
 import MonitorTimeline from './MonitorTimeline.vue'
 
 const props = defineProps<{
@@ -91,22 +95,9 @@ const statusIcon = computed<'check' | 'exclamationTriangle' | 'x' | 'infoCircle'
   }
 })
 
-const latencyLabel = computed(() => {
-  const ms = props.item.primary_latency_ms
-  if (ms == null || !Number.isFinite(ms)) return ''
-  if (ms < 10_000) return `${Math.round(ms)} ms`
-  // Slow checks switch to seconds, rounded down so a check just under a
-  // threshold never reads as the threshold itself.
-  const seconds = Math.floor(ms / 100) / 10
-  return `${Number.isInteger(seconds) ? seconds.toFixed(0) : seconds.toFixed(1)} s`
-})
+const latencyLabel = computed(() => formatMonitorLatency(props.item.primary_latency_ms))
 
-const latencyTone = computed(() => {
-  const ms = props.item.primary_latency_ms
-  if (ms == null || !Number.isFinite(ms)) return 'unknown'
-  const severity = firstTokenSeverity(ms)
-  return severity === 'good' ? 'good' : severity === 'critical' ? 'bad' : 'warn'
-})
+const latencyTone = computed(() => monitorLatencyTone(props.item.primary_latency_ms))
 
 const hasHistory = computed(() =>
   Boolean(props.item.primary_status) || (props.item.timeline?.length ?? 0) > 0
@@ -157,10 +148,11 @@ const uptimeTone = computed(() => {
   color: #fffef8;
 }
 
-.monitor-row-status.is-operational { background: #4f9a66; }
-.monitor-row-status.is-degraded { background: #e2a417; }
-.monitor-row-status.is-down { background: #d4614a; }
-.monitor-row-status.is-unknown { background: #b9ab80; }
+.monitor-row-status.is-operational { background: var(--monitor-ok); }
+/* Amber is light, so its glyph is dark like a warning sign. */
+.monitor-row-status.is-degraded { background: var(--monitor-warn); color: var(--monitor-warn-on); }
+.monitor-row-status.is-down { background: var(--monitor-down); }
+.monitor-row-status.is-unknown { background: var(--monitor-empty); color: var(--monitor-unknown-ink); }
 
 .monitor-row-title {
   display: flex;
@@ -213,8 +205,8 @@ const uptimeTone = computed(() => {
   color: #6b6045;
 }
 
-.monitor-row-latency.is-warn { color: #9a6a00; }
-.monitor-row-latency.is-bad { color: #b4472f; }
+.monitor-row-latency.is-warn { color: var(--monitor-warn-ink); }
+.monitor-row-latency.is-bad { color: var(--monitor-down-ink); }
 
 .monitor-row-uptime {
   white-space: nowrap;
@@ -223,9 +215,9 @@ const uptimeTone = computed(() => {
   font-variant-numeric: tabular-nums;
 }
 
-.monitor-row-uptime.is-good { color: #386344; }
-.monitor-row-uptime.is-warn { color: #9a6a00; }
-.monitor-row-uptime.is-bad { color: #b4472f; }
+.monitor-row-uptime.is-good { color: var(--monitor-ok-ink); }
+.monitor-row-uptime.is-warn { color: var(--monitor-warn-ink); }
+.monitor-row-uptime.is-bad { color: var(--monitor-down-ink); }
 .monitor-row-uptime.is-unknown { font-weight: 600; color: #9b8c62; }
 
 .monitor-row-timeline {

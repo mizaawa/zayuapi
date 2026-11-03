@@ -86,7 +86,8 @@ const (
 	MonitorHistoryMaxLimit = 1000
 
 	// monitorTimelineMaxPoints 用户视图 timeline 每个监控最多返回的历史点数。
-	monitorTimelineMaxPoints = 120
+	// 与前端 MONITOR_TIMELINE_POINTS 保持一致，多返回的点不会被展示。
+	monitorTimelineMaxPoints = 75
 
 	// monitorEndpointResolveTimeout validateEndpoint 解析 hostname 的最长耗时。
 	monitorEndpointResolveTimeout = 5 * time.Second

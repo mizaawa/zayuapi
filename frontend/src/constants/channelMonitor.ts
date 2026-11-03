@@ -48,5 +48,8 @@ export const MONITOR_STATUSES: readonly MonitorStatus[] = [
 /** Default polling interval (seconds) for new monitors. */
 export const DEFAULT_INTERVAL_SECONDS = 60
 
-/** Number of recent checks shown in each user-facing status timeline. */
-export const MONITOR_TIMELINE_POINTS = 120
+/**
+ * Number of recent checks shown in each user-facing status timeline.
+ * Matches the backend's monitorTimelineMaxPoints.
+ */
+export const MONITOR_TIMELINE_POINTS = 75

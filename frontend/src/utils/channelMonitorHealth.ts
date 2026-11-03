@@ -9,6 +9,29 @@ import { firstTokenSeverity } from '@/utils/latencyHealth'
 
 export type MonitorHealthBucket = 'operational' | 'degraded' | 'down' | 'unknown'
 
+export type MonitorLatencyTone = 'good' | 'warn' | 'bad' | 'unknown'
+
+/**
+ * First-token latency as the status page prints it: whole milliseconds below
+ * 10 s, seconds above. Empty when nothing was measured.
+ */
+export function formatMonitorLatency(ms: number | null | undefined): string {
+  if (ms == null || !Number.isFinite(ms)) return ''
+  if (ms < 10_000) return `${Math.round(ms)} ms`
+  // Slow checks switch to seconds, rounded down so a check just under a
+  // threshold never reads as the threshold itself.
+  const seconds = Math.floor(ms / 100) / 10
+  return `${Number.isInteger(seconds) ? seconds.toFixed(0) : seconds.toFixed(1)} s`
+}
+
+/** Colour a first-token latency with the same thresholds the statuses use. */
+export function monitorLatencyTone(ms: number | null | undefined): MonitorLatencyTone {
+  if (ms == null || !Number.isFinite(ms)) return 'unknown'
+  const severity = firstTokenSeverity(ms)
+  if (severity === 'good') return 'good'
+  return severity === 'critical' ? 'bad' : 'warn'
+}
+
 /** Group a monitor's current state for summaries: failed and error both count as down. */
 export function monitorHealthBucket(
   status: MonitorStatus | '',

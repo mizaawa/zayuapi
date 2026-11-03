@@ -34,12 +34,12 @@ func (r *channelMonitorTimelineRepoStub) ListRecentHistoryForMonitors(
 	return map[int64][]*ChannelMonitorHistoryEntry{}, nil
 }
 
-func TestChannelMonitorUserTimelineRequestsOneHundredTwentyPoints(t *testing.T) {
+func TestChannelMonitorUserTimelineRequestsSeventyFivePoints(t *testing.T) {
 	repo := &channelMonitorTimelineRepoStub{}
 	service := NewChannelMonitorService(repo, nil)
 
 	_, err := service.ListUserView(context.Background())
 
 	require.NoError(t, err)
-	require.Equal(t, 120, repo.limit)
+	require.Equal(t, 75, repo.limit)
 }

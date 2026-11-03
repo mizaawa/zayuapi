@@ -228,7 +228,16 @@ describe('ChannelStatusView', () => {
     expect(wrapper.get('[data-testid="channel-status-grid"]').text()).not.toContain(
       'Scheduled maintenance tonight.'
     )
-    expect(wrapper.get('[data-testid="monitor-status-row-1"]').findAll('.monitor-status-bar__segment')).toHaveLength(120)
+    expect(wrapper.get('[data-testid="monitor-status-row-1"]').findAll('.monitor-status-bar__segment')).toHaveLength(75)
+    const legend = wrapper.get('[data-testid="channel-status-legend"]')
+    expect(legend.findAll('.cs-legend-key').map(key => key.text())).toEqual([
+      'Operational',
+      'Degraded',
+      'Down',
+      'No data',
+    ])
+    expect(legend.findAll('.cs-legend-swatch').map(swatch => swatch.classes().find(name => name.startsWith('is-'))))
+      .toEqual(['is-operational', 'is-degraded', 'is-down', 'is-empty'])
     const poweredBy = wrapper.get('a[href="https://mizaawa.com"]')
     expect(poweredBy.text()).toBe('mizaawa.com')
     expect(poweredBy.attributes('target')).toBe('_blank')

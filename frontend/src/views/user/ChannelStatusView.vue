@@ -39,15 +39,15 @@
           </button>
         </div>
 
-        <p v-if="items.length" class="cs-legend">
-          <span class="cs-legend-swatches" aria-hidden="true">
-            <span class="cs-legend-swatch is-operational"></span>
-            <span class="cs-legend-swatch is-degraded"></span>
-            <span class="cs-legend-swatch is-down"></span>
-            <span class="cs-legend-swatch is-empty"></span>
-          </span>
-          <span>{{ t('channelStatus.legend') }}</span>
-        </p>
+        <div v-if="items.length" class="cs-legend" data-testid="channel-status-legend">
+          <ul class="cs-legend-keys" :aria-label="t('channelStatus.legendLabel')">
+            <li v-for="key in legendKeys" :key="key.status" class="cs-legend-key">
+              <span class="cs-legend-swatch" :class="`is-${key.status}`" aria-hidden="true"></span>
+              {{ key.label }}
+            </li>
+          </ul>
+          <p class="cs-legend-note">{{ t('channelStatus.legend') }}</p>
+        </div>
       </section>
 
       <aside
@@ -145,6 +145,14 @@ const counts = computed<Record<MonitorHealthBucket, number>>(() => {
 const statusCounts = computed(() => (['operational', 'degraded', 'down', 'unknown'] as const)
   .filter(key => counts.value[key] > 0)
   .map(key => ({ key, label: t(`channelStatus.counts.${key}`), value: counts.value[key] })))
+
+// Names every colour the timelines use; an empty slot is a check that has not happened.
+const legendKeys = computed(() => [
+  { status: 'operational', label: t('channelStatus.counts.operational') },
+  { status: 'degraded', label: t('channelStatus.counts.degraded') },
+  { status: 'down', label: t('channelStatus.counts.down') },
+  { status: 'empty', label: t('channelStatus.counts.unknown') },
+])
 
 const summaryTone = computed<SummaryTone>(() => {
   if (!items.value.length) {
@@ -260,10 +268,10 @@ onBeforeUnmount(() => {
 .cs-page {
   --cs-ink: #3f3420;
   --cs-ink-soft: #6b6045;
-  --cs-ok: #4f9a66;
-  --cs-warn: #e2a417;
-  --cs-down: #d4614a;
-  --cs-empty: #ebe2c4;
+  --cs-ok: var(--monitor-ok);
+  --cs-warn: var(--monitor-warn);
+  --cs-down: var(--monitor-down);
+  --cs-empty: var(--monitor-empty);
   display: flex;
   width: 100%;
   max-width: 80rem;
@@ -297,24 +305,24 @@ onBeforeUnmount(() => {
 }
 
 .cs-summary.is-operational {
-  --tone-bg: #f4f9ef;
-  --tone-glow: rgb(121 179 123 / 0.28);
-  --tone-ink: #2e5038;
+  --tone-bg: #f1f9f4;
+  --tone-glow: rgb(36 156 116 / 0.2);
+  --tone-ink: #145c43;
   --tone-glyph: var(--cs-ok);
 }
 
 .cs-summary.is-degraded {
-  --tone-bg: #fff8e0;
-  --tone-glow: rgb(233 184 36 / 0.32);
-  --tone-ink: #65460b;
+  --tone-bg: #fff6dc;
+  --tone-glow: rgb(242 165 22 / 0.26);
+  --tone-ink: #6b4500;
   --tone-glyph: var(--cs-warn);
 }
 
 .cs-summary.is-outage,
 .cs-summary.is-error {
-  --tone-bg: #fdf1ec;
-  --tone-glow: rgb(212 97 74 / 0.22);
-  --tone-ink: #7f3424;
+  --tone-bg: #fdefeb;
+  --tone-glow: rgb(207 51 40 / 0.16);
+  --tone-ink: #8a2a20;
   --tone-glyph: var(--cs-down);
 }
 
@@ -345,6 +353,11 @@ onBeforeUnmount(() => {
   background: #fff3bd;
   color: #976800;
   box-shadow: none;
+}
+
+/* White would wash out on amber; a dark glyph reads like a warning sign. */
+.is-degraded .cs-summary-glyph {
+  color: var(--monitor-warn-on);
 }
 
 /* A live check result pulses once in a while; nothing moves while loading or empty. */
@@ -408,7 +421,7 @@ onBeforeUnmount(() => {
 .cs-count.is-operational .cs-count-dot { background: var(--cs-ok); }
 .cs-count.is-degraded .cs-count-dot { background: var(--cs-warn); }
 .cs-count.is-down .cs-count-dot { background: var(--cs-down); }
-.cs-count.is-unknown .cs-count-dot { background: #cfc29a; }
+.cs-count.is-unknown .cs-count-dot { background: var(--monitor-unknown); }
 
 .cs-refresh {
   display: flex;
@@ -450,16 +463,25 @@ onBeforeUnmount(() => {
   grid-area: legend;
   flex-wrap: wrap;
   align-items: center;
-  gap: 0.5rem;
+  gap: 0.5rem 1.25rem;
   padding-top: 0.875rem;
   font-size: 0.75rem;
   color: var(--cs-ink-soft);
   box-shadow: inset 0 1px 0 rgb(215 193 106 / 0.28);
 }
 
-.cs-legend-swatches {
+.cs-legend-keys {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem 0.875rem;
+}
+
+.cs-legend-key {
   display: inline-flex;
-  gap: 2px;
+  align-items: center;
+  gap: 0.375rem;
+  font-weight: 600;
+  color: var(--cs-ink);
 }
 
 .cs-legend-swatch {
@@ -472,6 +494,8 @@ onBeforeUnmount(() => {
 .cs-legend-swatch.is-operational { background: var(--cs-ok); }
 .cs-legend-swatch.is-degraded { background: var(--cs-warn); }
 .cs-legend-swatch.is-down { background: var(--cs-down); }
+/* The empty key is pale; an outline keeps it visible on the tinted summary. */
+.cs-legend-swatch.is-empty { box-shadow: inset 0 0 0 1px rgb(63 52 32 / 0.16); }
 
 /* ---------- Notice ---------- */
 .cs-notice {

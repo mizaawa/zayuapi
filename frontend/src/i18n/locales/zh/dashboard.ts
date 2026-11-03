@@ -638,7 +638,19 @@ export default {
       down: '故障',
       unknown: '无数据'
     },
-    legend: '每一格是一次检查，越靠右越新',
+    legendLabel: '颜色说明',
+    legend: '每一格是一次检查，越靠右越新；悬停或点按色块可查看详情',
+    tooltip: {
+      checkedAt: '检测时间',
+      firstToken: '首字延迟',
+      elapsed: '耗时',
+      noRecord: '暂无检测记录',
+      hint: {
+        degraded: '响应偏慢',
+        failed: '回答异常或超时',
+        error: '请求出错'
+      }
+    },
     refreshIn: '{n} 秒后刷新',
     latencyTitle: '最近一次检查的首字延迟',
     providers: {

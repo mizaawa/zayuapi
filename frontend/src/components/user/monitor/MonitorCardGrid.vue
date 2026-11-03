@@ -225,12 +225,12 @@ function toggleProvider(provider: ProviderKey) {
   width: 0.5rem;
   height: 0.5rem;
   border-radius: 999px;
-  background: #cfc29a;
+  background: var(--monitor-unknown);
 }
 
-.monitor-provider-dot.is-operational { background: #4f9a66; }
-.monitor-provider-dot.is-degraded { background: #e2a417; }
-.monitor-provider-dot.is-down { background: #d4614a; }
+.monitor-provider-dot.is-operational { background: var(--monitor-ok); }
+.monitor-provider-dot.is-degraded { background: var(--monitor-warn); }
+.monitor-provider-dot.is-down { background: var(--monitor-down); }
 
 .monitor-provider-chevron {
   flex-shrink: 0;

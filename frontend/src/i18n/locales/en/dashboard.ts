@@ -633,7 +633,19 @@ export default {
       down: 'Down',
       unknown: 'No data'
     },
-    legend: 'Each bar is one check, newest on the right',
+    legendLabel: 'Color key',
+    legend: 'Each bar is one check, newest on the right. Hover or tap a bar for details',
+    tooltip: {
+      checkedAt: 'Checked at',
+      firstToken: 'First token',
+      elapsed: 'Took',
+      noRecord: 'No check recorded',
+      hint: {
+        degraded: 'Slow response',
+        failed: 'Wrong answer or timed out',
+        error: 'Request failed'
+      }
+    },
     refreshIn: 'Refreshing in {n}s',
     latencyTitle: 'First-token latency of the latest check',
     providers: {

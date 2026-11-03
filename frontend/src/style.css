@@ -23,6 +23,21 @@
     --theme-elevation-2: 0 2px 6px -2px rgb(63 52 32 / 0.08), 0 16px 32px -16px rgb(63 52 32 / 0.26);
     --theme-elevation-3: 0 4px 12px -4px rgb(63 52 32 / 0.1), 0 28px 56px -24px rgb(63 52 32 / 0.34);
     --theme-ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+
+    /* Channel status colours. Operational, degraded and down differ in both hue
+     * and lightness so they stay apart for colour-blind readers, and degraded
+     * leans amber-orange so it does not read as the yellow brand colour. */
+    --monitor-ok: #249c74;
+    --monitor-warn: #f2a516;
+    --monitor-down: #cf3328;
+    --monitor-empty: #e8e4d8;
+    --monitor-unknown: #aaa391;
+    /* Text and glyphs drawn on the surfaces above. */
+    --monitor-ok-ink: #17694d;
+    --monitor-warn-ink: #8f5a00;
+    --monitor-down-ink: #b02a20;
+    --monitor-unknown-ink: #6f6857;
+    --monitor-warn-on: #4a2f00;
   }
 
   /* Night mode is intentionally disabled. Keep this fallback light so a
