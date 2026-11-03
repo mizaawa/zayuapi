@@ -840,6 +840,8 @@ var ProviderSet = wire.NewSet(
 	ProvideChannelMonitorService,
 	ProvideChannelMonitorRunner,
 	NewChannelMonitorRequestTemplateService,
+	ProvideDegradationMonitorService,
+	ProvideDegradationMonitorRunner,
 	ProvideUserPlatformQuotaUsageFlusher,
 )
 
@@ -903,6 +905,36 @@ func ProvideChannelMonitorService(
 // settingService 用于 runner 每次 fire 读取功能开关。
 func ProvideChannelMonitorRunner(svc *ChannelMonitorService, settingService *SettingService) *ChannelMonitorRunner {
 	r := NewChannelMonitorRunner(svc, settingService)
+	svc.SetScheduler(r)
+	r.Start()
+	return r
+}
+
+// ProvideDegradationMonitorService creates the degradation check service. Checks
+// go through this deployment's own gateway with managed keys signed by the
+// same attestor the API-key middleware verifies.
+func ProvideDegradationMonitorService(
+	repo DegradationMonitorRepository,
+	settingRepo SettingRepository,
+	groupRepo GroupRepository,
+	apiKeyService *APIKeyService,
+	cfg *config.Config,
+) *DegradationMonitorService {
+	svc := NewDegradationMonitorService(repo, settingRepo, groupRepo, apiKeyService)
+	if cfg != nil {
+		attestor, err := NewChannelMonitorAttestor(cfg.Totp.EncryptionKey)
+		if err != nil {
+			attestor = nil
+		}
+		svc.SetManagedGateway(channelMonitorInternalGatewayEndpoint(cfg), attestor)
+	}
+	return svc
+}
+
+// ProvideDegradationMonitorRunner creates and starts the degradation scheduler.
+// Runner.Stop is called by the cleanup function.
+func ProvideDegradationMonitorRunner(svc *DegradationMonitorService) *DegradationMonitorRunner {
+	r := NewDegradationMonitorRunner(svc)
 	svc.SetScheduler(r)
 	r.Start()
 	return r

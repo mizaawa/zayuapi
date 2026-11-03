@@ -257,6 +257,7 @@ func (s *SettingService) GetPublicSettings(ctx context.Context) (*PublicSettings
 		SettingKeyVideoWorkbenchAnnouncement,
 		SettingKeyAvailableChannelsEnabled,
 		SettingKeyLeaderboardEnabled,
+		SettingKeyDegradationMonitorEnabled,
 		SettingKeyModelPlazaEnabled,
 		SettingKeyModelPlazaRequireAuth,
 		SettingKeyAffiliateEnabled,
@@ -409,6 +410,8 @@ func (s *SettingService) GetPublicSettings(ctx context.Context) (*PublicSettings
 
 		AvailableChannelsEnabled: settings[SettingKeyAvailableChannelsEnabled] == "true",
 		LeaderboardEnabled:       settings[SettingKeyLeaderboardEnabled] == "true",
+
+		DegradationMonitorEnabled: settings[SettingKeyDegradationMonitorEnabled] == "true",
 
 		ModelPlazaEnabled:     settings[SettingKeyModelPlazaEnabled] == "true",
 		ModelPlazaRequireAuth: settings[SettingKeyModelPlazaRequireAuth] == "true",
@@ -653,6 +656,7 @@ type PublicSettingsInjectionPayload struct {
 	VideoWorkbenchAnnouncement           string `json:"video_workbench_announcement"`
 	AvailableChannelsEnabled             bool   `json:"available_channels_enabled"`
 	LeaderboardEnabled                   bool   `json:"leaderboard_enabled"`
+	DegradationMonitorEnabled            bool   `json:"degradation_monitor_enabled"`
 	ModelPlazaEnabled                    bool   `json:"model_plaza_enabled"`
 	ModelPlazaRequireAuth                bool   `json:"model_plaza_require_auth"`
 	AffiliateEnabled                     bool   `json:"affiliate_enabled"`
@@ -759,6 +763,7 @@ func (s *SettingService) GetPublicSettingsForInjection(ctx context.Context) (any
 		VideoWorkbenchAnnouncement:           settings.VideoWorkbenchAnnouncement,
 		AvailableChannelsEnabled:             settings.AvailableChannelsEnabled,
 		LeaderboardEnabled:                   settings.LeaderboardEnabled,
+		DegradationMonitorEnabled:            settings.DegradationMonitorEnabled,
 		ModelPlazaEnabled:                    settings.ModelPlazaEnabled,
 		ModelPlazaRequireAuth:                settings.ModelPlazaRequireAuth,
 		AffiliateEnabled:                     settings.AffiliateEnabled,

@@ -322,6 +322,9 @@ type SystemSettings struct {
 	AvailableChannelsEnabled bool `json:"available_channels_enabled"`
 	LeaderboardEnabled       bool `json:"leaderboard_enabled"`
 
+	// Degradation check feature switch (降智检测)
+	DegradationMonitorEnabled bool `json:"degradation_monitor_enabled"`
+
 	// Model Plaza feature (public group/model pricing showcase)
 	ModelPlazaEnabled               bool   `json:"model_plaza_enabled"`
 	ModelPlazaRequireAuth           bool   `json:"model_plaza_require_auth"`
@@ -449,6 +452,8 @@ type PublicSettings struct {
 
 	AvailableChannelsEnabled bool `json:"available_channels_enabled"`
 	LeaderboardEnabled       bool `json:"leaderboard_enabled"`
+
+	DegradationMonitorEnabled bool `json:"degradation_monitor_enabled"`
 
 	ModelPlazaEnabled     bool `json:"model_plaza_enabled"`
 	ModelPlazaRequireAuth bool `json:"model_plaza_require_auth"`

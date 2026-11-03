@@ -39,6 +39,13 @@ export default {
           announcementPlaceholder: 'Enter the announcement shown on the channel status page',
           announcementHint: 'Shown at the top of the user channel status page. Leave blank to hide it. Plain text only, up to 4,000 characters.',
         },
+        degradation: {
+          title: 'Degradation Check',
+          description: 'Each channel model draws the same SVG animation on a schedule and users see the latest animations, which makes model degradation easy to spot. Checks go through this site\'s own gateway with internal managed keys, never charge the administrator, and their spend counts as monitor consumption on the operations dashboard.',
+          configureLink: 'Configure check groups in Channel Management > Degradation Monitor',
+          enabled: 'Enable channel degradation checks',
+          enabledHint: 'Shows the user Degradation Check page and the admin Degradation Monitor menu and starts scheduled checks. Turning it off stops checks and keeps stored animations.',
+        },
         availableChannels: {
           title: 'Available Channels',
           description: 'Show logged-in users an aggregate view of the channels, models and pricing they can access. Disabled by default.',

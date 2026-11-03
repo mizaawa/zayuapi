@@ -297,6 +297,7 @@ export interface PublicSettings {
   video_workbench_announcement: string
   available_channels_enabled: boolean
   leaderboard_enabled: boolean
+  degradation_monitor_enabled?: boolean
   model_plaza_enabled: boolean
   model_plaza_require_auth: boolean
   service_quota_enabled: boolean

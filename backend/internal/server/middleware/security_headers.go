@@ -53,6 +53,8 @@ var requiredCSPDirectiveValues = []struct {
 	directive string
 	value     string
 }{
+	// The degradation check page frames the same-origin, sandboxed preview shell.
+	{"frame-src", "'self'"},
 	{"script-src", CloudflareInsightsDomain},
 	{"script-src", TencentCaptchaDomain},
 	{"frame-src", TencentCaptchaDomain},

@@ -119,6 +119,11 @@ export const FeatureFlags = {
     mode: 'opt-in',
     label: 'Leaderboard',
   }),
+  degradationMonitor: defineFlag({
+    key: 'degradation_monitor_enabled',
+    mode: 'opt-in',
+    label: 'Degradation Monitor',
+  }),
   modelPlaza: defineFlag({
     key: 'model_plaza_enabled',
     mode: 'opt-in',

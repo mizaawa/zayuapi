@@ -6417,6 +6417,46 @@
           </div>
         </div>
 
+        <section class="card" data-testid="degradation-settings">
+          <div class="border-b border-gray-100 px-6 py-4 dark:border-dark-700">
+            <h2 class="text-lg font-semibold text-gray-900 dark:text-white">
+              {{ t('admin.settings.features.degradation.title') }}
+            </h2>
+            <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+              {{ t('admin.settings.features.degradation.description') }}
+            </p>
+            <p class="mt-1.5 text-xs">
+              <router-link
+                to="/admin/channels/degradation"
+                class="inline-flex items-center gap-1 text-primary-600 hover:underline dark:text-primary-400"
+              >
+                {{ t('admin.settings.features.degradation.configureLink') }}
+                <span aria-hidden="true">→</span>
+              </router-link>
+            </p>
+          </div>
+          <div class="p-6">
+            <div class="flex items-center justify-between gap-4">
+              <div class="min-w-0 flex-1">
+                <label for="degradation-monitor-enabled" class="text-sm font-medium text-gray-700 dark:text-gray-300">
+                  {{ t('admin.settings.features.degradation.enabled') }}
+                </label>
+                <p id="degradation-monitor-enabled-hint" class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+                  {{ t('admin.settings.features.degradation.enabledHint') }}
+                </p>
+              </div>
+              <Toggle
+                id="degradation-monitor-enabled"
+                v-model="form.degradation_monitor_enabled"
+                :aria-label="t('admin.settings.features.degradation.enabled')"
+                aria-describedby="degradation-monitor-enabled-hint"
+                class="shrink-0"
+                data-testid="degradation-monitor-enabled-toggle"
+              />
+            </div>
+          </div>
+        </section>
+
         <section class="card" data-testid="provider-settings">
           <div class="border-b border-gray-100 px-6 py-4 dark:border-dark-700">
             <h2 class="text-lg font-semibold text-gray-900 dark:text-white">{{ localText('上游管理', 'Provider management') }}</h2>
@@ -9147,6 +9187,8 @@ const form = reactive<SettingsForm>({
   // Available Channels feature switch
   available_channels_enabled: false,
   leaderboard_enabled: false,
+  // Degradation check feature switch (降智检测)
+  degradation_monitor_enabled: false,
   // Model Plaza feature switches + description
   model_plaza_enabled: false,
   model_plaza_require_auth: false,
@@ -10788,6 +10830,8 @@ async function saveSettings() {
       // Available Channels feature switch
       available_channels_enabled: form.available_channels_enabled,
       leaderboard_enabled: form.leaderboard_enabled,
+      // Degradation check feature switch
+      degradation_monitor_enabled: form.degradation_monitor_enabled,
       // Model Plaza feature switches + description
       model_plaza_enabled: form.model_plaza_enabled,
       model_plaza_require_auth: form.model_plaza_require_auth,

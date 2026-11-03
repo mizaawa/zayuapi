@@ -14,6 +14,13 @@ const channelMonitorAPIKeyNamePrefix = "[channel-monitor] "
 // authenticated gateway path as a user key, without requiring an administrator
 // to create and paste one into every monitor manually.
 func (s *APIKeyService) CreateChannelMonitorKey(ctx context.Context, userID, groupID int64, monitorName string) (*APIKey, error) {
+	return s.createManagedMonitorKey(ctx, userID, groupID, channelMonitorAPIKeyName(monitorName))
+}
+
+// createManagedMonitorKey creates an administrator-owned probe key bound to an
+// active group. Every managed probe key shares the channel-monitor purpose so it
+// inherits internal attestation, free probe billing and monitor accounting.
+func (s *APIKeyService) createManagedMonitorKey(ctx context.Context, userID, groupID int64, keyName string) (*APIKey, error) {
 	if s == nil || s.apiKeyRepo == nil || s.userRepo == nil || s.groupRepo == nil {
 		return nil, fmt.Errorf("channel monitor api key service is not configured")
 	}
@@ -46,7 +53,7 @@ func (s *APIKeyService) CreateChannelMonitorKey(ctx context.Context, userID, gro
 	apiKey := &APIKey{
 		UserID:  userID,
 		Key:     key,
-		Name:    channelMonitorAPIKeyName(monitorName),
+		Name:    keyName,
 		Purpose: APIKeyPurposeChannelMonitor,
 		GroupID: &groupIDCopy,
 		Status:  StatusAPIKeyActive,
@@ -84,11 +91,15 @@ func (s *APIKeyService) DeleteChannelMonitorKey(ctx context.Context, rawKey stri
 }
 
 func channelMonitorAPIKeyName(monitorName string) string {
+	return managedMonitorAPIKeyName(channelMonitorAPIKeyNamePrefix, monitorName)
+}
+
+func managedMonitorAPIKeyName(prefix, monitorName string) string {
 	name := html.EscapeString(strings.TrimSpace(monitorName))
 	if name == "" {
 		name = "monitor"
 	}
-	runes := []rune(channelMonitorAPIKeyNamePrefix + name)
+	runes := []rune(prefix + name)
 	if len(runes) > maxChannelMonitorNameRunes {
 		runes = runes[:maxChannelMonitorNameRunes]
 	}

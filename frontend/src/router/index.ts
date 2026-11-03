@@ -552,6 +552,18 @@ const routes: RouteRecordRaw[] = [
     }
   },
   {
+    path: '/admin/channels/degradation',
+    name: 'AdminDegradationMonitor',
+    component: () => import('@/views/admin/DegradationMonitorView.vue'),
+    meta: {
+      requiresAuth: true,
+      requiresAdmin: true,
+      title: 'Degradation Monitor',
+      titleKey: 'admin.degradation.title',
+      descriptionKey: 'admin.degradation.description'
+    }
+  },
+  {
     path: '/monitor',
     name: 'ChannelStatus',
     component: () => import('@/views/user/ChannelStatusView.vue'),
@@ -560,6 +572,18 @@ const routes: RouteRecordRaw[] = [
       requiresAdmin: false,
       title: 'Channel Status',
       titleKey: 'nav.channelStatus'
+    }
+  },
+  {
+    path: '/degradation',
+    name: 'DegradationCheck',
+    component: () => import('@/views/user/DegradationCheckView.vue'),
+    meta: {
+      requiresAuth: true,
+      requiresAdmin: false,
+      requiresDegradationMonitor: true,
+      title: 'Degradation Check',
+      titleKey: 'nav.degradationCheck'
     }
   },
   {
@@ -1037,7 +1061,7 @@ router.beforeEach(async (to, _from, next) => {
   // 公共设置可能尚未加载（App.vue 的 onMounted 异步拉取晚于首次导航，且纯静态部署
   // 无 __APP_CONFIG__ 注入）。此时 cachedPublicSettings 为空会把 payment/risk_control
   // 误判为“未启用”而错误拦截，故这里先确保设置加载完成。
-  if ((to.meta.requiresPayment || to.meta.requiresRiskControl || to.meta.requiresLeaderboard || to.meta.requiresImageWorkbench || to.meta.requiresVideoWorkbench) && !appStore.publicSettingsLoaded) {
+  if ((to.meta.requiresPayment || to.meta.requiresRiskControl || to.meta.requiresLeaderboard || to.meta.requiresDegradationMonitor || to.meta.requiresImageWorkbench || to.meta.requiresVideoWorkbench) && !appStore.publicSettingsLoaded) {
     try {
       await appStore.fetchPublicSettings()
     } catch (error) {
@@ -1079,6 +1103,17 @@ router.beforeEach(async (to, _from, next) => {
     to.meta.requiresLeaderboard &&
     appStore.publicSettingsLoaded &&
     appStore.cachedPublicSettings?.leaderboard_enabled !== true
+  ) {
+    next(authStore.isAdmin ? '/admin/dashboard' : '/dashboard')
+    return
+  }
+
+  // Degradation checks are opt-in: the user page stays hidden until the feature is on.
+  // The admin page remains reachable so groups can be prepared before enabling.
+  if (
+    to.meta.requiresDegradationMonitor &&
+    appStore.publicSettingsLoaded &&
+    appStore.cachedPublicSettings?.degradation_monitor_enabled !== true
   ) {
     next(authStore.isAdmin ? '/admin/dashboard' : '/dashboard')
     return

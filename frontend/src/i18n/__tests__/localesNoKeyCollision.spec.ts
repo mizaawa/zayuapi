@@ -9,9 +9,11 @@ import enAdminPromptAudit from '../locales/en/admin/promptAudit'
 import enAdminResourceLibrary from '../locales/en/admin/resourceLibrary'
 import enAdminResources from '../locales/en/admin/resources'
 import enAdminSettings from '../locales/en/admin/settings'
+import enAdminDegradation from '../locales/en/admin/degradation'
 import enCommon from '../locales/en/common'
 import enIndex from '../locales/en'
 import enDashboard from '../locales/en/dashboard'
+import enDegradation from '../locales/en/degradation'
 import enLanding from '../locales/en/landing'
 import enMisc from '../locales/en/misc'
 import zhAdminAccounts from '../locales/zh/admin/accounts'
@@ -23,9 +25,11 @@ import zhAdminPromptAudit from '../locales/zh/admin/promptAudit'
 import zhAdminResourceLibrary from '../locales/zh/admin/resourceLibrary'
 import zhAdminResources from '../locales/zh/admin/resources'
 import zhAdminSettings from '../locales/zh/admin/settings'
+import zhAdminDegradation from '../locales/zh/admin/degradation'
 import zhCommon from '../locales/zh/common'
 import zhIndex from '../locales/zh'
 import zhDashboard from '../locales/zh/dashboard'
+import zhDegradation from '../locales/zh/degradation'
 import zhLanding from '../locales/zh/landing'
 import zhMisc from '../locales/zh/misc'
 
@@ -50,8 +54,8 @@ function collisions(modules: Modules): string[] {
 }
 
 const roots: Record<string, Modules> = {
-  zh: { landing: zhLanding, common: zhCommon, dashboard: zhDashboard, misc: zhMisc },
-  en: { landing: enLanding, common: enCommon, dashboard: enDashboard, misc: enMisc }
+  zh: { landing: zhLanding, common: zhCommon, dashboard: zhDashboard, degradation: zhDegradation, misc: zhMisc },
+  en: { landing: enLanding, common: enCommon, dashboard: enDashboard, degradation: enDegradation, misc: enMisc }
 }
 
 const admins: Record<string, Modules> = {
@@ -64,7 +68,8 @@ const admins: Record<string, Modules> = {
     settings: zhAdminSettings,
     audit: zhAdminAudit,
     promptAudit: zhAdminPromptAudit,
-    resourceLibrary: zhAdminResourceLibrary
+    resourceLibrary: zhAdminResourceLibrary,
+    degradation: zhAdminDegradation
   },
   en: {
     overview: enAdminOverview,
@@ -75,7 +80,8 @@ const admins: Record<string, Modules> = {
     settings: enAdminSettings,
     audit: enAdminAudit,
     promptAudit: enAdminPromptAudit,
-    resourceLibrary: enAdminResourceLibrary
+    resourceLibrary: enAdminResourceLibrary,
+    degradation: enAdminDegradation
   }
 }
 

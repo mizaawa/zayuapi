@@ -17,6 +17,9 @@ func RegisterUserRoutes(
 	settingService *service.SettingService,
 	panelRateLimiter *middleware.PanelRateLimiter,
 ) {
+	// 降智检测动画预览外壳：静态、无用户数据，供沙箱 iframe 加载（iframe 无法携带登录凭证）。
+	v1.GET("/degradation/preview-frame", h.Degradation.PreviewFrame)
+
 	authenticated := v1.Group("")
 	authenticated.Use(gin.HandlerFunc(jwtAuth))
 	authenticated.Use(middleware.BackendModeUserGuard(settingService))
@@ -155,6 +158,13 @@ func RegisterUserRoutes(
 		{
 			monitors.GET("", h.ChannelMonitor.List)
 			monitors.GET("/:id/status", h.ChannelMonitor.GetStatus)
+		}
+
+		// 降智检测（用户只读；功能关闭时返回空列表）
+		degradation := authenticated.Group("/degradation")
+		{
+			degradation.GET("/overview", h.Degradation.Overview)
+			degradation.GET("/runs/:id", h.Degradation.GetRun)
 		}
 	}
 }

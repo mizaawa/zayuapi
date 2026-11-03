@@ -453,6 +453,14 @@ const (
 	// It is additive and defaults to false for backward-compatible upgrades.
 	SettingKeyLeaderboardEnabled = "leaderboard_enabled"
 
+	// SettingKeyDegradationMonitorEnabled controls the degradation check feature
+	// (降智检测): the scheduler, the user page and the admin entry. Every check
+	// spends upstream quota, so it defaults to false (opt-in feature).
+	SettingKeyDegradationMonitorEnabled = "degradation_monitor_enabled"
+	// SettingKeyDegradationMonitorConfig stores the JSON DegradationConfig edited
+	// on the degradation monitor admin page.
+	SettingKeyDegradationMonitorConfig = "degradation_monitor_config"
+
 	// SettingKeyModelPlazaEnabled is a DB-backed soft switch for the Model Plaza page
 	// (public group/model pricing showcase). When false: the plaza endpoint returns 404
 	// and the sidebar entry is hidden. Defaults to false (opt-in feature).

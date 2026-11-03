@@ -39,6 +39,13 @@ export default {
           announcementPlaceholder: '输入要在渠道状态页展示的公告内容',
           announcementHint: '显示在用户渠道状态页顶部；留空则不显示。仅支持纯文本，最多 4000 个字符。',
         },
+        degradation: {
+          title: '降智检测',
+          description: '定时让各渠道模型绘制同一道 SVG 动画题，在用户侧展示近期的检测动画，便于直观判断模型是否降智。检测走站点自身网关与内部托管密钥，不扣管理员余额，消耗计入运营面板的「今日监控消费」。',
+          configureLink: '前往 渠道管理 > 降智监控 配置检测分组',
+          enabled: '开启渠道降智检测',
+          enabledHint: '开启后显示用户侧「降智检测」与管理员「降智监控」菜单并开始定时检测；关闭后停止检测，已保存的动画会保留。',
+        },
         availableChannels: {
           title: '可用渠道',
           description: '向已登录用户展示他们能访问的渠道、模型和定价聚合视图。默认关闭。',

@@ -9,6 +9,7 @@ import promptAudit from './promptAudit'
 import resourceLibrary from './resourceLibrary'
 import upstream from './upstream'
 import providerImport from './providerImport'
+import degradation from './degradation'
 
 export default {
   ...overview,
@@ -22,4 +23,5 @@ export default {
   ...resourceLibrary,
   ...upstream,
   ...providerImport,
+  ...degradation,
 }

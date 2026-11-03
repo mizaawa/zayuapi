@@ -394,6 +394,8 @@ func (h *SettingHandler) GetSettings(c *gin.Context) {
 		AvailableChannelsEnabled: settings.AvailableChannelsEnabled,
 		LeaderboardEnabled:       settings.LeaderboardEnabled,
 
+		DegradationMonitorEnabled: settings.DegradationMonitorEnabled,
+
 		ModelPlazaEnabled:               settings.ModelPlazaEnabled,
 		ModelPlazaRequireAuth:           settings.ModelPlazaRequireAuth,
 		ModelPlazaDescription:           settings.ModelPlazaDescription,

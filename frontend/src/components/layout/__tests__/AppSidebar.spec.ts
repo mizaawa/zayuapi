@@ -121,6 +121,26 @@ describe('Model Plaza navigation', () => {
   })
 })
 
+describe('Degradation check navigation', () => {
+  it('places the user entry between channel status and model plaza behind its feature flag', () => {
+    const channelStatusIndex = componentSource.indexOf("{ path: '/monitor'")
+    const degradationIndex = componentSource.indexOf("{ path: '/degradation'")
+    const modelPlazaIndex = componentSource.indexOf("{ path: '/model-plaza'")
+
+    expect(degradationIndex).toBeGreaterThan(channelStatusIndex)
+    expect(modelPlazaIndex).toBeGreaterThan(degradationIndex)
+    expect(componentSource).toContain('const flagDegradationMonitor = makeSidebarFlag(FeatureFlags.degradationMonitor)')
+    expect(componentSource).toContain("{ path: '/degradation', label: t('nav.degradationCheck'), icon: DegradationIcon, featureFlag: flagDegradationMonitor }")
+  })
+
+  it('adds the admin entry under channel management after the channel monitor', () => {
+    const monitorIndex = componentSource.indexOf("{ path: '/admin/channels/monitor'")
+    const degradationIndex = componentSource.indexOf("{ path: '/admin/channels/degradation'")
+    expect(degradationIndex).toBeGreaterThan(monitorIndex)
+    expect(componentSource).toContain("{ path: '/admin/channels/degradation', label: t('nav.degradationMonitor'), icon: DegradationIcon, featureFlag: flagDegradationMonitor }")
+  })
+})
+
 describe('AppSidebar console appearance', () => {
   it('removes the console theme toggle without changing the saved Home preference', () => {
     expect(componentSource).not.toContain('@click="toggleTheme"')

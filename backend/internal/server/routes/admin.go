@@ -106,6 +106,9 @@ func RegisterAdminRoutes(
 		// 渠道监控
 		registerChannelMonitorRoutes(admin, h)
 
+		// 降智监控
+		registerDegradationRoutes(admin, h)
+
 		// 风控中心
 		registerContentModerationRoutes(admin, h)
 
@@ -751,6 +754,28 @@ func registerChannelMonitorRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 		templates.DELETE("/:id", h.Admin.ChannelMonitorTemplate.Delete)
 		templates.GET("/:id/monitors", h.Admin.ChannelMonitorTemplate.AssociatedMonitors)
 		templates.POST("/:id/apply", h.Admin.ChannelMonitorTemplate.Apply)
+	}
+}
+
+// registerDegradationRoutes 注册降智监控（检测分组、提示词预设、全局配置）路由。
+func registerDegradationRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
+	degradation := admin.Group("/degradation")
+	{
+		degradation.GET("/monitors", h.Admin.Degradation.ListMonitors)
+		degradation.POST("/monitors", h.Admin.Degradation.CreateMonitor)
+		degradation.PUT("/monitors/sort-order", h.Admin.Degradation.UpdateSortOrder)
+		degradation.PUT("/monitors/:id", h.Admin.Degradation.UpdateMonitor)
+		degradation.DELETE("/monitors/:id", h.Admin.Degradation.DeleteMonitor)
+		degradation.POST("/monitors/:id/run", h.Admin.Degradation.RunMonitor)
+		degradation.GET("/monitors/:id/storage", h.Admin.Degradation.StorageStats)
+		degradation.DELETE("/monitors/:id/runs", h.Admin.Degradation.ReleaseStorage)
+		degradation.GET("/runs/:id", h.Admin.Degradation.GetRun)
+		degradation.GET("/prompts", h.Admin.Degradation.ListPrompts)
+		degradation.POST("/prompts", h.Admin.Degradation.CreatePrompt)
+		degradation.PUT("/prompts/:id", h.Admin.Degradation.UpdatePrompt)
+		degradation.DELETE("/prompts/:id", h.Admin.Degradation.DeletePrompt)
+		degradation.GET("/config", h.Admin.Degradation.GetConfig)
+		degradation.PUT("/config", h.Admin.Degradation.UpdateConfig)
 	}
 }
 

@@ -226,6 +226,9 @@ func (s *SettingService) InitializeDefaultSettings(ctx context.Context) error {
 		SettingKeyAvailableChannelsEnabled: "false",
 		SettingKeyLeaderboardEnabled:       "false",
 
+		// Degradation check feature (default disabled; every check spends upstream quota)
+		SettingKeyDegradationMonitorEnabled: "false",
+
 		// Model plaza feature (default disabled; opt-in, public unless require_auth)
 		SettingKeyModelPlazaEnabled:        "false",
 		SettingKeyModelPlazaRequireAuth:    "false",
@@ -850,6 +853,9 @@ func (s *SettingService) parseSettings(settings map[string]string) *SystemSettin
 	// Available channels feature (default: disabled; strict true)
 	result.AvailableChannelsEnabled = settings[SettingKeyAvailableChannelsEnabled] == "true"
 	result.LeaderboardEnabled = settings[SettingKeyLeaderboardEnabled] == "true"
+
+	// Degradation check feature (default: disabled; strict true)
+	result.DegradationMonitorEnabled = settings[SettingKeyDegradationMonitorEnabled] == "true"
 
 	// Model plaza feature (default: disabled; strict true)
 	result.ModelPlazaEnabled = settings[SettingKeyModelPlazaEnabled] == "true"

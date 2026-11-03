@@ -716,6 +716,9 @@ export interface SystemSettings {
   available_channels_enabled: boolean;
   leaderboard_enabled: boolean;
 
+  // Degradation check feature switch (降智检测)
+  degradation_monitor_enabled: boolean;
+
   // Model Plaza feature switches + description
   model_plaza_enabled: boolean;
   model_plaza_require_auth: boolean;
@@ -1035,6 +1038,9 @@ export interface UpdateSettingsRequest {
   // Available Channels feature switch
   available_channels_enabled?: boolean;
   leaderboard_enabled?: boolean;
+
+  // Degradation check feature switch (降智检测)
+  degradation_monitor_enabled?: boolean;
 
   // Model Plaza feature switches + description
   model_plaza_enabled?: boolean;

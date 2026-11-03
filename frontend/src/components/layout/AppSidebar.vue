@@ -755,6 +755,20 @@ const ShieldIcon = {
     )
 }
 
+// Degradation check: a drawing canvas with a sparkle, for the SVG animation probes.
+const DegradationIcon = {
+  render: () =>
+    h(
+      'svg',
+      { fill: 'none', viewBox: '0 0 24 24', stroke: 'currentColor', 'stroke-width': '1.5' },
+      [
+        h('rect', { x: '3', y: '4.5', width: '13.5', height: '13.5', rx: '2.25', 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }),
+        h('path', { 'stroke-linecap': 'round', 'stroke-linejoin': 'round', d: 'M6 14.25l2.25-2.625 2.25 1.875 2.625-3.375' }),
+        h('path', { 'stroke-linecap': 'round', 'stroke-linejoin': 'round', d: 'M19.5 3v3m-1.5-1.5h3M19.5 15.75v.008M20.25 11.25L18.75 12' })
+      ]
+    )
+}
+
 const PriceTagIcon = {
   render: () =>
     h(
@@ -794,6 +808,7 @@ const ChevronDownIcon = {
 // which handles the opt-in vs opt-out fallback when settings haven't loaded
 // yet. Admin-only flags (not in public settings) stay inline below.
 const flagChannelMonitor = makeSidebarFlag(FeatureFlags.channelMonitor)
+const flagDegradationMonitor = makeSidebarFlag(FeatureFlags.degradationMonitor)
 const flagImageWorkbench = makeSidebarFlag(FeatureFlags.imageWorkbench)
 const flagVideoWorkbench = makeSidebarFlag(FeatureFlags.videoWorkbench)
 const paymentAccess = usePaymentAccessStore()
@@ -824,7 +839,7 @@ function buildCustomNavItem(item: CustomMenuItem): NavItem {
 // buildSelfNavItems 构造用户自己的导航项（用户端主菜单和管理员的"我的账户"子菜单共享这组声明）。
 // withDashboard=true 时包含仪表盘（用户端），false 时不含（管理员的个人区已经有独立仪表盘入口）。
 //
-// 条目顺序：密钥 → 批量生图 → 用量 → 可用渠道 → 渠道状态 → 模型广场 → 订阅/支付 → 兑换/资料。
+// 条目顺序：密钥 → 批量生图 → 用量 → 可用渠道 → 渠道状态 → 降智检测 → 模型广场 → 订阅/支付 → 兑换/资料。
 // 可用渠道紧挨渠道状态之上，让用户"先看自己能用什么、再看对应状态"。
 function buildSelfNavItems(withDashboard: boolean): NavItem[] {
   const items: NavItem[] = []
@@ -839,6 +854,7 @@ function buildSelfNavItems(withDashboard: boolean): NavItem[] {
     { path: '/usage', label: t('nav.usage'), icon: ChartIcon, hideInSimpleMode: true },
     { path: '/available-channels', label: t('nav.availableChannels'), icon: ChannelIcon, hideInSimpleMode: true, featureFlag: flagAvailableChannels },
     { path: '/monitor', label: t('nav.channelStatus'), icon: SignalIcon, featureFlag: flagChannelMonitor },
+    { path: '/degradation', label: t('nav.degradationCheck'), icon: DegradationIcon, featureFlag: flagDegradationMonitor },
     { path: '/model-plaza', label: t('nav.modelPlaza'), icon: ModelPlazaIcon, openInNewWindow: true, featureFlag: flagModelPlaza },
     { path: '/subscriptions', label: t('nav.mySubscriptions'), icon: CreditCardIcon, hideInSimpleMode: true },
     { path: '/purchase', label: t('nav.buySubscription'), badge: paymentAccess.access?.exclusive_enabled === true ? t('nav.exclusivePayment') : undefined, icon: RechargeSubscriptionIcon, featureFlag: flagPayment },
@@ -899,6 +915,7 @@ const adminNavItems = computed((): NavItem[] => {
       children: [
         { path: '/admin/channels/pricing', label: t('nav.channelPricing'), icon: PriceTagIcon },
         { path: '/admin/channels/monitor', label: t('nav.channelMonitor'), icon: SignalIcon, featureFlag: flagChannelMonitor },
+        { path: '/admin/channels/degradation', label: t('nav.degradationMonitor'), icon: DegradationIcon, featureFlag: flagDegradationMonitor },
       ],
     },
     { path: '/admin/subscriptions', label: t('nav.subscriptions'), icon: CreditCardIcon, hideInSimpleMode: true },

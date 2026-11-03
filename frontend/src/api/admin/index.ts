@@ -33,6 +33,7 @@ import riskControlAPI from './riskControl'
 import adminComplianceAPI from './compliance'
 import auditAPI from './audit'
 import resourceLibraryAPI from './resourceLibrary'
+import degradationAdminAPI from './degradation'
 
 /**
  * Unified admin API object for convenient access
@@ -67,7 +68,8 @@ export const adminAPI = {
   riskControl: riskControlAPI,
   compliance: adminComplianceAPI,
   audit: auditAPI,
-  resourceLibrary: resourceLibraryAPI
+  resourceLibrary: resourceLibraryAPI,
+  degradation: degradationAdminAPI
 }
 
 export {
@@ -100,7 +102,8 @@ export {
   riskControlAPI,
   adminComplianceAPI,
   auditAPI,
-  resourceLibraryAPI
+  resourceLibraryAPI,
+  degradationAdminAPI
 }
 
 export default adminAPI

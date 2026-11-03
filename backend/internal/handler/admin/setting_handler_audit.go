@@ -558,6 +558,9 @@ func diffSettings(before *service.SystemSettings, after *service.SystemSettings,
 	if before.LeaderboardEnabled != after.LeaderboardEnabled {
 		changed = append(changed, "leaderboard_enabled")
 	}
+	if before.DegradationMonitorEnabled != after.DegradationMonitorEnabled {
+		changed = append(changed, "degradation_monitor_enabled")
+	}
 	if before.ImageWorkbenchEnabled != after.ImageWorkbenchEnabled {
 		changed = append(changed, "image_workbench_enabled")
 	}

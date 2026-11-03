@@ -360,6 +360,17 @@ func TestEnhanceCSPPolicy(t *testing.T) {
 		assert.Equal(t, 1, countDirectiveValue(enhanced, "worker-src", TencentCaptchaWorkerSource))
 	})
 
+	t.Run("allows_same_origin_degradation_preview_frames", func(t *testing.T) {
+		// Legacy configured policies listed only third-party frame origins; the
+		// degradation page must still be able to frame its sandboxed preview shell.
+		policy := "default-src 'self'; script-src 'self' __CSP_NONCE__; frame-src https://challenges.cloudflare.com; frame-ancestors 'none'"
+		enhanced := enhanceCSPPolicy(policy)
+
+		assert.Equal(t, 1, countDirectiveValue(enhanced, "frame-src", "'self'"))
+		assert.Equal(t, 1, countDirectiveValue(enhanceCSPPolicy(config.DefaultCSPPolicy), "frame-src", "'self'"))
+		assert.Contains(t, enhanced, "frame-ancestors 'none'", "framing the app itself stays forbidden")
+	})
+
 	t.Run("default_policy_already_carries_tencent_captcha_domains", func(t *testing.T) {
 		// 默认策略与中间件强制注入表必须同形，否则 config.example.yaml 会误导自建用户
 		for _, required := range requiredCSPDirectiveValues {
