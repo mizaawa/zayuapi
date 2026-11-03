@@ -38,7 +38,8 @@ type DegradationMonitorRepository interface {
 	FinishRun(ctx context.Context, run *DegradationRun) error
 	UpdateRunUsage(ctx context.Context, run *DegradationRun) error
 	GetRun(ctx context.Context, id int64) (*DegradationRun, error)
-	ListRecentRuns(ctx context.Context, monitorIDs []int64, perMonitor int) (map[int64][]*DegradationRun, error)
+	// ListRecentFinishedRuns leaves out checks that are still generating.
+	ListRecentFinishedRuns(ctx context.Context, monitorIDs []int64, perMonitor int) (map[int64][]*DegradationRun, error)
 	StorageStats(ctx context.Context, monitorID int64) (*DegradationStorageStats, error)
 	DeleteRuns(ctx context.Context, monitorID int64) (int64, error)
 	PruneRuns(ctx context.Context, monitorID int64, keep int) (int64, error)
@@ -506,7 +507,9 @@ func (s *DegradationMonitorService) deleteKey(ctx context.Context, keyID, ownerI
 
 // ---------- user views ----------
 
-// Overview returns enabled monitors with their latest results, without document bodies.
+// Overview returns enabled monitors with their latest finished results, without
+// document bodies. Users only see a check once its output is complete, so a
+// run in progress is neither listed nor counted as the latest check.
 func (s *DegradationMonitorService) Overview(ctx context.Context) (*DegradationOverview, error) {
 	cfg := s.GetConfig(ctx)
 	overview := &DegradationOverview{Enabled: s.Enabled(ctx), DisplayLimit: cfg.MaxDisplayPerGroup, Monitors: []*DegradationUserMonitor{}}
@@ -526,7 +529,7 @@ func (s *DegradationMonitorService) Overview(ctx context.Context) (*DegradationO
 		visible = append(visible, monitor)
 		ids = append(ids, monitor.ID)
 	}
-	runs, err := s.repo.ListRecentRuns(ctx, ids, cfg.MaxDisplayPerGroup)
+	runs, err := s.repo.ListRecentFinishedRuns(ctx, ids, cfg.MaxDisplayPerGroup)
 	if err != nil {
 		return nil, fmt.Errorf("list degradation results: %w", err)
 	}
@@ -548,14 +551,27 @@ func (s *DegradationMonitorService) Overview(ctx context.Context) (*DegradationO
 			Protocol:                 monitor.Protocol,
 			EffectiveReasoningEffort: monitor.EffectiveReasoningEffort(cfg),
 			EffectiveIntervalMinutes: monitor.EffectiveIntervalMinutes(cfg),
-			LastRunAt:                monitor.LastRunAt,
+			LastRunAt:                latestFinishedAt(items),
 			Runs:                     items,
 		})
 	}
 	return overview, nil
 }
 
-// GetRunForUser returns one result with its document when its monitor is visible.
+// latestFinishedAt is when the newest listed result completed (results are newest first).
+func latestFinishedAt(runs []*DegradationRun) *time.Time {
+	if len(runs) == 0 {
+		return nil
+	}
+	if runs[0].FinishedAt != nil {
+		return runs[0].FinishedAt
+	}
+	started := runs[0].StartedAt
+	return &started
+}
+
+// GetRunForUser returns one finished result with its document when its monitor
+// is visible. A check that is still generating reads as not found.
 func (s *DegradationMonitorService) GetRunForUser(ctx context.Context, id int64) (*DegradationRun, error) {
 	if !s.Enabled(ctx) {
 		return nil, ErrDegradationRunNotFound
@@ -563,6 +579,9 @@ func (s *DegradationMonitorService) GetRunForUser(ctx context.Context, id int64)
 	run, err := s.repo.GetRun(ctx, id)
 	if err != nil {
 		return nil, err
+	}
+	if run.Status == DegradationRunStatusRunning {
+		return nil, ErrDegradationRunNotFound
 	}
 	monitor, err := s.repo.GetMonitor(ctx, run.MonitorID)
 	if err != nil {

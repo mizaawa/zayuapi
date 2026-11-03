@@ -6,7 +6,7 @@
     :style="{ aspectRatio: `${DEGRADATION_PREVIEW_WIDTH} / ${DEGRADATION_PREVIEW_HEIGHT}` }"
   >
     <iframe
-      v-if="html && mounted"
+      v-if="html && fits"
       :key="frameKey"
       ref="frameRef"
       class="dg-frame-iframe"
@@ -36,27 +36,24 @@ import {
   degradationPreviewFrameURL,
 } from '@/utils/degradationPreview'
 
+/** Plays a generated animation live (detail dialog). Gallery cards use still posters instead. */
 const props = withDefaults(defineProps<{
   /** Extracted HTML document; empty renders the placeholder slot. */
   html: string
   title: string
-  /** Let the pointer and keyboard reach the animation (detail view only). */
+  /** Let the pointer and keyboard reach the animation. */
   interactive?: boolean
-  /** Only mount the frame while it is near the viewport. */
-  lazy?: boolean
 }>(), {
   interactive: false,
-  lazy: true,
 })
 
 const containerRef = ref<HTMLElement | null>(null)
 const frameRef = ref<HTMLIFrameElement | null>(null)
 const frameKey = ref(0)
 const scale = ref(1)
-const visible = ref(!props.lazy)
 const frameURL = degradationPreviewFrameURL()
 const documentHTML = computed(() => buildDegradationPreviewDocument(props.html, { scrollable: props.interactive }))
-const mounted = computed(() => visible.value && documentHTML.value.length <= DEGRADATION_PREVIEW_MAX_LENGTH)
+const fits = computed(() => documentHTML.value.length <= DEGRADATION_PREVIEW_MAX_LENGTH)
 
 const frameStyle = computed(() => ({
   width: `${DEGRADATION_PREVIEW_WIDTH}px`,
@@ -65,7 +62,6 @@ const frameStyle = computed(() => ({
 }))
 
 let resizeObserver: ResizeObserver | null = null
-let intersectionObserver: IntersectionObserver | null = null
 
 function measure() {
   const width = containerRef.value?.clientWidth ?? 0
@@ -93,22 +89,10 @@ onMounted(() => {
     resizeObserver = new ResizeObserver(measure)
     resizeObserver.observe(containerRef.value)
   }
-  if (props.lazy) {
-    if (typeof IntersectionObserver === 'undefined' || !containerRef.value) {
-      visible.value = true
-    } else {
-      // Off-screen animations are unmounted so long galleries stay light.
-      intersectionObserver = new IntersectionObserver((entries) => {
-        visible.value = entries.some((entry) => entry.isIntersecting)
-      }, { rootMargin: '240px 0px' })
-      intersectionObserver.observe(containerRef.value)
-    }
-  }
 })
 
 onBeforeUnmount(() => {
   resizeObserver?.disconnect()
-  intersectionObserver?.disconnect()
 })
 </script>
 

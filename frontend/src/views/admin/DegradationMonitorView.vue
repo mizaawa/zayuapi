@@ -134,7 +134,10 @@
         <div class="card">
           <div class="dgm-card-head">
             <div class="min-w-0">
-              <h2 class="dgm-card-title">{{ t('admin.degradation.config.presetsTitle') }}</h2>
+              <h2 class="dgm-card-title dgm-title-row">
+                {{ t('admin.degradation.config.presetsTitle') }}
+                <span v-if="prompts.length" class="dgm-badge" data-testid="degradation-preset-count">{{ prompts.length }}</span>
+              </h2>
               <p class="dgm-card-hint">{{ t('admin.degradation.config.presetsHint') }}</p>
             </div>
             <button type="button" class="btn btn-secondary btn-sm shrink-0" data-testid="degradation-create-preset" @click="openPrompt(null)">
@@ -143,32 +146,44 @@
             </button>
           </div>
           <p v-if="!prompts.length" class="dgm-card-body text-sm text-gray-500">{{ t('admin.degradation.config.emptyPresets') }}</p>
-          <ul v-else class="dgm-presets" role="radiogroup" :aria-label="t('admin.degradation.config.presetsTitle')">
-            <li v-for="prompt in prompts" :key="prompt.id" class="dgm-preset" :class="{ 'is-default': prompt.id === effectiveDefaultPromptID }" data-testid="degradation-preset">
-              <button
-                type="button"
-                role="radio"
-                class="dgm-preset-select"
-                :aria-checked="prompt.id === effectiveDefaultPromptID"
-                :disabled="savingDefault"
-                :title="t('admin.degradation.config.setDefault')"
-                @click="setDefaultPrompt(prompt.id)"
+          <!-- Five rows stay in view and the rest scroll inside the card; the default preset leads. -->
+          <div v-else ref="presetScroller" class="dgm-presets-scroll" data-testid="degradation-presets-scroll">
+            <TransitionGroup tag="div" name="dgm-preset" class="dgm-presets" role="radiogroup" :aria-label="t('admin.degradation.config.presetsTitle')">
+              <div
+                v-for="prompt in orderedPrompts"
+                :key="prompt.id"
+                class="dgm-preset"
+                :class="{ 'is-default': prompt.id === effectiveDefaultPromptID }"
+                :data-preset-id="prompt.id"
+                data-testid="degradation-preset"
               >
-                <span class="dgm-radio" aria-hidden="true"></span>
-                <span class="dgm-preset-text">
-                  <span class="dgm-preset-name">
-                    {{ prompt.name }}
-                    <span v-if="prompt.id === effectiveDefaultPromptID" class="dgm-badge is-primary">{{ t('admin.degradation.config.defaultPreset') }}</span>
-                    <span v-if="prompt.builtin_key" class="dgm-badge">{{ t('admin.degradation.config.builtin') }}</span>
+                <button
+                  type="button"
+                  role="radio"
+                  class="dgm-preset-select"
+                  :aria-checked="prompt.id === effectiveDefaultPromptID"
+                  :disabled="savingDefault"
+                  :title="t('admin.degradation.config.setDefault')"
+                  @click="setDefaultPrompt(prompt.id)"
+                >
+                  <span class="dgm-preset-body">
+                    <span class="dgm-radio" aria-hidden="true"></span>
+                    <span class="dgm-preset-text">
+                      <span class="dgm-preset-name">
+                        <span class="dgm-preset-label" :title="prompt.name">{{ prompt.name }}</span>
+                        <span v-if="prompt.id === effectiveDefaultPromptID" class="dgm-badge is-primary">{{ t('admin.degradation.config.defaultPreset') }}</span>
+                        <span v-if="prompt.builtin_key" class="dgm-badge">{{ t('admin.degradation.config.builtin') }}</span>
+                      </span>
+                      <span class="dgm-preset-prompt">{{ prompt.prompt }}</span>
+                    </span>
                   </span>
-                  <span class="dgm-preset-prompt">{{ prompt.prompt }}</span>
-                </span>
-              </button>
-              <button type="button" class="dgm-action" :title="t('admin.degradation.config.editPreset')" :aria-label="`${t('admin.degradation.config.editPreset')} ${prompt.name}`" data-testid="degradation-edit-preset" @click="openPrompt(prompt)">
-                <Icon name="edit" size="sm" />
-              </button>
-            </li>
-          </ul>
+                </button>
+                <button type="button" class="dgm-action" :title="t('admin.degradation.config.editPreset')" :aria-label="`${t('admin.degradation.config.editPreset')} ${prompt.name}`" data-testid="degradation-edit-preset" @click="openPrompt(prompt)">
+                  <Icon name="edit" size="sm" />
+                </button>
+              </div>
+            </TransitionGroup>
+          </div>
         </div>
 
         <form class="card" data-testid="degradation-config-form" @submit.prevent="saveConfig">
@@ -228,7 +243,7 @@
       :show="showPromptDialog"
       :prompt="editingPrompt"
       @close="showPromptDialog = false"
-      @saved="loadPrompts"
+      @saved="onPromptSaved"
       @deleted="onPromptDeleted"
     />
 
@@ -293,7 +308,7 @@
   </AppLayout>
 </template>
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { VueDraggable } from 'vue-draggable-plus'
 import { adminAPI } from '@/api/admin'
@@ -353,6 +368,7 @@ const savingDefault = ref(false)
 const sortPlatform = ref<string | null>(null)
 const sortItems = ref<DegradationMonitor[]>([])
 const sortSaving = ref(false)
+const presetScroller = ref<HTMLElement | null>(null)
 let pollTimer: ReturnType<typeof setTimeout> | null = null
 let abortController: AbortController | null = null
 
@@ -395,6 +411,14 @@ const effectiveDefaultPromptID = computed(() => {
   const id = savedConfig.value.default_prompt_id
   if (id > 0 && prompts.value.some((prompt) => prompt.id === id)) return id
   return prompts.value[0]?.id ?? 0
+})
+
+// The default preset leads the list; the others keep their saved order.
+const orderedPrompts = computed(() => {
+  const id = effectiveDefaultPromptID.value
+  const selected = prompts.value.find((prompt) => prompt.id === id)
+  if (!selected) return prompts.value
+  return [selected, ...prompts.value.filter((prompt) => prompt.id !== id)]
 })
 
 const defaultEffortOptions = computed(() => EFFORTS.map((effort) => ({ value: effort, label: t(`degradationCheck.efforts.${effort}`) })))
@@ -533,6 +557,17 @@ function openPrompt(prompt: DegradationPrompt | null) {
   showPromptDialog.value = true
 }
 
+function scrollBehavior(): 'auto' | 'smooth' {
+  return window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth'
+}
+
+// New presets land after the five visible rows, so bring the saved one into view.
+async function onPromptSaved(prompt: DegradationPrompt) {
+  await loadPrompts()
+  await nextTick()
+  presetScroller.value?.querySelector<HTMLElement>(`[data-preset-id="${prompt.id}"]`)?.scrollIntoView({ block: 'nearest', behavior: scrollBehavior() })
+}
+
 async function onPromptDeleted() {
   await Promise.all([loadPrompts(), reload(true)])
 }
@@ -547,6 +582,10 @@ async function setDefaultPrompt(id: number) {
     savedConfig.value = { ...saved }
     configForm.default_prompt_id = saved.default_prompt_id
     appStore.showSuccess(t('admin.degradation.config.saved'))
+    // The new default moves to the top of the list; scroll up to show it there.
+    await nextTick()
+    const scroller = presetScroller.value
+    if (scroller && scroller.scrollTop > 0) scroller.scrollTo({ top: 0, behavior: scrollBehavior() })
   } catch (err: unknown) {
     appStore.showError(extractApiErrorMessage(err, t('admin.degradation.config.saveFailed')))
   } finally {
@@ -929,21 +968,43 @@ onBeforeUnmount(() => {
   color: #7e5600;
 }
 
+.dgm-title-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+/* Rows share one height so the list always ends right after the fifth row. */
+.dgm-presets-scroll {
+  --dgm-preset-row: 5.5rem;
+  --dgm-preset-gap: 0.5rem;
+  --dgm-presets-pad: 1rem;
+  max-height: calc(var(--dgm-presets-pad) + (var(--dgm-preset-row) + var(--dgm-preset-gap)) * 5);
+  margin-bottom: 0.75rem;
+  padding: var(--dgm-presets-pad) 1.25rem 0.5rem;
+  overflow-y: auto;
+}
+
 .dgm-presets {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
-  padding: 1rem 1.25rem 1.25rem;
+  gap: var(--dgm-preset-gap);
 }
 
 .dgm-preset {
   display: flex;
+  height: var(--dgm-preset-row);
+  flex-shrink: 0;
   align-items: center;
   gap: 0.5rem;
   padding: 0.25rem 0.25rem 0.25rem 0;
   border-radius: 1rem;
   background: var(--md-sys-color-surface-container);
   transition: box-shadow 160ms ease, background-color 160ms ease;
+}
+
+.dgm-preset-move {
+  transition: transform 280ms var(--theme-ease-out, ease), box-shadow 160ms ease, background-color 160ms ease;
 }
 
 .dgm-preset.is-default {
@@ -955,9 +1016,9 @@ onBeforeUnmount(() => {
   display: flex;
   min-width: 0;
   flex: 1 1 auto;
-  align-items: flex-start;
-  gap: 0.75rem;
-  padding: 0.625rem 0.75rem;
+  align-self: stretch;
+  align-items: center;
+  padding: 0 0.75rem;
   border-radius: 1rem;
   text-align: left;
 }
@@ -965,6 +1026,14 @@ onBeforeUnmount(() => {
 .dgm-preset-select:focus-visible {
   outline: 2px solid var(--md-sys-color-primary);
   outline-offset: 2px;
+}
+
+.dgm-preset-body {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  align-items: flex-start;
+  gap: 0.75rem;
 }
 
 .dgm-radio {
@@ -986,25 +1055,39 @@ onBeforeUnmount(() => {
 .dgm-preset-text {
   display: flex;
   min-width: 0;
+  flex: 1 1 auto;
   flex-direction: column;
   gap: 0.25rem;
 }
 
 .dgm-preset-name {
   display: flex;
-  flex-wrap: wrap;
+  min-width: 0;
   align-items: center;
   gap: 0.375rem;
   font-size: 0.875rem;
   font-weight: 700;
+  line-height: 1.375rem;
   color: var(--md-sys-color-on-surface);
+}
+
+.dgm-preset-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dgm-preset-name .dgm-badge {
+  flex-shrink: 0;
+  line-height: 1.5;
 }
 
 .dgm-preset-prompt {
   display: -webkit-box;
   overflow: hidden;
   font-size: 0.75rem;
-  line-height: 1.5;
+  line-height: 1.125rem;
   color: var(--md-sys-color-on-surface-variant);
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
@@ -1031,7 +1114,7 @@ onBeforeUnmount(() => {
   .dgm-card-head { padding: 1rem; }
   .dgm-card-body { padding: 1rem; }
   .dgm-card-foot { padding: 0 1rem 1rem; }
-  .dgm-presets { padding: 0.75rem; }
+  .dgm-presets-scroll { --dgm-presets-pad: 0.75rem; padding-inline: 0.75rem; }
   .dgm-toolbar { align-items: stretch; }
   .dgm-tabs { width: 100%; }
   .dgm-tabs .dgm-tab { flex: 1 1 0; justify-content: center; }
@@ -1042,5 +1125,6 @@ onBeforeUnmount(() => {
 @media (prefers-reduced-motion: reduce) {
   .dgm-chevron,
   .dgm-pulse { transition: none; animation: none; }
+  .dgm-preset-move { transition: none; }
 }
 </style>

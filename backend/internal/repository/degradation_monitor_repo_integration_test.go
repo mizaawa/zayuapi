@@ -90,7 +90,7 @@ func TestDegradationMonitorRepositoryLifecycle(t *testing.T) {
 	cost := 0.042
 	require.NoError(t, repo.UpdateRunUsage(ctx, &service.DegradationRun{ID: runIDs[2], InputTokens: 11, OutputTokens: 22, CacheReadTokens: 33, CacheCreationTokens: 4, Cost: &cost, UsageSynced: true}))
 
-	recent, err := repo.ListRecentRuns(ctx, []int64{monitor.ID}, 2)
+	recent, err := repo.ListRecentFinishedRuns(ctx, []int64{monitor.ID}, 2)
 	require.NoError(t, err)
 	require.Len(t, recent[monitor.ID], 2)
 	require.Equal(t, runIDs[2], recent[monitor.ID][0].ID)
@@ -132,6 +132,11 @@ func TestDegradationMonitorRepositoryLifecycle(t *testing.T) {
 	require.Equal(t, int64(2), pruned)
 	running := &service.DegradationRun{MonitorID: monitor.ID, Status: service.DegradationRunStatusRunning, StartedAt: now}
 	require.NoError(t, repo.CreateRun(ctx, running))
+	finishedOnly, err := repo.ListRecentFinishedRuns(ctx, []int64{monitor.ID}, 5)
+	require.NoError(t, err)
+	require.Len(t, finishedOnly[monitor.ID], 2, "a check that is still generating is not listed")
+	require.Equal(t, stale.ID, finishedOnly[monitor.ID][0].ID)
+	require.Equal(t, runIDs[2], finishedOnly[monitor.ID][1].ID)
 	deleted, err := repo.DeleteRuns(ctx, monitor.ID)
 	require.NoError(t, err)
 	require.Equal(t, int64(2), deleted, "an in-progress check is not released")

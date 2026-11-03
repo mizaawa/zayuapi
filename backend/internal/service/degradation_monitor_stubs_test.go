@@ -316,10 +316,15 @@ func (r *memoryDegradationRepo) monitorRuns(monitorID int64) []*DegradationRun {
 	return items
 }
 
-func (r *memoryDegradationRepo) ListRecentRuns(_ context.Context, monitorIDs []int64, perMonitor int) (map[int64][]*DegradationRun, error) {
+func (r *memoryDegradationRepo) ListRecentFinishedRuns(_ context.Context, monitorIDs []int64, perMonitor int) (map[int64][]*DegradationRun, error) {
 	result := map[int64][]*DegradationRun{}
 	for _, id := range monitorIDs {
-		items := r.monitorRuns(id)
+		items := make([]*DegradationRun, 0)
+		for _, item := range r.monitorRuns(id) {
+			if item.Status != DegradationRunStatusRunning {
+				items = append(items, item)
+			}
+		}
 		if len(items) > perMonitor {
 			items = items[:perMonitor]
 		}

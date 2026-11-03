@@ -35,6 +35,10 @@ FRONTEND_CRITICAL_VITEST := \
 	src/views/admin/__tests__/DegradationMonitorView.spec.ts \
 	src/views/user/__tests__/DegradationCheckView.spec.ts \
 	src/utils/__tests__/degradationPreview.spec.ts \
+	src/utils/__tests__/degradationPoster.spec.ts \
+	src/components/degradation/__tests__/DegradationRunPoster.spec.ts \
+	src/components/degradation/__tests__/DegradationRunCard.spec.ts \
+	src/components/degradation/__tests__/DegradationRunDetailDialog.spec.ts \
 	src/i18n/__tests__/degradationLocales.spec.ts \
 	src/i18n/__tests__/localesNoKeyCollision.spec.ts
 

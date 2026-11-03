@@ -329,6 +329,51 @@ func TestDegradationServiceOverviewHidesDisabledAndFeatureOff(t *testing.T) {
 	require.ErrorIs(t, err, ErrDegradationRunNotFound)
 }
 
+func TestDegradationServiceOverviewWaitsForFinishedOutput(t *testing.T) {
+	env := newDegradationTestEnv(true, "")
+	ctx := context.Background()
+	monitor, err := env.svc.CreateMonitor(ctx, DegradationMonitorInput{Name: "Shown", GroupID: 1, Model: "gpt", Enabled: true}, 7)
+	require.NoError(t, err)
+
+	started := time.Date(2026, 11, 3, 8, 0, 0, 0, time.UTC)
+	finished := started.Add(3 * time.Minute)
+	done := &DegradationRun{MonitorID: monitor.ID, Status: DegradationRunStatusSuccess, Output: "<svg></svg>", StartedAt: started, FinishedAt: &finished}
+	require.NoError(t, env.repo.CreateRun(ctx, done))
+	failed := &DegradationRun{MonitorID: monitor.ID, Status: DegradationRunStatusFailed, ErrorMessage: "upstream HTTP 502", StartedAt: started.Add(time.Hour)}
+	require.NoError(t, env.repo.CreateRun(ctx, failed))
+	running := &DegradationRun{MonitorID: monitor.ID, Status: DegradationRunStatusRunning, StartedAt: started.Add(2 * time.Hour)}
+	require.NoError(t, env.repo.CreateRun(ctx, running))
+
+	overview, err := env.svc.Overview(ctx)
+	require.NoError(t, err)
+	require.Len(t, overview.Monitors, 1)
+	runs := overview.Monitors[0].Runs
+	require.Len(t, runs, 2, "a check that is still generating is not listed")
+	require.Equal(t, []int64{failed.ID, done.ID}, []int64{runs[0].ID, runs[1].ID})
+	require.NotNil(t, overview.Monitors[0].LastRunAt)
+	require.True(t, overview.Monitors[0].LastRunAt.Equal(failed.StartedAt), "the latest check is the newest finished one")
+
+	_, err = env.svc.GetRunForUser(ctx, running.ID)
+	require.ErrorIs(t, err, ErrDegradationRunNotFound)
+	detail, err := env.svc.GetRunForUser(ctx, done.ID)
+	require.NoError(t, err)
+	require.Equal(t, "<svg></svg>", detail.Output)
+}
+
+func TestDegradationServiceOverviewWithoutFinishedResults(t *testing.T) {
+	env := newDegradationTestEnv(true, "")
+	ctx := context.Background()
+	monitor, err := env.svc.CreateMonitor(ctx, DegradationMonitorInput{Name: "First", GroupID: 1, Model: "gpt", Enabled: true}, 7)
+	require.NoError(t, err)
+	require.NoError(t, env.repo.CreateRun(ctx, &DegradationRun{MonitorID: monitor.ID, Status: DegradationRunStatusRunning, StartedAt: time.Now()}))
+
+	overview, err := env.svc.Overview(ctx)
+	require.NoError(t, err)
+	require.Len(t, overview.Monitors, 1)
+	require.Empty(t, overview.Monitors[0].Runs)
+	require.Nil(t, overview.Monitors[0].LastRunAt, "an unfinished first check does not count as checked")
+}
+
 func TestDegradationServiceStorageStatsAndRelease(t *testing.T) {
 	env := newDegradationTestEnv(true, "")
 	ctx := context.Background()

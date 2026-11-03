@@ -81,6 +81,14 @@ const prompts: DegradationPrompt[] = [
   { id: 2, name: 'Clock', prompt: 'draw a clock', builtin_key: 'clock', sort_order: 20, created_at: '', updated_at: '' },
 ]
 
+function preset(id: number): DegradationPrompt {
+  return { id, name: `Preset ${id}`, prompt: `draw ${id}`, builtin_key: '', sort_order: id * 10, created_at: '', updated_at: '' }
+}
+
+function presetNames(wrapper: VueWrapper): string[] {
+  return wrapper.findAll('[data-testid="degradation-preset"]').map((item) => item.get('.dgm-preset-label').text())
+}
+
 const wrappers: VueWrapper[] = []
 
 function mountView(): VueWrapper {
@@ -182,6 +190,8 @@ describe('DegradationMonitorView', () => {
     await presets[1].get('.dgm-preset-select').trigger('click')
     await flushPromises()
     expect(degradationAPI.updateConfig).toHaveBeenLastCalledWith({ ...config, default_prompt_id: 2 })
+    expect(presetNames(wrapper)).toEqual(['Clock', 'Pelican'])
+    expect(wrapper.findAll('[data-testid="degradation-preset"]')[0].classes()).toContain('is-default')
 
     expect(wrapper.get('[data-testid="degradation-config-save"]').attributes('disabled')).toBeDefined()
     await wrapper.get('[data-testid="degradation-config-timeout"]').setValue('25')
@@ -194,6 +204,53 @@ describe('DegradationMonitorView', () => {
       max_display_per_group: 40,
       default_prompt_id: 2,
     })
+  })
+
+  it('lists the default preset first and scrolls back up when another becomes default', async () => {
+    degradationAPI.listPrompts.mockResolvedValue([1, 2, 3, 4, 5, 6, 7, 8].map(preset))
+    degradationAPI.listMonitors.mockResolvedValue({ items: [], config: { ...config, default_prompt_id: 6 }, enabled: true })
+    const wrapper = mountView()
+    await flushPromises()
+    await wrapper.get('[data-testid="degradation-tab-config"]').trigger('click')
+
+    expect(presetNames(wrapper)).toEqual(['Preset 6', 'Preset 1', 'Preset 2', 'Preset 3', 'Preset 4', 'Preset 5', 'Preset 7', 'Preset 8'])
+    expect(wrapper.get('[data-testid="degradation-preset-count"]').text()).toBe('8')
+
+    const scroller = wrapper.get('[data-testid="degradation-presets-scroll"]').element as HTMLElement
+    const scrollTo = vi.fn()
+    Object.defineProperty(scroller, 'scrollTop', { configurable: true, value: 320 })
+    scroller.scrollTo = scrollTo as unknown as HTMLElement['scrollTo']
+    await wrapper.findAll('[data-testid="degradation-preset"]')[7].get('.dgm-preset-select').trigger('click')
+    await flushPromises()
+
+    expect(degradationAPI.updateConfig).toHaveBeenLastCalledWith({ ...config, default_prompt_id: 8 })
+    expect(presetNames(wrapper)).toEqual(['Preset 8', 'Preset 1', 'Preset 2', 'Preset 3', 'Preset 4', 'Preset 5', 'Preset 6', 'Preset 7'])
+    expect(wrapper.findAll('[data-testid="degradation-preset"]')[0].classes()).toContain('is-default')
+    expect(scrollTo).toHaveBeenCalledWith(expect.objectContaining({ top: 0 }))
+  })
+
+  it('scrolls a saved preset into view', async () => {
+    const original = Object.getOwnPropertyDescriptor(Element.prototype, 'scrollIntoView')
+    const scrollIntoView = vi.fn()
+    Object.defineProperty(Element.prototype, 'scrollIntoView', { configurable: true, writable: true, value: scrollIntoView })
+    try {
+      const wrapper = mountView()
+      await flushPromises()
+      await wrapper.get('[data-testid="degradation-tab-config"]').trigger('click')
+
+      const created = preset(3)
+      degradationAPI.listPrompts.mockResolvedValue([...prompts, created])
+      wrapper.findComponent({ name: 'DegradationPromptDialog' }).vm.$emit('saved', created)
+      await flushPromises()
+
+      expect(presetNames(wrapper)).toEqual(['Pelican', 'Clock', 'Preset 3'])
+      expect(scrollIntoView).toHaveBeenCalledTimes(1)
+      expect(scrollIntoView).toHaveBeenCalledWith(expect.objectContaining({ block: 'nearest' }))
+      expect((scrollIntoView.mock.contexts[0] as HTMLElement).dataset.presetId).toBe('3')
+    } finally {
+      if (original) Object.defineProperty(Element.prototype, 'scrollIntoView', original)
+      else delete (Element.prototype as Partial<Element>).scrollIntoView
+    }
   })
 
   it('warns when the feature switch is off', async () => {

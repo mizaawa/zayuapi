@@ -1,6 +1,5 @@
 <template>
   <article
-    ref="cardRef"
     class="dg-card"
     :class="`is-${run.status}`"
     data-testid="degradation-run-card"
@@ -12,37 +11,16 @@
       @click="emit('open', run.id)"
     >
       <div class="dg-card-stage">
-        <DegradationPreviewFrame
-          v-if="run.status === 'success' && html"
-          :html="html"
+        <!-- A still poster; the animation itself only plays in the detail dialog. -->
+        <DegradationRunPoster
+          v-if="run.status === 'success'"
+          :run="run"
           :title="`${title} · ${timeLabel}`"
         />
-        <div v-else class="dg-card-placeholder" :class="placeholderTone">
-          <template v-if="run.status === 'running'">
-            <span class="dg-spinner" aria-hidden="true"></span>
-            <span class="dg-placeholder-title">{{ t('degradationCheck.status.running') }}</span>
-          </template>
-          <template v-else-if="run.status === 'failed'">
-            <Icon name="exclamationTriangle" size="lg" />
-            <span class="dg-placeholder-title">{{ t('degradationCheck.status.failed') }}</span>
-            <span v-if="run.error_message" class="dg-placeholder-text">{{ run.error_message }}</span>
-          </template>
-          <template v-else-if="loadError">
-            <Icon name="exclamationCircle" size="lg" />
-            <span class="dg-placeholder-title">{{ t('degradationCheck.animationError') }}</span>
-          </template>
-          <template v-else-if="loaded">
-            <Icon name="document" size="lg" />
-            <span class="dg-placeholder-title">{{ t('degradationCheck.noAnimation') }}</span>
-          </template>
-          <template v-else>
-            <span class="dg-spinner is-soft" aria-hidden="true"></span>
-            <span class="dg-placeholder-text">{{ t('degradationCheck.loadingAnimation') }}</span>
-          </template>
+        <div v-else class="dg-card-placeholder is-failed">
+          <Icon name="exclamationTriangle" size="lg" />
+          <span class="dg-placeholder-title">{{ t('degradationCheck.status.failed') }}</span>
         </div>
-        <span v-if="run.status !== 'success'" class="dg-card-status" :class="`is-${run.status}`">
-          {{ t(`degradationCheck.status.${run.status}`) }}
-        </span>
       </div>
       <dl class="dg-card-meta">
         <div class="dg-card-meta-row">
@@ -63,13 +41,11 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { DegradationRun } from '@/api/degradation'
 import Icon from '@/components/icons/Icon.vue'
-import DegradationPreviewFrame from './DegradationPreviewFrame.vue'
-import { loadDegradationRun } from '@/composables/useDegradationRuns'
-import { extractDegradationHTML } from '@/utils/degradationPreview'
+import DegradationRunPoster from './DegradationRunPoster.vue'
 import { formatDate, formatDateTime, formatReasoningEffort } from '@/utils/format'
 
 const props = defineProps<{
@@ -82,12 +58,6 @@ const emit = defineEmits<{
 }>()
 
 const { t } = useI18n()
-const cardRef = ref<HTMLElement | null>(null)
-const html = ref('')
-const loaded = ref(false)
-const loadError = ref(false)
-let observer: IntersectionObserver | null = null
-let requested = false
 
 const modelLabel = computed(() => props.run.response_model || props.run.model || '-')
 const effortLabel = computed(() => formatReasoningEffort(props.run.reasoning_effort) === '-'
@@ -96,46 +66,6 @@ const effortLabel = computed(() => formatReasoningEffort(props.run.reasoning_eff
 const timestamp = computed(() => props.run.finished_at || props.run.started_at)
 const timeLabel = computed(() => formatDate(timestamp.value, { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false }))
 const fullTimeLabel = computed(() => formatDateTime(timestamp.value))
-const placeholderTone = computed(() => ({
-  'is-failed': props.run.status === 'failed' || loadError.value,
-  'is-running': props.run.status === 'running',
-}))
-
-async function loadDocument() {
-  if (requested || props.run.status !== 'success') return
-  requested = true
-  try {
-    const detail = await loadDegradationRun(props.run.id)
-    html.value = extractDegradationHTML(detail.output)
-    loadError.value = false
-  } catch {
-    loadError.value = true
-    requested = false
-  } finally {
-    loaded.value = true
-  }
-}
-
-watch(() => [props.run.id, props.run.status] as const, () => {
-  requested = false
-  loaded.value = false
-  loadError.value = false
-  html.value = ''
-  if (!observer) void loadDocument()
-})
-
-onMounted(() => {
-  if (typeof IntersectionObserver === 'undefined' || !cardRef.value) {
-    void loadDocument()
-    return
-  }
-  observer = new IntersectionObserver((entries) => {
-    if (entries.some((entry) => entry.isIntersecting)) void loadDocument()
-  }, { rootMargin: '320px 0px' })
-  observer.observe(cardRef.value)
-})
-
-onBeforeUnmount(() => observer?.disconnect())
 </script>
 
 <style scoped>
@@ -200,46 +130,6 @@ onBeforeUnmount(() => observer?.disconnect())
   font-weight: 650;
 }
 
-.dg-placeholder-text {
-  display: -webkit-box;
-  max-width: 100%;
-  overflow: hidden;
-  font-size: 0.6875rem;
-  line-height: 1.35;
-  word-break: break-word;
-  -webkit-line-clamp: 3;
-  -webkit-box-orient: vertical;
-}
-
-.dg-card-status {
-  position: absolute;
-  top: 0.5rem;
-  right: 0.5rem;
-  padding: 0.125rem 0.5rem;
-  border-radius: 999px;
-  font-size: 0.6875rem;
-  font-weight: 650;
-  background: rgb(255 254 248 / 0.92);
-  box-shadow: 0 1px 2px rgb(63 52 32 / 0.12);
-}
-
-.dg-card-status.is-failed { color: #b4513d; }
-.dg-card-status.is-running { color: #7e5600; }
-
-.dg-spinner {
-  width: 1.5rem;
-  height: 1.5rem;
-  border: 2.5px solid rgb(233 184 36 / 0.3);
-  border-top-color: var(--md-sys-color-primary);
-  border-radius: 999px;
-  animation: dg-spin 0.9s linear infinite;
-}
-
-.dg-spinner.is-soft {
-  width: 1.125rem;
-  height: 1.125rem;
-}
-
 .dg-card-meta {
   display: grid;
   gap: 0.25rem;
@@ -283,13 +173,8 @@ onBeforeUnmount(() => observer?.disconnect())
   font-size: 0.6875rem;
 }
 
-@keyframes dg-spin {
-  to { transform: rotate(360deg); }
-}
-
 @media (prefers-reduced-motion: reduce) {
   .dg-card,
   .dg-card:hover { transform: none; transition: none; }
-  .dg-spinner { animation-duration: 2.4s; }
 }
 </style>

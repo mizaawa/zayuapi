@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { DegradationOverview, DegradationRun, DegradationUserMonitor } from '@/api/degradation'
 import enCommon from '@/i18n/locales/en/common'
 import enDegradation from '@/i18n/locales/en/degradation'
+import { degradationPosterQueue } from '@/utils/degradationPoster'
 import DegradationCheckView from '@/views/user/DegradationCheckView.vue'
 
 const { getOverview } = vi.hoisted(() => ({ getOverview: vi.fn() }))
@@ -28,6 +29,7 @@ const CardStub = defineComponent({
 })
 const DetailStub = defineComponent({
   props: { runId: { type: Number, default: null }, title: { type: String, default: '' } },
+  emits: ['close'],
   template: '<div class="detail-stub" :data-run="runId">{{ title }}</div>',
 })
 
@@ -36,26 +38,12 @@ function makeRun(id: number, overrides: Partial<DegradationRun> = {}): Degradati
     id,
     monitor_id: 1,
     status: 'success',
-    trigger_source: 'schedule',
     model: 'gpt-5.5',
     response_model: '',
     reasoning_effort: 'high',
     protocol: 'openai_responses',
     prompt_name: 'Pelican',
-    output_bytes: 1024,
-    error_message: '',
-    attempts: 1,
-    first_token_ms: 1200,
     duration_ms: 30000,
-    input_tokens: 10,
-    output_tokens: 20,
-    cache_read_tokens: 0,
-    cache_creation_tokens: 0,
-    reasoning_tokens: 0,
-    total_tokens: 30,
-    cache_rate: null,
-    cost: 0.01,
-    usage_synced: true,
     started_at: '2026-11-03T08:00:00Z',
     finished_at: '2026-11-03T08:01:00Z',
     ...overrides,
@@ -146,6 +134,37 @@ describe('DegradationCheckView', () => {
     await wrapper.get('.run-card[data-run="8"]').trigger('click')
     expect(wrapper.get('.detail-stub').attributes('data-run')).toBe('8')
     expect(wrapper.get('.detail-stub').text()).toBe('Monitor 1')
+  })
+
+  it('never shows a check that is still generating', async () => {
+    getOverview.mockResolvedValue({
+      enabled: true,
+      display_limit: 25,
+      monitors: [makeMonitor(1, 'openai', [makeRun(3, { status: 'running', finished_at: null }), makeRun(2, { status: 'failed' }), makeRun(1)])],
+    })
+    const wrapper = mountView()
+    await flushPromises()
+
+    expect(wrapper.findAll('.run-card').map((card) => card.attributes('data-run'))).toEqual(['2', '1'])
+  })
+
+  it('holds poster rendering while the detail dialog plays', async () => {
+    getOverview.mockResolvedValue({ enabled: true, display_limit: 25, monitors: [makeMonitor(1, 'openai', [makeRun(9)])] })
+    const pause = vi.spyOn(degradationPosterQueue, 'pause')
+    const resume = vi.spyOn(degradationPosterQueue, 'resume')
+    try {
+      const wrapper = mountView()
+      await flushPromises()
+
+      await wrapper.get('.run-card[data-run="9"]').trigger('click')
+      expect(pause).toHaveBeenCalledTimes(1)
+      wrapper.findComponent(DetailStub).vm.$emit('close')
+      await flushPromises()
+      expect(resume).toHaveBeenCalledTimes(1)
+    } finally {
+      pause.mockRestore()
+      resume.mockRestore()
+    }
   })
 
   it('explains when the feature is disabled or nothing is configured', async () => {

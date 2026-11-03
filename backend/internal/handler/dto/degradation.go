@@ -77,6 +77,53 @@ func DegradationRunFromService(run *service.DegradationRun, withBody bool) Degra
 	return out
 }
 
+// DegradationUserRun is the read-only result shown to users. Failure reasons,
+// retry counts, latency to the first token, token usage and cost stay on the
+// admin side, and the generated document is only returned for a successful
+// check.
+type DegradationUserRun struct {
+	ID              int64   `json:"id"`
+	MonitorID       int64   `json:"monitor_id"`
+	Status          string  `json:"status"`
+	Model           string  `json:"model"`
+	ResponseModel   string  `json:"response_model"`
+	ReasoningEffort string  `json:"reasoning_effort"`
+	Protocol        string  `json:"protocol"`
+	PromptName      string  `json:"prompt_name"`
+	Prompt          *string `json:"prompt,omitempty"`
+	Output          *string `json:"output,omitempty"`
+	DurationMs      *int    `json:"duration_ms"`
+	StartedAt       string  `json:"started_at"`
+	FinishedAt      *string `json:"finished_at"`
+}
+
+// DegradationUserRunFromService maps a result for users. withBody adds the
+// prompt, plus the document when the check succeeded.
+func DegradationUserRunFromService(run *service.DegradationRun, withBody bool) DegradationUserRun {
+	out := DegradationUserRun{
+		ID:              run.ID,
+		MonitorID:       run.MonitorID,
+		Status:          run.Status,
+		Model:           run.Model,
+		ResponseModel:   run.ResponseModel,
+		ReasoningEffort: run.ReasoningEffort,
+		Protocol:        run.Protocol,
+		PromptName:      run.PromptName,
+		DurationMs:      run.DurationMs,
+		StartedAt:       run.StartedAt.UTC().Format(time.RFC3339),
+		FinishedAt:      formatOptionalRFC3339(run.FinishedAt),
+	}
+	if withBody {
+		prompt := run.Prompt
+		out.Prompt = &prompt
+		if run.Status == service.DegradationRunStatusSuccess {
+			output := run.Output
+			out.Output = &output
+		}
+	}
+	return out
+}
+
 // DegradationPrompt is a prompt preset.
 type DegradationPrompt struct {
 	ID         int64  `json:"id"`

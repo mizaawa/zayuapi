@@ -85,6 +85,24 @@ export interface DegradationStorageStats {
   bytes: number
 }
 
+/** A stored result with the diagnostics only administrators see. */
+export interface DegradationAdminRun extends DegradationRun {
+  trigger_source: 'schedule' | 'manual' | string
+  output_bytes: number
+  error_message: string
+  attempts: number
+  first_token_ms: number | null
+  input_tokens: number
+  output_tokens: number
+  cache_read_tokens: number
+  cache_creation_tokens: number
+  reasoning_tokens: number
+  total_tokens: number
+  cache_rate: number | null
+  cost: number | null
+  usage_synced: boolean
+}
+
 export async function listMonitors(options?: { signal?: AbortSignal }): Promise<DegradationMonitorList> {
   const { data } = await apiClient.get<DegradationMonitorList>('/admin/degradation/monitors', { signal: options?.signal })
   return data
@@ -122,8 +140,8 @@ export async function releaseStorage(id: number): Promise<{ deleted: number }> {
   return data
 }
 
-export async function getRun(id: number): Promise<DegradationRun> {
-  const { data } = await apiClient.get<DegradationRun>(`/admin/degradation/runs/${id}`)
+export async function getRun(id: number): Promise<DegradationAdminRun> {
+  const { data } = await apiClient.get<DegradationAdminRun>(`/admin/degradation/runs/${id}`)
   return data
 }
 

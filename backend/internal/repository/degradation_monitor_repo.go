@@ -405,15 +405,18 @@ func (r *degradationMonitorRepository) GetRun(ctx context.Context, id int64) (*s
 	return &run, nil
 }
 
-func (r *degradationMonitorRepository) ListRecentRuns(ctx context.Context, monitorIDs []int64, perMonitor int) (map[int64][]*service.DegradationRun, error) {
+// ListRecentFinishedRuns returns the latest finished results per monitor. A
+// check that is still generating is left out until its output is complete.
+func (r *degradationMonitorRepository) ListRecentFinishedRuns(ctx context.Context, monitorIDs []int64, perMonitor int) (map[int64][]*service.DegradationRun, error) {
 	result := make(map[int64][]*service.DegradationRun, len(monitorIDs))
 	if len(monitorIDs) == 0 || perMonitor <= 0 {
 		return result, nil
 	}
 	rows, err := r.sql.QueryContext(ctx, `SELECT `+degradationRunSummaryColumns+` FROM (
 			SELECT r.*, ROW_NUMBER() OVER (PARTITION BY r.monitor_id ORDER BY r.id DESC) AS position
-			FROM degradation_runs r WHERE r.monitor_id = ANY($1)
-		) ranked WHERE position <= $2 ORDER BY monitor_id, id DESC`, pq.Array(monitorIDs), perMonitor)
+			FROM degradation_runs r WHERE r.monitor_id = ANY($1) AND r.status <> $3
+		) ranked WHERE position <= $2 ORDER BY monitor_id, id DESC`,
+		pq.Array(monitorIDs), perMonitor, service.DegradationRunStatusRunning)
 	if err != nil {
 		return nil, err
 	}

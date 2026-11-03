@@ -57,16 +57,19 @@ export function extractDegradationHTML(output: string | null | undefined): strin
 /**
  * Wraps the generated markup with a restrictive CSP and neutral base styles.
  * The shell already applies an equivalent CSP header; the meta tag is a
- * second layer in case the shell is ever served without it.
+ * second layer in case the shell is ever served without it. `script` runs
+ * before the generated markup (the poster runtime uses it).
  */
-export function buildDegradationPreviewDocument(html: string, options: { scrollable?: boolean } = {}): string {
+export function buildDegradationPreviewDocument(html: string, options: { scrollable?: boolean; script?: string } = {}): string {
   const overflow = options.scrollable ? 'auto' : 'hidden'
+  const script = options.script ? `<script>${options.script.replace(/<\/(script)/gi, '<\\/$1')}</script>` : ''
   return (
     '<!doctype html><html><head><meta charset="utf-8">' +
     `<meta http-equiv="Content-Security-Policy" content="${PREVIEW_POLICY}">` +
     '<meta name="referrer" content="no-referrer">' +
     `<meta name="viewport" content="width=${DEGRADATION_PREVIEW_WIDTH}, initial-scale=1">` +
     `<style>html,body{margin:0;min-height:100%;overflow:${overflow};}svg{max-width:100%;}</style>` +
+    script +
     `</head><body>${html}</body></html>`
   )
 }

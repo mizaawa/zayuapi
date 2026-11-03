@@ -44,16 +44,16 @@ func NewDegradationUserHandler(svc *service.DegradationMonitorService) *Degradat
 }
 
 type degradationUserMonitorResponse struct {
-	ID              int64                `json:"id"`
-	Name            string               `json:"name"`
-	GroupName       string               `json:"group_name"`
-	Platform        string               `json:"platform"`
-	Model           string               `json:"model"`
-	Protocol        string               `json:"protocol"`
-	ReasoningEffort string               `json:"reasoning_effort"`
-	IntervalMinutes int                  `json:"interval_minutes"`
-	LastRunAt       *string              `json:"last_run_at"`
-	Runs            []dto.DegradationRun `json:"runs"`
+	ID              int64                    `json:"id"`
+	Name            string                   `json:"name"`
+	GroupName       string                   `json:"group_name"`
+	Platform        string                   `json:"platform"`
+	Model           string                   `json:"model"`
+	Protocol        string                   `json:"protocol"`
+	ReasoningEffort string                   `json:"reasoning_effort"`
+	IntervalMinutes int                      `json:"interval_minutes"`
+	LastRunAt       *string                  `json:"last_run_at"`
+	Runs            []dto.DegradationUserRun `json:"runs"`
 }
 
 // Overview GET /api/v1/degradation/overview
@@ -65,9 +65,9 @@ func (h *DegradationUserHandler) Overview(c *gin.Context) {
 	}
 	monitors := make([]degradationUserMonitorResponse, 0, len(overview.Monitors))
 	for _, monitor := range overview.Monitors {
-		runs := make([]dto.DegradationRun, 0, len(monitor.Runs))
+		runs := make([]dto.DegradationUserRun, 0, len(monitor.Runs))
 		for _, run := range monitor.Runs {
-			runs = append(runs, dto.DegradationRunFromService(run, false))
+			runs = append(runs, dto.DegradationUserRunFromService(run, false))
 		}
 		item := degradationUserMonitorResponse{
 			ID:              monitor.ID,
@@ -105,7 +105,7 @@ func (h *DegradationUserHandler) GetRun(c *gin.Context) {
 		response.ErrorFrom(c, err)
 		return
 	}
-	response.Success(c, dto.DegradationRunFromService(run, true))
+	response.Success(c, dto.DegradationUserRunFromService(run, true))
 }
 
 // PreviewFrame GET /api/v1/degradation/preview-frame

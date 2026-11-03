@@ -7,11 +7,14 @@ import type { DegradationEffort, DegradationProtocol, DegradationRunStatus } fro
 
 export type { DegradationEffort, DegradationProtocol, DegradationRunStatus } from './admin/degradation'
 
+/**
+ * A finished check as users see it. Checks still generating are never listed,
+ * and failure reasons, retries, token usage and cost stay on the admin side.
+ */
 export interface DegradationRun {
   id: number
   monitor_id: number
   status: DegradationRunStatus
-  trigger_source: 'schedule' | 'manual' | string
   model: string
   response_model: string
   reasoning_effort: DegradationEffort | ''
@@ -19,22 +22,9 @@ export interface DegradationRun {
   prompt_name: string
   /** Present on detail reads only. */
   prompt?: string
-  /** The generated document. Present on detail reads only. */
+  /** The generated document. Present on detail reads of successful checks only. */
   output?: string
-  output_bytes: number
-  error_message: string
-  attempts: number
-  first_token_ms: number | null
   duration_ms: number | null
-  input_tokens: number
-  output_tokens: number
-  cache_read_tokens: number
-  cache_creation_tokens: number
-  reasoning_tokens: number
-  total_tokens: number
-  cache_rate: number | null
-  cost: number | null
-  usage_synced: boolean
   started_at: string
   finished_at: string | null
 }

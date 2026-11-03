@@ -8,20 +8,16 @@
     <div v-else-if="run" class="dg-detail" data-testid="degradation-run-detail">
       <section class="dg-detail-stage-wrap" :aria-label="t('degradationCheck.detail.animation')">
         <div class="dg-detail-stage">
+          <!-- The only place the animation plays; gallery cards show still posters. -->
           <DegradationPreviewFrame
             v-if="html"
             ref="frameRef"
             :html="html"
             :title="dialogTitle"
             interactive
-            :lazy="false"
           />
           <div v-else class="dg-detail-empty">
-            <template v-if="run.status === 'running'">
-              <span class="dg-detail-spinner" aria-hidden="true"></span>
-              <strong>{{ t('degradationCheck.status.running') }}</strong>
-            </template>
-            <template v-else-if="run.status === 'failed'">
+            <template v-if="run.status === 'failed'">
               <Icon name="exclamationTriangle" size="xl" />
               <strong>{{ t('degradationCheck.status.failed') }}</strong>
             </template>
@@ -38,7 +34,7 @@
             {{ t('degradationCheck.detail.sandboxHint') }}
           </span>
           <div class="dg-detail-actions">
-            <button type="button" class="btn btn-secondary btn-sm" :disabled="!html" @click="replay">
+            <button type="button" class="btn btn-secondary btn-sm" :disabled="!html" data-testid="degradation-replay" @click="replay">
               <Icon name="refresh" size="sm" />
               {{ t('degradationCheck.detail.replay') }}
             </button>
@@ -72,10 +68,6 @@
             <dd>{{ effortLabel }}</dd>
           </div>
           <div class="dg-detail-item">
-            <dt>{{ t('degradationCheck.detail.firstToken') }}</dt>
-            <dd class="is-num">{{ formatDegradationDuration(run.first_token_ms) }}</dd>
-          </div>
-          <div class="dg-detail-item">
             <dt>{{ t('degradationCheck.detail.duration') }}</dt>
             <dd class="is-num">{{ formatDegradationDuration(run.duration_ms) }}</dd>
           </div>
@@ -83,31 +75,7 @@
             <dt>{{ t('degradationCheck.detail.protocol') }}</dt>
             <dd>{{ protocolLabel }}</dd>
           </div>
-          <div class="dg-detail-item">
-            <dt>{{ t('degradationCheck.detail.tokens') }}</dt>
-            <dd class="is-num">
-              {{ formatNumberLocaleString(run.total_tokens) }}
-              <small>{{ tokenBreakdown }}</small>
-            </dd>
-          </div>
-          <div class="dg-detail-item">
-            <dt>{{ t('degradationCheck.detail.cacheRate') }}</dt>
-            <dd class="is-num">{{ cacheRateLabel }}</dd>
-          </div>
-          <div class="dg-detail-item">
-            <dt>{{ t('degradationCheck.detail.cost') }}</dt>
-            <dd class="is-num">{{ costLabel }}</dd>
-          </div>
-          <div v-if="run.attempts > 1" class="dg-detail-item">
-            <dt>{{ t('degradationCheck.detail.attempts') }}</dt>
-            <dd class="is-num">{{ run.attempts }}</dd>
-          </div>
         </dl>
-
-        <div v-if="run.status === 'failed' && run.error_message" class="dg-detail-block is-error">
-          <h4>{{ t('degradationCheck.detail.error') }}</h4>
-          <p>{{ run.error_message }}</p>
-        </div>
 
         <div class="dg-detail-block">
           <h4>
@@ -115,14 +83,6 @@
             <span v-if="run.prompt_name" class="dg-detail-preset">{{ run.prompt_name }}</span>
           </h4>
           <p class="dg-detail-prompt">{{ run.prompt || '-' }}</p>
-        </div>
-
-        <div v-if="codeText" class="dg-detail-block">
-          <button type="button" class="dg-detail-code-toggle" :aria-expanded="showCode" @click="showCode = !showCode">
-            <span>{{ t('degradationCheck.detail.code') }}</span>
-            <span class="dg-detail-code-hint">{{ showCode ? t('degradationCheck.detail.hideCode') : t('degradationCheck.detail.showCode') }}</span>
-          </button>
-          <pre v-if="showCode" class="dg-detail-code" tabindex="0"><code>{{ codeText }}</code></pre>
         </div>
       </aside>
     </div>
@@ -148,7 +108,7 @@ import { loadDegradationRun } from '@/composables/useDegradationRuns'
 import { useClipboard } from '@/composables/useClipboard'
 import { extractDegradationHTML, formatDegradationDuration } from '@/utils/degradationPreview'
 import { extractApiErrorMessage } from '@/utils/apiError'
-import { formatCurrency, formatDateTime, formatNumberLocaleString } from '@/utils/format'
+import { formatDateTime } from '@/utils/format'
 
 const props = defineProps<{
   runId: number | null
@@ -164,12 +124,12 @@ const { copyToClipboard } = useClipboard()
 const run = ref<DegradationRun | null>(null)
 const loading = ref(false)
 const error = ref('')
-const showCode = ref(false)
 const frameRef = ref<InstanceType<typeof DegradationPreviewFrame> | null>(null)
 let generation = 0
 
 const html = computed(() => (run.value?.status === 'success' ? extractDegradationHTML(run.value.output) : ''))
-const codeText = computed(() => html.value || run.value?.output || '')
+// Only successful checks carry a document, so there is never anything to copy for a failure.
+const codeText = computed(() => (run.value?.status === 'success' ? html.value || run.value.output || '' : ''))
 const dialogTitle = computed(() => (props.title ? `${t('degradationCheck.detail.title')} · ${props.title}` : t('degradationCheck.detail.title')))
 const generatedAt = computed(() => formatDateTime(run.value?.finished_at || run.value?.started_at) || '-')
 const effortLabel = computed(() => {
@@ -183,19 +143,6 @@ const protocolLabel = computed(() => {
   if (!protocol) return '-'
   const key = `degradationCheck.protocols.${protocol}`
   return te(key) ? t(key) : protocol
-})
-const tokenBreakdown = computed(() => t('degradationCheck.detail.tokenBreakdown', {
-  input: formatNumberLocaleString(run.value?.input_tokens ?? 0),
-  output: formatNumberLocaleString(run.value?.output_tokens ?? 0),
-  cache: formatNumberLocaleString((run.value?.cache_read_tokens ?? 0) + (run.value?.cache_creation_tokens ?? 0)),
-}))
-const cacheRateLabel = computed(() => {
-  const rate = run.value?.cache_rate
-  return rate === null || rate === undefined ? '-' : `${(rate * 100).toFixed(1)}%`
-})
-const costLabel = computed(() => {
-  const cost = run.value?.cost
-  return cost === null || cost === undefined ? '-' : formatCurrency(cost)
 })
 
 async function load(id: number) {
@@ -225,7 +172,6 @@ async function copyCode() {
 
 watch(() => props.runId, (id) => {
   run.value = null
-  showCode.value = false
   if (id !== null) void load(id)
   else generation += 1
 }, { immediate: true })
@@ -334,14 +280,6 @@ watch(() => props.runId, (id) => {
   color: var(--md-sys-color-on-surface);
 }
 
-.dg-detail-item dd small {
-  display: block;
-  margin-top: 0.125rem;
-  font-size: 0.6875rem;
-  font-weight: 500;
-  color: var(--md-sys-color-on-surface-variant);
-}
-
 .dg-detail-item dd.is-mono {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 0.8125rem;
@@ -358,15 +296,6 @@ watch(() => props.runId, (id) => {
   font-size: 0.8125rem;
   font-weight: 700;
   color: var(--md-sys-color-on-surface);
-}
-
-.dg-detail-block.is-error p {
-  padding: 0.625rem 0.75rem;
-  border-radius: 0.875rem;
-  background: #fdf1ec;
-  color: #7f3424;
-  font-size: 0.8125rem;
-  overflow-wrap: anywhere;
 }
 
 .dg-detail-preset {
@@ -388,38 +317,6 @@ watch(() => props.runId, (id) => {
   line-height: 1.6;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
-}
-
-.dg-detail-code-toggle {
-  display: flex;
-  width: 100%;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem;
-  padding: 0.5rem 0.75rem;
-  border-radius: 0.875rem;
-  background: var(--md-sys-color-surface-container);
-  font-size: 0.8125rem;
-  font-weight: 700;
-}
-
-.dg-detail-code-hint {
-  font-size: 0.75rem;
-  font-weight: 500;
-  color: var(--md-sys-color-on-surface-variant);
-}
-
-.dg-detail-code {
-  max-height: 18rem;
-  margin-top: 0.5rem;
-  overflow: auto;
-  padding: 0.75rem;
-  border-radius: 0.875rem;
-  background: #2b2416;
-  color: #fdf6dc;
-  font-size: 0.75rem;
-  line-height: 1.5;
-  white-space: pre;
 }
 
 .dg-detail-loading,

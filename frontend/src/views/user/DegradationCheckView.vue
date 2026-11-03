@@ -107,7 +107,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, reactive, ref, type ComponentPublicInstance } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch, type ComponentPublicInstance } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { getOverview, type DegradationOverview, type DegradationUserMonitor } from '@/api/degradation'
 import AppLayout from '@/components/layout/AppLayout.vue'
@@ -117,6 +117,7 @@ import DegradationRunCard from '@/components/degradation/DegradationRunCard.vue'
 import DegradationRunDetailDialog from '@/components/degradation/DegradationRunDetailDialog.vue'
 import { useAppStore } from '@/stores/app'
 import { extractApiErrorMessage } from '@/utils/apiError'
+import { degradationPosterQueue } from '@/utils/degradationPoster'
 import {
   DEGRADATION_PLATFORM_ORDER,
   degradationColumnsForWidth,
@@ -156,7 +157,8 @@ const platforms = computed<PlatformSection[]>(() => {
   for (const monitor of overview.value?.monitors ?? []) {
     const key = degradationPlatformKey(monitor.platform)
     const list = groups.get(key) ?? []
-    list.push(monitor)
+    // A check only shows up once its output is complete.
+    list.push({ ...monitor, runs: monitor.runs.filter((run) => run.status !== 'running') })
     groups.set(key, list)
   }
   const order = [...DEGRADATION_PLATFORM_ORDER] as string[]
@@ -220,6 +222,12 @@ function openDetail(title: string, id: number) {
   detailRunId.value = id
 }
 
+// While the dialog plays an animation, gallery posters wait so it runs smoothly.
+watch(detailRunId, (id) => {
+  if (id === null) degradationPosterQueue.resume()
+  else degradationPosterQueue.pause()
+})
+
 async function reload(silent = false) {
   abortController?.abort()
   const controller = new AbortController()
@@ -265,6 +273,7 @@ onMounted(() => {
 onBeforeUnmount(() => {
   abortController?.abort()
   if (refreshTimer) clearInterval(refreshTimer)
+  degradationPosterQueue.resume()
   for (const { observer } of gridObservers.values()) observer.disconnect()
   gridObservers.clear()
 })
