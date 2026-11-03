@@ -200,6 +200,16 @@ export default {
     noGroup: '无分组',
     searchGroup: '搜索分组...',
     noGroupFound: '未找到匹配的分组',
+    groupPicker: {
+      changeTitle: '更换分组',
+      forKey: '密钥：{name}',
+      platformFilter: '按平台筛选',
+      all: '全部',
+      clearSearch: '清除搜索',
+      empty: '暂无可用分组',
+      noMatch: '没有符合条件的分组',
+      clearFilters: '清除筛选'
+    },
     created: '创建时间',
     copyToClipboard: '复制到剪贴板',
     copied: '已复制！',

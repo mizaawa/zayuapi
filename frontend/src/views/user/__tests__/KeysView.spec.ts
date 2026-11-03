@@ -295,6 +295,12 @@ const getButtonByText = (wrapper: VueWrapper, text: string) => {
   return button
 }
 
+const pickFormGroup = async (wrapper: VueWrapper, groupId: number) => {
+  await wrapper.get('[data-tour="key-form-group"]').trigger('click')
+  await wrapper.get(`[data-test="key-group-option-${groupId}"]`).trigger('click')
+  await nextTick()
+}
+
 describe('user KeysView column settings', () => {
   beforeEach(() => {
     localStorage.clear()
@@ -644,6 +650,61 @@ describe('user KeysView column settings', () => {
     )
   })
 
+  it('fills the key form from the platform-filtered group picker', async () => {
+    setKey({ ...createApiKey(), group_id: 1, group: group(1) }, [
+      group(1), group(2, 'anthropic', { name: 'Claude Max' }), group(3, 'grok'), group(4, 'custom')
+    ])
+    const wrapper = await mountView()
+    await getButtonByText(wrapper, 'Create API Key').trigger('click')
+
+    const field = wrapper.get('[data-tour="key-form-group"]')
+    expect(field.text()).toContain('keys.selectGroup')
+    await field.trigger('click')
+    const picker = wrapper.get('[data-test="key-group-picker"]')
+    expect(picker.get('h2').text()).toBe('keys.selectGroup')
+    expect(field.attributes('aria-expanded')).toBe('true')
+
+    await picker.get('[data-test="key-group-platform-anthropic"]').trigger('click')
+    expect(picker.findAll('[role="option"]').map((option) => option.attributes('data-test')))
+      .toEqual(['key-group-option-2'])
+    await picker.get('[data-test="key-group-option-2"]').trigger('click')
+    await nextTick()
+
+    expect(wrapper.find('[data-test="key-group-picker"]').exists()).toBe(false)
+    expect(field.attributes('aria-expanded')).toBe('false')
+    expect(field.getComponent(GroupBadge).props('name')).toBe('Claude Max')
+    expect(updateKey).not.toHaveBeenCalled()
+  })
+
+  it('rebinds a key from the table through the picker, skipping blocked and unchanged groups', async () => {
+    const key = { ...createApiKey(), name: 'prod-key', group_id: 1, group: group(1) }
+    setKey(key, [group(1), group(2, 'gemini'), group(3, 'openai', { is_blocked_for_user: true })])
+    updateKey.mockResolvedValue({ ...key, group_id: 2 })
+    const wrapper = await mountView()
+
+    await wrapper.get('[data-test="key-group-button-1"]').trigger('click')
+    const picker = wrapper.get('[data-test="key-group-picker"]')
+    expect(picker.get('h2').text()).toBe('keys.groupPicker.changeTitle')
+    expect(picker.text()).toContain('keys.groupPicker.forKey')
+    expect(picker.get('[data-test="key-group-option-1"]').attributes('aria-selected')).toBe('true')
+
+    await picker.get('[data-test="key-group-option-3"]').trigger('click')
+    expect(picker.get('[data-test="key-group-option-3"]').attributes('aria-disabled')).toBe('true')
+    expect(wrapper.find('[data-test="key-group-picker"]').exists()).toBe(true)
+
+    await picker.get('[data-test="key-group-option-1"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.find('[data-test="key-group-picker"]').exists()).toBe(false)
+    expect(updateKey).not.toHaveBeenCalled()
+
+    await wrapper.get('[data-test="key-group-button-1"]').trigger('click')
+    await wrapper.get('[data-test="key-group-option-2"]').trigger('click')
+    await flushPromises()
+    expect(updateKey).toHaveBeenCalledExactlyOnceWith(1, { group_id: 2 })
+    expect(showSuccess).toHaveBeenCalled()
+    expect(wrapper.find('[data-test="key-group-picker"]').exists()).toBe(false)
+  })
+
   it('shows green health when configured but not cooling', async () => {
     const key = { ...createApiKey(), group_id: 1, group: group(1), failover_enabled: true, failover_group_id: 2 }
     setKey(key, [group(1), group(2)])
@@ -849,17 +910,14 @@ describe('user KeysView column settings', () => {
     setKey(key, [group(1), group(2), group(3, 'anthropic')])
     const wrapper = await mountView()
     await getButtonByText(wrapper, 'common.edit').trigger('click')
-    const primarySelector = wrapper.findAllComponents({ name: 'Select' }).find((select) => select.attributes('data-tour') === 'key-form-group')!
-    primarySelector.vm.$emit('update:modelValue', 3)
-    await nextTick()
+    await pickFormGroup(wrapper, 3)
     expect(wrapper.get('[data-test="failover-toggle"]').attributes('aria-checked')).toBe('false')
     await wrapper.get('[data-test="failover-toggle"]').trigger('click')
     const failoverSelector = wrapper.findAllComponents({ name: 'Select' }).find((select) => select.attributes('data-test') === 'failover-group')!
     expect(failoverSelector.props('modelValue')).toBe(null)
     expect(failoverSelector.props('options')).toEqual([])
 
-    primarySelector.vm.$emit('update:modelValue', 2)
-    await nextTick()
+    await pickFormGroup(wrapper, 2)
     expect(failoverSelector.props('options').map((option: { value: number }) => option.value)).toEqual([1])
   })
 
@@ -885,9 +943,7 @@ describe('user KeysView column settings', () => {
     setKey(key, [group(1), group(2), group(3, platform)])
     const wrapper = await mountView()
     await getButtonByText(wrapper, 'common.edit').trigger('click')
-    const primarySelector = wrapper.findAllComponents({ name: 'Select' }).find((select) => select.attributes('data-tour') === 'key-form-group')!
-    primarySelector.vm.$emit('update:modelValue', 3)
-    await nextTick()
+    await pickFormGroup(wrapper, 3)
     expect(wrapper.find('[data-test="failover-toggle"]').exists()).toBe(false)
     await wrapper.get('#key-form').trigger('submit')
     await flushPromises()

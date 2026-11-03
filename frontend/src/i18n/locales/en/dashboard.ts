@@ -200,6 +200,16 @@ export default {
     noGroup: 'No group',
     searchGroup: 'Search groups...',
     noGroupFound: 'No groups found',
+    groupPicker: {
+      changeTitle: 'Change group',
+      forKey: 'Key: {name}',
+      platformFilter: 'Filter by platform',
+      all: 'All',
+      clearSearch: 'Clear search',
+      empty: 'No groups available',
+      noMatch: 'No groups match these filters',
+      clearFilters: 'Clear filters'
+    },
     created: 'Created',
     copyToClipboard: 'Copy to clipboard',
     copied: 'Copied!',

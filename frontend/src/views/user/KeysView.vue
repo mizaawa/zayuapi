@@ -134,14 +134,15 @@
           </template>
 
           <template #cell-group="{ row }">
-            <div class="group/dropdown relative">
+            <div class="relative">
               <!-- 手机卡片里分组名过长会把整页撑宽：按钮限宽（+1rem 抵消 -mx-2），
                    空间不够时"选择分组"换到下一行，分组徽章独占一行并省略超长名称 -->
               <button
-                :ref="(el) => setGroupButtonRef(row.id, el)"
-                @click="openGroupSelector(row)"
+                type="button"
+                @click="openKeyGroupPicker(row)"
                 class="keys-group-button -mx-2 -my-1 flex max-w-[calc(100%_+_1rem)] cursor-pointer flex-wrap items-center gap-2 rounded-xl px-2 py-1"
                 :title="t('keys.clickToChangeGroup')"
+                :data-test="`key-group-button-${row.id}`"
               >
                 <div v-if="row.group" class="flex min-w-0 max-w-full flex-wrap items-center gap-1.5">
                   <GroupBadge
@@ -356,10 +357,10 @@
                 </span>
               </button>
 
-              <div class="group/dropdown relative min-w-0">
+              <div class="relative min-w-0">
                 <button
-                  :ref="(el) => setGroupButtonRef(row.id, el)"
-                  @click="openGroupSelector(row)"
+                  type="button"
+                  @click="openKeyGroupPicker(row)"
                   class="keys-card-group"
                   :title="t('keys.clickToChangeGroup')"
                 >
@@ -547,54 +548,40 @@
         </div>
 
         <div>
-          <label class="input-label">{{ t('keys.groupLabel') }}</label>
-          <Select
-            v-model="formData.group_id"
-            :options="groupOptions"
-            centered
-            :placeholder="t('keys.selectGroup')"
-            :searchable="true"
-            :search-placeholder="t('keys.searchGroup')"
+          <label class="input-label" for="key-form-group">{{ t('keys.groupLabel') }}</label>
+          <button
+            id="key-form-group"
+            type="button"
+            class="key-group-field"
+            :class="{ 'is-open': groupPickerTarget?.kind === 'form' }"
+            aria-haspopup="dialog"
+            :aria-expanded="groupPickerTarget?.kind === 'form'"
             data-tour="key-form-group"
-            @blocked="handleBlockedGroupOption"
+            @click="openFormGroupPicker"
           >
-            <template #selected="{ option }">
-              <div v-if="option" class="flex min-w-0 flex-wrap items-center gap-1.5">
+            <span class="key-group-field-value">
+              <template v-if="editPrimaryGroup">
                 <GroupBadge
-                  :name="(option as unknown as GroupOption).label"
-                  :platform="(option as unknown as GroupOption).platform"
-                  :subscription-type="(option as unknown as GroupOption).subscriptionType"
-                  :rate-multiplier="(option as unknown as GroupOption).rate"
-                  :user-rate-multiplier="(option as unknown as GroupOption).userRate"
-                  :peak-rate-enabled="(option as unknown as GroupOption).peakRateEnabled"
-                  :peak-start="(option as unknown as GroupOption).peakStart"
-                  :peak-end="(option as unknown as GroupOption).peakEnd"
-                  :peak-rate-multiplier="(option as unknown as GroupOption).peakRateMultiplier"
+                  class="max-w-full"
+                  :name="editPrimaryGroup.name"
+                  :platform="editPrimaryGroup.platform"
+                  :subscription-type="editPrimaryGroup.subscription_type"
+                  :rate-multiplier="editPrimaryGroup.rate_multiplier"
+                  :user-rate-multiplier="userGroupRates[editPrimaryGroup.id]"
+                  :peak-rate-enabled="editPrimaryGroup.peak_rate_enabled"
+                  :peak-start="editPrimaryGroup.peak_start"
+                  :peak-end="editPrimaryGroup.peak_end"
+                  :peak-rate-multiplier="editPrimaryGroup.peak_rate_multiplier"
                 />
                 <span
-                  v-if="(option as unknown as GroupOption).blocked"
-                  class="inline-flex items-center rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-semibold text-red-700 dark:bg-red-900/40 dark:text-red-300"
+                  v-if="editPrimaryGroup.is_blocked_for_user === true || isBlockedGroupId(editPrimaryGroup.id)"
+                  class="inline-flex shrink-0 items-center rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-semibold text-red-700"
                 >{{ t('common.groupBlocked') }}</span>
-              </div>
-              <span v-else class="text-gray-400">{{ t('keys.selectGroup') }}</span>
-            </template>
-            <template #option="{ option, selected }">
-              <GroupOptionItem
-                :name="(option as unknown as GroupOption).label"
-                :platform="(option as unknown as GroupOption).platform"
-                :subscription-type="(option as unknown as GroupOption).subscriptionType"
-                :rate-multiplier="(option as unknown as GroupOption).rate"
-                :user-rate-multiplier="(option as unknown as GroupOption).userRate"
-                :peak-rate-enabled="(option as unknown as GroupOption).peakRateEnabled"
-                :peak-start="(option as unknown as GroupOption).peakStart"
-                :peak-end="(option as unknown as GroupOption).peakEnd"
-                :peak-rate-multiplier="(option as unknown as GroupOption).peakRateMultiplier"
-                :description="(option as unknown as GroupOption).description"
-                :selected="selected"
-                :blocked="(option as unknown as GroupOption).blocked"
-              />
-            </template>
-          </Select>
+              </template>
+              <span v-else class="key-group-field-placeholder">{{ t('keys.selectGroup') }}</span>
+            </span>
+            <Icon name="chevronDown" size="md" class="key-group-field-icon" />
+          </button>
         </div>
 
         <!-- Custom Key Section (only for create) -->
@@ -1153,87 +1140,21 @@
       </template>
     </BaseDialog>
 
-    <!-- Group Selector Dropdown (Teleported to body to avoid overflow clipping) -->
-    <Teleport to="body">
-      <Transition name="fade">
-        <button
-          v-if="groupSelectorKeyId !== null && dropdownPosition"
-          type="button"
-          class="group-selector-backdrop"
-          :aria-label="t('common.close')"
-          @click="closeGroupSelector"
-        ></button>
-      </Transition>
-      <div
-        v-if="groupSelectorKeyId !== null && dropdownPosition"
-        ref="dropdownRef"
-        class="group-selector-portal animate-in fade-in fixed z-[100000020] overflow-hidden rounded-xl duration-200"
-        style="pointer-events: auto !important;"
-        :style="{ top: '50%', left: '50%' }"
-      >
-        <!-- Search box -->
-        <div class="p-2">
-          <div class="relative">
-            <svg class="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-            </svg>
-            <input
-              v-model="groupSearchQuery"
-              type="text"
-              class="w-full rounded-lg border border-gray-200 bg-gray-50 py-1.5 pl-8 pr-3 text-sm text-gray-900 placeholder-gray-400 outline-none focus:border-primary-300 focus:ring-1 focus:ring-primary-300 dark:border-dark-600 dark:bg-dark-700 dark:text-white dark:placeholder-gray-500 dark:focus:border-primary-600 dark:focus:ring-primary-600"
-              :placeholder="t('keys.searchGroup')"
-              @click.stop
-            />
-          </div>
-        </div>
-        <!-- Group list -->
-        <div class="max-h-80 overflow-y-auto p-1.5">
-          <button
-            v-for="option in filteredGroupOptions"
-            :key="option.value ?? 'null'"
-            @click="handleBlockedGroupDropdownOption(option)"
-            :class="[
-              'flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-sm transition-colors',
-              'border-b border-gray-100 last:border-0 dark:border-dark-700',
-              option.blocked
-                ? 'bg-red-50/70 hover:bg-red-100 dark:bg-red-900/20 dark:hover:bg-red-900/30'
-                : selectedKeyForGroup?.group_id === option.value ||
-                    (!selectedKeyForGroup?.group_id && option.value === null)
-                  ? 'bg-primary-50 dark:bg-primary-900/20'
-                  : 'hover:bg-gray-100 dark:hover:bg-dark-700'
-            ]"
-            :title="option.description || undefined"
-          >
-            <GroupOptionItem
-              :name="option.label"
-              :platform="option.platform"
-              :subscription-type="option.subscriptionType"
-              :rate-multiplier="option.rate"
-              :user-rate-multiplier="option.userRate"
-              :peak-rate-enabled="option.peakRateEnabled"
-              :peak-start="option.peakStart"
-              :peak-end="option.peakEnd"
-              :peak-rate-multiplier="option.peakRateMultiplier"
-              :description="option.description"
-              :blocked="option.blocked"
-              :selected="
-                selectedKeyForGroup?.group_id === option.value ||
-                (!selectedKeyForGroup?.group_id && option.value === null)
-              "
-            />
-          </button>
-          <!-- Empty state when search has no results -->
-          <div v-if="filteredGroupOptions.length === 0" class="py-4 text-center text-sm text-gray-400 dark:text-gray-500">
-            {{ t('keys.noGroupFound') }}
-          </div>
-        </div>
-      </div>
-    </Teleport>
+    <!-- One picker serves both the key form and the table's "change group" button. -->
+    <KeyGroupPicker
+      :show="groupPickerTarget !== null"
+      :options="groupOptions"
+      :selected-id="groupPickerSelectedId"
+      :title="groupPickerTitle"
+      :subtitle="groupPickerSubtitle"
+      @select="handleGroupPicked"
+      @close="closeGroupPicker"
+    />
   </AppLayout>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, watch, onMounted, onUnmounted, type ComponentPublicInstance } from 'vue'
+import { ref, reactive, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAppStore } from '@/stores/app'
 import { useOnboardingStore } from '@/stores/onboarding'
@@ -1257,9 +1178,10 @@ import TablePageLayout from '@/components/layout/TablePageLayout.vue'
 	import SystemPromptSettings from '@/components/keys/SystemPromptSettings.vue'
 	import EndpointPopover from '@/components/keys/EndpointPopover.vue'
 	import KeyTokenMix from '@/components/keys/KeyTokenMix.vue'
+	import KeyGroupPicker from '@/components/keys/KeyGroupPicker.vue'
+	import type { KeyGroupOption } from '@/components/keys/keyGroupFilters'
 	import GroupBadge from '@/components/common/GroupBadge.vue'
-	import GroupOptionItem from '@/components/common/GroupOptionItem.vue'
-	import type { ApiKey, ApiKeyFailoverSettings, ApiKeySystemPromptSettings, CustomEndpoint, Group, PublicSettings, SubscriptionType, GroupPlatform, UpdateApiKeyRequest } from '@/types'
+	import type { ApiKey, ApiKeyFailoverSettings, ApiKeySystemPromptSettings, CustomEndpoint, Group, PublicSettings, UpdateApiKeyRequest } from '@/types'
 import type { Column } from '@/components/common/types'
 import type { BatchApiKeyUsageStats } from '@/api/usage'
 import { formatDateTime, formatRelativeTime } from '@/utils/format'
@@ -1275,21 +1197,6 @@ const formatDateTimeLocal = (isoDate: string): string => {
   const date = new Date(isoDate)
   const pad = (n: number) => n.toString().padStart(2, '0')
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`
-}
-
-interface GroupOption {
-  value: number
-  label: string
-  description: string | null
-  rate: number
-  userRate: number | null
-  peakRateEnabled: boolean
-  peakStart: string
-  peakEnd: string
-  peakRateMultiplier: number
-  subscriptionType: SubscriptionType
-  platform: GroupPlatform
-  blocked?: boolean
 }
 
 // 列表里分组名最多显示的字数，超出用"…"省略（悬停看全名）
@@ -1444,29 +1351,11 @@ const showColumnDropdown = ref(false)
 const pendingCcsRow = ref<ApiKey | null>(null)
 const selectedKey = ref<ApiKey | null>(null)
 const copiedKeyId = ref<number | null>(null)
-const groupSelectorKeyId = ref<number | null>(null)
 const publicSettings = ref<PublicSettings | null>(null)
 // Keep authenticated relay URLs local to this page, outside public app config.
 const customEndpoints = ref<CustomEndpoint[]>([])
-const dropdownRef = ref<HTMLElement | null>(null)
 const columnDropdownRef = ref<HTMLElement | null>(null)
-const dropdownPosition = ref<{ top?: number; bottom?: number; left: number } | null>(null)
-const groupButtonRefs = ref<Map<number, HTMLElement>>(new Map())
 let abortController: AbortController | null = null
-
-// Get the currently selected key for group change
-const selectedKeyForGroup = computed(() => {
-  if (groupSelectorKeyId.value === null) return null
-  return apiKeys.value.find((k) => k.id === groupSelectorKeyId.value) || null
-})
-
-const setGroupButtonRef = (keyId: number, el: Element | ComponentPublicInstance | null) => {
-  if (el instanceof HTMLElement) {
-    groupButtonRefs.value.set(keyId, el)
-  } else {
-    groupButtonRefs.value.delete(keyId)
-  }
-}
 
 const formData = ref({
   name: '',
@@ -1601,8 +1490,8 @@ const onStatusFilterChange = (value: string | number | boolean | null) => {
   onFilterChange()
 }
 
-// Convert groups to Select options format with rate multiplier and subscription type
-const groupOptions = computed(() =>
+// Convert groups to picker options with rate multiplier and subscription type
+const groupOptions = computed<KeyGroupOption[]>(() =>
   groups.value.map((group) => ({
     value: group.id,
     label: group.name,
@@ -1619,16 +1508,52 @@ const groupOptions = computed(() =>
   }))
 )
 
-// Group dropdown search
-const groupSearchQuery = ref('')
-const filteredGroupOptions = computed(() => {
-  const query = groupSearchQuery.value.trim().toLowerCase()
-  if (!query) return groupOptions.value
-  return groupOptions.value.filter((opt) => {
-    return opt.label.toLowerCase().includes(query) ||
-      (opt.description && opt.description.toLowerCase().includes(query))
-  })
+// The group picker either fills the key form or rebinds a key from the table.
+type GroupPickerTarget = { kind: 'form' } | { kind: 'key'; keyId: number }
+const groupPickerTarget = ref<GroupPickerTarget | null>(null)
+
+const groupPickerKey = computed(() => {
+  const target = groupPickerTarget.value
+  if (target?.kind !== 'key') return null
+  return apiKeys.value.find((key) => key.id === target.keyId) ?? null
 })
+
+const groupPickerSelectedId = computed(() => {
+  const target = groupPickerTarget.value
+  if (!target) return null
+  return target.kind === 'form' ? formData.value.group_id : groupPickerKey.value?.group_id ?? null
+})
+
+const groupPickerTitle = computed(() =>
+  groupPickerTarget.value?.kind === 'key' ? t('keys.groupPicker.changeTitle') : t('keys.selectGroup')
+)
+
+const groupPickerSubtitle = computed(() =>
+  groupPickerKey.value ? t('keys.groupPicker.forKey', { name: groupPickerKey.value.name }) : ''
+)
+
+const openFormGroupPicker = () => {
+  groupPickerTarget.value = { kind: 'form' }
+}
+
+const openKeyGroupPicker = (key: ApiKey) => {
+  groupPickerTarget.value = { kind: 'key', keyId: key.id }
+}
+
+const closeGroupPicker = () => {
+  groupPickerTarget.value = null
+}
+
+const handleGroupPicked = (option: KeyGroupOption) => {
+  const target = groupPickerTarget.value
+  const key = groupPickerKey.value
+  closeGroupPicker()
+  if (target?.kind === 'form') {
+    formData.value.group_id = option.value
+  } else if (key) {
+    void changeGroup(key, option.value)
+  }
+}
 
 const copyToClipboard = async (text: string, keyId: number) => {
   const success = await clipboardCopy(text, t('keys.copied'))
@@ -1886,43 +1811,7 @@ const toggleKeyStatus = async (key: ApiKey) => {
   }
 }
 
-const openGroupSelector = (key: ApiKey) => {
-  if (groupSelectorKeyId.value === key.id) {
-    groupSelectorKeyId.value = null
-    dropdownPosition.value = null
-  } else {
-    const buttonEl = groupButtonRefs.value.get(key.id)
-    if (buttonEl) {
-      const rect = buttonEl.getBoundingClientRect()
-      const dropdownEstHeight = 400 // estimated max dropdown height
-      const dropdownEstWidth = Math.min(380, window.innerWidth - 16)
-      const spaceBelow = window.innerHeight - rect.bottom
-      const spaceAbove = rect.top
-      // 夹取 left，避免窄屏下浮层超出视口右缘
-      const left = Math.max(8, Math.min(rect.left, window.innerWidth - dropdownEstWidth - 8))
-
-      if (spaceBelow < dropdownEstHeight && spaceAbove > spaceBelow) {
-        // Not enough space below, pop upward
-        dropdownPosition.value = {
-          bottom: window.innerHeight - rect.top + 4,
-          left
-        }
-      } else {
-        // Default: pop downward
-        dropdownPosition.value = {
-          top: rect.bottom + 4,
-          left
-        }
-      }
-    }
-    groupSelectorKeyId.value = key.id
-    groupSearchQuery.value = ''
-  }
-}
-
 const changeGroup = async (key: ApiKey, newGroupId: number | null) => {
-  groupSelectorKeyId.value = null
-  dropdownPosition.value = null
   if (key.group_id === newGroupId) return
 
   try {
@@ -1945,27 +1834,9 @@ const changeGroup = async (key: ApiKey, newGroupId: number | null) => {
   }
 }
 
-const handleBlockedGroupOption = () => {
-  appStore.showError(t('keys.groupBlockedToast'))
-}
-
-const handleBlockedGroupDropdownOption = (option: GroupOption) => {
-  if (option.blocked) {
-    handleBlockedGroupOption()
-    return
-  }
-  const key = selectedKeyForGroup.value
-  if (key) void changeGroup(key, option.value)
-}
-
-const closeGroupSelector = (event: MouseEvent) => {
-  const target = event.target as HTMLElement
-  // Check if click is inside the dropdown or the trigger button
-  if (!target.closest('.group\\/dropdown') && !dropdownRef.value?.contains(target)) {
-    groupSelectorKeyId.value = null
-    dropdownPosition.value = null
-  }
-  if (columnDropdownRef.value && !columnDropdownRef.value.contains(target)) {
+const closeColumnDropdownOnOutsideClick = (event: MouseEvent) => {
+  const target = event.target as Node | null
+  if (columnDropdownRef.value && target && !columnDropdownRef.value.contains(target)) {
     showColumnDropdown.value = false
   }
 }
@@ -2118,6 +1989,7 @@ const handleDelete = async () => {
 }
 
 const closeModals = () => {
+  if (groupPickerTarget.value?.kind === 'form') closeGroupPicker()
   showCreateModal.value = false
   showEditModal.value = false
   selectedKey.value = null
@@ -2355,13 +2227,13 @@ onMounted(() => {
   loadUserGroupRates()
   loadPublicSettings()
   loadUserEndpointSettings()
-  document.addEventListener('click', closeGroupSelector)
+  document.addEventListener('click', closeColumnDropdownOnOutsideClick)
   resetTimer = setInterval(() => { now.value = new Date() }, 1000)
   failoverRefreshTimer = setInterval(() => { void refreshFailoverStatuses() }, 15000)
 })
 
 onUnmounted(() => {
-  document.removeEventListener('click', closeGroupSelector)
+  document.removeEventListener('click', closeColumnDropdownOnOutsideClick)
   if (resetTimer) clearInterval(resetTimer)
   if (failoverRefreshTimer) clearInterval(failoverRefreshTimer)
   failoverRefreshController?.abort()
@@ -2546,6 +2418,51 @@ onUnmounted(() => {
 .keys-group-button:hover .keys-group-switch,
 .keys-card-group:hover .keys-group-switch {
   opacity: 1;
+}
+
+/* ---------- Key form: group field that opens the group picker ---------- */
+.key-group-field {
+  display: flex;
+  width: 100%;
+  min-height: 3rem;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem 0.875rem 0.5rem 1rem;
+  border-radius: 1rem;
+  text-align: left;
+  background: var(--md-sys-color-surface-container);
+  box-shadow: inset 0 1px 2px rgb(63 52 32 / 0.06);
+  transition: background-color 160ms ease, box-shadow 160ms ease;
+}
+
+.key-group-field:hover {
+  background: color-mix(in srgb, var(--md-sys-color-surface-container) 82%, var(--md-sys-color-surface-container-high));
+}
+
+.key-group-field:focus-visible,
+.key-group-field.is-open {
+  outline: none;
+  background: var(--md-sys-color-surface);
+  box-shadow: inset 0 0 0 1.5px rgb(233 184 36 / 0.75), 0 0 0 4px rgb(233 184 36 / 0.14);
+}
+
+.key-group-field-value {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.375rem;
+}
+
+.key-group-field-placeholder {
+  font-size: 0.875rem;
+  color: var(--md-sys-color-placeholder);
+}
+
+.key-group-field-icon {
+  flex-shrink: 0;
+  color: var(--md-sys-color-on-surface-variant);
 }
 
 .keys-live {

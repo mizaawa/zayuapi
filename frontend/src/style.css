@@ -732,26 +732,7 @@
     overscroll-behavior: contain;
   }
 
-  .group-selector-portal {
-    left: 50% !important;
-    top: 50% !important;
-    bottom: auto !important;
-    width: min(520px, calc(100vw - 1rem));
-    max-width: calc(100vw - 1rem);
-    transform: translate(-50%, -50%);
-    background: var(--md-sys-color-surface);
-    border: 1px solid transparent;
-    box-shadow: 0 1.5rem 3rem rgb(63 52 32 / 0.16), 0 0.35rem 1rem rgb(63 52 32 / 0.08);
-  }
-
-  @media (max-width: 640px) {
-    .group-selector-portal {
-      width: calc(100vw - 1rem);
-    }
-  }
-
-  .select-centered-backdrop,
-  .group-selector-backdrop {
+  .select-centered-backdrop {
     position: fixed;
     inset: 0;
     z-index: 100000010;
