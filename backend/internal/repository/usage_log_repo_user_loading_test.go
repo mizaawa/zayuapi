@@ -2,6 +2,8 @@ package repository
 
 import (
 	"context"
+	"database/sql/driver"
+	"strings"
 	"testing"
 	"time"
 
@@ -29,6 +31,50 @@ func TestUserUsageListFastPaginationSkipsCountWithDateFilters(t *testing.T) {
 	require.Empty(t, logs)
 	require.Zero(t, page.Total)
 	require.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestUsageLogFastPaginationFlagsEstimatedTotals(t *testing.T) {
+	columns := strings.Split(usageLogSelectColumns, ", ")
+	for _, tc := range []struct {
+		name     string
+		page     int
+		rows     int
+		total    int64
+		estimate bool
+	}{
+		{"next page exists", 1, 3, 3, true},
+		{"final page", 2, 1, 3, false},
+		{"empty first page", 1, 0, 0, false},
+		{"past the final page", 3, 0, 4, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			db, mock, err := sqlmock.New()
+			require.NoError(t, err)
+			t.Cleanup(func() { _ = db.Close() })
+			rows := sqlmock.NewRows(columns)
+			for range tc.rows {
+				values := make([]driver.Value, len(columns))
+				for i, column := range columns {
+					values[i] = int64(1)
+					if column == "created_at" {
+						values[i] = time.Date(2026, 11, 1, 0, 0, 0, 0, time.UTC)
+					}
+				}
+				rows.AddRow(values...)
+			}
+			mock.ExpectQuery(`SELECT .* FROM usage_logs WHERE user_id = \$1 ORDER BY id DESC LIMIT \$2 OFFSET \$3`).
+				WithArgs(int64(7), 3, (tc.page-1)*2).
+				WillReturnRows(rows)
+			repo := newUsageLogRepositoryWithSQL(nil, db)
+			logs, page, err := repo.listUsageLogsWithFastPagination(context.Background(), "WHERE user_id = $1", []any{int64(7)},
+				pagination.PaginationParams{Page: tc.page, PageSize: 2})
+			require.NoError(t, err)
+			require.Len(t, logs, min(tc.rows, 2))
+			require.Equal(t, tc.total, page.Total)
+			require.Equal(t, tc.estimate, page.TotalIsEstimate)
+			require.NoError(t, mock.ExpectationsWereMet())
+		})
+	}
 }
 
 func TestUserUsageStatsSkipUnusedUpstreamQueries(t *testing.T) {

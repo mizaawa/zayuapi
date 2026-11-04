@@ -168,6 +168,7 @@
     <div class="flex-shrink-0">
       <Pagination
         v-if="total > 0"
+        :variant="paginationVariant"
         :total="total"
         :page="page"
         :page-size="pageSize"
@@ -290,6 +291,8 @@ interface Props {
   visibleColumnKeys?: string[]
   /** 嵌入统一卡片内使用：去掉自身卡片外观 */
   flat?: boolean
+  /** 分页样式：用量页传 picker（上一页 / 页码下拉 / 下一页） */
+  paginationVariant?: 'numbers' | 'picker'
 }
 
 interface Emits {

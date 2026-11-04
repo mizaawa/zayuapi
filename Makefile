@@ -33,6 +33,8 @@ FRONTEND_CRITICAL_VITEST := \
 	src/utils/__tests__/usageRequest.spec.ts \
 	src/utils/__tests__/usageRequestQueue.spec.ts \
 	src/components/common/__tests__/Pagination.spec.ts \
+	src/components/common/__tests__/PagePicker.spec.ts \
+	src/views/admin/__tests__/UsageView.spec.ts \
 	src/views/admin/__tests__/SettingsView.spec.ts \
 	src/views/admin/__tests__/ResourceLibraryView.spec.ts \
 	src/views/admin/__tests__/DegradationMonitorView.spec.ts \

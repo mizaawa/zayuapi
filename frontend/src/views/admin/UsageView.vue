@@ -122,7 +122,7 @@
             @userClick="handleUserClick"
             @ipGeoBatchFailed="handleIpGeoBatchFailed"
           />
-          <Pagination v-if="pagination.total > 0" :page="pagination.page" :total="pagination.total" :page-size="pagination.page_size" @update:page="handlePageChange" @update:pageSize="handlePageSizeChange" />
+          <Pagination v-if="paginationTotal > 0" variant="picker" :page="pagination.page" :total="paginationTotal" :total-is-exact="paginationTotalIsExact" :page-size="pagination.page_size" @update:page="handlePageChange" @update:pageSize="handlePageSizeChange" />
         </div>
         <div v-show="activeTab === 'errors'" class="admin-records-body">
           <OpsErrorLogTable
@@ -130,6 +130,7 @@
             :rows="errRows" :total="errTotal" :loading="errLoading"
             :page="errPage" :page-size="errPageSize"
             :visible-column-keys="errVisibleColumnKeys"
+            pagination-variant="picker"
             user-clickable
             @userClick="handleUserClick"
             @openErrorDetail="openError"
@@ -291,6 +292,22 @@ const filters = ref<AdminUsageQueryParams>({ user_id: undefined, model: undefine
 const pagination = reactive({ page: 1, page_size: getPersistedPageSize(), total: 0 })
 // Lists load without an exact count; an estimated total is shown with a trailing "+".
 const totalIsExact = ref(true)
+// Stats count the same filtered rows, so their total fills in the page count the list skips.
+const statsTotalsKey = ref<string | null>(null)
+const usageTotalsKey = (f: AdminUsageQueryParams) => JSON.stringify([
+  f.start_date, f.end_date, f.user_id, f.api_key_id, f.account_id, f.group_id, f.model,
+  f.request_type, f.stream, f.billing_type, f.billing_mode, f.upstream_model_mismatch,
+])
+const currentStatsTotal = computed(() =>
+  statsTotalsKey.value === usageTotalsKey(filters.value) ? usageStats.value?.total_requests : undefined
+)
+const paginationTotal = computed(() => totalIsExact.value
+  ? pagination.total
+  : Math.max(pagination.total, currentStatsTotal.value ?? 0)
+)
+const paginationTotalIsExact = computed(() => totalIsExact.value ||
+  (currentStatsTotal.value !== undefined && currentStatsTotal.value >= pagination.total)
+)
 const sortState = reactive({
   sort_by: 'created_at',
   sort_order: 'desc' as 'asc' | 'desc'
@@ -386,11 +403,12 @@ const loadLogs = async () => {
       buildUsageListParams(pagination.page, pagination.page_size, false),
       { signal: c.signal }
     )
-    if(!c.signal.aborted) { usageLogs.value = res.items; pagination.total = res.total; totalIsExact.value = (res as { total_is_exact?: boolean }).total_is_exact ?? true }
+    if(!c.signal.aborted) { usageLogs.value = res.items; pagination.total = res.total; totalIsExact.value = res.total_is_exact ?? true }
   } catch (error: any) { if(error?.name !== 'AbortError') console.error('Failed to load usage logs:', error) } finally { if(abortController === c) loading.value = false }
 }
 const loadStats = async (force = false) => {
   const seq = ++statsReqSeq
+  const totalsKey = usageTotalsKey(filters.value)
   endpointStatsLoading.value = true
   try {
     const requestType = filters.value.request_type
@@ -402,6 +420,7 @@ const loadStats = async (force = false) => {
     })
     if (seq !== statsReqSeq) return
     usageStats.value = s
+    statsTotalsKey.value = totalsKey
     inboundEndpointStats.value = s.endpoints || []
     upstreamEndpointStats.value = s.upstream_endpoints || []
     endpointPathStats.value = s.endpoint_paths || []
@@ -791,8 +810,8 @@ const recordsSummary = computed(() => {
   if (activeTab.value === 'errors') {
     return errTotal.value > 0 ? t('usage.recordsCount', { count: errTotal.value.toLocaleString() }) : ''
   }
-  if (activeTab.value !== 'usage' || pagination.total <= 0) return ''
-  return t('usage.recordsCount', { count: pagination.total.toLocaleString() + (totalIsExact.value ? '' : '+') })
+  if (activeTab.value !== 'usage' || paginationTotal.value <= 0) return ''
+  return t('usage.recordsCount', { count: paginationTotal.value.toLocaleString() + (paginationTotalIsExact.value ? '' : '+') })
 })
 
 const detailTabs = computed(() => [

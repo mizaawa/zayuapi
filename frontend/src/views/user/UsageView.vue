@@ -225,6 +225,7 @@
 
           <Pagination
             v-if="!logsError && paginationTotal > 0"
+            variant="picker"
             :page="pagination.page"
             :total="paginationTotal"
             :total-is-exact="paginationTotalIsExact"

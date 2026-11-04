@@ -1,8 +1,44 @@
 <template>
   <div
     class="pagination-shell flex items-center justify-between border-t px-4 py-3 sm:px-6"
+    :class="{ 'gap-3': isPicker }"
   >
-    <div class="flex flex-1 items-center justify-between sm:hidden">
+    <!-- Picker pagination: previous, a dropdown that lists every page, next — on phones and desktops alike. -->
+    <nav
+      v-if="isPicker"
+      class="pagination-picker sm:order-last"
+      :aria-label="t('pagination.choosePage')"
+      data-testid="pagination-picker"
+    >
+      <button
+        type="button"
+        @click="goToPage(page - 1)"
+        :disabled="page <= 1"
+        class="pagination-button pagination-step"
+        data-testid="pagination-previous"
+      >
+        <Icon name="chevronLeft" size="sm" class="pagination-step-icon" />
+        <span>{{ t('pagination.previous') }}</span>
+      </button>
+      <PagePicker
+        :page="page"
+        :total-pages="totalPages"
+        :total-is-exact="totalIsExact"
+        @select="goToPage"
+      />
+      <button
+        type="button"
+        @click="goToPage(page + 1)"
+        :disabled="page >= totalPages"
+        class="pagination-button pagination-step"
+        data-testid="pagination-next"
+      >
+        <span>{{ t('pagination.next') }}</span>
+        <Icon name="chevronRight" size="sm" class="pagination-step-icon" />
+      </button>
+    </nav>
+
+    <div v-else class="flex flex-1 items-center justify-between sm:hidden">
       <!-- Mobile pagination -->
       <button
         @click="goToPage(page - 1)"
@@ -69,6 +105,7 @@
 
       <!-- Desktop pagination buttons -->
       <nav
+        v-if="!isPicker"
         class="relative z-0 inline-flex flex-wrap gap-1 rounded-xl"
         aria-label="Pagination"
       >
@@ -121,6 +158,7 @@
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Icon from '@/components/icons/Icon.vue'
+import PagePicker from './PagePicker.vue'
 import Select from './Select.vue'
 import { getConfiguredTablePageSizeOptions, normalizeTablePageSize } from '@/utils/tablePreferences'
 import { setPersistedPageSize } from '@/composables/usePersistedPageSize'
@@ -135,6 +173,8 @@ interface Props {
   pageSizeOptions?: number[]
   showPageSizeSelector?: boolean
   showJump?: boolean
+  /** "picker" swaps the numbered buttons for previous / page dropdown / next. */
+  variant?: 'numbers' | 'picker'
 }
 
 interface Emits {
@@ -146,11 +186,13 @@ const props = withDefaults(defineProps<Props>(), {
   totalIsExact: true,
   pageSizeOptions: () => getConfiguredTablePageSizeOptions(),
   showPageSizeSelector: true,
-  showJump: false
+  showJump: false,
+  variant: 'numbers'
 })
 
 const emit = defineEmits<Emits>()
 
+const isPicker = computed(() => props.variant === 'picker')
 const totalPages = computed(() => Math.ceil(props.total / props.pageSize))
 const totalDisplay = computed(() => props.totalIsExact ? props.total : `${props.total}+`)
 const totalPagesDisplay = computed(() => props.totalIsExact ? totalPages.value : `${totalPages.value}+`)
@@ -280,5 +322,68 @@ const submitJump = () => {
 .page-size-select :deep(.select-trigger) {
   @apply px-3 py-1.5 text-sm;
   background: var(--md-sys-color-surface);
+}
+
+/* Phones: previous and next hug the edges with the page picker centred between them. */
+.pagination-picker {
+  display: grid;
+  width: 100%;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.pagination-picker > :first-child {
+  justify-self: start;
+}
+
+.pagination-picker > :last-child {
+  justify-self: end;
+}
+
+.pagination-step {
+  display: inline-flex;
+  min-height: 2.5rem;
+  max-width: 100%;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem;
+  padding: 0 0.75rem;
+  border-radius: 0.75rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.pagination-step:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+/* Phones keep plain words so five-digit page numbers still fit; arrows join them once the bar has room. */
+.pagination-step-icon {
+  display: none;
+}
+
+@media (max-width: 359.98px) {
+  .pagination-picker {
+    gap: 0.375rem;
+  }
+
+  .pagination-step {
+    padding: 0 0.5rem;
+  }
+}
+
+@media (min-width: 640px) {
+  .pagination-picker {
+    display: flex;
+    width: auto;
+    flex: none;
+  }
+
+  .pagination-step-icon {
+    display: block;
+  }
 }
 </style>

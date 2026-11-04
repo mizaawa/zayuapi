@@ -107,6 +107,11 @@ export interface DatabaseStorageStats {
   measured_at: string
 }
 
+export interface AdminUsageListResponse extends PaginatedResponse<AdminUsageLog> {
+  /** False when the list skipped COUNT(*) and total only proves whether another page exists. */
+  total_is_exact?: boolean
+}
+
 export interface AdminUsageQueryParams extends UsageQueryParams {
   user_id?: number
   exact_total?: boolean
@@ -130,8 +135,8 @@ export interface AdminUsageQueryParams extends UsageQueryParams {
 export async function list(
   params: AdminUsageQueryParams,
   options?: { signal?: AbortSignal; timeout?: number }
-): Promise<PaginatedResponse<AdminUsageLog>> {
-  const { data } = await apiClient.get<PaginatedResponse<AdminUsageLog>>('/admin/usage', {
+): Promise<AdminUsageListResponse> {
+  const { data } = await apiClient.get<AdminUsageListResponse>('/admin/usage', {
     params,
     signal: options?.signal,
     timeout: options?.timeout

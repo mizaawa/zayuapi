@@ -250,7 +250,10 @@ func (r *usageLogRepository) listUsageLogsWithFastPagination(ctx context.Context
 		total = int64(offset) + int64(limit) + 1
 	}
 
-	return logs, paginationResultFromTotal(total, params), nil
+	result := paginationResultFromTotal(total, params)
+	// 越过末页读到空页时，offset 也不是真实总数。
+	result.TotalIsEstimate = hasMore || (len(logs) == 0 && offset > 0)
+	return logs, result, nil
 }
 
 func usageLogOrderBy(params pagination.PaginationParams) string {

@@ -3,6 +3,7 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { defineComponent, ref } from 'vue'
 
 import UsageView from '../UsageView.vue'
+import Pagination from '@/components/common/Pagination.vue'
 
 const { list, exportList, getStats, getSnapshotV2, getById, getModelStats, listErrorLogs, routeQuery, aoaToSheet, sheetAddAoa, saveAs, xlsxWrite, showError, showSuccess } = vi.hoisted(() => {
   vi.stubGlobal('localStorage', {
@@ -766,6 +767,42 @@ describe('admin UsageView columns and export', () => {
     expect(speedIndex).toBeGreaterThan(-1)
     expect(headers[speedIndex - 1]).toBe('usage.duration')
     expect(sheetAddAoa.mock.calls[0][1][0][speedIndex]).toBe(expected)
+    wrapper.unmount()
+  })
+})
+
+describe('admin UsageView pagination totals', () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+    Object.keys(routeQuery).forEach((key) => delete routeQuery[key])
+    getSnapshotV2.mockReset().mockResolvedValue({ trend: [], models: [], groups: [] })
+    getModelStats.mockReset().mockResolvedValue({ models: [] })
+    getStats.mockReset()
+    list.mockReset().mockResolvedValue({ items: [{}], total: 21, pages: 2, total_is_exact: false })
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('fills the page picker from the matching stats count when the list skipped its count', async () => {
+    let resolveStats!: (stats: { total_requests: number }) => void
+    getStats.mockReturnValueOnce(new Promise((resolve) => { resolveStats = resolve }))
+    const wrapper = mountRouteFilteredUsageView()
+    await flushPromises()
+    const pager = () => wrapper.findComponent(Pagination)
+    expect(pager().props()).toMatchObject({ variant: 'picker', total: 21, totalIsExact: false })
+
+    resolveStats({ total_requests: 2573 })
+    await flushPromises()
+    expect(pager().props()).toMatchObject({ total: 2573, totalIsExact: true })
+
+    // Stats for other filters never size the pager; the list's lower bound does until they arrive.
+    getStats.mockReturnValueOnce(new Promise(() => {}))
+    ;(wrapper.vm as any).filters.model = 'gpt-5.4'
+    ;(wrapper.vm as any).applyFilters()
+    await flushPromises()
+    expect(pager().props()).toMatchObject({ total: 21, totalIsExact: false })
     wrapper.unmount()
   })
 })

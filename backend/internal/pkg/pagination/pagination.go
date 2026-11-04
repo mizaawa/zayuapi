@@ -22,6 +22,8 @@ type PaginationResult struct {
 	Page     int
 	PageSize int
 	Pages    int
+	// TotalIsEstimate 表示跳过了 COUNT(*)：Total 只够判断是否还有下一页，不是精确总数。
+	TotalIsEstimate bool
 }
 
 // DefaultPagination 默认分页参数

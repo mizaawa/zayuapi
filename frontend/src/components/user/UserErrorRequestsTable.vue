@@ -108,6 +108,7 @@
     <div class="flex-shrink-0">
       <Pagination
         v-if="total > 0"
+        variant="picker"
         :page="page"
         :page-size="pageSize"
         :total="total"

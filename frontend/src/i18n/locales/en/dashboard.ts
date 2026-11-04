@@ -1110,7 +1110,10 @@ export default {
     goToPage: 'Go to page {page}',
     jumpTo: 'Jump to',
     jumpPlaceholder: 'Page',
-    jumpAction: 'Go'
+    jumpAction: 'Go',
+    pageLabel: 'Page {page}',
+    totalPages: 'Pages: {total}',
+    choosePage: 'Choose a page'
   },
 
   // Errors

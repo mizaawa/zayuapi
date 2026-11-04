@@ -222,7 +222,20 @@ func (h *UsageHandler) List(c *gin.Context) {
 	for i := range records {
 		out = append(out, *dto.UsageLogFromServiceAdmin(&records[i]))
 	}
-	response.Paginated(c, out, result.Total, page, pageSize)
+	if exactTotal {
+		response.Paginated(c, out, result.Total, page, pageSize)
+		return
+	}
+	// Unfiltered lists skip COUNT(*); the console fills in the page count from /admin/usage/stats.
+	response.Success(c, struct {
+		response.PaginatedData
+		TotalIsExact bool `json:"total_is_exact"`
+	}{
+		PaginatedData: response.PaginatedData{
+			Items: out, Total: result.Total, Page: page, PageSize: pageSize, Pages: max(1, result.Pages),
+		},
+		TotalIsExact: !result.TotalIsEstimate,
+	})
 }
 
 // Stats handles getting usage statistics with filters

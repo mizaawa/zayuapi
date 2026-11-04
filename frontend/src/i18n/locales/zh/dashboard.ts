@@ -1115,7 +1115,10 @@ export default {
     goToPage: '跳转到第 {page} 页',
     jumpTo: '跳转页',
     jumpPlaceholder: '页码',
-    jumpAction: '跳转'
+    jumpAction: '跳转',
+    pageLabel: '第 {page} 页',
+    totalPages: '共 {total} 页',
+    choosePage: '选择页码'
   },
 
   // Errors
