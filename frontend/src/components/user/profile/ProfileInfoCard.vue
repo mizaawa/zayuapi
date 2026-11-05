@@ -8,11 +8,14 @@
     <div class="profile-hero-top">
       <div class="profile-hero-avatar">
         <img
-          v-if="avatarUrl"
-          :src="avatarUrl"
+          v-if="avatarSrc"
+          data-testid="profile-hero-avatar-image"
+          :src="avatarSrc"
           :alt="displayName"
+          referrerpolicy="no-referrer"
+          @error="onAvatarError"
         >
-        <span v-else aria-hidden="true">{{ avatarInitial }}</span>
+        <span v-else data-testid="profile-hero-avatar-initial" aria-hidden="true">{{ avatarInitial }}</span>
         <span
           class="profile-hero-presence"
           :class="isActive ? 'is-active' : 'is-disabled'"
@@ -156,6 +159,7 @@ import Icon from '@/components/icons/Icon.vue'
 import ProfileAvatarCard from '@/components/user/profile/ProfileAvatarCard.vue'
 import ProfileEditForm from '@/components/user/profile/ProfileEditForm.vue'
 import ProfileIdentityBindingsSection from '@/components/user/profile/ProfileIdentityBindingsSection.vue'
+import { useAvatarImage } from '@/composables/useAvatarImage'
 import type { User, UserAuthBindingStatus, UserAuthProvider, UserProfileSourceContext } from '@/types'
 
 const props = withDefaults(defineProps<{
@@ -203,7 +207,7 @@ function isEmailBound(user: User | null | undefined): boolean {
 }
 
 const isActive = computed(() => props.user?.status === 'active')
-const avatarUrl = computed(() => props.user?.avatar_url?.trim() || '')
+const { src: avatarSrc, onError: onAvatarError } = useAvatarImage(() => props.user?.avatar_url)
 const displayName = computed(() => props.user?.username?.trim() || props.user?.email?.trim() || t('profile.user'))
 const primaryEmailDisplay = computed(() => {
   const email = props.user?.email?.trim() || ''

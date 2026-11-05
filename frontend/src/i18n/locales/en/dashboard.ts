@@ -1029,9 +1029,9 @@ export default {
     },
     avatar: {
       title: 'Profile Avatar',
-      description: 'Upload an avatar image. Static uploads are compressed to 20KB before saving.',
+      description: 'Upload an avatar image. It is compressed to 20KB and saved as soon as you pick it.',
       uploadAction: 'Upload image',
-      uploadHint: 'Static uploads are compressed to 20KB when possible. GIF uploads must already be within 20KB.',
+      uploadHint: 'The picked image is saved right away. Static images are compressed to 20KB; GIFs must already be within 20KB.',
       uploadRequired: 'Upload an avatar image first',
       saveSuccess: 'Avatar updated',
       deleteSuccess: 'Avatar removed',
@@ -1041,7 +1041,7 @@ export default {
       compressFailed: 'Failed to compress the selected image.',
       readFailed: 'Failed to read the selected image.',
       emptyDeleteHint: 'Avatar is already empty',
-      unsaved: 'Unsaved',
+      saving: 'Saving',
     },
     authBindings: {
       title: 'Connected Sign-In Methods',

@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -85,7 +86,6 @@ type UpdateProfileRequest struct {
 
 type userProfileResponse struct {
 	dto.User
-	AvatarURL         string                                 `json:"avatar_url,omitempty"`
 	AvatarSource      *userProfileSourceContext              `json:"avatar_source,omitempty"`
 	UsernameSource    *userProfileSourceContext              `json:"username_source,omitempty"`
 	DisplayNameSource *userProfileSourceContext              `json:"display_name_source,omitempty"`
@@ -302,6 +302,10 @@ func (h *UserHandler) BindEmailIdentity(c *gin.Context) {
 	if err != nil {
 		response.ErrorFrom(c, err)
 		return
+	}
+	// 绑定已经生效，读不到头像只让这次响应缺头像，不能把成功的绑定报成失败。
+	if err := h.authService.LoadUserAvatar(c.Request.Context(), updatedUser); err != nil {
+		slog.Warn("failed to load avatar after email binding", "error", err, "user_id", subject.UserID)
 	}
 
 	profileResp, err := h.buildUserProfileResponse(c.Request.Context(), subject.UserID, updatedUser)
@@ -547,7 +551,6 @@ func userProfileResponseFromService(user *service.User, identities service.UserI
 	profileSources, avatarSource, usernameSource := inferUserProfileSources(user, identities)
 	return userProfileResponse{
 		User:              *base,
-		AvatarURL:         user.AvatarURL,
 		AvatarSource:      avatarSource,
 		UsernameSource:    usernameSource,
 		DisplayNameSource: usernameSource,

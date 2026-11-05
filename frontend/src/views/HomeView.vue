@@ -97,7 +97,16 @@
             :to="isAuthenticated ? dashboardPath : '/login'"
             class="landing-login"
           >
-            <span v-if="isAuthenticated" class="landing-avatar">{{ userInitial }}</span>
+            <span v-if="isAuthenticated" class="landing-avatar" data-testid="landing-avatar">
+              <img
+                v-if="userAvatarSrc"
+                :src="userAvatarSrc"
+                alt=""
+                referrerpolicy="no-referrer"
+                @error="onUserAvatarError"
+              />
+              <template v-else>{{ userInitial }}</template>
+            </span>
             {{ isAuthenticated ? t('home.dashboard') : t('home.login') }}
           </router-link>
         </div>
@@ -358,6 +367,7 @@ import { useAppStore, useAuthStore } from '@/stores'
 import LocaleSwitcher from '@/components/common/LocaleSwitcher.vue'
 import Icon from '@/components/icons/Icon.vue'
 import ProviderIcon from '@/components/user/monitor/ProviderIcon.vue'
+import { useAvatarImage } from '@/composables/useAvatarImage'
 import { sanitizeUrl } from '@/utils/url'
 
 const { t } = useI18n()
@@ -385,6 +395,7 @@ const isAuthenticated = computed(() => authStore.isAuthenticated)
 const isAdmin = computed(() => authStore.isAdmin)
 const dashboardPath = computed(() => isAdmin.value ? '/admin/dashboard' : '/dashboard')
 const userInitial = computed(() => authStore.user?.email?.charAt(0).toUpperCase() || '')
+const { src: userAvatarSrc, onError: onUserAvatarError } = useAvatarImage(() => authStore.user?.avatar_url)
 const currentYear = computed(() => new Date().getFullYear())
 
 onMounted(() => {
@@ -560,7 +571,8 @@ onMounted(() => {
 .landing-icon-button { color: var(--landing-hero-muted); }
 .landing-icon-button:hover { background: var(--landing-hero-panel-muted); color: var(--landing-hero-text); }
 .landing-login { gap: 0.5rem; margin-left: 0.375rem; padding: 0.625rem 1.125rem; background: var(--landing-accent-band); color: var(--landing-accent-band-text); font-weight: 700; box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.4), 0 6px 14px -8px rgb(151 104 0 / 0.55); }
-.landing-avatar { display: grid; width: 1.5rem; height: 1.5rem; place-items: center; border-radius: 50%; background: var(--landing-hero-panel); color: var(--landing-accent); font-size: 0.6875rem; font-weight: 800; }
+.landing-avatar { display: grid; width: 1.5rem; height: 1.5rem; place-items: center; overflow: hidden; border-radius: 50%; background: var(--landing-hero-panel); color: var(--landing-accent); font-size: 0.6875rem; font-weight: 800; }
+.landing-avatar img { width: 100%; height: 100%; object-fit: cover; }
 
 /* ---------- Hero ---------- */
 .landing-hero {

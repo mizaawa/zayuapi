@@ -13,13 +13,19 @@
     <div class="profile-avatar-row">
       <div class="profile-avatar-preview">
         <img
-          v-if="avatarPreviewUrl"
+          v-if="previewSrc"
           data-testid="profile-avatar-preview"
-          :src="avatarPreviewUrl"
+          :src="previewSrc"
           :alt="displayName"
+          referrerpolicy="no-referrer"
+          @error="handlePreviewError"
         >
-        <span v-else aria-hidden="true">{{ avatarInitial }}</span>
-        <span v-if="avatarDraft" class="profile-avatar-draft">{{ t('profile.avatar.unsaved') }}</span>
+        <span v-else data-testid="profile-avatar-initial" aria-hidden="true">{{ avatarInitial }}</span>
+        <span
+          v-if="avatarBusy"
+          data-testid="profile-avatar-saving"
+          class="profile-avatar-draft"
+        >{{ t('profile.avatar.saving') }}</span>
       </div>
 
       <div class="min-w-0 flex-1">
@@ -31,12 +37,16 @@
     </div>
 
     <div class="profile-avatar-actions">
-      <label class="btn btn-secondary btn-sm cursor-pointer">
+      <label
+        class="btn btn-secondary btn-sm"
+        :class="avatarBusy ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'"
+      >
         <input
           data-testid="profile-avatar-file-input"
           type="file"
           accept="image/*"
           class="hidden"
+          :disabled="avatarBusy"
           @change="handleAvatarFileChange"
         >
         <Icon name="upload" size="sm" />
@@ -44,20 +54,10 @@
       </label>
 
       <button
-        data-testid="profile-avatar-save"
-        type="button"
-        class="btn btn-primary btn-sm"
-        :disabled="avatarSaving || !avatarDraft"
-        @click="handleAvatarSave"
-      >
-        {{ t('common.save') }}
-      </button>
-
-      <button
         data-testid="profile-avatar-delete"
         type="button"
         class="profile-link-button is-danger"
-        :disabled="avatarSaving"
+        :disabled="avatarBusy"
         @click="handleAvatarDelete"
       >
         <Icon name="trash" size="sm" />
@@ -68,10 +68,11 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { userAPI } from '@/api'
 import Icon from '@/components/icons/Icon.vue'
+import { useAvatarImage } from '@/composables/useAvatarImage'
 import { useAppStore } from '@/stores/app'
 import { useAuthStore } from '@/stores/auth'
 import type { User } from '@/types'
@@ -89,21 +90,28 @@ const authStore = useAuthStore()
 const appStore = useAppStore()
 
 const targetAvatarUploadBytes = 20 * 1024
+// An avatar is shown at 88px at most; starting from a smaller canvas keeps
+// 48MP phone photos under mobile canvas limits and leaves room for quality.
+const maxAvatarDimension = 512
 const avatarScaleSteps = [1, 0.92, 0.84, 0.76, 0.68, 0.6, 0.52, 0.44, 0.36]
 const avatarQualitySteps = [0.92, 0.84, 0.76, 0.68, 0.6, 0.52, 0.44, 0.36]
-const avatarDraft = ref('')
-const avatarSaving = ref(false)
+// Formats every browser can show; anything else is redrawn before upload.
+const passThroughAvatarTypes = new Set(['image/png', 'image/jpeg', 'image/webp'])
+
+// The picked image is shown here only while it is being saved.
+const pendingAvatar = ref('')
+const avatarBusy = ref(false)
 
 const displayName = computed(() => props.user?.username?.trim() || props.user?.email?.trim() || t('profile.user'))
 const avatarInitial = computed(() => Array.from(displayName.value)[0]?.toUpperCase() || 'U')
-const avatarPreviewUrl = computed(() => avatarDraft.value.trim() || props.user?.avatar_url?.trim() || '')
+const { src: savedAvatarSrc, onError: onSavedAvatarError } = useAvatarImage(() => props.user?.avatar_url)
+const previewSrc = computed(() => pendingAvatar.value || savedAvatarSrc.value)
 
-watch(
-  () => props.user?.avatar_url,
-  () => {
-    avatarDraft.value = ''
+function handlePreviewError() {
+  if (!pendingAvatar.value) {
+    onSavedAvatarError()
   }
-)
+}
 
 function normalizeUploadedAvatar(value: string): string | null {
   const normalized = value.trim()
@@ -149,6 +157,16 @@ function canvasToBlob(canvas: HTMLCanvasElement, type: string, quality: number):
   })
 }
 
+function drawAvatar(ctx: CanvasRenderingContext2D, image: HTMLImageElement, width: number, height: number, type: string) {
+  ctx.clearRect(0, 0, width, height)
+  if (type === 'image/jpeg') {
+    // JPEG has no transparency; paint white like the server-side compressor.
+    ctx.fillStyle = '#ffffff'
+    ctx.fillRect(0, 0, width, height)
+  }
+  ctx.drawImage(image, 0, 0, width, height)
+}
+
 async function compressAvatarFile(file: File): Promise<File> {
   const sourceDataURL = await readFileAsDataURL(file)
   const image = await loadImage(sourceDataURL)
@@ -158,19 +176,32 @@ async function compressAvatarFile(file: File): Promise<File> {
     throw new Error(t('profile.avatar.compressFailed'))
   }
 
+  // SVGs without an intrinsic size report 0; draw them at the avatar size.
+  const sourceWidth = image.naturalWidth || maxAvatarDimension
+  const sourceHeight = image.naturalHeight || maxAvatarDimension
+  const baseScale = Math.min(1, maxAvatarDimension / Math.max(sourceWidth, sourceHeight))
+  const fileName = file.name.replace(/\.[^.]+$/, '') || 'avatar'
+  let outputType = 'image/webp'
+
   for (const scale of avatarScaleSteps) {
-    const width = Math.max(1, Math.round(image.naturalWidth * scale))
-    const height = Math.max(1, Math.round(image.naturalHeight * scale))
+    const width = Math.max(1, Math.round(sourceWidth * baseScale * scale))
+    const height = Math.max(1, Math.round(sourceHeight * baseScale * scale))
     canvas.width = width
     canvas.height = height
-    ctx.clearRect(0, 0, width, height)
-    ctx.drawImage(image, 0, 0, width, height)
+    drawAvatar(ctx, image, width, height, outputType)
 
     for (const quality of avatarQualitySteps) {
-      const blob = await canvasToBlob(canvas, 'image/webp', quality)
+      let blob = await canvasToBlob(canvas, outputType, quality)
+      if (blob.type !== outputType) {
+        // Safari cannot encode WebP and quietly returns a PNG instead, which
+        // ignores the quality and is rarely under 20KB. Every browser encodes JPEG.
+        outputType = 'image/jpeg'
+        drawAvatar(ctx, image, width, height, outputType)
+        blob = await canvasToBlob(canvas, outputType, quality)
+      }
       if (blob.size <= targetAvatarUploadBytes) {
-        const fileName = file.name.replace(/\.[^.]+$/, '') || 'avatar'
-        return new File([blob], `${fileName}.webp`, { type: 'image/webp' })
+        const extension = outputType === 'image/jpeg' ? 'jpg' : 'webp'
+        return new File([blob], `${fileName}.${extension}`, { type: outputType })
       }
     }
   }
@@ -188,22 +219,25 @@ async function prepareAvatarUpload(file: File): Promise<File> {
     }
     return file
   }
-  if (file.size <= targetAvatarUploadBytes) {
+  if (file.size <= targetAvatarUploadBytes && passThroughAvatarTypes.has(file.type)) {
     return file
   }
   return compressAvatarFile(file)
 }
 
+// Picking an image saves it right away: a separate save step was easy to miss,
+// and an unsaved pick never reaches the header or the profile card.
 async function handleAvatarFileChange(event: Event) {
   const input = event.target as HTMLInputElement | null
   const file = input?.files?.[0]
   if (input) {
     input.value = ''
   }
-  if (!file) {
+  if (!file || avatarBusy.value) {
     return
   }
 
+  avatarBusy.value = true
   try {
     const preparedFile = await prepareAvatarUpload(file)
     const dataURL = await readFileAsDataURL(preparedFile)
@@ -211,50 +245,36 @@ async function handleAvatarFileChange(event: Event) {
     if (!normalized) {
       return
     }
-    avatarDraft.value = normalized
-  } catch (error: unknown) {
-    appStore.showError(extractApiErrorMessage(error, t('common.error')))
-  }
-}
-
-async function handleAvatarSave() {
-  const normalized = normalizeUploadedAvatar(avatarDraft.value)
-  if (!normalized) {
-    return
-  }
-
-  avatarSaving.value = true
-  try {
+    pendingAvatar.value = normalized
     const updated = await userAPI.updateProfile({ avatar_url: normalized })
     authStore.user = updated
-    avatarDraft.value = updated.avatar_url?.trim() || ''
     appStore.showSuccess(t('profile.avatar.saveSuccess'))
   } catch (error: unknown) {
     appStore.showError(extractApiErrorMessage(error, t('common.error')))
   } finally {
-    avatarSaving.value = false
+    pendingAvatar.value = ''
+    avatarBusy.value = false
   }
 }
 
 async function handleAvatarDelete() {
-  if (avatarSaving.value) {
+  if (avatarBusy.value) {
     return
   }
-  if (!avatarDraft.value.trim() && !props.user?.avatar_url?.trim()) {
+  if (!props.user?.avatar_url?.trim()) {
     appStore.showError(t('profile.avatar.emptyDeleteHint'))
     return
   }
 
-  avatarSaving.value = true
+  avatarBusy.value = true
   try {
     const updated = await userAPI.updateProfile({ avatar_url: '' })
     authStore.user = updated
-    avatarDraft.value = ''
     appStore.showSuccess(t('profile.avatar.deleteSuccess'))
   } catch (error: unknown) {
     appStore.showError(extractApiErrorMessage(error, t('common.error')))
   } finally {
-    avatarSaving.value = false
+    avatarBusy.value = false
   }
 }
 </script>
@@ -302,7 +322,7 @@ async function handleAvatarDelete() {
   object-fit: cover;
 }
 
-/* An unsaved pick gets a small tag so it is not mistaken for the saved avatar. */
+/* A pick that is still being saved gets a small tag. */
 .profile-avatar-draft {
   position: absolute;
   right: -0.375rem;

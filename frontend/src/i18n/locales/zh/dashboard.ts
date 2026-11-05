@@ -1034,9 +1034,9 @@ export default {
     },
     avatar: {
       title: '资料头像',
-      description: '仅支持上传头像图片；静态图片会自动压缩到 20KB 以内后再保存。',
+      description: '仅支持上传头像图片；选好后会自动压缩到 20KB 以内并立即保存。',
       uploadAction: '上传图片',
-      uploadHint: '上传图片时会自动压缩静态图片到 20KB 以内，GIF 需自行控制在 20KB 以内',
+      uploadHint: '选好图片即自动保存，静态图片会压缩到 20KB 以内，GIF 需自行控制在 20KB 以内',
       uploadRequired: '请先上传头像图片',
       saveSuccess: '头像已更新',
       deleteSuccess: '头像已删除',
@@ -1046,7 +1046,7 @@ export default {
       compressFailed: '压缩所选图片失败',
       readFailed: '读取所选图片失败',
       emptyDeleteHint: '当前没有可删除的头像',
-      unsaved: '未保存',
+      saving: '保存中',
     },
     authBindings: {
       title: '登录方式绑定',

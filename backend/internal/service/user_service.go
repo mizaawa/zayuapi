@@ -540,6 +540,10 @@ func (s *UserService) updateProfile(ctx context.Context, userID int64, req Updat
 			return nil, oldConcurrency, err
 		}
 		applyUserAvatar(user, avatar)
+	} else if err := s.hydrateUserAvatar(ctx, user); err != nil {
+		// 前端会用返回的用户整体替换本地资料：只改昵称、提醒等字段时也要带回已存的头像，
+		// 否则头部和资料页的头像会退回首字母。
+		return nil, oldConcurrency, fmt.Errorf("get user avatar: %w", err)
 	}
 
 	if req.Concurrency != nil {
@@ -1133,11 +1137,19 @@ func userLastActiveFresh(lastActiveAt *time.Time, now time.Time) bool {
 }
 
 func (s *UserService) hydrateUserAvatar(ctx context.Context, user *User) error {
-	if s == nil || s.userRepo == nil || user == nil || user.ID == 0 {
+	if s == nil {
+		return nil
+	}
+	return loadUserAvatar(ctx, s.userRepo, user)
+}
+
+// loadUserAvatar 把 user_avatars 里的头像补到从 users 表读出的用户上（users 表不存头像）。
+func loadUserAvatar(ctx context.Context, repo UserRepository, user *User) error {
+	if repo == nil || user == nil || user.ID == 0 {
 		return nil
 	}
 
-	avatar, err := s.userRepo.GetUserAvatar(ctx, user.ID)
+	avatar, err := repo.GetUserAvatar(ctx, user.ID)
 	if err != nil {
 		return err
 	}

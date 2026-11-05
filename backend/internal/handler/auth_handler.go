@@ -120,6 +120,10 @@ func respondWithTokenPair(c *gin.Context, authService *service.AuthService, user
 		response.ErrorFrom(c, err)
 		return
 	}
+	// 前端直接用这里的 user 渲染头部头像；读头像失败不影响登录，下一次 /auth/me 会补上。
+	if err := authService.LoadUserAvatar(c.Request.Context(), user); err != nil {
+		slog.Warn("failed to load avatar for login response", "error", err, "user_id", user.ID)
+	}
 
 	tokenPair, err := authService.GenerateTokenPair(c.Request.Context(), user, "")
 	if err != nil {

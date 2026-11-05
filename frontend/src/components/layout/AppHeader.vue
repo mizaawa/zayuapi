@@ -124,12 +124,15 @@
           >
             <div class="flex h-8 w-8 items-center justify-center overflow-hidden rounded-xl bg-gradient-to-br from-primary-500 to-primary-600 text-sm font-medium text-white shadow-sm">
               <img
-                v-if="avatarUrl"
-                :src="avatarUrl"
+                v-if="avatarSrc"
+                data-testid="header-avatar-image"
+                :src="avatarSrc"
                 :alt="displayName"
+                referrerpolicy="no-referrer"
                 class="h-full w-full object-cover"
+                @error="onAvatarError"
               >
-              <span v-else>{{ userInitials }}</span>
+              <span v-else data-testid="header-avatar-initials">{{ userInitials }}</span>
             </div>
             <div class="hidden text-left md:block">
               <div class="text-sm font-medium text-gray-900 dark:text-white">
@@ -276,6 +279,7 @@ import LocaleSwitcher from '@/components/common/LocaleSwitcher.vue'
 import SubscriptionProgressMini from '@/components/common/SubscriptionProgressMini.vue'
 import AnnouncementBell from '@/components/common/AnnouncementBell.vue'
 import Icon from '@/components/icons/Icon.vue'
+import { useAvatarImage } from '@/composables/useAvatarImage'
 import { sanitizeUrl } from '@/utils/url'
 
 const router = useRouter()
@@ -291,7 +295,7 @@ const dropdownOpen = ref(false)
 const dropdownRef = ref<HTMLElement | null>(null)
 const contactInfo = computed(() => appStore.contactInfo)
 const docUrl = computed(() => sanitizeUrl(appStore.docUrl))
-const avatarUrl = computed(() => user.value?.avatar_url?.trim() || '')
+const { src: avatarSrc, onError: onAvatarError } = useAvatarImage(() => user.value?.avatar_url)
 const availableBalance = computed(() => Number(user.value?.balance || 0))
 const frozenBalance = computed(() => Number(user.value?.frozen_balance || 0))
 const totalBalance = computed(() => availableBalance.value + frozenBalance.value)

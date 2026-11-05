@@ -73,8 +73,10 @@ func (s *emailSyncRepoStub) Update(_ context.Context, user *User, _ UserUpdateFi
 
 func (s *emailSyncRepoStub) Delete(context.Context, int64) error { return nil }
 
+// UpdateProfile reads the stored avatar back so its response keeps it; these
+// users have none.
 func (s *emailSyncRepoStub) GetUserAvatar(context.Context, int64) (*UserAvatar, error) {
-	return nil, fmt.Errorf("unexpected GetUserAvatar call")
+	return nil, nil
 }
 
 func (s *emailSyncRepoStub) UpsertUserAvatar(context.Context, int64, UpsertUserAvatarInput) (*UserAvatar, error) {

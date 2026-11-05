@@ -15,6 +15,10 @@ FRONTEND_CRITICAL_VITEST := \
 	src/views/user/__tests__/PaymentView.spec.ts \
 	src/views/user/__tests__/PaymentResultView.spec.ts \
 	src/components/user/profile/__tests__/ProfileInfoCard.spec.ts \
+	src/components/user/profile/__tests__/ProfileAvatarCard.spec.ts \
+	src/components/layout/__tests__/AppHeader.avatar.spec.ts \
+	src/composables/__tests__/useAvatarImage.spec.ts \
+	src/views/__tests__/HomeView.compact.spec.ts \
 	src/components/keys/__tests__/SystemPromptSettings.spec.ts \
 	src/components/keys/__tests__/UseKeyModal.spec.ts \
 	src/components/keys/__tests__/KeyGroupPicker.spec.ts \

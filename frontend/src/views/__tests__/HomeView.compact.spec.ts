@@ -15,7 +15,7 @@ const { appStore, authStore } = vi.hoisted(() => ({
   authStore: {
     isAuthenticated: false,
     isAdmin: false,
-    user: null as { email?: string } | null,
+    user: null as { email?: string; avatar_url?: string | null } | null,
     checkAuth: vi.fn(),
   },
 }))
@@ -151,5 +151,34 @@ describe('HomeView compact mode', () => {
     expect(compactDestination(wrapper)).toBe('/admin/dashboard')
     expect(authStore.checkAuth).toHaveBeenCalledOnce()
     expect(appStore.fetchPublicSettings).not.toHaveBeenCalled()
+  })
+})
+
+describe('HomeView landing header', () => {
+  beforeEach(() => {
+    authStore.isAuthenticated = true
+    authStore.isAdmin = false
+    localStorage.clear()
+    vi.spyOn(window, 'matchMedia').mockReturnValue({ matches: false } as MediaQueryList)
+  })
+
+  it('shows the saved avatar next to the dashboard link', async () => {
+    authStore.user = { email: 'miza@example.com', avatar_url: 'data:image/webp;base64,UklGRg==' }
+
+    const avatar = mountHome().get('[data-testid="landing-avatar"]')
+    const image = avatar.get('img')
+    expect(image.attributes('src')).toBe('data:image/webp;base64,UklGRg==')
+
+    await image.trigger('error')
+    expect(avatar.find('img').exists()).toBe(false)
+    expect(avatar.text()).toBe('M')
+  })
+
+  it('shows the initial when there is no avatar', () => {
+    authStore.user = { email: 'miza@example.com', avatar_url: null }
+
+    const avatar = mountHome().get('[data-testid="landing-avatar"]')
+    expect(avatar.find('img').exists()).toBe(false)
+    expect(avatar.text()).toBe('M')
   })
 })

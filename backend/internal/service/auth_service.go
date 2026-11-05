@@ -1551,6 +1551,15 @@ type TokenPairWithUser struct {
 	UserRole string
 }
 
+// LoadUserAvatar 为登录响应补上 user_avatars 中保存的头像：users 表本身不带头像，
+// 不补的话前端登录后会一直显示首字母，直到下一次 /auth/me 刷新。
+func (s *AuthService) LoadUserAvatar(ctx context.Context, user *User) error {
+	if s == nil || user == nil || user.AvatarURL != "" {
+		return nil
+	}
+	return loadUserAvatar(ctx, s.userRepo, user)
+}
+
 // GenerateTokenPair 生成Access Token和Refresh Token对
 // familyID: 可选的Token家族ID，用于Token轮转时保持家族关系
 func (s *AuthService) GenerateTokenPair(ctx context.Context, user *User, familyID string) (*TokenPair, error) {

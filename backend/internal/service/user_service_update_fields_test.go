@@ -60,6 +60,28 @@ func TestUpdateProfile_AvatarOnlySkipsUserRowWrite(t *testing.T) {
 	require.Equal(t, []UserUpdateFields{{}}, repo.updateFields, "no user column should be declared")
 }
 
+// 前端用返回的用户整体替换本地资料：只改昵称时也必须带回已保存的头像。
+func TestUpdateProfile_UsernameOnlyReturnsStoredAvatar(t *testing.T) {
+	storedAvatar := "data:image/webp;base64,UklGRg=="
+	repo := &mockUserRepo{
+		getByIDUser: &User{ID: 7, Username: "before"},
+		getAvatarFn: func(_ context.Context, userID int64) (*UserAvatar, error) {
+			require.Equal(t, int64(7), userID)
+			return &UserAvatar{StorageProvider: "inline", URL: storedAvatar, ContentType: "image/webp"}, nil
+		},
+	}
+	svc := NewUserService(repo, nil, nil, nil)
+
+	username := "after"
+	updated, err := svc.UpdateProfile(context.Background(), 7, UpdateProfileRequest{Username: &username})
+	require.NoError(t, err)
+	require.Equal(t, "after", updated.Username)
+	require.Equal(t, storedAvatar, updated.AvatarURL)
+	require.Equal(t, "inline", updated.AvatarSource)
+	require.Empty(t, repo.upsertAvatarArgs, "the stored avatar must not be rewritten")
+	require.Empty(t, repo.deleteAvatarIDs)
+}
+
 func TestChangePassword_OnlyDeclaresPasswordHash(t *testing.T) {
 	user := &User{ID: 7, Balance: 0.30}
 	require.NoError(t, user.SetPassword("old-password"))

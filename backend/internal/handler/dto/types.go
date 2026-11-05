@@ -14,6 +14,7 @@ type User struct {
 	ID                       int64   `json:"id"`
 	Email                    string  `json:"email"`
 	Username                 string  `json:"username"`
+	AvatarURL                string  `json:"avatar_url,omitempty"` // 读取方补过头像（GetByID / LoadUserAvatar）才有值
 	Role                     string  `json:"role"`
 	Balance                  float64 `json:"balance"`
 	FrozenBalance            float64 `json:"frozen_balance"`

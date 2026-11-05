@@ -216,4 +216,30 @@ describe('ProfileInfoCard', () => {
     expect(wrapper.get('[data-testid="profile-basics-panel"]').exists()).toBe(true)
     expect(wrapper.get('[data-testid="profile-auth-bindings-panel"]').exists()).toBe(true)
   })
+
+  it('shows the saved avatar in the hero and falls back to the initial when it cannot load', async () => {
+    const wrapper = mount(ProfileInfoCard, {
+      props: {
+        user: createUser({ avatar_url: 'data:image/webp;base64,UklGRg==' })
+      },
+      global: {
+        stubs: {
+          Icon: true
+        }
+      }
+    })
+
+    const image = wrapper.get('[data-testid="profile-hero-avatar-image"]')
+    expect(image.attributes('src')).toBe('data:image/webp;base64,UklGRg==')
+    expect(wrapper.find('[data-testid="profile-hero-avatar-initial"]').exists()).toBe(false)
+
+    await image.trigger('error')
+
+    expect(wrapper.find('[data-testid="profile-hero-avatar-image"]').exists()).toBe(false)
+    expect(wrapper.get('[data-testid="profile-hero-avatar-initial"]').text()).toBe('A')
+
+    await wrapper.setProps({ user: createUser({ avatar_url: 'data:image/png;base64,iVBORw==' }) })
+
+    expect(wrapper.get('[data-testid="profile-hero-avatar-image"]').attributes('src')).toBe('data:image/png;base64,iVBORw==')
+  })
 })
