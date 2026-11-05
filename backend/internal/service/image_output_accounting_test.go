@@ -252,3 +252,37 @@ func TestOpenAIImageOutputCounter_AddJSONResponse_Exported(t *testing.T) {
 		})
 	}
 }
+
+func TestOpenAIImageOutputCounter_CountsFlatImageEditCompletedEvents(t *testing.T) {
+	tests := []struct {
+		name  string
+		body  string
+		count int
+	}{
+		{
+			name:  "flat edit completion",
+			body:  "data: {\"type\":\"image_edit.completed\",\"b64_json\":\"image-a\",\"usage\":{\"input_tokens\":8}}\n\n",
+			count: 1,
+		},
+		{
+			name:  "multiple edit completions",
+			body:  "data: {\"type\":\"image_edit.completed\",\"b64_json\":\"image-a\"}\n\ndata: {\"type\":\"image_edit.completed\",\"b64_json\":\"image-b\"}\n\n",
+			count: 2,
+		},
+		{
+			name:  "partial edit without output is not billable",
+			body:  "data: {\"type\":\"image_edit.partial_image\",\"partial_image_b64\":\"preview\"}\n\n",
+			count: 0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			counter := newOpenAIImageOutputCounter()
+			counter.AddSSEBody(tt.body)
+			if got := counter.Count(); got != tt.count {
+				t.Fatalf("Count() = %d, want %d", got, tt.count)
+			}
+		})
+	}
+}

@@ -14,6 +14,8 @@ export default {
         payment: 'Payment',
       },
       features: {
+        defaultUpstreamBillingRateSync: 'Enable upstream rate sync by default',
+        defaultUpstreamBillingRateSyncHint: 'When enabled, new API Key accounts start with upstream protocol detection and automatic rate sync turned on. You can still turn it off when creating an account.',
         frozenBalance: {
           releaseHours: 'Frozen balance release time (hours)',
           releaseHoursHint: 'Automatically return frozen funds to the available balance after this time. Defaults to 1 hour; accepts 1–720 hours. Changes also apply to existing holds; late task results are still settled at actual cost.',
@@ -471,14 +473,16 @@ export default {
         allowUngroupedKeyHint: 'When disabled, API Keys not assigned to any group cannot make requests (403 Forbidden). Keep disabled to ensure all Keys belong to a specific group.'
       },
       upstreamBillingProbe: {
-        title: 'Upstream Rate Auto Detection',
-        description: 'Periodically retrieve rates declared by upstream Sub2API sites. Account rates change only when the separate sync switch is enabled.',
-        enabled: 'Enable global auto detection',
-        enabledHint: 'When enabled, scheduled detection runs only for accounts that also enable automatic detection. Disabling stops all scheduled detection; manual detection remains available.',
-        intervalMinutes: 'Detection interval (minutes)',
-        intervalHint: 'Range: 5–1440 minutes. A successful result remains valid for two detection intervals.',
-        saved: 'Upstream rate auto detection settings saved',
-        saveFailed: 'Failed to save upstream rate auto detection settings'
+        title: 'Account Rate Sync',
+        description: 'Detect Sub2API or New API on a schedule and read its upstream rate. Sub2API uses its current billing endpoint; New API reads the most recently used group rate from API key consumption logs. Only the current New API interface is supported; old versions or missing logs never change the account rate.',
+        enabled: 'Enable scheduled detection and sync',
+        enabledHint: 'Only API Key accounts with automatic upstream rate sync enabled are processed. Turning this off stops scheduled probes; manual probes remain available.',
+        intervalSeconds: 'Detection and sync interval (seconds)',
+        intervalHint: 'Range: 5–86400 seconds. Successful results remain valid for two intervals.',
+        newapiMultiplierConsensusCount: 'New API matching rate confirmations',
+        newapiMultiplierConsensusCountHint: 'Write the rate only after this many consecutive recent consumption logs show the same multiplier and it differs from the account rate. Range: 1–100; default: 3.',
+        saved: 'Account rate sync settings saved',
+        saveFailed: 'Failed to save account rate sync settings'
       },
       ollamaCloudUsage: {
         title: 'Ollama Cloud Usage Refresh',

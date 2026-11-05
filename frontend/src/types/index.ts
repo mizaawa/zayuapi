@@ -1085,11 +1085,22 @@ export interface UpstreamBillingData {
   observed_at: string
 }
 
-export type UpstreamBillingProbeStatus = 'ok' | 'unsupported' | 'failed'
+export interface UpstreamBillingLogData {
+  resolved_rate_multiplier: number
+  group: string
+  source: 'consumption_log'
+  consensus_required: number
+}
+
+export type UpstreamBillingProbeStatus = 'ok' | 'unsupported' | 'failed' | 'waiting_logs' | 'waiting_consensus'
 
 export interface UpstreamBillingProbeSnapshot {
   status: UpstreamBillingProbeStatus
-  data?: UpstreamBillingData
+  protocol?: 'newapi' | 'sub2api' | 'unknown'
+  data?: UpstreamBillingData | UpstreamBillingLogData
+  observed_multiplier?: number
+  observed_multiplier_at?: string
+  multiplier_match_count?: number
   received_at?: string
   fresh_until?: string
   last_attempt_at: string
@@ -1104,7 +1115,8 @@ export interface UpstreamBillingProbeSnapshot {
 
 export interface UpstreamBillingProbeSettings {
   enabled: boolean
-  interval_minutes: number
+  interval_seconds: number
+  newapi_multiplier_consensus_count: number
 }
 
 export interface UpstreamBillingProbeResult {
@@ -1470,6 +1482,7 @@ export interface CreateAccountRequest {
   expires_at?: number | null
   auto_pause_on_expired?: boolean
   upstream_billing_probe_enabled?: boolean
+  upstream_billing_rate_sync_enabled?: boolean
   confirm_mixed_channel_risk?: boolean
   /** Provider import: the server writes this provider key into credentials. */
   provider_id?: string

@@ -570,8 +570,8 @@ func latestFinishedAt(runs []*DegradationRun) *time.Time {
 	return &started
 }
 
-// GetRunForUser returns one finished result with its document when its monitor
-// is visible. A check that is still generating reads as not found.
+// GetRunForUser returns a finished result only within the same per-monitor
+// display window as Overview. Hidden, running and older results read as not found.
 func (s *DegradationMonitorService) GetRunForUser(ctx context.Context, id int64) (*DegradationRun, error) {
 	if !s.Enabled(ctx) {
 		return nil, ErrDegradationRunNotFound
@@ -593,7 +593,18 @@ func (s *DegradationMonitorService) GetRunForUser(ctx context.Context, id int64)
 	if !monitor.Enabled || monitor.GroupDeleted {
 		return nil, ErrDegradationRunNotFound
 	}
-	return run, nil
+	// A visible monitor does not publish its entire history. Recheck the current
+	// window so guessing an ID cannot expose results omitted from the gallery.
+	recent, err := s.repo.ListRecentFinishedRuns(ctx, []int64{monitor.ID}, s.GetConfig(ctx).MaxDisplayPerGroup)
+	if err != nil {
+		return nil, fmt.Errorf("list visible degradation results: %w", err)
+	}
+	for _, summary := range recent[monitor.ID] {
+		if summary.ID == run.ID {
+			return run, nil
+		}
+	}
+	return nil, ErrDegradationRunNotFound
 }
 
 // GetRun returns one result for administrators.

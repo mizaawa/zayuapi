@@ -14,6 +14,8 @@ export default {
         payment: '支付设置',
       },
       features: {
+        defaultUpstreamBillingRateSync: '默认启用自动同步上游倍率',
+        defaultUpstreamBillingRateSyncHint: '开启后，创建 API Key 账号时会默认开启上游协议探测与倍率自动同步；仍可在创建账号时关闭。',
         frozenBalance: {
           releaseHours: '冻结金额释放时间（小时）',
           releaseHoursHint: '冻结金额超过设定时间后自动返还可用余额，默认 1 小时，可设置 1–720 小时。保存后对已有冻结金额也生效；任务晚到仍会按实际费用结算。',
@@ -464,14 +466,16 @@ export default {
         allowUngroupedKeyHint: '关闭后，未分配到任何分组的 API Key 将无法发起请求（返回 403）。建议保持关闭以确保所有 Key 都归属明确的分组。'
       },
       upstreamBillingProbe: {
-        title: '上游倍率自动探测',
-        description: '定期获取 API Key 账号所连接上游 Sub2API 站点声明的计费倍率；只有另行开启“同步上游声明倍率”的账号才会更新账号倍率。',
-        enabled: '启用全局自动探测',
-        enabledHint: '开启后，仅对账号自身已启用自动检测的账号执行定时探测；关闭后停止所有定时探测，手动探测不受影响。',
-        intervalMinutes: '探测周期（分钟）',
-        intervalHint: '范围 5–1440 分钟。成功探测结果的有效期为两个探测周期。',
-        saved: '上游倍率自动探测设置已保存',
-        saveFailed: '保存上游倍率自动探测设置失败'
+        title: '账号倍率同步',
+        description: '按周期识别 Sub2API 或 New API 并获取上游倍率。Sub2API 使用当前计费接口；New API 从 API Key 消费日志读取最近使用的分组倍率。New API 仅支持当前接口格式，旧版或无消费日志时不会修改账号倍率。',
+        enabled: '启用定时探测和同步',
+        enabledHint: '只处理账号自身已开启“自动同步上游倍率”的 API Key 账号；关闭后停止所有定时探测，手动探测不受影响。',
+        intervalSeconds: '探测与同步周期（秒）',
+        intervalHint: '范围 5–86400 秒。成功探测结果的有效期为两个探测周期。',
+        newapiMultiplierConsensusCount: 'New API 相同倍率确认次数',
+        newapiMultiplierConsensusCountHint: '最近消费日志中连续出现相同倍率达到此次数，且与当前账号倍率不同时才写回。范围 1–100，默认 3。',
+        saved: '账号倍率同步设置已保存',
+        saveFailed: '保存账号倍率同步设置失败'
       },
       ollamaCloudUsage: {
         title: 'Ollama Cloud 用量刷新',

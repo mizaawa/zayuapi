@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"strings"
 	"time"
@@ -370,7 +371,8 @@ func (h *UserHandler) SendEmailBindingCode(c *gin.Context) {
 		return
 	}
 
-	if err := h.authService.SendEmailIdentityBindCode(c.Request.Context(), subject.UserID, req.Email, c.GetHeader("Accept-Language")); err != nil {
+	if err := h.authService.SendEmailIdentityBindCode(c.Request.Context(), subject.UserID, req.Email, c.GetHeader("Accept-Language")); err != nil &&
+		!errors.Is(err, service.ErrVerifyCodeTooFrequent) && !errors.Is(err, service.ErrNotifyCodeUserRateLimit) && !errors.Is(err, service.ErrEmailExists) {
 		response.ErrorFrom(c, err)
 		return
 	}
@@ -399,7 +401,7 @@ func (h *UserHandler) SendNotifyEmailCode(c *gin.Context) {
 	}
 
 	err := h.userService.SendNotifyEmailCode(c.Request.Context(), subject.UserID, req.Email, h.emailService, h.emailCache, c.GetHeader("Accept-Language"))
-	if err != nil {
+	if err != nil && !errors.Is(err, service.ErrVerifyCodeTooFrequent) && !errors.Is(err, service.ErrNotifyCodeUserRateLimit) {
 		response.ErrorFrom(c, err)
 		return
 	}

@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -233,40 +234,158 @@ func TestUpstreamBillingProbeSettingsDefaultsAndValidation(t *testing.T) {
 	settings, err := settingsService.GetUpstreamBillingProbeSettings(context.Background())
 	require.NoError(t, err)
 	require.True(t, settings.Enabled)
-	require.Equal(t, 30, settings.IntervalMinutes)
+	require.Equal(t, upstreamBillingProbeDefaultIntervalSeconds, settings.IntervalSeconds)
+	require.Equal(t, upstreamBillingProbeDefaultConsensusCount, settings.NewAPIMultiplierConsensusCount)
 
 	err = settingsService.SetUpstreamBillingProbeSettings(context.Background(), &UpstreamBillingProbeSettings{
 		Enabled:         false,
-		IntervalMinutes: 4,
+		IntervalSeconds: 4,
 	})
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "interval_minutes must be between 5 and 1440")
+	require.Contains(t, err.Error(), "interval_seconds must be between 5 and 86400")
 
 	err = settingsService.SetUpstreamBillingProbeSettings(context.Background(), &UpstreamBillingProbeSettings{
 		Enabled:         false,
-		IntervalMinutes: 60,
+		IntervalSeconds: 60,
 	})
 	require.NoError(t, err)
 	settings, err = settingsService.GetUpstreamBillingProbeSettings(context.Background())
 	require.NoError(t, err)
 	require.False(t, settings.Enabled)
-	require.Equal(t, 60, settings.IntervalMinutes)
+	require.Equal(t, 60, settings.IntervalSeconds)
+	require.Equal(t, upstreamBillingProbeDefaultConsensusCount, settings.NewAPIMultiplierConsensusCount)
+
+	err = settingsService.SetUpstreamBillingProbeSettings(context.Background(), &UpstreamBillingProbeSettings{
+		Enabled:                        true,
+		IntervalSeconds:                60,
+		NewAPIMultiplierConsensusCount: 101,
+	})
+	require.ErrorContains(t, err, "newapi_multiplier_consensus_count must be between 1 and 100")
+
+	err = settingsService.SetUpstreamBillingProbeSettings(context.Background(), &UpstreamBillingProbeSettings{
+		Enabled:                        true,
+		IntervalSeconds:                60,
+		NewAPIMultiplierConsensusCount: 5,
+	})
+	require.NoError(t, err)
+	settings, err = settingsService.GetUpstreamBillingProbeSettings(context.Background())
+	require.NoError(t, err)
+	require.Equal(t, 5, settings.NewAPIMultiplierConsensusCount)
 
 	repo.values[SettingKeyUpstreamBillingProbeSettings] = `{"interval_minutes":45}`
 	settings, err = settingsService.GetUpstreamBillingProbeSettings(context.Background())
 	require.NoError(t, err)
 	require.True(t, settings.Enabled)
-	require.Equal(t, 45, settings.IntervalMinutes)
+	require.Equal(t, 2700, settings.IntervalSeconds)
 	repo.values[SettingKeyUpstreamBillingProbeSettings] = `{"enabled":false}`
 	settings, err = settingsService.GetUpstreamBillingProbeSettings(context.Background())
 	require.NoError(t, err)
 	require.False(t, settings.Enabled)
-	require.Equal(t, 30, settings.IntervalMinutes)
+	require.Equal(t, upstreamBillingProbeDefaultIntervalSeconds, settings.IntervalSeconds)
 
 	repo.values[SettingKeyUpstreamBillingProbeSettings] = `{"enabled":`
 	settings, err = settingsService.GetUpstreamBillingProbeSettings(context.Background())
 	require.ErrorContains(t, err, "parse upstream billing probe settings")
 	require.Nil(t, settings)
+}
+
+func TestUpstreamBillingProbeProtocolOrderUsesProviderSiteType(t *testing.T) {
+	for _, test := range []struct {
+		name     string
+		siteType string
+		want     []string
+	}{
+		{name: "new api", siteType: "new-api", want: []string{UpstreamBillingProtocolNewAPI, UpstreamBillingProtocolSub2API}},
+		{name: "sub2api", siteType: "sub2api", want: []string{UpstreamBillingProtocolSub2API, UpstreamBillingProtocolNewAPI}},
+		{name: "unknown", siteType: "custom", want: []string{UpstreamBillingProtocolSub2API, UpstreamBillingProtocolNewAPI}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			account := &Account{Extra: map[string]any{"provider_binding": map[string]any{"site_type": test.siteType}}}
+			require.Equal(t, test.want, upstreamBillingProbeProtocolOrder(account))
+		})
+	}
+}
+
+func TestUpstreamBillingProbeDetectsNewAPIAndSyncsRecentConsumptionRate(t *testing.T) {
+	initialRate := 0.25
+	account := &Account{
+		ID:          71,
+		Platform:    PlatformOpenAI,
+		Type:        AccountTypeAPIKey,
+		Status:      StatusActive,
+		Concurrency: 1,
+		Credentials: map[string]any{"api_key": "sk-test", "base_url": "https://upstream.example/v1"},
+		Extra: map[string]any{
+			"provider_binding":                     map[string]any{"site_type": "newapi"},
+			UpstreamBillingProbeEnabledExtraKey:    true,
+			UpstreamBillingRateSyncEnabledExtraKey: true,
+		},
+		RateMultiplier: &initialRate,
+	}
+	repo := &upstreamBillingProbeAccountRepo{accounts: map[int64]*Account{account.ID: account}}
+	upstream := &httpUpstreamRecorder{responses: []*http.Response{
+		{StatusCode: http.StatusOK, Header: http.Header{}, Body: io.NopCloser(strings.NewReader(`{"code":true,"data":{"object":"token_usage","name":"test-key","total_used":10,"total_available":90,"unlimited_quota":false}}`))},
+		{StatusCode: http.StatusOK, Header: http.Header{}, Body: io.NopCloser(strings.NewReader(`{"success":true,"data":[{"id":1,"created_at":1793890000,"type":2,"group":"standard","other":{"group_ratio":0.5,"user_group_ratio":-1}}]}`))},
+	}}
+	settingsRepo := &upstreamBillingProbeSettingRepo{values: map[string]string{
+		SettingKeyUpstreamBillingProbeSettings: `{"enabled":true,"interval_seconds":60,"newapi_multiplier_consensus_count":1}`,
+	}}
+	svc := newUpstreamBillingProbeTestService(repo, upstream, settingsRepo)
+
+	snapshot, err := svc.ProbeAccount(context.Background(), account.ID)
+
+	require.NoError(t, err)
+	require.Equal(t, UpstreamBillingProtocolNewAPI, snapshot.Protocol)
+	require.Equal(t, UpstreamBillingProbeStatusOK, snapshot.Status)
+	require.Equal(t, 1, snapshot.MultiplierMatchCount)
+	require.NotNil(t, snapshot.SyncedRateMultiplier)
+	require.Equal(t, 0.5, *snapshot.SyncedRateMultiplier)
+	require.NotNil(t, account.RateMultiplier)
+	require.Equal(t, 0.5, *account.RateMultiplier)
+	require.Len(t, upstream.requests, 2)
+	require.Equal(t, "https://upstream.example/api/usage/token/", upstream.requests[0].URL.String())
+	require.Equal(t, "https://upstream.example/api/log/token", upstream.requests[1].URL.String())
+	require.Equal(t, "Bearer sk-test", upstream.requests[0].Header.Get("Authorization"))
+}
+
+func TestUpstreamBillingProbeNewAPIRequiresConsecutiveMatchingLogsBeforeSync(t *testing.T) {
+	initialRate := 0.25
+	account := &Account{
+		ID:          72,
+		Platform:    PlatformOpenAI,
+		Type:        AccountTypeAPIKey,
+		Credentials: map[string]any{"api_key": "sk-test", "base_url": "https://upstream.example"},
+		Extra: map[string]any{
+			UpstreamBillingProbeEnabledExtraKey:    true,
+			UpstreamBillingRateSyncEnabledExtraKey: true,
+		},
+		RateMultiplier: &initialRate,
+	}
+	repo := &upstreamBillingProbeAccountRepo{accounts: map[int64]*Account{account.ID: account}}
+	svc := newUpstreamBillingProbeTestService(repo, &upstreamBillingProbeHTTPStub{}, &upstreamBillingProbeSettingRepo{})
+	now := time.Date(2026, time.November, 6, 1, 0, 0, 0, time.UTC)
+	logs := []newAPIConsumptionLog{
+		{ID: 3, CreatedAt: now.Unix(), Type: 2, Group: "standard", Other: json.RawMessage(`{"group_ratio":0.5}`)},
+		{ID: 2, CreatedAt: now.Unix() - 1, Type: 2, Group: "standard", Other: json.RawMessage(`{"group_ratio":0.5}`)},
+		{ID: 1, CreatedAt: now.Unix() - 2, Type: 2, Group: "standard", Other: json.RawMessage(`{"group_ratio":0.4}`)},
+	}
+
+	snapshot, err := svc.persistNewAPIProbeResult(context.Background(), account, logs, http.StatusOK, time.Minute, 3, now)
+
+	require.NoError(t, err)
+	require.Equal(t, UpstreamBillingProbeStatusWaitingConsensus, snapshot.Status)
+	require.Equal(t, 2, snapshot.MultiplierMatchCount)
+	require.Nil(t, snapshot.SyncedRateMultiplier)
+	require.Equal(t, 0.25, *account.RateMultiplier)
+
+	logs[2].Other = json.RawMessage(`{"group_ratio":0.5}`)
+	snapshot, err = svc.persistNewAPIProbeResult(context.Background(), account, logs, http.StatusOK, time.Minute, 3, now)
+
+	require.NoError(t, err)
+	require.Equal(t, UpstreamBillingProbeStatusOK, snapshot.Status)
+	require.Equal(t, 3, snapshot.MultiplierMatchCount)
+	require.NotNil(t, snapshot.SyncedRateMultiplier)
+	require.Equal(t, 0.5, *account.RateMultiplier)
 }
 
 func TestUpstreamBillingProbeSuccessPersistsSanitizedSnapshot(t *testing.T) {
@@ -736,26 +855,24 @@ func TestUpstreamBillingProbeFailurePreservesLastSuccessAndRetryAfter(t *testing
 }
 
 func TestUpstreamBillingProbeRetryAfterIsCappedAtMaxDelay(t *testing.T) {
-	delay := nextProbeDelay(30, 48*time.Hour)
+	delay := nextProbeDelay(30*time.Second, 48*time.Hour)
 	require.Equal(t, upstreamBillingProbeMaxDelay, delay)
 }
 
 // unsupported 的重探间隔明显长于普通失败，但始终有上界：上游后来接入 sub2api
 // 时最迟一天内会被重新发现，且上游超长 Retry-After 亦受 24h 封顶保护。
 func TestUpstreamBillingProbeUnsupportedDelayIsStretchedAndBounded(t *testing.T) {
-	// 默认 30 分钟 interval：普通失败 24~36 分钟，unsupported 为其 8 倍。
-	stretched := unsupportedProbeDelay(30, 0)
-	require.Greater(t, stretched, 36*time.Minute)
-	require.GreaterOrEqual(t, stretched, 192*time.Minute)
-	require.LessOrEqual(t, stretched, 288*time.Minute)
+	// 30 秒 interval：unsupported 为普通周期的 8 倍。
+	stretched := unsupportedProbeDelay(30*time.Second, 0)
+	require.Equal(t, 4*time.Minute, stretched)
 
 	// 永不超过封顶值，因此 unsupported 账号不会被永久排除在重探之外。
-	require.LessOrEqual(t, unsupportedProbeDelay(upstreamBillingProbeMaxIntervalMinutes, 0), upstreamBillingProbeMaxDelay)
-	require.Positive(t, unsupportedProbeDelay(upstreamBillingProbeMinIntervalMinutes, 0))
+	require.LessOrEqual(t, unsupportedProbeDelay(time.Duration(upstreamBillingProbeMaxIntervalSeconds)*time.Second, 0), upstreamBillingProbeMaxDelay)
+	require.Positive(t, unsupportedProbeDelay(time.Duration(upstreamBillingProbeMinIntervalSeconds)*time.Second, 0))
 
 	// Retry-After 更长时受封顶保护，不超过 upstreamBillingProbeMaxDelay；更短时至少不早于该指令。
-	require.Equal(t, upstreamBillingProbeMaxDelay, unsupportedProbeDelay(30, 48*time.Hour))
-	require.GreaterOrEqual(t, unsupportedProbeDelay(30, time.Hour), time.Hour)
+	require.Equal(t, upstreamBillingProbeMaxDelay, unsupportedProbeDelay(30*time.Second, 48*time.Hour))
+	require.GreaterOrEqual(t, unsupportedProbeDelay(30*time.Second, time.Hour), time.Hour)
 }
 
 // 加长退避只把 unsupported 账号移出周期性热队列，手动探测不受影响。
@@ -1184,7 +1301,7 @@ func TestUpstreamBillingProbeManualAndScheduledRequestsShareOneNetworkProbe(t *t
 
 	errs := make(chan error, 2)
 	go func() {
-		_, err := svc.probeScheduledAccount(context.Background(), account.ID, 30)
+		_, err := svc.probeScheduledAccount(context.Background(), account.ID, 30*time.Second, upstreamBillingProbeDefaultConsensusCount)
 		errs <- err
 	}()
 	select {
@@ -1224,7 +1341,7 @@ func TestUpstreamBillingProbeScheduledRechecksAfterWaitingForSlot(t *testing.T) 
 	}
 	result := make(chan error, 1)
 	go func() {
-		_, err := svc.probeScheduledAccount(context.Background(), account.ID, 30)
+		_, err := svc.probeScheduledAccount(context.Background(), account.ID, 30*time.Second, upstreamBillingProbeDefaultConsensusCount)
 		result <- err
 	}()
 	time.Sleep(20 * time.Millisecond)

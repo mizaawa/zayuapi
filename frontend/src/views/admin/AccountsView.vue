@@ -245,7 +245,6 @@
               >
                 {{ accountDisplayEmail(row) }}
               </span>
-              <AccountSourceBadge :account="row" class="mt-1 max-w-[220px] self-start" />
             </div>
           </template>
           <template #cell-notes="{ value }">
@@ -267,6 +266,7 @@
                   {{ getAntigravityTierLabel(row) }}
                 </span>
               </div>
+              <AccountSourceBadge :account="row" class="max-w-[220px] self-start" />
               <div
                 v-if="getOpenAICompactMeta(row)"
                 :class="[

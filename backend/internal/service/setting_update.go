@@ -439,6 +439,7 @@ func (s *SettingService) buildSystemSettingsUpdates(ctx context.Context, setting
 
 	updates[SettingKeyDisableRedeemCodeCreationLimit] = strconv.FormatBool(settings.DisableRedeemCodeCreationLimit)
 	updates[SettingKeyResourceLibraryEnabled] = strconv.FormatBool(settings.ResourceLibraryEnabled)
+	updates[SettingKeyDefaultUpstreamBillingRateSyncEnabled] = strconv.FormatBool(settings.DefaultUpstreamBillingRateSyncEnabled)
 	settings.FrozenBalanceReleaseHours = normalizeFrozenBalanceReleaseHours(settings.FrozenBalanceReleaseHours)
 	updates[SettingKeyFrozenBalanceReleaseHours] = strconv.Itoa(settings.FrozenBalanceReleaseHours)
 

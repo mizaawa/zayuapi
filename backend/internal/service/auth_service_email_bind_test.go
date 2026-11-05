@@ -522,6 +522,34 @@ func TestAuthServiceEmailIdentityBinding_RejectsEmailOutsideRegistrationSuffixWh
 	require.Equal(t, "legacy-user"+service.OIDCConnectSyntheticEmailDomain, storedUser.Email)
 }
 
+func TestAuthServiceEmailIdentityBindingRateLimitsCodeDelivery(t *testing.T) {
+	ctx := context.Background()
+	cache := &emailBindCacheStub{rateCount: 6}
+	svc, _, client := newAuthServiceForEmailBind(t, map[string]string{
+		service.SettingKeyRegistrationEmailSuffixWhitelist: `["@qq.com"]`,
+	}, cache, nil)
+	user := createEmailBindTestUser(t, client, "legacy-rate-limit"+service.OIDCConnectSyntheticEmailDomain, "legacy-rate-limit", "old-hash")
+
+	err := svc.SendEmailIdentityBindCode(ctx, user.ID, "new-address@qq.com")
+	require.ErrorIs(t, err, service.ErrNotifyCodeUserRateLimit)
+	require.Empty(t, cache.setEmails)
+	require.Equal(t, 1, cache.rateCalls)
+}
+
+func TestAuthServiceEmailIdentityBindingTreatsMissingCodeAsNoCooldown(t *testing.T) {
+	ctx := context.Background()
+	cache := &emailBindCacheStub{err: service.ErrEmailCacheEntryNotFound}
+	svc, _, client := newAuthServiceForEmailBind(t, map[string]string{
+		service.SettingKeyRegistrationEmailSuffixWhitelist: `["@qq.com"]`,
+	}, cache, nil)
+	user := createEmailBindTestUser(t, client, "legacy-missing-code"+service.OIDCConnectSyntheticEmailDomain, "legacy-missing-code", "old-hash")
+
+	err := svc.SendEmailIdentityBindCode(ctx, user.ID, "new-address@qq.com")
+	require.Error(t, err, "the test email transport is intentionally unconfigured")
+	require.Equal(t, []string{"new-address@qq.com"}, cache.setEmails)
+	require.Equal(t, 1, cache.rateCalls)
+}
+
 func TestAuthServiceBindEmailIdentity_AllowsEmailInsideRegistrationSuffixWhitelist(t *testing.T) {
 	ctx := context.Background()
 	cache := &emailBindCacheStub{
@@ -674,6 +702,8 @@ type emailBindCacheStub struct {
 	data      *service.VerificationCodeData
 	err       error
 	setEmails []string
+	rateCount int64
+	rateCalls int
 }
 
 func (s *emailBindCacheStub) GetVerificationCode(context.Context, string) (*service.VerificationCodeData, error) {
@@ -729,7 +759,11 @@ func (s *emailBindCacheStub) GetNotifyCodeUserRate(context.Context, int64) (int6
 }
 
 func (s *emailBindCacheStub) IncrNotifyCodeUserRate(context.Context, int64, time.Duration) (int64, error) {
-	return 0, nil
+	s.rateCalls++
+	if s.rateCount == 0 {
+		s.rateCount = 1
+	}
+	return s.rateCount, nil
 }
 
 type emailBindRefreshTokenCacheStub struct {

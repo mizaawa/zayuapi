@@ -11,19 +11,25 @@
         </span>
       </template>
       <div class="space-y-1">
-        <template v-if="hasEffectiveRate && data">
-          <p>{{ t('admin.accounts.upstreamBilling.groupRate', { value: data.group_rate_multiplier }) }}</p>
-          <p v-if="data.user_rate_multiplier != null">
-            {{ t('admin.accounts.upstreamBilling.userRate', { value: data.user_rate_multiplier }) }}
+        <template v-if="logData">
+          <p>{{ t('admin.accounts.upstreamBilling.newapiGroup', { group: logData.group }) }}</p>
+          <p>{{ t('admin.accounts.upstreamBilling.newapiConsensus', { count: snapshot?.multiplier_match_count ?? 0, required: logData.consensus_required }) }}</p>
+          <p>{{ t('admin.accounts.upstreamBilling.lastDetectedRate', { value: logData.resolved_rate_multiplier }) }}</p>
+          <p>{{ t('admin.accounts.upstreamBilling.lastDetectedAt', { value: formatDate(snapshot?.observed_multiplier_at || snapshot?.received_at) }) }}</p>
+        </template>
+        <template v-else-if="hasEffectiveRate && billingData">
+          <p>{{ t('admin.accounts.upstreamBilling.groupRate', { value: billingData.group_rate_multiplier }) }}</p>
+          <p v-if="billingData.user_rate_multiplier != null">
+            {{ t('admin.accounts.upstreamBilling.userRate', { value: billingData.user_rate_multiplier }) }}
           </p>
           <p>
             {{
-              data.peak_rate_enabled
+              billingData.peak_rate_enabled
                 ? t('admin.accounts.upstreamBilling.peakRate', {
-                    start: data.peak_start,
-                    end: data.peak_end,
-                    value: data.peak_rate_multiplier,
-                    timezone: data.timezone
+                    start: billingData.peak_start,
+                    end: billingData.peak_end,
+                    value: billingData.peak_rate_multiplier,
+                    timezone: billingData.timezone
                   })
                 : t('admin.accounts.upstreamBilling.noPeakRate')
             }}
@@ -89,7 +95,7 @@ import { useI18n } from 'vue-i18n'
 import HelpTooltip from '@/components/common/HelpTooltip.vue'
 import Icon from '@/components/icons/Icon.vue'
 import { formatMultiplier } from '@/utils/formatters'
-import type { Account, UpstreamBillingProbeSnapshot } from '@/types'
+import type { Account, UpstreamBillingData, UpstreamBillingLogData, UpstreamBillingProbeSnapshot } from '@/types'
 
 const props = withDefaults(defineProps<{
   account: Account
@@ -110,6 +116,16 @@ const CLOCK_SKEW_TOLERANCE_MS = 5 * 60 * 1000
 const eligible = computed(() => props.account.type === 'apikey')
 const snapshot = computed<UpstreamBillingProbeSnapshot | undefined>(() => props.account.extra?.upstream_billing_probe)
 const data = computed(() => snapshot.value?.data)
+const isConsumptionLogData = (value: UpstreamBillingData | UpstreamBillingLogData): value is UpstreamBillingLogData =>
+  'source' in value && value.source === 'consumption_log'
+const logData = computed<UpstreamBillingLogData | null>(() => {
+  const value = data.value
+  return value && isConsumptionLogData(value) ? value : null
+})
+const billingData = computed<UpstreamBillingData | null>(() => {
+  const value = data.value
+  return value && !isConsumptionLogData(value) ? value : null
+})
 const probeEnabled = computed(() => props.account.extra?.upstream_billing_probe_enabled === true)
 const nextProbeAt = computed(() => {
   const value = snapshot.value?.next_probe_at
@@ -159,7 +175,11 @@ const minuteInTimeZone = (timestamp: number, timeZone?: string) => {
   }
 }
 const currentEffectiveRate = computed(() => {
-  const billing = data.value
+  if (logData.value) {
+    const rate = logData.value.resolved_rate_multiplier
+    return typeof rate === 'number' && Number.isFinite(rate) && rate >= 0 ? rate : null
+  }
+  const billing = billingData.value
   if (!billing) return null
   if (billing.billing_scope !== 'token') return null
   const base = billing.resolved_rate_multiplier
@@ -175,7 +195,7 @@ const currentEffectiveRate = computed(() => {
   return Number.isFinite(value) ? value : null
 })
 const lastDetectedRate = computed(() => {
-  const value = data.value?.effective_rate_multiplier
+  const value = billingData.value?.effective_rate_multiplier
   return typeof value === 'number' && Number.isFinite(value) && value >= 0
     ? Number(value.toPrecision(12))
     : null
@@ -190,12 +210,14 @@ const elapsedSinceLastSuccess = computed(() => {
   return t('admin.accounts.upstreamBilling.daysAgo', { count: Math.floor(elapsedHours / 24) })
 })
 const effectiveRate = computed(() => {
-  if (!validTimestamps.value || stale.value || !['ok', 'failed'].includes(snapshot.value?.status ?? '')) return '-'
+  if (!validTimestamps.value || stale.value || !['ok', 'failed', 'waiting_consensus'].includes(snapshot.value?.status ?? '')) return '-'
   const value = currentEffectiveRate.value
   return value == null ? '-' : `${formatMultiplier(value)}x`
 })
 const statusLabel = computed(() => {
   if (!snapshot.value) return t('admin.accounts.upstreamBilling.notProbed')
+  if (snapshot.value.status === 'waiting_logs') return t('admin.accounts.upstreamBilling.waitingLogs')
+  if (snapshot.value.status === 'waiting_consensus') return t('admin.accounts.upstreamBilling.waitingConsensus')
   if (snapshot.value.status === 'unsupported') return t('admin.accounts.upstreamBilling.unsupported')
   if (stale.value) return t('admin.accounts.upstreamBilling.stale')
   if (snapshot.value.status === 'failed') return t('admin.accounts.upstreamBilling.failed')

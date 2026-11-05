@@ -19,6 +19,7 @@ const {
   isCurrentStep,
   nextStep,
   deleteKey,
+  createKey,
   updateKey,
   toggleStatus,
 } = vi.hoisted(() => ({
@@ -34,6 +35,7 @@ const {
   isCurrentStep: vi.fn(),
   nextStep: vi.fn(),
   deleteKey: vi.fn(),
+  createKey: vi.fn(),
   updateKey: vi.fn(),
   toggleStatus: vi.fn(),
 }))
@@ -49,6 +51,10 @@ const messages: Record<string, string> = {
   'keys.cardFields': 'Card fields',
   'keys.createKey': 'Create API Key',
   'keys.created': 'Created',
+  'keys.onlyShownOnCreation': 'Full key shown only once',
+  'keys.createdKeyTitle': 'Your new API key',
+  'keys.createdKeyWarning': 'Copy and save this key now. It will not be shown again after you close this window.',
+  'keys.copyCreatedKey': 'Copy API key',
   'keys.expiresAt': 'Expires',
   'keys.group': 'Group',
   'keys.id': 'ID',
@@ -72,7 +78,7 @@ const messages: Record<string, string> = {
 vi.mock('@/api', () => ({
   keysAPI: {
     list: listKeys,
-    create: vi.fn(),
+    create: createKey,
     update: updateKey,
     delete: deleteKey,
     toggleStatus,
@@ -238,7 +244,6 @@ const mountView = async () => {
         Select: SelectStub,
         SearchInput: SearchInputStub,
         Icon: IconStub,
-        UseKeyModal: true,
         EndpointPopover: true,
         GroupBadge: true,
         GroupOptionItem: true,
@@ -290,6 +295,7 @@ describe('user KeysView', () => {
     isCurrentStep.mockReset()
     nextStep.mockReset()
     deleteKey.mockReset()
+    createKey.mockReset()
     updateKey.mockReset()
     toggleStatus.mockReset()
 
@@ -659,14 +665,41 @@ describe('user KeysView', () => {
     await flushPromises()
   })
 
-  it('copies the full key from its card', async () => {
+  it('keeps list keys masked and removes copy, use, and import actions', async () => {
+    const maskedKey = 'sk-123...cdef'
+    listKeys.mockResolvedValue(page([{ ...createApiKey(), key: maskedKey }]))
+    const wrapper = await mountView()
+
+    expect(wrapper.get('[data-test="key-secret"]').text()).toContain(maskedKey)
+    expect(wrapper.find('[data-test="key-copy"]').exists()).toBe(false)
+    expect(wrapper.find('[data-test="key-action-use"]').exists()).toBe(false)
+    expect(wrapper.find('[data-test="key-action-ccs"]').exists()).toBe(false)
+    expect(copyToClipboard).not.toHaveBeenCalled()
+  })
+
+  it('shows and copies the raw key only in the successful creation dialog', async () => {
+    const newKey = { ...createApiKey(), key: 'newly-created-secret-value' }
+    createKey.mockResolvedValue(newKey)
+    getAvailableGroups.mockResolvedValue([group(4)])
     copyToClipboard.mockResolvedValue(true)
     const wrapper = await mountView()
 
-    await wrapper.get('[data-test="key-copy"]').trigger('click')
+    await wrapper.get('[data-tour="keys-create-btn"]').trigger('click')
+    await wrapper.get('[data-tour="key-form-name"]').setValue('new-key')
+    await pickFormGroup(wrapper, 4)
+    await wrapper.get('#key-form').trigger('submit')
     await flushPromises()
-    expect(copyToClipboard).toHaveBeenCalledWith('sk-test-key', 'keys.copied')
-    expect(wrapper.get('[data-test="key-copy"]').classes()).toContain('is-copied')
+
+    expect(wrapper.get('[data-test="created-api-key"]').element).toHaveProperty('value', newKey.key)
+    expect(wrapper.text()).toContain('Copy API key')
+    expect(copyToClipboard).not.toHaveBeenCalled()
+
+    await wrapper.get('[data-test="copy-created-api-key"]').trigger('click')
+    expect(copyToClipboard).toHaveBeenCalledWith(newKey.key, 'keys.copied')
+
+    await getButtonByText(wrapper, 'common.close').trigger('click')
+    expect(wrapper.find('[data-test="created-api-key"]').exists()).toBe(false)
+    expect(wrapper.text()).not.toContain(newKey.key)
   })
 
   it('renders the current concurrency value', async () => {

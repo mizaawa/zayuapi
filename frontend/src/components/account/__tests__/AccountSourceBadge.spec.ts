@@ -36,24 +36,37 @@ describe('AccountSourceBadge', () => {
     })
 
     const badge = wrapper.get('[data-testid="account-source"]')
-    expect(badge.attributes('data-source')).toBe('provider')
-    expect(badge.text()).toContain('admin.providerImport.sourceProvider')
+    expect(badge.attributes('data-source')).toBe('sub2api')
+    expect(badge.attributes('data-provider-source')).toBe('provider')
+    expect(badge.text()).toContain('admin.accounts.upstreamBilling.protocol.sub2api')
     expect(badge.text()).toContain('小卖部')
     expect(badge.attributes('title')).toContain('[杂鱼] 主力')
     expect(badge.attributes('title')).toContain('Claude 特价')
   })
 
-  it('marks hand-entered API key accounts', () => {
+  it('marks hand-entered API key accounts as unknown until detected', () => {
     const wrapper = mountBadge({ type: 'apikey', extra: {} })
 
     const badge = wrapper.get('[data-testid="account-source"]')
-    expect(badge.attributes('data-source')).toBe('api')
-    expect(badge.text()).toContain('API Key')
+    expect(badge.attributes('data-source')).toBe('unknown')
+    expect(badge.text()).toContain('admin.accounts.upstreamBilling.protocol.unknown')
   })
 
   it('ignores malformed bindings and non-key accounts', () => {
     expect(mountBadge({ type: 'apikey', extra: { provider_binding: 'oops' } })
-      .get('[data-testid="account-source"]').attributes('data-source')).toBe('api')
+      .get('[data-testid="account-source"]').attributes('data-source')).toBe('unknown')
     expect(mountBadge({ type: 'oauth', extra: {} }).find('[data-testid="account-source"]').exists()).toBe(false)
+  })
+
+  it('prefers a verified probe protocol over provider metadata', () => {
+    const wrapper = mountBadge({
+      type: 'apikey',
+      extra: {
+        provider_binding: { provider_id: 'p-1', provider_name: '小卖部', site_type: 'sub2api' },
+        upstream_billing_probe: { protocol: 'newapi' }
+      }
+    })
+
+    expect(wrapper.get('[data-testid="account-source"]').attributes('data-source')).toBe('newapi')
   })
 })

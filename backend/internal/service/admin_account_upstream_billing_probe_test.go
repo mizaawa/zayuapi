@@ -162,6 +162,23 @@ func TestCreateAccountAcceptsDedicatedUpstreamBillingProbeSetting(t *testing.T) 
 	require.Equal(t, "ACCOUNT_TYPE_APIKEY_REQUIRED", infraerrors.Reason(err))
 }
 
+func TestCreateAccountRateSyncEnablesCombinedProbeAndSync(t *testing.T) {
+	rateSyncEnabled := true
+	repo := &upstreamBillingProbeAccountRepo{}
+	created, err := (&adminServiceImpl{accountRepo: repo}).CreateAccount(context.Background(), &CreateAccountInput{
+		Name:                 "new-api-upstream",
+		Platform:             PlatformOpenAI,
+		Type:                 AccountTypeAPIKey,
+		Credentials:          map[string]any{"api_key": "sk-test"},
+		RateSyncEnabled:      &rateSyncEnabled,
+		SkipDefaultGroupBind: true,
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, true, created.Extra[UpstreamBillingProbeEnabledExtraKey])
+	require.Equal(t, true, created.Extra[UpstreamBillingRateSyncEnabledExtraKey])
+}
+
 func TestCreateCustomAccountAcceptsDefaultUpstreamBillingProbeSetting(t *testing.T) {
 	enabled := true
 	repo := &upstreamBillingProbeAccountRepo{}

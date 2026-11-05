@@ -360,9 +360,10 @@ func (h *SettingHandler) GetSettings(c *gin.Context) {
 		PaymentAlipayForceQRCode:                               paymentCfg.AlipayForceQRCode,
 		PaymentAlipayMobilePrecreateDeepLink:                   paymentCfg.AlipayMobilePrecreateDeepLink,
 
-		DisableRedeemCodeCreationLimit: settings.DisableRedeemCodeCreationLimit,
-		ResourceLibraryEnabled:         settings.ResourceLibraryEnabled,
-		FrozenBalanceReleaseHours:      settings.FrozenBalanceReleaseHours,
+		DisableRedeemCodeCreationLimit:        settings.DisableRedeemCodeCreationLimit,
+		ResourceLibraryEnabled:                settings.ResourceLibraryEnabled,
+		DefaultUpstreamBillingRateSyncEnabled: settings.DefaultUpstreamBillingRateSyncEnabled,
+		FrozenBalanceReleaseHours:             settings.FrozenBalanceReleaseHours,
 
 		ChannelMonitorEnabled:                settings.ChannelMonitorEnabled,
 		ChannelMonitorHideUsageLogs:          settings.ChannelMonitorHideUsageLogs,

@@ -1474,12 +1474,12 @@
             step="0.0001"
             class="input disabled:cursor-not-allowed disabled:opacity-60"
             data-testid="account-rate-multiplier"
-            :disabled="upstreamBillingRateSyncEnabled"
+            :disabled="upstreamBillingAutoProbeEnabled"
           />
           <p class="input-hint">
             {{
               t(
-                upstreamBillingRateSyncEnabled
+                upstreamBillingAutoProbeEnabled
                   ? 'admin.accounts.upstreamBilling.syncRateManagedHint'
                   : 'admin.accounts.billingRateMultiplierHint'
               )
@@ -1491,17 +1491,17 @@
           >
             <div class="min-w-0">
               <p class="text-xs font-medium text-gray-700 dark:text-gray-200">
-                {{ t('admin.accounts.upstreamBilling.syncRate') }}
+                {{ t('admin.accounts.upstreamBilling.autoProbeAndSync') }}
               </p>
               <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                {{ t('admin.accounts.upstreamBilling.syncRateHint') }}
+                {{ t('admin.accounts.upstreamBilling.autoProbeAndSyncHint') }}
               </p>
             </div>
             <Toggle
-              :model-value="upstreamBillingRateSyncEnabled"
-              data-testid="upstream-billing-rate-sync"
-              :aria-label="t('admin.accounts.upstreamBilling.syncRate')"
-              @update:model-value="handleUpstreamBillingRateSyncChange"
+              :model-value="upstreamBillingAutoProbeEnabled"
+              data-testid="upstream-billing-auto-probe"
+              :aria-label="t('admin.accounts.upstreamBilling.autoProbeAndSync')"
+              @update:model-value="handleUpstreamBillingAutoProbeChange"
             />
           </div>
         </div>
@@ -1710,24 +1710,6 @@
           </div>
           <p class="input-hint">{{ t('admin.accounts.openai.endpointCapabilitiesDesc') }}</p>
         </div>
-      </div>
-
-      <div
-        v-if="account?.type === 'apikey'"
-        class="flex items-center justify-between gap-4 border-t border-gray-200 pt-4 dark:border-dark-600"
-      >
-        <div>
-          <label class="input-label mb-0">{{ t('admin.accounts.upstreamBilling.autoProbe') }}</label>
-          <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
-            {{ t('admin.accounts.upstreamBilling.autoProbeHint') }}
-          </p>
-        </div>
-        <Toggle
-          :model-value="upstreamBillingAutoProbeEnabled"
-          data-testid="upstream-billing-auto-probe"
-          :aria-label="t('admin.accounts.upstreamBilling.autoProbe')"
-          @update:model-value="handleUpstreamBillingAutoProbeChange"
-        />
       </div>
 
       <OllamaCloudUsageSettings
@@ -2842,7 +2824,6 @@ const autoPause7dThreshold = ref<number | null>(null)
 const autoPause5hDisabled = ref(false)
 const autoPause7dDisabled = ref(false)
 const upstreamBillingAutoProbeEnabled = ref(false)
-const upstreamBillingRateSyncEnabled = ref(false)
 const mixedScheduling = ref(false) // For antigravity accounts: enable mixed scheduling
 const allowOverages = ref(false) // For antigravity accounts: enable AI Credits overages
 const antigravityProjectId = ref('')
@@ -3218,18 +3199,8 @@ const form = reactive({
   expires_at: null as number | null
 })
 
-const handleUpstreamBillingRateSyncChange = (enabled: boolean) => {
-  upstreamBillingRateSyncEnabled.value = enabled
-  if (enabled) {
-    upstreamBillingAutoProbeEnabled.value = true
-  }
-}
-
 const handleUpstreamBillingAutoProbeChange = (enabled: boolean) => {
   upstreamBillingAutoProbeEnabled.value = enabled
-  if (!enabled) {
-    upstreamBillingRateSyncEnabled.value = false
-  }
 }
 
 const statusOptions = computed(() => {
@@ -3346,9 +3317,8 @@ const syncFormFromAccount = (newAccount: Account | null) => {
 	autoPause7dThreshold.value = typeof extra?.auto_pause_7d_threshold === 'number' ? extra.auto_pause_7d_threshold * 100 : null
 	autoPause5hDisabled.value = extra?.auto_pause_5h_disabled === true
 	autoPause7dDisabled.value = extra?.auto_pause_7d_disabled === true
-	upstreamBillingAutoProbeEnabled.value = extra?.upstream_billing_probe_enabled === true
-  upstreamBillingRateSyncEnabled.value =
-    upstreamBillingAutoProbeEnabled.value && extra?.upstream_billing_rate_sync_enabled === true
+	upstreamBillingAutoProbeEnabled.value =
+	    extra?.upstream_billing_probe_enabled === true && extra?.upstream_billing_rate_sync_enabled === true
 
   // Load OpenAI passthrough toggle (OpenAI OAuth/SetupToken/API Key)
   openaiPassthroughEnabled.value = false
@@ -4139,8 +4109,8 @@ const handleSubmit = async () => {
       // account table. Ordinary edits must not create a conflicting status.
       delete updatePayload.status
       updatePayload.upstream_billing_probe_enabled = upstreamBillingAutoProbeEnabled.value
-      updatePayload.upstream_billing_rate_sync_enabled = upstreamBillingRateSyncEnabled.value
-      if (upstreamBillingRateSyncEnabled.value) {
+      updatePayload.upstream_billing_rate_sync_enabled = upstreamBillingAutoProbeEnabled.value
+      if (upstreamBillingAutoProbeEnabled.value) {
         delete updatePayload.rate_multiplier
       }
     }

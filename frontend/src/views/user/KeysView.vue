@@ -186,11 +186,9 @@
             :usage-pending="usagePending"
             :hidden-fields="hiddenFields"
             :now="now"
-            :copied="copiedKeyId === key.id"
             :toggling="togglingKeyIds.has(key.id)"
             :group-blocked="Boolean(key.group && (key.group.is_blocked_for_user === true || isBlockedGroupId(key.group.id)))"
             :user-group-rate="key.group ? userGroupRates[key.group.id] : undefined"
-            :show-ccs-import="!publicSettings?.hide_ccs_import_button"
             @action="handleCardAction"
           />
         </div>
@@ -769,6 +767,37 @@
       </template>
     </BaseDialog>
 
+    <BaseDialog
+      :show="createdApiKey !== null"
+      :title="t('keys.createdKeyTitle')"
+      width="normal"
+      @close="closeCreatedApiKey"
+    >
+      <div class="space-y-4">
+        <p class="text-sm text-gray-600 dark:text-gray-300">{{ t('keys.createdKeyWarning') }}</p>
+        <label class="input-label" for="created-api-key">{{ t('keys.apiKey') }}</label>
+        <input
+          id="created-api-key"
+          class="input font-mono"
+          type="text"
+          :value="createdApiKey || ''"
+          readonly
+          data-test="created-api-key"
+        />
+      </div>
+      <template #footer>
+        <div class="flex justify-end gap-3">
+          <button type="button" class="btn btn-secondary" @click="closeCreatedApiKey">
+            {{ t('common.close') }}
+          </button>
+          <button type="button" class="btn btn-primary" data-test="copy-created-api-key" @click="copyCreatedApiKey">
+            <Icon name="clipboard" size="sm" />
+            {{ t('keys.copyCreatedKey') }}
+          </button>
+        </div>
+      </template>
+    </BaseDialog>
+
     <!-- Delete Confirmation Dialog -->
     <ConfirmDialog
       :show="showDeleteDialog"
@@ -806,63 +835,6 @@
       @cancel="showResetRateLimitDialog = false"
     />
 
-    <!-- Use Key Modal -->
-    <UseKeyModal
-      :show="showUseKeyModal"
-      :api-key="selectedKey?.key || ''"
-      :base-url="publicSettings?.api_base_url || ''"
-      :platform="selectedKey?.group?.platform || null"
-      :allow-messages-dispatch="selectedKey?.group?.allow_messages_dispatch || false"
-      @close="closeUseKeyModal"
-    />
-
-    <!-- CCS Client Selection Dialog for Antigravity -->
-    <BaseDialog
-      :show="showCcsClientSelect"
-      :title="t('keys.ccsClientSelect.title')"
-      width="narrow"
-      @close="closeCcsClientSelect"
-    >
-      <div class="space-y-4">
-        <p class="text-sm text-gray-600 dark:text-gray-400">
-          {{ t('keys.ccsClientSelect.description') }}
-	        </p>
-	        <div class="grid grid-cols-2 gap-3">
-	          <button
-	            @click="handleCcsClientSelect('claude')"
-	            class="flex flex-col items-center gap-2 p-4 rounded-xl border-2 border-gray-200 dark:border-dark-600 hover:border-primary-500 dark:hover:border-primary-500 hover:bg-primary-50 dark:hover:bg-primary-900/20 transition-all"
-	          >
-	            <Icon name="terminal" size="xl" class="text-gray-600 dark:text-gray-400" />
-	            <span class="font-medium text-gray-900 dark:text-white">{{
-	              t('keys.ccsClientSelect.claudeCode')
-	            }}</span>
-	            <span class="text-xs text-gray-500 dark:text-gray-400">{{
-	              t('keys.ccsClientSelect.claudeCodeDesc')
-	            }}</span>
-	          </button>
-	          <button
-	            @click="handleCcsClientSelect('gemini')"
-	            class="flex flex-col items-center gap-2 p-4 rounded-xl border-2 border-gray-200 dark:border-dark-600 hover:border-primary-500 dark:hover:border-primary-500 hover:bg-primary-50 dark:hover:bg-primary-900/20 transition-all"
-	          >
-	            <Icon name="sparkles" size="xl" class="text-gray-600 dark:text-gray-400" />
-	            <span class="font-medium text-gray-900 dark:text-white">{{
-	              t('keys.ccsClientSelect.geminiCli')
-	            }}</span>
-	            <span class="text-xs text-gray-500 dark:text-gray-400">{{
-	              t('keys.ccsClientSelect.geminiCliDesc')
-	            }}</span>
-	          </button>
-	        </div>
-	      </div>
-      <template #footer>
-        <div class="flex justify-end">
-          <button @click="closeCcsClientSelect" class="btn btn-secondary">
-            {{ t('common.cancel') }}
-          </button>
-        </div>
-      </template>
-    </BaseDialog>
-
     <!-- One picker serves both the key form and the table's "change group" button. -->
     <KeyGroupPicker
       :show="groupPickerTarget !== null"
@@ -894,7 +866,6 @@ import EmptyState from '@/components/common/EmptyState.vue'
 import Select from '@/components/common/Select.vue'
 import SearchInput from '@/components/common/SearchInput.vue'
 import Icon from '@/components/icons/Icon.vue'
-import UseKeyModal from '@/components/keys/UseKeyModal.vue'
 import FailoverSettings from '@/components/keys/FailoverSettings.vue'
 import SystemPromptSettings from '@/components/keys/SystemPromptSettings.vue'
 import EndpointPopover from '@/components/keys/EndpointPopover.vue'
@@ -920,10 +891,6 @@ import type { ApiKey, ApiKeyFailoverSettings, ApiKeySystemPromptSettings, Custom
 import type { BatchApiKeyUsageStats } from '@/api/usage'
 import { formatDateTime } from '@/utils/format'
 import { fetchUsageWithRetry } from '@/utils/usageRequest'
-import {
-  buildCcSwitchImportDeeplink,
-  type CcSwitchClientType
-} from '@/utils/ccswitchImport'
 
 // Helper to format date for datetime-local input
 const formatDateTimeLocal = (isoDate: string): string => {
@@ -934,9 +901,6 @@ const formatDateTimeLocal = (isoDate: string): string => {
 
 // 首次加载时占位的卡片数
 const SKELETON_CARD_COUNT = 6
-// "已复制"提示保持的时间
-const COPIED_FEEDBACK_MS = 800
-
 const appStore = useAppStore()
 const onboardingStore = useOnboardingStore()
 const { copyToClipboard: clipboardCopy } = useClipboard()
@@ -1052,13 +1016,9 @@ const releasingFailover = ref(false)
 const showDeleteDialog = ref(false)
 const showResetQuotaDialog = ref(false)
 const showResetRateLimitDialog = ref(false)
-const showUseKeyModal = ref(false)
-const showCcsClientSelect = ref(false)
 const showFieldMenu = ref(false)
-const pendingCcsRow = ref<ApiKey | null>(null)
 const selectedKey = ref<ApiKey | null>(null)
-const copiedKeyId = ref<number | null>(null)
-let copiedTimer: ReturnType<typeof setTimeout> | null = null
+const createdApiKey = ref<string | null>(null)
 const publicSettings = ref<PublicSettings | null>(null)
 // Keep authenticated relay URLs local to this page, outside public app config.
 const customEndpoints = ref<CustomEndpoint[]>([])
@@ -1288,16 +1248,12 @@ const handleGroupPicked = (option: KeyGroupOption) => {
   }
 }
 
-const copyToClipboard = async (text: string, keyId: number) => {
-  const success = await clipboardCopy(text, t('keys.copied'))
-  if (success) {
-    copiedKeyId.value = keyId
-    if (copiedTimer) clearTimeout(copiedTimer)
-    copiedTimer = setTimeout(() => {
-      copiedTimer = null
-      copiedKeyId.value = null
-    }, COPIED_FEEDBACK_MS)
-  }
+const copyCreatedApiKey = async () => {
+  if (createdApiKey.value) await clipboardCopy(createdApiKey.value, t('keys.copied'))
+}
+
+const closeCreatedApiKey = () => {
+  createdApiKey.value = null
 }
 
 const isAbortError = (error: unknown) => {
@@ -1407,16 +1363,6 @@ const loadUserEndpointSettings = async () => {
   } catch (error) {
     console.error('Failed to load API endpoint settings:', error)
   }
-}
-
-const openUseKeyModal = (key: ApiKey) => {
-  selectedKey.value = key
-  showUseKeyModal.value = true
-}
-
-const closeUseKeyModal = () => {
-  showUseKeyModal.value = false
-  selectedKey.value = null
 }
 
 const handlePageChange = (page: number) => {
@@ -1598,12 +1544,9 @@ const clearFilters = () => {
 }
 
 const cardActionHandlers: Record<KeyCardAction, (key: ApiKey) => void> = {
-  copy: (key) => void copyToClipboard(key.key, key.id),
   group: (key) => openKeyGroupPicker(key),
   failover: (key) => openFailoverModal(key),
   resetRateLimit: (key) => confirmResetRateLimitFromCard(key),
-  use: (key) => openUseKeyModal(key),
-  ccs: (key) => importToCcswitch(key),
   toggle: (key) => void toggleKeyStatus(key),
   edit: (key) => editKey(key),
   delete: (key) => confirmDelete(key)
@@ -1708,7 +1651,7 @@ const handleSubmit = async () => {
       appStore.showSuccess(t('keys.keyUpdatedSuccess'))
     } else {
       const customKey = formData.value.use_custom_key ? formData.value.custom_key : undefined
-      await keysAPI.create(
+      const createdKey = await keysAPI.create(
         formData.value.name,
         formData.value.group_id,
         customKey,
@@ -1718,6 +1661,7 @@ const handleSubmit = async () => {
         expiresInDays,
         rateLimitData
       )
+      createdApiKey.value = createdKey.key
       appStore.showSuccess(t('keys.keyCreatedSuccess'))
       // Only advance tour if active, on submit step, and creation succeeded
       if (onboardingStore.isCurrentStep('[data-tour="key-form-submit"]')) {
@@ -1851,78 +1795,6 @@ const resetRateLimitUsage = async () => {
   }
 }
 
-const importToCcswitch = (row: ApiKey) => {
-  const platform = row.group?.platform || 'anthropic'
-
-  // For antigravity platform, show client selection dialog
-  if (platform === 'antigravity') {
-    pendingCcsRow.value = row
-    showCcsClientSelect.value = true
-    return
-  }
-
-  // For other platforms, execute directly
-  executeCcsImport(row, platform === 'gemini' ? 'gemini' : 'claude')
-}
-
-const executeCcsImport = (row: ApiKey, clientType: CcSwitchClientType) => {
-  const baseUrl = publicSettings.value?.api_base_url || window.location.origin
-  const platform = row.group?.platform || 'anthropic'
-
-  const usageScript = `({
-    request: {
-      url: "{{baseUrl}}/v1/usage",
-      method: "GET",
-      headers: { "Authorization": "Bearer {{apiKey}}" }
-    },
-    extractor: function(response) {
-      const remaining = response?.remaining ?? response?.quota?.remaining ?? response?.balance;
-      const unit = response?.unit ?? response?.quota?.unit ?? "USD";
-      return {
-        isValid: response?.is_active ?? response?.isValid ?? true,
-        remaining,
-        unit
-      };
-    }
-  })`
-  const providerName = (publicSettings.value?.site_name || 'sub2api').trim() || 'sub2api'
-  const deeplink = buildCcSwitchImportDeeplink({
-    baseUrl,
-    platform,
-    clientType,
-    providerName,
-    apiKey: row.key,
-    usageScript
-  })
-
-  try {
-    window.open(deeplink, '_self')
-
-    // Check if the protocol handler worked by detecting if we're still focused
-    setTimeout(() => {
-      if (document.hasFocus()) {
-        // Still focused means the protocol handler likely failed
-        appStore.showError(t('keys.ccSwitchNotInstalled'))
-      }
-    }, 100)
-  } catch (error) {
-    appStore.showError(t('keys.ccSwitchNotInstalled'))
-  }
-}
-
-const handleCcsClientSelect = (clientType: CcSwitchClientType) => {
-  if (pendingCcsRow.value) {
-    executeCcsImport(pendingCcsRow.value, clientType)
-  }
-  showCcsClientSelect.value = false
-  pendingCcsRow.value = null
-}
-
-const closeCcsClientSelect = () => {
-  showCcsClientSelect.value = false
-  pendingCcsRow.value = null
-}
-
 onMounted(() => {
   loadCardFields()
   loadApiKeys()
@@ -1937,7 +1809,6 @@ onMounted(() => {
 onUnmounted(() => {
   document.removeEventListener('click', closeFieldMenuOnOutsideClick)
   stopClock()
-  if (copiedTimer) clearTimeout(copiedTimer)
   if (failoverRefreshTimer) clearInterval(failoverRefreshTimer)
   failoverRefreshController?.abort()
   abortController?.abort()

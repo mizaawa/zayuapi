@@ -686,6 +686,7 @@ export interface SystemSettings {
 
   // 资源库（工作台生成内容监管与存档）
   resource_library_enabled: boolean;
+  default_upstream_billing_rate_sync_enabled: boolean;
 
   // Channel Monitor feature switch
   channel_monitor_enabled: boolean;
@@ -1009,6 +1010,7 @@ export interface UpdateSettingsRequest {
 
   // 资源库（工作台生成内容监管与存档）
   resource_library_enabled?: boolean;
+  default_upstream_billing_rate_sync_enabled?: boolean;
 
   // Channel Monitor feature switch
   channel_monitor_enabled?: boolean;

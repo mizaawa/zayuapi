@@ -115,11 +115,17 @@ func (s *AuthService) SendEmailIdentityBindCode(ctx context.Context, userID int6
 	if s.emailService == nil {
 		return ErrServiceUnavailable
 	}
+	if s.emailService.cache == nil {
+		return ErrServiceUnavailable
+	}
 	if _, err := s.userRepo.GetByID(ctx, userID); err != nil {
 		if errors.Is(err, ErrUserNotFound) {
 			return ErrUserNotFound
 		}
 		return ErrServiceUnavailable
+	}
+	if err := reserveEmailCodeUserRate(ctx, s.emailService.cache, userID); err != nil {
+		return err
 	}
 
 	existingUser, err := s.userRepo.GetByEmail(ctx, normalizedEmail)
@@ -129,7 +135,6 @@ func (s *AuthService) SendEmailIdentityBindCode(ctx context.Context, userID int6
 	case err != nil && !errors.Is(err, ErrUserNotFound):
 		return ErrServiceUnavailable
 	}
-
 	siteName := "Sub2API"
 	if s.settingService != nil {
 		siteName = s.settingService.GetSiteName(ctx)

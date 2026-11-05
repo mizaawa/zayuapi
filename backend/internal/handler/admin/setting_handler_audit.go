@@ -537,6 +537,9 @@ func diffSettings(before *service.SystemSettings, after *service.SystemSettings,
 	if before.ResourceLibraryEnabled != after.ResourceLibraryEnabled {
 		changed = append(changed, "resource_library_enabled")
 	}
+	if before.DefaultUpstreamBillingRateSyncEnabled != after.DefaultUpstreamBillingRateSyncEnabled {
+		changed = append(changed, "default_upstream_billing_rate_sync_enabled")
+	}
 	if before.FrozenBalanceReleaseHours != after.FrozenBalanceReleaseHours {
 		changed = append(changed, "frozen_balance_release_hours")
 	}

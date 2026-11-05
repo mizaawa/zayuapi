@@ -36,7 +36,7 @@ func RegisterUserRoutes(
 			user.PUT("", h.User.UpdateProfile)
 			user.GET("/aff", h.User.GetAffiliate)
 			user.POST("/aff/transfer", h.User.TransferAffiliateQuota)
-			user.POST("/account-bindings/email/send-code", h.User.SendEmailBindingCode)
+			user.POST("/account-bindings/email/send-code", panelRateLimiter.Heavy(), h.User.SendEmailBindingCode)
 			user.POST("/account-bindings/email", h.User.BindEmailIdentity)
 			user.DELETE("/account-bindings/:provider", h.User.UnbindIdentity)
 			user.POST("/auth-identities/bind/start", h.User.StartIdentityBinding)
@@ -46,7 +46,7 @@ func RegisterUserRoutes(
 			// 通知邮箱管理
 			notifyEmail := user.Group("/notify-email")
 			{
-				notifyEmail.POST("/send-code", h.User.SendNotifyEmailCode)
+				notifyEmail.POST("/send-code", panelRateLimiter.Heavy(), h.User.SendNotifyEmailCode)
 				notifyEmail.POST("/verify", h.User.VerifyNotifyEmail)
 				notifyEmail.PUT("/toggle", h.User.ToggleNotifyEmail)
 				notifyEmail.DELETE("", h.User.RemoveNotifyEmail)

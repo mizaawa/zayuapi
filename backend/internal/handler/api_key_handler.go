@@ -201,12 +201,26 @@ func (h *APIKeyHandler) Create(c *gin.Context) {
 		svcReq.RateLimit7d = *req.RateLimit7d
 	}
 
-	executeUserIdempotentJSON(c, "user.api_keys.create", req, service.DefaultWriteIdempotencyTTL(), func(ctx context.Context) (any, error) {
+	createdKey := ""
+	executeUserIdempotentJSONWithResponse(c, "user.api_keys.create", req, service.DefaultWriteIdempotencyTTL(), func(ctx context.Context) (any, error) {
 		key, err := h.apiKeyService.Create(ctx, subject.UserID, svcReq)
 		if err != nil {
 			return nil, err
 		}
+		createdKey = key.Key
 		return dto.APIKeyFromService(key), nil
+	}, func(data any, replayed bool) any {
+		if replayed || createdKey == "" {
+			return data
+		}
+		created, ok := data.(*dto.APIKey)
+		if !ok || created == nil {
+			return data
+		}
+		// The raw secret is returned once, and is never stored in idempotency data.
+		response := *created
+		response.Key = createdKey
+		return &response
 	})
 }
 

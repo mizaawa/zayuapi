@@ -88,22 +88,15 @@ const mountCard = (props: Partial<InstanceType<typeof KeyCard>['$props']> = {}) 
   })
 
 describe('KeyCard', () => {
-  it('shows the essentials and copies the key on click', async () => {
+  it('shows only a masked key and explains that the secret is available at creation', () => {
     const wrapper = mountCard()
 
     expect(wrapper.get('h3').text()).toBe('Claude Code 主力')
     expect(wrapper.get('[data-test="key-status"]').text()).toBe('keys.status.active')
-    expect(wrapper.get('[data-test="key-copy"]').text()).toContain('sk-zy-...2b6d')
+    expect(wrapper.get('[data-test="key-secret"]').text()).toContain('sk-zy-...2b6d')
+    expect(wrapper.get('[data-test="key-secret"]').text()).toContain('keys.onlyShownOnCreation')
     expect(wrapper.text()).not.toContain('7f3a9c2e4b1d8f6a0c5e3b9d7a1f4c8e2b6d')
-
-    await wrapper.get('[data-test="key-copy"]').trigger('click')
-    expect(wrapper.emitted('action')).toEqual([['copy', wrapper.props('apiKey')]])
-  })
-
-  it('switches the copy button to its confirmation state', () => {
-    const wrapper = mountCard({ copied: true })
-    expect(wrapper.get('[data-test="key-copy"]').classes()).toContain('is-copied')
-    expect(wrapper.get('[data-test="key-copy"]').text()).toContain('keys.copied')
+    expect(wrapper.find('button[data-test="key-secret"]').exists()).toBe(false)
   })
 
   it('keeps a long group name inside the card and opens the picker on click', async () => {
@@ -242,20 +235,20 @@ describe('KeyCard', () => {
   it('offers the right actions and locks the toggle while it saves', async () => {
     const active = mountCard({ toggling: true })
     expect(active.findAll('.key-action').map((button) => button.attributes('data-test'))).toEqual([
-      'key-action-use', 'key-action-ccs', 'key-action-toggle', 'key-action-edit', 'key-action-delete'
+      'key-action-toggle', 'key-action-edit', 'key-action-delete'
     ])
     expect(active.get('[data-test="key-action-toggle"]').text()).toBe('keys.disable')
     expect((active.get('[data-test="key-action-toggle"]').element as HTMLButtonElement).disabled).toBe(true)
 
-    const inactive = mountCard({ apiKey: apiKey({ status: 'inactive' }), showCcsImport: false })
+    const inactive = mountCard({ apiKey: apiKey({ status: 'inactive' }) })
     expect(inactive.find('[data-test="key-action-ccs"]').exists()).toBe(false)
     expect(inactive.get('[data-test="key-action-toggle"]').text()).toBe('keys.enable')
     expect(inactive.classes()).toContain('is-inactive')
 
-    for (const name of ['use', 'toggle', 'edit', 'delete']) {
+    for (const name of ['toggle', 'edit', 'delete']) {
       await inactive.get(`[data-test="key-action-${name}"]`).trigger('click')
     }
-    expect(inactive.emitted('action')?.map(([name]) => name)).toEqual(['use', 'toggle', 'edit', 'delete'])
+    expect(inactive.emitted('action')?.map(([name]) => name)).toEqual(['toggle', 'edit', 'delete'])
   })
 
   it('marks keys with an IP restriction', () => {

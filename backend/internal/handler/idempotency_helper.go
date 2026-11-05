@@ -21,6 +21,27 @@ func executeUserIdempotentJSON(
 	ttl time.Duration,
 	execute func(context.Context) (any, error),
 ) {
+	executeUserIdempotentJSONWithResponse(c, scope, payload, ttl, execute, nil)
+}
+
+// executeUserIdempotentJSONWithResponse lets sensitive create endpoints expose
+// a one-time value in the initial response while keeping the cached idempotent
+// result safe for replay.
+func executeUserIdempotentJSONWithResponse(
+	c *gin.Context,
+	scope string,
+	payload any,
+	ttl time.Duration,
+	execute func(context.Context) (any, error),
+	responseData func(data any, replayed bool) any,
+) {
+	writeResponse := func(data any, replayed bool) {
+		if responseData != nil {
+			data = responseData(data, replayed)
+		}
+		response.Success(c, data)
+	}
+
 	coordinator := service.DefaultIdempotencyCoordinator()
 	if coordinator == nil {
 		data, err := execute(c.Request.Context())
@@ -28,7 +49,7 @@ func executeUserIdempotentJSON(
 			response.ErrorFrom(c, err)
 			return
 		}
-		response.Success(c, data)
+		writeResponse(data, false)
 		return
 	}
 
@@ -61,5 +82,5 @@ func executeUserIdempotentJSON(
 	if result != nil && result.Replayed {
 		c.Header("X-Idempotency-Replayed", "true")
 	}
-	response.Success(c, result.Data)
+	writeResponse(result.Data, result.Replayed)
 }

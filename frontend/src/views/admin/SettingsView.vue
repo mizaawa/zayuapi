@@ -4639,20 +4639,45 @@
                     class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300"
                     for="upstream-billing-probe-interval"
                   >
-                    {{ t("admin.settings.upstreamBillingProbe.intervalMinutes") }}
+                    {{ t("admin.settings.upstreamBillingProbe.intervalSeconds") }}
                   </label>
                   <input
                     id="upstream-billing-probe-interval"
-                    v-model.number="upstreamBillingProbeForm.interval_minutes"
+                    v-model.number="upstreamBillingProbeForm.interval_seconds"
                     type="number"
                     min="5"
-                    max="1440"
+                    max="86400"
                     class="input w-32"
                     data-testid="upstream-billing-probe-interval"
                     @keydown.enter.prevent="saveUpstreamBillingProbeSettings"
                   />
                   <p class="mt-1.5 text-xs text-gray-500 dark:text-gray-400">
                     {{ t("admin.settings.upstreamBillingProbe.intervalHint") }}
+                  </p>
+                </div>
+
+                <div
+                  v-if="upstreamBillingProbeForm.enabled"
+                  class="border-t border-gray-100 pt-4 dark:border-dark-700"
+                >
+                  <label
+                    class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300"
+                    for="upstream-billing-probe-consensus-count"
+                  >
+                    {{ t("admin.settings.upstreamBillingProbe.newapiMultiplierConsensusCount") }}
+                  </label>
+                  <input
+                    id="upstream-billing-probe-consensus-count"
+                    v-model.number="upstreamBillingProbeForm.newapi_multiplier_consensus_count"
+                    type="number"
+                    min="1"
+                    max="100"
+                    class="input w-32"
+                    data-testid="upstream-billing-probe-consensus-count"
+                    @keydown.enter.prevent="saveUpstreamBillingProbeSettings"
+                  />
+                  <p class="mt-1.5 text-xs text-gray-500 dark:text-gray-400">
+                    {{ t("admin.settings.upstreamBillingProbe.newapiMultiplierConsensusCountHint") }}
                   </p>
                 </div>
 
@@ -6319,6 +6344,22 @@
                 aria-describedby="disable-redeem-code-creation-limit-hint"
                 class="shrink-0"
                 data-testid="disable-redeem-code-creation-limit-toggle"
+              />
+            </div>
+
+            <div class="flex items-center justify-between gap-4 border-t border-gray-100 pt-5 dark:border-dark-700" data-testid="default-upstream-billing-rate-sync">
+              <div class="min-w-0 flex-1">
+                <label class="text-sm font-medium text-gray-700 dark:text-gray-300">
+                  {{ t('admin.settings.features.defaultUpstreamBillingRateSync') }}
+                </label>
+                <p class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+                  {{ t('admin.settings.features.defaultUpstreamBillingRateSyncHint') }}
+                </p>
+              </div>
+              <Toggle
+                v-model="form.default_upstream_billing_rate_sync_enabled"
+                :aria-label="t('admin.settings.features.defaultUpstreamBillingRateSync')"
+                data-testid="default-upstream-billing-rate-sync-toggle"
               />
             </div>
 
@@ -8651,7 +8692,8 @@ const upstreamBillingProbeLoading = ref(true);
 const upstreamBillingProbeSaving = ref(false);
 const upstreamBillingProbeForm = reactive({
   enabled: true,
-  interval_minutes: 30,
+  interval_seconds: 1800,
+  newapi_multiplier_consensus_count: 3,
 });
 
 const ollamaCloudUsageLoading = ref(true);
@@ -9198,6 +9240,7 @@ const form = reactive<SettingsForm>({
   disable_redeem_code_creation_limit: false,
   frozen_balance_release_hours: 1,
   resource_library_enabled: false,
+  default_upstream_billing_rate_sync_enabled: false,
   // Affiliate (邀请返利) feature switch
   affiliate_enabled: false,
   // Allow user view error requests
@@ -10848,6 +10891,7 @@ async function saveSettings() {
       disable_redeem_code_creation_limit: form.disable_redeem_code_creation_limit,
       frozen_balance_release_hours: frozenBalanceReleaseHours,
       resource_library_enabled: form.resource_library_enabled,
+      default_upstream_billing_rate_sync_enabled: form.default_upstream_billing_rate_sync_enabled,
       // Affiliate (邀请返利) feature switch
       affiliate_enabled: form.affiliate_enabled,
       allow_user_view_error_requests: form.allow_user_view_error_requests,

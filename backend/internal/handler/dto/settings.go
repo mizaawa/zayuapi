@@ -285,9 +285,10 @@ type SystemSettings struct {
 	AccountQuotaNotifyEnabled       bool               `json:"account_quota_notify_enabled"`
 	AccountQuotaNotifyEmails        []NotifyEmailEntry `json:"account_quota_notify_emails"`
 
-	DisableRedeemCodeCreationLimit bool `json:"disable_redeem_code_creation_limit"`
-	ResourceLibraryEnabled         bool `json:"resource_library_enabled"`
-	FrozenBalanceReleaseHours      int  `json:"frozen_balance_release_hours"`
+	DisableRedeemCodeCreationLimit        bool `json:"disable_redeem_code_creation_limit"`
+	ResourceLibraryEnabled                bool `json:"resource_library_enabled"`
+	DefaultUpstreamBillingRateSyncEnabled bool `json:"default_upstream_billing_rate_sync_enabled"`
+	FrozenBalanceReleaseHours             int  `json:"frozen_balance_release_hours"`
 
 	// Channel Monitor feature switch
 	ChannelMonitorEnabled                bool    `json:"channel_monitor_enabled"`

@@ -161,20 +161,6 @@
           />
           <p class="input-hint">{{ t('admin.accounts.upstream.apiKeyHint') }}</p>
         </div>
-        <!-- 上游倍率自动探测：antigravity upstream 也是 API-key 账号 -->
-        <div class="flex items-center justify-between gap-4 border-t border-gray-200 pt-4 dark:border-dark-600">
-          <div>
-            <label class="input-label mb-0">{{ t('admin.accounts.upstreamBilling.autoProbe') }}</label>
-            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
-              {{ t('admin.accounts.upstreamBilling.autoProbeHint') }}
-            </p>
-          </div>
-          <Toggle
-            v-model="upstreamBillingAutoProbeEnabled"
-            data-testid="upstream-billing-auto-probe-antigravity"
-            :aria-label="t('admin.accounts.upstreamBilling.autoProbe')"
-          />
-        </div>
       </div>
 
       <!-- Antigravity API key model mapping -->
@@ -334,22 +320,6 @@
           <p v-if="apiKeyHint" class="input-hint">{{ apiKeyHint }}</p>
         </div>
 
-        <!-- 上游倍率自动探测：全部 API-key 平台可用（所在区块已限定 apikey 类型） -->
-        <div
-          class="flex items-center justify-between gap-4 border-t border-gray-200 pt-4 dark:border-dark-600"
-        >
-          <div>
-            <label class="input-label mb-0">{{ t('admin.accounts.upstreamBilling.autoProbe') }}</label>
-            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
-              {{ t('admin.accounts.upstreamBilling.autoProbeHint') }}
-            </p>
-          </div>
-          <Toggle
-            v-model="upstreamBillingAutoProbeEnabled"
-            data-testid="upstream-billing-auto-probe"
-            :aria-label="t('admin.accounts.upstreamBilling.autoProbe')"
-          />
-        </div>
 
         <!-- Gemini API Key tier selection -->
         <div v-if="form.platform === 'gemini'">
@@ -1084,6 +1054,18 @@
             data-testid="account-rate-multiplier" />
           <p v-if="providerRateHint" class="input-hint" data-testid="account-rate-multiplier-source">{{ providerRateHint }}</p>
           <p v-else class="input-hint">{{ t('admin.accounts.billingRateMultiplierHint') }}</p>
+          <div v-if="form.type === 'apikey'" class="mt-3 flex items-center justify-between gap-3">
+            <div class="min-w-0">
+              <p class="text-xs font-medium text-gray-700 dark:text-gray-200">{{ t('admin.accounts.upstreamBilling.autoProbeAndSync') }}</p>
+              <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ t('admin.accounts.upstreamBilling.autoProbeAndSyncHint') }}</p>
+            </div>
+            <Toggle
+              :model-value="upstreamBillingAutoProbeEnabled"
+              data-testid="upstream-billing-auto-probe"
+              :aria-label="t('admin.accounts.upstreamBilling.autoProbeAndSync')"
+              @update:model-value="handleUpstreamBillingAutoProbeChange"
+            />
+          </div>
         </div>
       </div>
       <div class="border-t border-gray-200 pt-4 dark:border-dark-600">
@@ -1569,6 +1551,27 @@ const emit = defineEmits<{
 
 const appStore = useAppStore()
 
+async function loadDefaultUpstreamBillingRateSyncSetting() {
+  const requestId = ++defaultBillingSettingsRequestId
+  try {
+    const settings = await adminAPI.settings.getSettings()
+    if (requestId !== defaultBillingSettingsRequestId) return
+    defaultUpstreamBillingRateSyncEnabled.value = settings.default_upstream_billing_rate_sync_enabled === true
+    if (props.show && !upstreamBillingToggleTouched) {
+      upstreamBillingAutoProbeEnabled.value = defaultUpstreamBillingRateSyncEnabled.value
+    }
+  } catch {
+    if (requestId !== defaultBillingSettingsRequestId) return
+    defaultUpstreamBillingRateSyncEnabled.value = false
+    if (props.show && !upstreamBillingToggleTouched) upstreamBillingAutoProbeEnabled.value = false
+  }
+}
+
+const handleUpstreamBillingAutoProbeChange = (enabled: boolean) => {
+  upstreamBillingToggleTouched = true
+  upstreamBillingAutoProbeEnabled.value = enabled
+}
+
 // Model mapping type
 interface ModelMapping {
   from: string
@@ -1587,7 +1590,10 @@ const submitting = ref(false)
 const apiKeyBaseUrl = ref('https://api.anthropic.com')
 const mediaProtocol = ref('')
 const apiKeyValue = ref('')
-const upstreamBillingAutoProbeEnabled = ref(true)
+const upstreamBillingAutoProbeEnabled = ref(false)
+const defaultUpstreamBillingRateSyncEnabled = ref(false)
+let defaultBillingSettingsRequestId = 0
+let upstreamBillingToggleTouched = false
 // 'provider' imports a key from Upstream Management. The browser only names
 // the provider key; the server writes its secret and base URL.
 const importSource = ref<AccountImportSource>('api')
@@ -1867,6 +1873,9 @@ watch(
   () => props.show,
   (newVal) => {
     if (newVal) {
+      upstreamBillingToggleTouched = false
+      upstreamBillingAutoProbeEnabled.value = defaultUpstreamBillingRateSyncEnabled.value
+      void loadDefaultUpstreamBillingRateSyncSetting()
       // Modal opened - fill related models
       allowedModels.value = [...getModelsByPlatform(form.platform)]
       // Antigravity: 默认使用映射模式并填充默认映射
@@ -1880,7 +1889,8 @@ watch(
     } else {
       resetForm()
     }
-  }
+  },
+  { immediate: true }
 )
 
 // Reset platform-specific API key settings when switching providers.
@@ -2287,7 +2297,8 @@ const resetForm = () => {
   providerSelection.value = null
   providerSuggestedName = ''
   providerRateFill.value = null
-  upstreamBillingAutoProbeEnabled.value = true
+  upstreamBillingAutoProbeEnabled.value = defaultUpstreamBillingRateSyncEnabled.value
+  upstreamBillingToggleTouched = false
   editQuotaLimit.value = null
   editQuotaDailyLimit.value = null
   editQuotaWeeklyLimit.value = null
@@ -2665,7 +2676,8 @@ const createAccountAndFinish = async (
     group_ids: form.group_ids,
     expires_at: form.expires_at,
     // 上游倍率探测对全部 API-key 平台开放（antigravity upstream 走本 helper）；
-    upstream_billing_probe_enabled: upstreamBillingAutoProbeEnabled.value,
+    upstream_billing_probe_enabled: form.type === 'apikey' && upstreamBillingAutoProbeEnabled.value,
+    upstream_billing_rate_sync_enabled: form.type === 'apikey' ? upstreamBillingAutoProbeEnabled.value : undefined,
     auto_pause_on_expired: autoPauseOnExpired.value,
     ...providerBindingPayload()
   })

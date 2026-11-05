@@ -2,12 +2,13 @@
   <span
     v-if="source"
     class="account-source"
-    :class="source.kind === 'provider' ? 'is-provider' : 'is-api'"
+    :class="`is-${source.protocol}`"
     :title="source.tooltip"
     data-testid="account-source"
-    :data-source="source.kind"
+    :data-source="source.protocol"
+    :data-provider-source="source.provider ? 'provider' : 'api'"
   >
-    <Icon :name="source.kind === 'provider' ? 'server' : 'key'" size="xs" class="shrink-0" />
+    <Icon :name="source.icon" size="xs" class="shrink-0" />
     <span class="account-source-label">{{ source.label }}</span>
     <span v-if="source.provider" class="account-source-provider">{{ source.provider }}</span>
   </span>
@@ -20,8 +21,6 @@ import Icon from '@/components/icons/Icon.vue'
 import type { Account } from '@/types'
 import { accountProviderBinding } from './providerImport'
 
-// Where an API-key account's credentials came from: typed in by an admin, or
-// read from a site in Upstream Management ("从服务商导入").
 const props = defineProps<{
   account: Pick<Account, 'type' | 'extra'>
 }>()
@@ -29,30 +28,36 @@ const props = defineProps<{
 const { t } = useI18n()
 
 const source = computed(() => {
+  if (props.account.type !== 'apikey' && props.account.type !== 'upstream') return null
   const binding = accountProviderBinding(props.account)
-  if (binding) {
-    const details = [
-      t('admin.accounts.source.providerTooltip', { provider: binding.providerName || '-' }),
-      binding.keyName ? t('admin.accounts.source.providerKey', { key: binding.keyName }) : '',
-      binding.groupName ? t('admin.accounts.source.providerGroup', { group: binding.groupName }) : ''
-    ].filter(Boolean)
-    return {
-      kind: 'provider' as const,
-      label: t('admin.providerImport.sourceProvider'),
-      provider: binding.providerName,
-      tooltip: details.join('\n')
-    }
+  const snapshotProtocol = props.account.extra?.upstream_billing_probe?.protocol
+  const detectedProtocol = normalizeProtocol(snapshotProtocol)
+  const bindingProtocol = normalizeProtocol(binding?.siteType)
+  const protocol = detectedProtocol === 'unknown' ? bindingProtocol : detectedProtocol
+  const label = t(`admin.accounts.upstreamBilling.protocol.${protocol}`)
+  const details = [
+    t('admin.accounts.upstreamBilling.protocolTooltip', { protocol: label }),
+    binding ? t('admin.accounts.source.providerTooltip', { provider: binding.providerName || '-' }) : t('admin.accounts.source.apiTooltip'),
+    binding?.keyName ? t('admin.accounts.source.providerKey', { key: binding.keyName }) : '',
+    binding?.groupName ? t('admin.accounts.source.providerGroup', { group: binding.groupName }) : ''
+  ].filter(Boolean)
+  const icons = { newapi: 'database', sub2api: 'server', unknown: 'questionCircle' } as const
+  return {
+    protocol,
+    icon: icons[protocol],
+    label,
+    provider: binding?.providerName || '',
+    tooltip: details.join('\n')
   }
-  if (props.account.type === 'apikey' || props.account.type === 'upstream') {
-    return {
-      kind: 'api' as const,
-      label: 'API Key',
-      provider: '',
-      tooltip: t('admin.accounts.source.apiTooltip')
-    }
-  }
-  return null
 })
+
+function normalizeProtocol(value: unknown): 'newapi' | 'sub2api' | 'unknown' {
+  if (typeof value !== 'string') return 'unknown'
+  const normalized = value.trim().toLowerCase().replace(/[-_\s]/g, '')
+  if (normalized === 'newapi') return 'newapi'
+  if (normalized === 'sub2api') return 'sub2api'
+  return 'unknown'
+}
 </script>
 
 <style scoped>
@@ -70,27 +75,31 @@ const source = computed(() => {
   white-space: nowrap;
 }
 
-.account-source.is-api {
-  background: #faf6e8;
-  color: #5b5238;
+.account-source.is-newapi {
+  background: #e0e7ff;
+  color: #4338ca;
 }
 
-.account-source.is-provider {
-  background: #e0f2fe;
-  color: #075985;
+.account-source.is-sub2api {
+  background: #dbeafe;
+  color: #1d4ed8;
 }
 
-.account-source-label {
-  flex-shrink: 0;
+.account-source.is-unknown {
+  background: #f3f4f6;
+  color: #6b7280;
 }
 
-/* The provider name rides inside the chip after a hairline, truncated if long. */
 .account-source-provider {
   min-width: 0;
   overflow: hidden;
   padding-left: 0.375rem;
   text-overflow: ellipsis;
   font-weight: 700;
-  box-shadow: inset 1px 0 0 rgb(7 89 133 / 0.25);
+  box-shadow: inset 1px 0 0 currentColor;
 }
+
+:global(.dark) .account-source.is-newapi { background: rgb(49 46 129 / 0.35); color: #a5b4fc; }
+:global(.dark) .account-source.is-sub2api { background: rgb(30 58 138 / 0.35); color: #93c5fd; }
+:global(.dark) .account-source.is-unknown { background: #27272a; color: #a1a1aa; }
 </style>

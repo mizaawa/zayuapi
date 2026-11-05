@@ -4,12 +4,14 @@ package service
 
 import (
 	"bufio"
+	"context"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"errors"
 	"math/big"
 	"net"
 	"strings"
@@ -18,6 +20,62 @@ import (
 	"testing"
 	"time"
 )
+
+type verifyCodeCacheTestStub struct {
+	EmailCache
+	getErr      error
+	setCount    int
+	deleteCount int
+}
+
+type emptyEmailSettingRepo struct{ SettingRepository }
+
+func (emptyEmailSettingRepo) GetMultiple(context.Context, []string) (map[string]string, error) {
+	return map[string]string{}, nil
+}
+
+func (s *verifyCodeCacheTestStub) GetVerificationCode(context.Context, string) (*VerificationCodeData, error) {
+	return nil, s.getErr
+}
+
+func (s *verifyCodeCacheTestStub) SetVerificationCode(context.Context, string, *VerificationCodeData, time.Duration) error {
+	s.setCount++
+	return nil
+}
+
+func (s *verifyCodeCacheTestStub) DeleteVerificationCode(context.Context, string) error {
+	s.deleteCount++
+	return nil
+}
+
+func TestSendVerifyCodeTreatsMissingCacheEntryAsNoCooldownAndClearsOnDeliveryFailure(t *testing.T) {
+	cache := &verifyCodeCacheTestStub{getErr: ErrEmailCacheEntryNotFound}
+	svc := &EmailService{cache: cache, settingRepo: emptyEmailSettingRepo{}}
+
+	err := svc.SendVerifyCode(context.Background(), "new@example.com", "Test")
+	if !errors.Is(err, ErrEmailNotConfigured) {
+		t.Fatalf("expected transport configuration error, got %v", err)
+	}
+	if cache.setCount != 1 {
+		t.Fatalf("expected verification code to be reserved before delivery, got %d saves", cache.setCount)
+	}
+	if cache.deleteCount != 1 {
+		t.Fatalf("expected undelivered code to be cleared, got %d deletes", cache.deleteCount)
+	}
+}
+
+func TestSendVerifyCodeFailsClosedWhenCooldownCacheIsUnavailable(t *testing.T) {
+	cache := &verifyCodeCacheTestStub{getErr: errors.New("redis unavailable")}
+	svc := &EmailService{cache: cache}
+
+	err := svc.SendVerifyCode(context.Background(), "new@example.com", "Test")
+	if err == nil || !strings.Contains(err.Error(), "check verification code cooldown") {
+		t.Fatalf("expected cache error before sending, got %v", err)
+	}
+	if cache.setCount != 0 || cache.deleteCount != 0 {
+		t.Fatalf("unexpected cache mutation after cooldown lookup failure: set=%d delete=%d", cache.setCount, cache.deleteCount)
+	}
+}
 
 // newSMTPTestCert 生成 127.0.0.1/localhost 的自签证书及其信任池。
 func newSMTPTestCert(t *testing.T) (tls.Certificate, *x509.CertPool) {

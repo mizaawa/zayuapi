@@ -3,6 +3,7 @@ package handler
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -282,4 +283,60 @@ func TestExecuteUserIdempotentJSONConcurrentRetrySingleSideEffectAndReplay(t *te
 	require.Equal(t, http.StatusOK, status3)
 	require.Equal(t, "true", headers3.Get("X-Idempotency-Replayed"))
 	require.Equal(t, int32(1), executed.Load())
+}
+
+func TestIdempotentCreateResponseOnlyRevealsSecretOnce(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	repo := newUserMemoryIdempotencyRepoStub()
+	service.SetDefaultIdempotencyCoordinator(service.NewIdempotencyCoordinator(repo, service.DefaultIdempotencyConfig()))
+	t.Cleanup(func() { service.SetDefaultIdempotencyCoordinator(nil) })
+
+	const secret = "sk-0123456789abcdef0123456789abcdef"
+	const masked = "sk-0123...cdef"
+	var executions int
+	router := gin.New()
+	router.Use(withUserSubject(18))
+	router.POST("/keys", func(c *gin.Context) {
+		executeUserIdempotentJSONWithResponse(c, "user.keys.create", map[string]any{"name": "test"}, time.Minute,
+			func(context.Context) (any, error) {
+				executions++
+				return gin.H{"key": masked}, nil
+			},
+			func(data any, replayed bool) any {
+				if replayed {
+					return data
+				}
+				out, ok := data.(gin.H)
+				require.True(t, ok)
+				out["key"] = secret
+				return out
+			},
+		)
+	})
+
+	call := func() string {
+		req := httptest.NewRequest(http.MethodPost, "/keys", bytes.NewBufferString(`{"name":"test"}`))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Idempotency-Key", "create-once")
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+		require.Equal(t, http.StatusOK, rec.Code)
+		var response struct {
+			Data struct {
+				Key string `json:"key"`
+			} `json:"data"`
+		}
+		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &response))
+		return response.Data.Key
+	}
+
+	require.Equal(t, secret, call())
+	require.Equal(t, masked, call())
+	require.Equal(t, 1, executions)
+
+	stored, err := repo.GetByScopeAndKeyHash(context.Background(), "user.keys.create", service.HashIdempotencyKey("create-once"))
+	require.NoError(t, err)
+	require.NotNil(t, stored)
+	require.NotNil(t, stored.ResponseBody)
+	require.NotContains(t, *stored.ResponseBody, secret)
 }

@@ -5,9 +5,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const {
   createAccountMock,
   probeUpstreamBillingMock,
+  getSettingsMock,
 } = vi.hoisted(() => ({
   createAccountMock: vi.fn(),
   probeUpstreamBillingMock: vi.fn(),
+  getSettingsMock: vi.fn(),
 }))
 
 vi.mock('@/stores/app', () => ({
@@ -31,7 +33,7 @@ vi.mock('@/api/admin', () => ({
     },
     settings: {
       getWebSearchEmulationConfig: vi.fn().mockResolvedValue({ enabled: false, providers: [] }),
-      getSettings: vi.fn().mockResolvedValue({}),
+      getSettings: getSettingsMock,
     },
     tlsFingerprintProfiles: {
       list: vi.fn().mockResolvedValue([]),
@@ -95,6 +97,7 @@ async function submitApiKeyAccount(
   disableUpstreamBillingProbe = false
 ) {
   const wrapper = mountModal()
+  await flushPromises()
   await selectButtonByText(wrapper, platform === 'openai' ? 'OpenAI' : 'Anthropic')
   await wrapper.get('form#create-account-form input[type="text"]').setValue(`${platform} account`)
   await wrapper.get('form#create-account-form input[type="password"]').setValue('test-api-key')
@@ -113,6 +116,7 @@ describe('CreateAccountModal OpenAI long-context billing', () => {
   beforeEach(() => {
     createAccountMock.mockReset().mockResolvedValue({ id: 42, platform: 'openai', type: 'apikey' })
     probeUpstreamBillingMock.mockReset().mockResolvedValue({})
+    getSettingsMock.mockReset().mockResolvedValue({ default_upstream_billing_rate_sync_enabled: true })
   })
 
   it('sends false explicitly for normal OpenAI account creation by default', async () => {
@@ -123,10 +127,19 @@ describe('CreateAccountModal OpenAI long-context billing', () => {
   })
 
   // namespace 摊平是仅 OAuth 的兼容开关：API Key 走 chat completions 回退桥时由桥自行摊平
-  it('enables upstream billing probes by default for new OpenAI API key accounts', async () => {
+  it('uses the global default to enable upstream detection and rate sync for new accounts', async () => {
     await submitApiKeyAccount('openai')
 
     expect(createAccountMock.mock.calls[0]?.[0]?.upstream_billing_probe_enabled).toBe(true)
+    expect(createAccountMock.mock.calls[0]?.[0]?.upstream_billing_rate_sync_enabled).toBe(true)
+  })
+
+  it('keeps upstream detection and rate sync off when the global default is disabled', async () => {
+    getSettingsMock.mockResolvedValue({ default_upstream_billing_rate_sync_enabled: false })
+    await submitApiKeyAccount('openai')
+
+    expect(createAccountMock.mock.calls[0]?.[0]?.upstream_billing_probe_enabled).toBe(false)
+    expect(createAccountMock.mock.calls[0]?.[0]?.upstream_billing_rate_sync_enabled).toBe(false)
   })
 
   it('waits for the initial upstream billing probe before refreshing the account list', async () => {
@@ -148,10 +161,11 @@ describe('CreateAccountModal OpenAI long-context billing', () => {
     expect(wrapper.emitted('created')).toHaveLength(1)
   })
 
-  it('sends an explicit disabled state when the create toggle is turned off', async () => {
+  it('sends both settings off when the combined create toggle is turned off', async () => {
     await submitApiKeyAccount('openai', false, true)
 
     expect(createAccountMock.mock.calls[0]?.[0]?.upstream_billing_probe_enabled).toBe(false)
+    expect(createAccountMock.mock.calls[0]?.[0]?.upstream_billing_rate_sync_enabled).toBe(false)
     expect(probeUpstreamBillingMock).not.toHaveBeenCalled()
   })
 
@@ -167,14 +181,16 @@ describe('CreateAccountModal OpenAI long-context billing', () => {
 
     expect(createAccountMock).toHaveBeenCalledTimes(1)
     expect(createAccountMock.mock.calls[0]?.[0]?.extra?.openai_long_context_billing_enabled).toBeUndefined()
-    // 上游倍率探测已放宽到全部 API-key 平台：非 OpenAI 平台与 OpenAI 一致，默认开启。
+    // The same system default applies to every API-key platform.
     expect(createAccountMock.mock.calls[0]?.[0]?.upstream_billing_probe_enabled).toBe(true)
+    expect(createAccountMock.mock.calls[0]?.[0]?.upstream_billing_rate_sync_enabled).toBe(true)
   })
 
   it('sends an explicit disabled state when the non-OpenAI create toggle is turned off', async () => {
     await submitApiKeyAccount('anthropic', false, true)
 
     expect(createAccountMock.mock.calls[0]?.[0]?.upstream_billing_probe_enabled).toBe(false)
+    expect(createAccountMock.mock.calls[0]?.[0]?.upstream_billing_rate_sync_enabled).toBe(false)
   })
 
   it('no longer offers Antigravity as a platform for new accounts', async () => {

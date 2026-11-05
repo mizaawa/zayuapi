@@ -319,9 +319,10 @@ type UpdateSettingsRequest struct {
 	// Use Alipay face-to-face precreate and an app deep link on mobile clients.
 	PaymentAlipayMobilePrecreateDeepLink *bool `json:"payment_alipay_mobile_precreate_deep_link"`
 
-	DisableRedeemCodeCreationLimit *bool `json:"disable_redeem_code_creation_limit"`
-	ResourceLibraryEnabled         *bool `json:"resource_library_enabled"`
-	FrozenBalanceReleaseHours      *int  `json:"frozen_balance_release_hours"`
+	DisableRedeemCodeCreationLimit        *bool `json:"disable_redeem_code_creation_limit"`
+	ResourceLibraryEnabled                *bool `json:"resource_library_enabled"`
+	DefaultUpstreamBillingRateSyncEnabled *bool `json:"default_upstream_billing_rate_sync_enabled"`
+	FrozenBalanceReleaseHours             *int  `json:"frozen_balance_release_hours"`
 
 	// Channel Monitor feature switch
 	ChannelMonitorEnabled                *bool    `json:"channel_monitor_enabled"`
@@ -1884,6 +1885,12 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 			}
 			return previousSettings.ResourceLibraryEnabled
 		}(),
+		DefaultUpstreamBillingRateSyncEnabled: func() bool {
+			if req.DefaultUpstreamBillingRateSyncEnabled != nil {
+				return *req.DefaultUpstreamBillingRateSyncEnabled
+			}
+			return previousSettings.DefaultUpstreamBillingRateSyncEnabled
+		}(),
 		FrozenBalanceReleaseHours: frozenBalanceReleaseHours,
 
 		ChannelMonitorEnabled: func() bool {
@@ -2483,9 +2490,10 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		PaymentAlipayForceQRCode:                               updatedPaymentCfg.AlipayForceQRCode,
 		PaymentAlipayMobilePrecreateDeepLink:                   updatedPaymentCfg.AlipayMobilePrecreateDeepLink,
 
-		DisableRedeemCodeCreationLimit: updatedSettings.DisableRedeemCodeCreationLimit,
-		ResourceLibraryEnabled:         updatedSettings.ResourceLibraryEnabled,
-		FrozenBalanceReleaseHours:      updatedSettings.FrozenBalanceReleaseHours,
+		DisableRedeemCodeCreationLimit:        updatedSettings.DisableRedeemCodeCreationLimit,
+		ResourceLibraryEnabled:                updatedSettings.ResourceLibraryEnabled,
+		DefaultUpstreamBillingRateSyncEnabled: updatedSettings.DefaultUpstreamBillingRateSyncEnabled,
+		FrozenBalanceReleaseHours:             updatedSettings.FrozenBalanceReleaseHours,
 
 		ChannelMonitorEnabled:                updatedSettings.ChannelMonitorEnabled,
 		ChannelMonitorHideUsageLogs:          updatedSettings.ChannelMonitorHideUsageLogs,

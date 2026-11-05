@@ -57,7 +57,8 @@ const {
   getBetaPolicySettings: vi.fn(),
   getUpstreamBillingProbeSettings: vi.fn().mockResolvedValue({
     enabled: true,
-    interval_minutes: 30,
+    interval_seconds: 1800,
+    newapi_multiplier_consensus_count: 3,
   }),
   updateUpstreamBillingProbeSettings: vi.fn().mockImplementation(async (payload) => payload),
   getOllamaCloudUsageSettings: vi.fn().mockResolvedValue({
@@ -238,14 +239,16 @@ vi.mock("vue-i18n", async () => {
     "admin.settings.openaiExperimentalScheduler.upstreamCostWeight": "计费倍率",
     "admin.settings.openaiExperimentalScheduler.previousResponseWeight": "previous_response 粘性",
     "admin.settings.openaiExperimentalScheduler.sessionStickyWeight": "session_hash 粘性",
-    "admin.settings.upstreamBillingProbe.title": "上游倍率自动探测",
-    "admin.settings.upstreamBillingProbe.description": "定期获取 OpenAI API Key 所连接上游 Sub2API 站点声明的计费倍率。",
-    "admin.settings.upstreamBillingProbe.enabled": "启用全局自动探测",
-    "admin.settings.upstreamBillingProbe.enabledHint": "开启后，仅对账号自身已启用自动检测的账号执行定时探测。",
-    "admin.settings.upstreamBillingProbe.intervalMinutes": "探测周期（分钟）",
-    "admin.settings.upstreamBillingProbe.intervalHint": "范围 5–1440 分钟。",
-    "admin.settings.upstreamBillingProbe.saved": "上游倍率自动探测设置已保存",
-    "admin.settings.upstreamBillingProbe.saveFailed": "保存上游倍率自动探测设置失败",
+    "admin.settings.upstreamBillingProbe.title": "账号倍率同步",
+    "admin.settings.upstreamBillingProbe.description": "按周期识别上游协议并获取倍率。",
+    "admin.settings.upstreamBillingProbe.enabled": "启用定时探测和同步",
+    "admin.settings.upstreamBillingProbe.enabledHint": "只处理已开启自动同步的账号。",
+    "admin.settings.upstreamBillingProbe.intervalSeconds": "探测与同步周期（秒）",
+    "admin.settings.upstreamBillingProbe.intervalHint": "范围 5–86400 秒。",
+    "admin.settings.upstreamBillingProbe.newapiMultiplierConsensusCount": "New API 相同倍率确认次数",
+    "admin.settings.upstreamBillingProbe.newapiMultiplierConsensusCountHint": "连续出现相同倍率达到此次数后才写回。",
+    "admin.settings.upstreamBillingProbe.saved": "账号倍率同步设置已保存",
+    "admin.settings.upstreamBillingProbe.saveFailed": "保存账号倍率同步设置失败",
     "admin.settings.security.passkeyDeploymentHint":
       "请由服务器运维在部署配置中将 webauthn.enabled 设为 true，填写 webauthn.rp_id（仅域名）与 webauthn.rp_origins（完整 HTTPS 来源），然后重启服务。",
     "admin.settings.site.uploadImage": "上传图片",
@@ -722,7 +725,8 @@ describe("admin SettingsView payment visible method controls", () => {
     });
     getUpstreamBillingProbeSettings.mockResolvedValue({
       enabled: true,
-      interval_minutes: 30,
+      interval_seconds: 1800,
+      newapi_multiplier_consensus_count: 3,
     });
     updateUpstreamBillingProbeSettings.mockImplementation(async (payload) => payload);
     getOllamaCloudUsageSettings.mockResolvedValue({
@@ -1139,6 +1143,24 @@ describe("admin SettingsView payment visible method controls", () => {
 
     expect(updateSettings).toHaveBeenCalledWith(
       expect.objectContaining({ channel_monitor_hide_usage_logs: true }),
+    );
+  });
+
+  it("saves the default upstream rate sync switch from extended features", async () => {
+    const wrapper = mountView();
+    await flushPromises();
+    await openFeaturesTab(wrapper);
+
+    const toggle = wrapper.get('[data-testid="default-upstream-billing-rate-sync-toggle"]');
+    expect((toggle.element as HTMLInputElement).checked).toBe(false);
+    expect(toggle.element.closest(".card")?.textContent).toContain("拓展功能");
+
+    await toggle.setValue(true);
+    await wrapper.find("form").trigger("submit.prevent");
+    await flushPromises();
+
+    expect(updateSettings).toHaveBeenCalledWith(
+      expect.objectContaining({ default_upstream_billing_rate_sync_enabled: true }),
     );
   });
 
@@ -2107,7 +2129,8 @@ describe("admin SettingsView payment visible method controls", () => {
   it("loads and saves upstream billing probe settings from the gateway tab", async () => {
     getUpstreamBillingProbeSettings.mockResolvedValueOnce({
       enabled: false,
-      interval_minutes: 45,
+      interval_seconds: 2700,
+      newapi_multiplier_consensus_count: 4,
     });
 
     const wrapper = mountView();
@@ -2117,7 +2140,7 @@ describe("admin SettingsView payment visible method controls", () => {
 
     const card = wrapper.get('[data-testid="upstream-billing-probe-settings"]');
     expect(card.isVisible()).toBe(true);
-    expect(card.text()).toContain("上游倍率自动探测");
+    expect(card.text()).toContain("账号倍率同步");
     expect(
       (card.get('[data-testid="upstream-billing-probe-enabled"]').element as HTMLInputElement)
         .checked,
@@ -2126,14 +2149,16 @@ describe("admin SettingsView payment visible method controls", () => {
 
     await card.get('[data-testid="upstream-billing-probe-enabled"]').setValue(true);
     await card.get('[data-testid="upstream-billing-probe-interval"]').setValue(60);
+    await card.get('[data-testid="upstream-billing-probe-consensus-count"]').setValue(5);
     await card.get('[data-testid="upstream-billing-probe-save"]').trigger("click");
     await flushPromises();
 
     expect(updateUpstreamBillingProbeSettings).toHaveBeenCalledWith({
       enabled: true,
-      interval_minutes: 60,
+      interval_seconds: 60,
+      newapi_multiplier_consensus_count: 5,
     });
-    expect(showSuccess).toHaveBeenCalledWith("上游倍率自动探测设置已保存");
+    expect(showSuccess).toHaveBeenCalledWith("账号倍率同步设置已保存");
   });
 
   it("loads fail-safe-off Ollama Cloud usage refresh settings and saves an explicit opt-in", async () => {

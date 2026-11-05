@@ -5,6 +5,7 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"testing"
 	"time"
 
@@ -372,6 +373,84 @@ func TestDegradationServiceOverviewWithoutFinishedResults(t *testing.T) {
 	require.Len(t, overview.Monitors, 1)
 	require.Empty(t, overview.Monitors[0].Runs)
 	require.Nil(t, overview.Monitors[0].LastRunAt, "an unfinished first check does not count as checked")
+}
+
+func TestDegradationServiceGetRunForUserEnforcesDisplayWindow(t *testing.T) {
+	env := newDegradationTestEnv(true, "")
+	ctx := context.Background()
+	monitor, err := env.svc.CreateMonitor(ctx, DegradationMonitorInput{GroupID: 1, Model: "gpt", Enabled: true}, 7)
+	require.NoError(t, err)
+	other, err := env.svc.CreateMonitor(ctx, DegradationMonitorInput{GroupID: 2, Model: "claude", Enabled: true}, 7)
+	require.NoError(t, err)
+	addRun := func(monitorID int64, status string) *DegradationRun {
+		run := &DegradationRun{MonitorID: monitorID, Status: status, Prompt: "gallery prompt", Output: "<svg/>", StartedAt: time.Now()}
+		require.NoError(t, env.repo.CreateRun(ctx, run))
+		return run
+	}
+	archived := addRun(monitor.ID, DegradationRunStatusSuccess)
+	boundary := addRun(monitor.ID, DegradationRunStatusSuccess)
+	latest := addRun(monitor.ID, DegradationRunStatusFailed)
+	running := addRun(monitor.ID, DegradationRunStatusRunning)
+	otherRun := addRun(other.ID, DegradationRunStatusSuccess)
+	cfg := DefaultDegradationConfig()
+	cfg.MaxDisplayPerGroup = 2
+	_, err = env.svc.UpdateConfig(ctx, cfg)
+	require.NoError(t, err)
+
+	for _, visible := range []*DegradationRun{boundary, latest, otherRun} {
+		run, err := env.svc.GetRunForUser(ctx, visible.ID)
+		require.NoError(t, err, "every displayed run remains readable, including failed runs")
+		require.Equal(t, visible.ID, run.ID)
+	}
+	for _, id := range []int64{archived.ID, running.ID, 99999} {
+		run, err := env.svc.GetRunForUser(ctx, id)
+		require.ErrorIs(t, err, ErrDegradationRunNotFound)
+		require.Nil(t, run)
+	}
+	adminRun, err := env.svc.GetRun(ctx, archived.ID)
+	require.NoError(t, err, "administrator history reads are not restricted to the gallery window")
+	require.Equal(t, archived.Output, adminRun.Output)
+
+	// Newly finished checks and a smaller display limit revoke older detail access.
+	fresh := addRun(monitor.ID, DegradationRunStatusSuccess)
+	_, err = env.svc.GetRunForUser(ctx, boundary.ID)
+	require.ErrorIs(t, err, ErrDegradationRunNotFound)
+	cfg.MaxDisplayPerGroup = 1
+	_, err = env.svc.UpdateConfig(ctx, cfg)
+	require.NoError(t, err)
+	_, err = env.svc.GetRunForUser(ctx, latest.ID)
+	require.ErrorIs(t, err, ErrDegradationRunNotFound)
+	_, err = env.svc.GetRunForUser(ctx, fresh.ID)
+	require.NoError(t, err)
+
+	// Deleting a group also removes the latest result from the public scope.
+	delete(env.groups.groups, 1)
+	_, err = env.svc.GetRunForUser(ctx, fresh.ID)
+	require.ErrorIs(t, err, ErrDegradationRunNotFound)
+}
+
+type degradationVisibilityErrorRepo struct {
+	DegradationMonitorRepository
+	err error
+}
+
+func (r degradationVisibilityErrorRepo) ListRecentFinishedRuns(context.Context, []int64, int) (map[int64][]*DegradationRun, error) {
+	return nil, r.err
+}
+
+func TestDegradationServiceGetRunForUserFailsClosedOnVisibilityError(t *testing.T) {
+	env := newDegradationTestEnv(true, "")
+	ctx := context.Background()
+	monitor, err := env.svc.CreateMonitor(ctx, DegradationMonitorInput{GroupID: 1, Model: "gpt", Enabled: true}, 7)
+	require.NoError(t, err)
+	run := &DegradationRun{MonitorID: monitor.ID, Status: DegradationRunStatusSuccess, Prompt: "private", Output: "private"}
+	require.NoError(t, env.repo.CreateRun(ctx, run))
+	visibilityError := errors.New("visibility query failed")
+	env.svc.repo = degradationVisibilityErrorRepo{DegradationMonitorRepository: env.repo, err: visibilityError}
+
+	detail, err := env.svc.GetRunForUser(ctx, run.ID)
+	require.ErrorIs(t, err, visibilityError)
+	require.Nil(t, detail)
 }
 
 func TestDegradationServiceStorageStatsAndRelease(t *testing.T) {

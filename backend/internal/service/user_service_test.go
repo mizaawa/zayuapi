@@ -59,6 +59,12 @@ type mockUserSettingRepo struct {
 	values map[string]string
 }
 
+type missingRegistrationWhitelistRepo struct{ SettingRepository }
+
+func (missingRegistrationWhitelistRepo) GetValue(context.Context, string) (string, error) {
+	return "", ErrSettingNotFound
+}
+
 func (m *mockUserSettingRepo) Get(context.Context, string) (*Setting, error) {
 	panic("unexpected Get call")
 }
@@ -917,4 +923,11 @@ func TestGetProfile_HydratesAvatarFromRepository(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "https://cdn.example.com/profile.png", user.AvatarURL)
 	require.Equal(t, "remote_url", user.AvatarSource)
+}
+
+func TestSendNotifyEmailCodeAllowsMissingOptionalRegistrationWhitelist(t *testing.T) {
+	svc := NewUserService(nil, missingRegistrationWhitelistRepo{}, nil, nil)
+	err := svc.SendNotifyEmailCode(context.Background(), 1, "user@example.com", nil, nil)
+	require.ErrorIs(t, err, ErrServiceUnavailable, "missing mail dependencies should be reported after an absent whitelist is treated as unrestricted")
+	require.NotErrorIs(t, err, ErrEmailSuffixNotAllowed)
 }
