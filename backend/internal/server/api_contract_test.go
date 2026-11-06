@@ -290,7 +290,7 @@ func TestAPIContracts(t *testing.T) {
 						{
 							"id": 100,
 							"user_id": 1,
-							"key": "sk_cus...7890",
+							"key": "sk_custom_1234567890",
 							"name": "Key One",
 							"custom_system_prompt_enabled": false,
 							"custom_system_prompt_force": false,

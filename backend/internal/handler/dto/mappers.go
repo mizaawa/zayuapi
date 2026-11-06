@@ -85,7 +85,7 @@ func APIKeyFromService(k *service.APIKey) *APIKey {
 	out := &APIKey{
 		ID:                        k.ID,
 		UserID:                    k.UserID,
-		Key:                       maskUserAPIKey(k.Key),
+		Key:                       k.Key,
 		Name:                      k.Name,
 		CustomSystemPromptEnabled: k.CustomSystemPromptEnabled,
 		CustomSystemPromptForce:   k.CustomSystemPromptForce,
@@ -133,16 +133,6 @@ func APIKeyFromService(k *service.APIKey) *APIKey {
 		out.Reset7dAt = &t
 	}
 	return out
-}
-
-func maskUserAPIKey(key string) string {
-	if key == "" {
-		return ""
-	}
-	if len(key) <= 12 {
-		return key[:min(4, len(key))] + "***"
-	}
-	return key[:6] + "..." + key[len(key)-4:]
 }
 
 func GroupFromServiceShallow(g *service.Group) *Group {

@@ -29,14 +29,7 @@ func TestAPIKeyFromService_MapsLastUsedAt(t *testing.T) {
 	require.NotNil(t, out.LastUsedIP)
 	require.Equal(t, lastUsedIP, *out.LastUsedIP)
 	require.Equal(t, 3, out.CurrentConcurrency)
-	require.Equal(t, "sk-map...used", out.Key, "user-facing reads must expose only a masked API key")
-}
-
-func TestAPIKeyFromServiceMasksSecret(t *testing.T) {
-	const secret = "sk-0123456789abcdef0123456789abcdef"
-	out := APIKeyFromService(&service.APIKey{Key: secret})
-	require.Equal(t, "sk-012...cdef", out.Key)
-	require.NotContains(t, out.Key, secret)
+	require.Equal(t, src.Key, out.Key, "the keys page copies the full key from list responses")
 }
 
 func TestAPIKeyFromService_MapsNilLastUsedAt(t *testing.T) {

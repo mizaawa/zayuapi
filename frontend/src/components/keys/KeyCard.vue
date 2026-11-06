@@ -31,14 +31,21 @@
       </span>
     </header>
 
-    <!-- List responses only contain a masked key. The full secret is shown once after creation. -->
-    <div class="key-secret" data-test="key-secret">
+    <!-- The key itself is the one thing people come here for: a tag that copies on click. -->
+    <button
+      type="button"
+      class="key-secret"
+      :class="{ 'is-copied': copied }"
+      :aria-label="copied ? t('keys.copied') : t('keys.copyToClipboard')"
+      data-test="key-copy"
+      @click="emit('action', 'copy', apiKey)"
+    >
       <code class="key-secret-text">{{ maskApiKey(apiKey.key) }}</code>
       <span class="key-secret-hint">
-        <Icon name="lock" size="sm" />
-        {{ t('keys.onlyShownOnCreation') }}
+        <Icon :name="copied ? 'check' : 'clipboard'" size="sm" :stroke-width="copied ? 2 : 1.5" />
+        {{ copied ? t('keys.copied') : t('keys.copyToClipboard') }}
       </span>
-    </div>
+    </button>
 
     <!-- The title carries the full group name for when a narrow card cuts it short. -->
     <button
@@ -233,7 +240,7 @@ import {
 import { formatDateTime, formatRelativeTime } from '@/utils/format'
 import { maskApiKey } from '@/utils/maskApiKey'
 
-export type KeyCardAction = 'group' | 'failover' | 'resetRateLimit' | 'toggle' | 'edit' | 'delete'
+export type KeyCardAction = 'copy' | 'group' | 'failover' | 'resetRateLimit' | 'use' | 'ccs' | 'toggle' | 'edit' | 'delete'
 
 // 卡片里分组名最多显示的字数，超出用"…"省略（悬停看全名）
 const GROUP_NAME_MAX_LENGTH = 20
@@ -246,15 +253,19 @@ const props = withDefaults(defineProps<{
   hiddenFields: ReadonlySet<KeyCardField>
   /** Shared page clock in ms; the page advances it only when a card's text can change. */
   now: number
+  copied?: boolean
   toggling?: boolean
   groupBlocked?: boolean
   userGroupRate?: number
+  showCcsImport?: boolean
 }>(), {
   usage: undefined,
   usagePending: false,
+  copied: false,
   toggling: false,
   groupBlocked: false,
-  userGroupRate: undefined
+  userGroupRate: undefined,
+  showCcsImport: true
 })
 
 const emit = defineEmits<{
@@ -287,20 +298,25 @@ const detailFields = computed(() =>
 )
 
 type CardActionButton = {
-  name: Extract<KeyCardAction, 'toggle' | 'edit' | 'delete'>
-  icon: 'ban' | 'checkCircle' | 'edit' | 'trash'
-  tone: 'neutral' | 'warning' | 'success' | 'danger'
+  name: Extract<KeyCardAction, 'use' | 'ccs' | 'toggle' | 'edit' | 'delete'>
+  icon: 'terminal' | 'upload' | 'ban' | 'checkCircle' | 'edit' | 'trash'
+  tone: 'use' | 'neutral' | 'warning' | 'success' | 'danger'
   label: string
 }
 
 const actions = computed<CardActionButton[]>(() => {
-  return [
+  const list: CardActionButton[] = [{ name: 'use', icon: 'terminal', tone: 'use', label: t('keys.useKey') }]
+  if (props.showCcsImport) {
+    list.push({ name: 'ccs', icon: 'upload', tone: 'neutral', label: t('keys.importToCcSwitch') })
+  }
+  list.push(
     props.apiKey.status === 'active'
       ? { name: 'toggle', icon: 'ban', tone: 'warning', label: t('keys.disable') }
       : { name: 'toggle', icon: 'checkCircle', tone: 'success', label: t('keys.enable') },
     { name: 'edit', icon: 'edit', tone: 'neutral', label: t('common.edit') },
     { name: 'delete', icon: 'trash', tone: 'danger', label: t('common.delete') }
-  ]
+  )
+  return list
 })
 </script>
 
@@ -456,6 +472,17 @@ const actions = computed<CardActionButton[]>(() => {
   background: #fffbe8;
   box-shadow: inset 0 0 0 1px rgb(215 193 106 / 0.55);
   transition: background-color 160ms ease, color 160ms ease, box-shadow 160ms ease;
+}
+
+.key-secret:hover {
+  background: #fff3bd;
+  box-shadow: inset 0 0 0 1px rgb(201 154 18 / 0.6);
+}
+
+.key-secret.is-copied {
+  color: #2e5038;
+  background: #e4f0df;
+  box-shadow: inset 0 0 0 1px rgb(92 152 101 / 0.45);
 }
 
 .key-secret-text {
@@ -816,6 +843,17 @@ const actions = computed<CardActionButton[]>(() => {
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 0.75rem;
+}
+
+/* "Use key" is the most common next step, so it keeps a quiet tint at rest. */
+.key-action-use {
+  background: #f2f8ef;
+  color: #386344;
+}
+
+.key-action-use:hover {
+  background: #e4f0df;
+  color: #284331;
 }
 
 .key-action-neutral:hover {
