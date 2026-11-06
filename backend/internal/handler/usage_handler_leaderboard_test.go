@@ -51,15 +51,14 @@ func (*leaderboardSettingRepoStub) GetMultiple(context.Context, []string) (map[s
 	return map[string]string{service.SettingKeyLeaderboardEnabled: "true"}, nil
 }
 
-func TestGetLeaderboardOnlyReturnsAnonymizedUsageBandsForParticipants(t *testing.T) {
+func TestGetLeaderboardReturnsOptionalAvatarAndDisplayName(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	costs := []float64{0.99, 1, 10, 100, 1000}
 	usageRepo := &leaderboardUsageRepoStub{ranking: []usagestats.UserSpendingRankingItem{
-		{UserID: 1, Email: "alice@example.com", Username: "Alice", AvatarURL: " https://cdn.example.com/alice.png ", ActualCost: costs[0]},
-		{UserID: 2, Email: "bob@example.com", Username: "Bob", ActualCost: costs[1]},
-		{UserID: 3, Email: "carol@example.com", ActualCost: costs[2]},
-		{UserID: 4, Email: "  charlotte@example.com  ", Username: " \t ", ActualCost: costs[3]},
-		{UserID: 5, Email: "a@example.com", ActualCost: costs[4]},
+		{UserID: 1, Email: "alice@example.com", Username: "Alice", AvatarURL: " https://cdn.example.com/alice.png "},
+		{UserID: 2, Email: "bob@example.com", Username: "Bob"},
+		{UserID: 3, Email: "carol@example.com"},
+		{UserID: 4, Email: "  charlotte@example.com  ", Username: " \t "},
+		{UserID: 5, Email: "a@example.com"},
 		{UserID: 6, Email: "unicode@example.com", Username: "\u7528\u6237\u5168\u540d"},
 		{UserID: 7, Email: "fallback@example.com", Username: "  Display Name  "},
 		{UserID: 8, Email: "fallback@example.com", Username: "chosen@name.example"},
@@ -84,22 +83,15 @@ func TestGetLeaderboardOnlyReturnsAnonymizedUsageBandsForParticipants(t *testing
 		} `json:"data"`
 	}
 	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &response))
-	require.Len(t, response.Data.Entries, 11)
-	require.Equal(t, []string{"under_1", "1_to_10", "10_to_100", "100_to_1000", "over_1000"}, []string{
-		response.Data.Entries[0]["usage_band"].(string),
-		response.Data.Entries[1]["usage_band"].(string),
-		response.Data.Entries[2]["usage_band"].(string),
-		response.Data.Entries[3]["usage_band"].(string),
-		response.Data.Entries[4]["usage_band"].(string),
-	})
+	wantNames := []string{
+		"Alice", "Bob", "c***@example.com", "ch***@example.com", "a***@example.com",
+		"\u7528\u6237\u5168\u540d", "Display Name", "chosen@name.example", "***", "\u7528***@example.com", "A",
+	}
+	require.Len(t, response.Data.Entries, len(wantNames))
+	require.Equal(t, "https://cdn.example.com/alice.png", response.Data.Entries[0]["avatar_url"])
+	require.NotContains(t, response.Data.Entries[1], "avatar_url")
 	for i, entry := range response.Data.Entries {
-		require.EqualValues(t, i+1, entry["rank"])
-		require.NotEmpty(t, entry["usage_band"])
-		require.NotContains(t, entry, "avatar_url")
-		require.NotContains(t, entry, "display_name")
-		require.NotContains(t, entry, "actual_cost")
-		require.NotContains(t, entry, "requests")
-		require.NotContains(t, entry, "tokens")
+		require.Equal(t, wantNames[i], entry["display_name"], "entry %d", i)
 		require.NotContains(t, entry, "user_id")
 		require.NotContains(t, entry, "email")
 		require.NotContains(t, entry, "username")

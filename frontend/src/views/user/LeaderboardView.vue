@@ -65,10 +65,21 @@
             >
               <div class="podium-person">
                 <template v-if="slot.entry">
-                  <div class="user-avatar podium-avatar" aria-hidden="true"><Icon name="user" size="md" /></div>
-                  <p class="podium-name">{{ t('leaderboard.participantRank', { rank: slot.entry.rank }) }}</p>
+                  <div class="user-avatar podium-avatar" :class="avatarTint(slot.entry)" aria-hidden="true">
+                    <img
+                      v-if="avatarUrl(slot.entry)"
+                      :src="avatarUrl(slot.entry)"
+                      alt=""
+                      @error="markAvatarFailed(slot.entry)"
+                    />
+                    <span v-else>{{ avatarInitial(slot.entry.display_name) }}</span>
+                  </div>
+                  <p class="podium-name" :title="slot.entry.display_name">{{ slot.entry.display_name }}</p>
                   <span v-if="isMe(slot.entry)" class="lb-me-tag">{{ t('leaderboard.me') }}</span>
-                  <p class="podium-meta">{{ formatUsageBand(slot.entry.usage_band) }}</p>
+                  <p class="podium-meta">
+                    <span class="podium-requests">{{ requestsLabel(slot.entry.requests) }}</span>
+                    <span :title="exactNumber(slot.entry.tokens)">{{ tokensLabel(slot.entry.tokens) }}</span>
+                  </p>
                 </template>
                 <template v-else>
                   <div class="podium-avatar is-vacant" aria-hidden="true"><Icon name="user" size="md" /></div>
@@ -77,7 +88,7 @@
               </div>
               <div class="podium-plinth">
                 <span class="podium-rank">{{ slot.rank }}</span>
-                <span v-if="slot.entry" class="podium-cost">{{ formatUsageBand(slot.entry.usage_band) }}</span>
+                <span v-if="slot.entry" class="podium-cost">{{ formatCost(slot.entry.actual_cost) }}</span>
               </div>
             </li>
           </ol>
@@ -135,7 +146,9 @@
         <div class="lb-row lb-row-labels" aria-hidden="true">
           <span class="lb-rank">{{ t('leaderboard.rank') }}</span>
           <span>{{ t('leaderboard.user') }}</span>
-          <span class="lb-cost">{{ t('leaderboard.usageBand') }}</span>
+          <span class="lb-metric">{{ t('leaderboard.requests') }}</span>
+          <span class="lb-metric">{{ t('leaderboard.tokens') }}</span>
+          <span class="lb-cost">{{ t('leaderboard.cost') }}</span>
         </div>
         <ol class="lb-list">
           <li
@@ -147,11 +160,29 @@
           >
             <span class="lb-rank">{{ entry.rank }}</span>
             <div class="lb-user">
-              <div class="user-avatar lb-avatar" aria-hidden="true"><Icon name="user" size="sm" /></div>
-              <span class="lb-name">{{ t('leaderboard.participantRank', { rank: entry.rank }) }}</span>
+              <div class="user-avatar lb-avatar" :class="avatarTint(entry)" aria-hidden="true">
+                <img
+                  v-if="avatarUrl(entry)"
+                  :src="avatarUrl(entry)"
+                  alt=""
+                  @error="markAvatarFailed(entry)"
+                />
+                <span v-else>{{ avatarInitial(entry.display_name) }}</span>
+              </div>
+              <span class="lb-name" :title="entry.display_name">{{ entry.display_name }}</span>
               <span v-if="isMe(entry)" class="lb-me-tag">{{ t('leaderboard.me') }}</span>
             </div>
-            <span class="lb-cost">{{ formatUsageBand(entry.usage_band) }}</span>
+            <div class="lb-meta">
+              <span class="lb-metric">
+                <span class="lb-metric-full">{{ requestsLabel(entry.requests) }}</span>
+                <span class="lb-metric-short" aria-hidden="true">{{ exactNumber(entry.requests) }}</span>
+              </span>
+              <span class="lb-metric" :title="exactNumber(entry.tokens)">
+                <span class="lb-metric-full">{{ tokensLabel(entry.tokens) }}</span>
+                <span class="lb-metric-short" aria-hidden="true">{{ formatCompactNumber(entry.tokens) }}</span>
+              </span>
+            </div>
+            <span class="lb-cost">{{ formatCost(entry.actual_cost) }}</span>
           </li>
         </ol>
       </section>
@@ -171,6 +202,7 @@ const CACHE_KEY = 'leaderboard_cache_today'
 const REFRESH_INTERVAL = 5 * 60 * 1000 // 5分钟
 const PODIUM_RANKS = [1, 2, 3] as const
 const RING_LENGTH = 2 * Math.PI * 8
+const AVATAR_TINTS = ['tint-honey', 'tint-garden', 'tint-coral', 'tint-slate', 'tint-plum']
 
 interface CachedLeaderboard {
   data: LeaderboardResponse
@@ -184,6 +216,7 @@ const loading = ref(false)
 const error = ref('')
 const participating = ref(false)
 const participationLoading = ref(false)
+const failedAvatarUrls = ref(new Set<string>())
 const nextUpdateTime = ref<number>(0)
 const countdown = ref<number>(0)
 const integerFormatter = new Intl.NumberFormat()
@@ -214,6 +247,16 @@ const myNote = computed(() => {
   const rank = current.my_rank
   if (!rank) return current.my_requests > 0 ? '' : t('leaderboard.noUsage')
   if (rank === 1) return t('leaderboard.leading')
+  const ahead = entries.value.find(entry => entry.rank === rank - 1)
+  if (ahead) {
+    const gap = ahead.actual_cost - current.my_actual_cost
+    return gap >= 0.01 ? t('leaderboard.gapToNext', { rank: ahead.rank, amount: formatCost(gap) }) : ''
+  }
+  const last = entries.value[entries.value.length - 1]
+  if (last && rank > last.rank) {
+    const gap = last.actual_cost - current.my_actual_cost
+    return gap >= 0.01 ? t('leaderboard.gapToTop', { n: last.rank, amount: formatCost(gap) }) : ''
+  }
   return ''
 })
 
@@ -242,8 +285,33 @@ function formatCost(value: number): string {
   return `$${value.toFixed(2)}`
 }
 
-function formatUsageBand(band: LeaderboardEntry['usage_band']): string {
-  return t(`leaderboard.usageBands.${band}`)
+function requestsLabel(value: number): string {
+  return t('leaderboard.requestsCount', { count: exactNumber(value) }, value)
+}
+
+function tokensLabel(value: number): string {
+  return t('leaderboard.tokensCount', { count: formatCompactNumber(value) })
+}
+
+function avatarUrl(entry: LeaderboardEntry): string {
+  const url = entry.avatar_url?.trim() || ''
+  return failedAvatarUrls.value.has(url) ? '' : url
+}
+
+function markAvatarFailed(entry: LeaderboardEntry): void {
+  const url = entry.avatar_url?.trim()
+  if (url) failedAvatarUrls.value.add(url)
+}
+
+function avatarInitial(displayName: string): string {
+  return Array.from(displayName.trim())[0]?.toUpperCase() || 'U'
+}
+
+// Initials get a stable tint per name so neighbouring rows are easy to tell apart.
+function avatarTint(entry: LeaderboardEntry): string {
+  let hash = 0
+  for (const char of entry.display_name) hash = (hash * 31 + (char.codePointAt(0) ?? 0)) >>> 0
+  return AVATAR_TINTS[hash % AVATAR_TINTS.length]
 }
 
 function loadFromCache(): boolean {

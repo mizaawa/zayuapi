@@ -19,8 +19,12 @@ import (
 )
 
 type leaderboardEntryResponse struct {
-	Rank      int64  `json:"rank"`
-	UsageBand string `json:"usage_band"`
+	Rank        int64   `json:"rank"`
+	DisplayName string  `json:"display_name"`
+	AvatarURL   string  `json:"avatar_url,omitempty"`
+	ActualCost  float64 `json:"actual_cost"`
+	Requests    int64   `json:"requests"`
+	Tokens      int64   `json:"tokens"`
 }
 
 type leaderboardResponse struct {
@@ -32,6 +36,36 @@ type leaderboardResponse struct {
 	MyRequests    int64                      `json:"my_requests"`
 	MyTokens      int64                      `json:"my_tokens"`
 	Participating bool                       `json:"participating"`
+}
+
+func leaderboardDisplayName(username, email string) string {
+	if name := strings.TrimSpace(username); name != "" {
+		return name
+	}
+	value := strings.TrimSpace(email)
+	if value == "" {
+		return "***"
+	}
+	if at := strings.LastIndex(value, "@"); at > 0 {
+		local, domain := value[:at], value[at:]
+		runes := []rune(local)
+		keep := 1
+		if len(runes) > 6 {
+			keep = 2
+		}
+		if len(runes) <= keep {
+			return string(runes[:1]) + "***" + domain
+		}
+		return string(runes[:keep]) + "***" + domain
+	}
+	runes := []rune(value)
+	if len(runes) == 1 {
+		return string(runes) + "***"
+	}
+	if len(runes) == 2 {
+		return string(runes[:1]) + "***"
+	}
+	return string(runes[:1]) + "***" + string(runes[len(runes)-1])
 }
 
 type userUsageFilters struct {
@@ -509,7 +543,9 @@ func (h *UsageHandler) GetLeaderboard(c *gin.Context) {
 	entries := make([]leaderboardEntryResponse, 0, len(data.Ranking))
 	for i, item := range data.Ranking {
 		entries = append(entries, leaderboardEntryResponse{
-			Rank: int64(i + 1), UsageBand: leaderboardUsageBand(item.ActualCost),
+			Rank: int64(i + 1), DisplayName: leaderboardDisplayName(item.Username, item.Email),
+			AvatarURL:  strings.TrimSpace(item.AvatarURL),
+			ActualCost: item.ActualCost, Requests: item.Requests, Tokens: item.Tokens,
 		})
 	}
 	myStats := data.MyStats
@@ -518,21 +554,6 @@ func (h *UsageHandler) GetLeaderboard(c *gin.Context) {
 		MyActualCost: myStats.TotalActualCost, MyRequests: myStats.TotalRequests, MyTokens: myStats.TotalTokens,
 		Participating: participating,
 	})
-}
-
-func leaderboardUsageBand(actualCost float64) string {
-	switch {
-	case actualCost < 1:
-		return "under_1"
-	case actualCost < 10:
-		return "1_to_10"
-	case actualCost < 100:
-		return "10_to_100"
-	case actualCost < 1000:
-		return "100_to_1000"
-	default:
-		return "over_1000"
-	}
 }
 
 type leaderboardParticipationRequest struct {

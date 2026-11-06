@@ -132,17 +132,8 @@ export default {
     gapToTop: '距前 {n} 名还差 {amount}',
     noUsage: '今天还没有产生用量',
     participationLabel: '参与排行',
-    participationOnHint: '榜单匿名显示你的排名和大致用量区间；昵称、头像和准确用量不会公开',
+    participationOnHint: '其他用户能看到你的昵称、头像和今日用量',
     participationOffHint: '你不会出现在榜单上，用量也不参与排名',
-    participantRank: '参与者 #{rank}',
-    usageBand: '用量区间',
-    usageBands: {
-      under_1: '低于 $1',
-      '1_to_10': '$1–$10',
-      '10_to_100': '$10–$100',
-      '100_to_1000': '$100–$1,000',
-      over_1000: '$1,000 以上',
-    },
   },
 
   // Groups (shared)

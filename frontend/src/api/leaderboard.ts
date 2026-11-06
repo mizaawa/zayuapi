@@ -2,7 +2,11 @@ import { apiClient } from './client'
 
 export interface LeaderboardEntry {
   rank: number
-  usage_band: 'under_1' | '1_to_10' | '10_to_100' | '100_to_1000' | 'over_1000'
+  display_name: string
+  avatar_url?: string | null
+  actual_cost: number
+  requests: number
+  tokens: number
 }
 
 export interface LeaderboardResponse {

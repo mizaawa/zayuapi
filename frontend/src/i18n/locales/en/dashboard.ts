@@ -132,17 +132,8 @@ export default {
     gapToTop: '{amount} short of the top {n}',
     noUsage: 'No usage yet today',
     participationLabel: 'Show me on the leaderboard',
-    participationOnHint: 'Your rank and a broad usage range appear anonymously; your name, avatar and exact usage stay private',
+    participationOnHint: 'Other users can see your name, avatar and usage today',
     participationOffHint: "You're hidden from the leaderboard and your usage isn't ranked",
-    participantRank: 'Participant #{rank}',
-    usageBand: 'Usage range',
-    usageBands: {
-      under_1: 'Under $1',
-      '1_to_10': '$1–$10',
-      '10_to_100': '$10–$100',
-      '100_to_1000': '$100–$1,000',
-      over_1000: '$1,000+',
-    },
   },
 
   // Groups (shared)
