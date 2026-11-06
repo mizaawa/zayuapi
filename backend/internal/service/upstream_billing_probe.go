@@ -691,8 +691,12 @@ func (s *UpstreamBillingProbeService) probeLoadedAccount(ctx context.Context, ac
 			if status < 200 || status >= 300 {
 				return s.persistProbeFailure(ctx, account, interval, now, status, "http_error", retryAfter(headers, now))
 			}
-			if parseNewAPIUsageResponse(usageBody) != nil {
+			usage, parseErr := parseNewAPIUsageResponse(usageBody)
+			if parseErr != nil {
 				continue
+			}
+			if rate, ok := newAPIUsageGroupMultiplier(usage); ok {
+				return s.persistNewAPIUsageProbeResult(ctx, account, usage, rate, status, interval, now)
 			}
 			logStatus, logHeaders, logsBody, logRequestErr := s.doUpstreamBillingProbeRequest(ctx, account, normalizedBaseURL, proxyURL, apiKey, buildNewAPIEndpointURL(normalizedBaseURL, "/api/log/token"))
 			if logRequestErr != "" {
@@ -840,7 +844,12 @@ type newAPIConsumptionLog struct {
 	Other     json.RawMessage `json:"other"`
 }
 
-func parseNewAPIUsageResponse(body []byte) error {
+type newAPIUsageResponse struct {
+	Group      string
+	GroupRatio *float64
+}
+
+func parseNewAPIUsageResponse(body []byte) (*newAPIUsageResponse, error) {
 	var response struct {
 		Code bool `json:"code"`
 		Data struct {
@@ -849,17 +858,67 @@ func parseNewAPIUsageResponse(body []byte) error {
 			TotalUsed      json.Number `json:"total_used"`
 			TotalAvailable json.Number `json:"total_available"`
 			UnlimitedQuota bool        `json:"unlimited_quota"`
+			Group          string      `json:"group"`
+			GroupRatio     *float64    `json:"group_ratio"`
 		} `json:"data"`
 	}
 	decoder := json.NewDecoder(bytes.NewReader(body))
 	decoder.UseNumber()
 	if err := decoder.Decode(&response); err != nil {
-		return err
+		return nil, err
 	}
 	if !response.Code || response.Data.Object != "token_usage" || strings.TrimSpace(response.Data.Name) == "" || response.Data.TotalUsed == "" || response.Data.TotalAvailable == "" {
-		return fmt.Errorf("unexpected New API token usage schema")
+		return nil, fmt.Errorf("unexpected New API token usage schema")
 	}
-	return nil
+	return &newAPIUsageResponse{Group: response.Data.Group, GroupRatio: response.Data.GroupRatio}, nil
+}
+
+func newAPIUsageGroupMultiplier(usage *newAPIUsageResponse) (float64, bool) {
+	if usage == nil || strings.TrimSpace(usage.Group) == "" || usage.GroupRatio == nil {
+		return 0, false
+	}
+	return upstreamBillingProbeSyncRate(map[string]any{"resolved_rate_multiplier": *usage.GroupRatio})
+}
+
+func (s *UpstreamBillingProbeService) persistNewAPIUsageProbeResult(
+	ctx context.Context,
+	account *Account,
+	usage *newAPIUsageResponse,
+	rate float64,
+	status int,
+	interval time.Duration,
+	now time.Time,
+) (*UpstreamBillingProbeSnapshot, error) {
+	observedAt := now.UTC()
+	snapshot := &UpstreamBillingProbeSnapshot{
+		Status:               UpstreamBillingProbeStatusOK,
+		Protocol:             UpstreamBillingProtocolNewAPI,
+		ObservedMultiplier:   &rate,
+		ObservedMultiplierAt: &observedAt,
+		MultiplierMatchCount: 1,
+		Data: map[string]any{
+			"resolved_rate_multiplier": rate,
+			"group":                    usage.Group,
+			"source":                   "token_usage",
+		},
+		ReceivedAt:    &observedAt,
+		FreshUntil:    probeTimePtr(now.Add(2 * interval)),
+		LastAttemptAt: now,
+		NextProbeAt:   now.Add(interval),
+		HTTPStatus:    status,
+	}
+	var syncRate *float64
+	if upstreamBillingRateSyncEnabled(account) && !equalBillingMultiplier(account.BillingRateMultiplier(), rate) {
+		syncRate = &rate
+		snapshot.SyncedRateMultiplier = &rate
+	}
+	if err := s.updateSnapshot(ctx, account, snapshot, syncRate); err != nil {
+		return nil, err
+	}
+	if syncRate != nil {
+		slog.Info("upstream_billing_rate_sync_applied", "source", "newapi_token_usage", "account_id", account.ID, "new_rate_multiplier", rate)
+	}
+	return snapshot, nil
 }
 
 func parseNewAPIConsumptionLogs(body []byte) ([]newAPIConsumptionLog, error) {

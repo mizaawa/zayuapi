@@ -348,6 +348,47 @@ func TestUpstreamBillingProbeDetectsNewAPIAndSyncsRecentConsumptionRate(t *testi
 	require.Equal(t, "Bearer sk-test", upstream.requests[0].Header.Get("Authorization"))
 }
 
+func TestUpstreamBillingProbeDetectsNewAPITokenUsageGroupRateAndSyncs(t *testing.T) {
+	initialRate := 0.25
+	account := &Account{
+		ID:          72,
+		Platform:    PlatformOpenAI,
+		Type:        AccountTypeAPIKey,
+		Status:      StatusActive,
+		Concurrency: 1,
+		Credentials: map[string]any{"api_key": "sk-test", "base_url": "https://upstream.example"},
+		Extra: map[string]any{
+			UpstreamBillingProbeEnabledExtraKey:    true,
+			UpstreamBillingRateSyncEnabledExtraKey: true,
+		},
+		RateMultiplier: &initialRate,
+	}
+	repo := &upstreamBillingProbeAccountRepo{accounts: map[int64]*Account{account.ID: account}}
+	upstream := &httpUpstreamRecorder{responses: []*http.Response{
+		{StatusCode: http.StatusNotFound, Header: http.Header{}, Body: io.NopCloser(strings.NewReader(`{"message":"not found"}`))},
+		{StatusCode: http.StatusOK, Header: http.Header{}, Body: io.NopCloser(strings.NewReader(`{"code":true,"data":{"object":"token_usage","name":"test-key","total_used":10,"total_available":90,"unlimited_quota":false,"group":"standard","group_ratio":0.6}}`))},
+	}}
+	svc := newUpstreamBillingProbeTestService(repo, upstream, &upstreamBillingProbeSettingRepo{})
+
+	snapshot, err := svc.ProbeAccount(context.Background(), account.ID)
+
+	require.NoError(t, err)
+	require.Equal(t, UpstreamBillingProtocolNewAPI, snapshot.Protocol)
+	require.Equal(t, UpstreamBillingProbeStatusOK, snapshot.Status)
+	require.Equal(t, 1, snapshot.MultiplierMatchCount)
+	require.NotNil(t, snapshot.ObservedMultiplier)
+	require.Equal(t, 0.6, *snapshot.ObservedMultiplier)
+	require.NotNil(t, snapshot.SyncedRateMultiplier)
+	require.Equal(t, 0.6, *snapshot.SyncedRateMultiplier)
+	require.Equal(t, 0.6, account.BillingRateMultiplier())
+	require.Equal(t, "token_usage", snapshot.Data["source"])
+	require.Equal(t, "standard", snapshot.Data["group"])
+	require.Len(t, upstream.requests, 2)
+	require.Equal(t, "https://upstream.example/v1/sub2api/billing", upstream.requests[0].URL.String())
+	require.Equal(t, "https://upstream.example/api/usage/token/", upstream.requests[1].URL.String())
+	require.Equal(t, "Bearer sk-test", upstream.requests[1].Header.Get("Authorization"))
+}
+
 func TestUpstreamBillingProbeNewAPIRequiresConsecutiveMatchingLogsBeforeSync(t *testing.T) {
 	initialRate := 0.25
 	account := &Account{

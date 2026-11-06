@@ -467,13 +467,13 @@ export default {
       },
       upstreamBillingProbe: {
         title: '账号倍率同步',
-        description: '按周期识别 Sub2API 或 New API 并获取上游倍率。Sub2API 使用当前计费接口；New API 从 API Key 消费日志读取最近使用的分组倍率。New API 仅支持当前接口格式，旧版或无消费日志时不会修改账号倍率。',
+        description: '按周期识别 Sub2API 或 New API 并获取上游倍率。Sub2API 使用当前计费接口；New API 优先读取用量接口直接返回的分组倍率，未提供时再从 API Key 消费日志获取。New API 仅支持当前接口格式；日志回退模式需要有消费记录。',
         enabled: '启用定时探测和同步',
         enabledHint: '只处理账号自身已开启“自动同步上游倍率”的 API Key 账号；关闭后停止所有定时探测，手动探测不受影响。',
         intervalSeconds: '探测与同步周期（秒）',
         intervalHint: '范围 5–86400 秒。成功探测结果的有效期为两个探测周期。',
-        newapiMultiplierConsensusCount: 'New API 相同倍率确认次数',
-        newapiMultiplierConsensusCountHint: '最近消费日志中连续出现相同倍率达到此次数，且与当前账号倍率不同时才写回。范围 1–100，默认 3。',
+        newapiMultiplierConsensusCount: 'New API 消费日志倍率确认次数',
+        newapiMultiplierConsensusCountHint: '用量接口未提供分组倍率时，才使用消费日志：连续出现相同倍率达到此次数且与当前账号倍率不同时写回。接口直接提供有效分组倍率时直接同步。范围 1–100，默认 3。',
         saved: '账号倍率同步设置已保存',
         saveFailed: '保存账号倍率同步设置失败'
       },

@@ -1092,12 +1092,18 @@ export interface UpstreamBillingLogData {
   consensus_required: number
 }
 
+export interface UpstreamBillingUsageData {
+  resolved_rate_multiplier: number
+  group: string
+  source: 'token_usage'
+}
+
 export type UpstreamBillingProbeStatus = 'ok' | 'unsupported' | 'failed' | 'waiting_logs' | 'waiting_consensus'
 
 export interface UpstreamBillingProbeSnapshot {
   status: UpstreamBillingProbeStatus
   protocol?: 'newapi' | 'sub2api' | 'unknown'
-  data?: UpstreamBillingData | UpstreamBillingLogData
+  data?: UpstreamBillingData | UpstreamBillingLogData | UpstreamBillingUsageData
   observed_multiplier?: number
   observed_multiplier_at?: string
   multiplier_match_count?: number

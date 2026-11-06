@@ -17,6 +17,11 @@
           <p>{{ t('admin.accounts.upstreamBilling.lastDetectedRate', { value: logData.resolved_rate_multiplier }) }}</p>
           <p>{{ t('admin.accounts.upstreamBilling.lastDetectedAt', { value: formatDate(snapshot?.observed_multiplier_at || snapshot?.received_at) }) }}</p>
         </template>
+        <template v-else-if="usageData">
+          <p>{{ t('admin.accounts.upstreamBilling.newapiGroup', { group: usageData.group }) }}</p>
+          <p>{{ t('admin.accounts.upstreamBilling.newapiUsageRate', { value: usageData.resolved_rate_multiplier }) }}</p>
+          <p>{{ t('admin.accounts.upstreamBilling.lastDetectedAt', { value: formatDate(snapshot?.observed_multiplier_at || snapshot?.received_at) }) }}</p>
+        </template>
         <template v-else-if="hasEffectiveRate && billingData">
           <p>{{ t('admin.accounts.upstreamBilling.groupRate', { value: billingData.group_rate_multiplier }) }}</p>
           <p v-if="billingData.user_rate_multiplier != null">
@@ -95,7 +100,13 @@ import { useI18n } from 'vue-i18n'
 import HelpTooltip from '@/components/common/HelpTooltip.vue'
 import Icon from '@/components/icons/Icon.vue'
 import { formatMultiplier } from '@/utils/formatters'
-import type { Account, UpstreamBillingData, UpstreamBillingLogData, UpstreamBillingProbeSnapshot } from '@/types'
+import type {
+  Account,
+  UpstreamBillingData,
+  UpstreamBillingLogData,
+  UpstreamBillingProbeSnapshot,
+  UpstreamBillingUsageData
+} from '@/types'
 
 const props = withDefaults(defineProps<{
   account: Account
@@ -116,15 +127,21 @@ const CLOCK_SKEW_TOLERANCE_MS = 5 * 60 * 1000
 const eligible = computed(() => props.account.type === 'apikey')
 const snapshot = computed<UpstreamBillingProbeSnapshot | undefined>(() => props.account.extra?.upstream_billing_probe)
 const data = computed(() => snapshot.value?.data)
-const isConsumptionLogData = (value: UpstreamBillingData | UpstreamBillingLogData): value is UpstreamBillingLogData =>
+const isConsumptionLogData = (value: UpstreamBillingData | UpstreamBillingLogData | UpstreamBillingUsageData): value is UpstreamBillingLogData =>
   'source' in value && value.source === 'consumption_log'
+const isTokenUsageData = (value: UpstreamBillingData | UpstreamBillingLogData | UpstreamBillingUsageData): value is UpstreamBillingUsageData =>
+  'source' in value && value.source === 'token_usage'
 const logData = computed<UpstreamBillingLogData | null>(() => {
   const value = data.value
   return value && isConsumptionLogData(value) ? value : null
 })
+const usageData = computed<UpstreamBillingUsageData | null>(() => {
+  const value = data.value
+  return value && isTokenUsageData(value) ? value : null
+})
 const billingData = computed<UpstreamBillingData | null>(() => {
   const value = data.value
-  return value && !isConsumptionLogData(value) ? value : null
+  return value && 'billing_scope' in value ? value : null
 })
 const probeEnabled = computed(() => props.account.extra?.upstream_billing_probe_enabled === true)
 const nextProbeAt = computed(() => {
@@ -179,6 +196,10 @@ const currentEffectiveRate = computed(() => {
     const rate = logData.value.resolved_rate_multiplier
     return typeof rate === 'number' && Number.isFinite(rate) && rate >= 0 ? rate : null
   }
+  if (usageData.value) {
+    const rate = usageData.value.resolved_rate_multiplier
+    return typeof rate === 'number' && Number.isFinite(rate) && rate >= 0 ? rate : null
+  }
   const billing = billingData.value
   if (!billing) return null
   if (billing.billing_scope !== 'token') return null
@@ -195,6 +216,18 @@ const currentEffectiveRate = computed(() => {
   return Number.isFinite(value) ? value : null
 })
 const lastDetectedRate = computed(() => {
+  if (usageData.value) {
+    const rate = usageData.value.resolved_rate_multiplier
+    return typeof rate === 'number' && Number.isFinite(rate) && rate >= 0
+      ? Number(rate.toPrecision(12))
+      : null
+  }
+  if (logData.value) {
+    const rate = logData.value.resolved_rate_multiplier
+    return typeof rate === 'number' && Number.isFinite(rate) && rate >= 0
+      ? Number(rate.toPrecision(12))
+      : null
+  }
   const value = billingData.value?.effective_rate_multiplier
   return typeof value === 'number' && Number.isFinite(value) && value >= 0
     ? Number(value.toPrecision(12))

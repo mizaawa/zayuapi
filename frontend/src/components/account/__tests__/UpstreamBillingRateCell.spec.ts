@@ -100,6 +100,44 @@ describe('UpstreamBillingRateCell', () => {
     )
   })
 
+  it('shows New API group rates returned directly by token usage', async () => {
+    const wrapper = mount(UpstreamBillingRateCell, {
+      props: {
+        account: makeAccount({
+          rate_multiplier: 0.6,
+          extra: {
+            upstream_billing_probe_enabled: true,
+            upstream_billing_probe: {
+              status: 'ok',
+              protocol: 'newapi',
+              data: {
+                resolved_rate_multiplier: 0.6,
+                group: 'default',
+                source: 'token_usage'
+              },
+              observed_multiplier: 0.6,
+              received_at: '2026-07-13T00:00:00Z',
+              fresh_until: '2026-07-14T00:00:00Z',
+              last_attempt_at: '2026-07-13T00:00:00Z',
+              next_probe_at: '2026-07-13T00:30:00Z'
+            }
+          }
+        }),
+        now: Date.now()
+      }
+    })
+
+    expect(wrapper.get('[data-testid="upstream-billing-rate"]').text()).toBe('0.60x')
+    await wrapper.get('[data-testid="upstream-billing-details"]').trigger('mouseenter')
+    await flushPromises()
+
+    const tooltips = document.body.querySelectorAll('[role="tooltip"]')
+    const tooltip = tooltips[tooltips.length - 1] as HTMLElement
+    expect(tooltip.textContent).toContain('admin.accounts.upstreamBilling.newapiGroup:default')
+    expect(tooltip.textContent).toContain('admin.accounts.upstreamBilling.newapiUsageRate:0.6')
+    wrapper.unmount()
+  })
+
   it('uses retained failed data only while it is still fresh', async () => {
     const account = makeAccount({
       extra: {

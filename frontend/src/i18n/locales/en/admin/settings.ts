@@ -474,13 +474,13 @@ export default {
       },
       upstreamBillingProbe: {
         title: 'Account Rate Sync',
-        description: 'Detect Sub2API or New API on a schedule and read its upstream rate. Sub2API uses its current billing endpoint; New API reads the most recently used group rate from API key consumption logs. Only the current New API interface is supported; old versions or missing logs never change the account rate.',
+        description: 'Detect Sub2API or New API on a schedule and read its upstream rate. Sub2API uses its current billing endpoint; New API first reads a group rate returned directly by token usage and falls back to API key consumption logs when it is not provided. The current New API interface is required; log fallback needs consumption records.',
         enabled: 'Enable scheduled detection and sync',
         enabledHint: 'Only API Key accounts with automatic upstream rate sync enabled are processed. Turning this off stops scheduled probes; manual probes remain available.',
         intervalSeconds: 'Detection and sync interval (seconds)',
         intervalHint: 'Range: 5–86400 seconds. Successful results remain valid for two intervals.',
-        newapiMultiplierConsensusCount: 'New API matching rate confirmations',
-        newapiMultiplierConsensusCountHint: 'Write the rate only after this many consecutive recent consumption logs show the same multiplier and it differs from the account rate. Range: 1–100; default: 3.',
+        newapiMultiplierConsensusCount: 'New API consumption log rate confirmations',
+        newapiMultiplierConsensusCountHint: 'Used when token usage does not return a group rate: write only after this many consecutive logs show the same multiplier and it differs from the account rate. A valid rate returned directly by token usage is synced immediately. Range: 1–100; default: 3.',
         saved: 'Account rate sync settings saved',
         saveFailed: 'Failed to save account rate sync settings'
       },
