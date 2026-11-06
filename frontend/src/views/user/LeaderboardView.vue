@@ -322,6 +322,15 @@ function loadFromCache(): boolean {
     const { data: cachedData, timestamp }: CachedLeaderboard = JSON.parse(cached)
     const now = Date.now()
 
+    if (!Array.isArray(cachedData?.entries) || cachedData.entries.some(entry =>
+      !entry || typeof entry.display_name !== 'string' ||
+      ![entry.actual_cost, entry.requests, entry.tokens].every(value =>
+        typeof value === 'number' && Number.isFinite(value))
+    )) {
+      localStorage.removeItem(CACHE_KEY)
+      return false
+    }
+
     if (now - timestamp < REFRESH_INTERVAL) {
       data.value = cachedData
       participating.value = cachedData.participating

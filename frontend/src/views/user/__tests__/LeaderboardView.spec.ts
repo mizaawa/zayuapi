@@ -132,6 +132,35 @@ describe('LeaderboardView', () => {
     expect(wrapper.get('.countdown-badge').text()).toBe('5:00')
   })
 
+  it('refreshes anonymous entries cached before participant details were restored', async () => {
+    localStorage.setItem('leaderboard_cache_today', JSON.stringify({
+      data: { ...makeResponse(), entries: [{ rank: 1, usage_band: '10_to_100' }] },
+      timestamp: Date.now(),
+    }))
+    getLeaderboard.mockResolvedValue(makeResponse([makeEntry()]))
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    expect(getLeaderboard).toHaveBeenCalledWith('today')
+    expect(wrapper.get('[data-testid="leaderboard-entry-1"]').text()).toContain('Alice')
+    expect(wrapper.get('.podium-cost').text()).toBe('$12.34')
+  })
+
+  it('reuses fresh participant details from the cache', async () => {
+    localStorage.setItem('leaderboard_cache_today', JSON.stringify({
+      data: makeResponse([makeEntry()]),
+      timestamp: Date.now(),
+    }))
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    expect(getLeaderboard).not.toHaveBeenCalled()
+    expect(wrapper.get('[data-testid="leaderboard-entry-1"]').text()).toContain('Alice')
+    expect(wrapper.get('.podium-cost').text()).toBe('$12.34')
+  })
+
   it('renders the user avatar before the display name', async () => {
     getLeaderboard.mockResolvedValue(makeResponse([
       makeEntry({ avatar_url: 'https://example.com/alice.png' }),
