@@ -251,6 +251,38 @@ func TestGatewayRoutesCustomVideoCreationUsesStandardEndpoint(t *testing.T) {
 	}
 }
 
+func TestGatewayRoutesSoraBridgeUsesVideoMethodsAndCustomBoundary(t *testing.T) {
+	custom := newGatewayRoutesTestRouter(service.PlatformCustom)
+	registered := make(map[string]bool)
+	for _, route := range custom.Routes() {
+		registered[route.Method+" "+route.Path] = true
+	}
+	for _, prefix := range []string{"/v1", ""} {
+		require.True(t, registered["POST "+prefix+"/sora/videos"])
+		require.True(t, registered["GET "+prefix+"/sora/videos/:request_id"])
+		require.True(t, registered["GET "+prefix+"/sora/videos/:request_id/content"])
+	}
+
+	for _, path := range []string{"/v1/sora/videos", "/v1/videos"} {
+		req := httptest.NewRequest(http.MethodPost, path, strings.NewReader(`{"model":"custom-video","prompt":"waves","seconds":8,"size":"1280x720"}`))
+		req.Header.Set("Content-Type", "application/json")
+		if path == "/v1/videos" {
+			req.Header.Set("X-Zayu-Video-Protocol", "sora")
+		}
+		w := httptest.NewRecorder()
+		custom.ServeHTTP(w, req)
+		require.NotContains(t, w.Body.String(), "Sora video bridge requires a Custom group")
+	}
+
+	grok := newGatewayRoutesTestRouter(service.PlatformGrok)
+	req := httptest.NewRequest(http.MethodPost, "/v1/sora/videos", strings.NewReader(`{"model":"grok-imagine-video","prompt":"waves","seconds":8,"size":"1280x720"}`))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	grok.ServeHTTP(w, req)
+	require.Equal(t, http.StatusNotFound, w.Code)
+	require.Contains(t, w.Body.String(), "Sora video bridge requires a Custom group")
+}
+
 func TestGatewayRoutesCustomImagesAndCountTokensUseOpenAICompatibleHandlers(t *testing.T) {
 	router := newGatewayRoutesTestRouter(service.PlatformComposite)
 

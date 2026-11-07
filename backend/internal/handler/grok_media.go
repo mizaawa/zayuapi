@@ -127,7 +127,13 @@ func (h *OpenAIGatewayHandler) handleGrokMedia(c *gin.Context, endpoint service.
 		return
 	}
 	requestInfo := service.GrokMediaRequestInfo{}
-	if endpoint.IsSeedance() && endpoint == service.SeedanceEndpointCreate {
+	if targetPlatform == service.PlatformCustom && endpoint == service.GrokMediaEndpointVideosGenerations && service.IsSoraVideoBridge(c.Request.Context()) {
+		requestInfo, err = service.ParseSoraVideoBridgeRequestInfo(body, contentType)
+		if err != nil {
+			h.errorResponse(c, http.StatusBadRequest, "invalid_request_error", err.Error())
+			return
+		}
+	} else if endpoint.IsSeedance() && endpoint == service.SeedanceEndpointCreate {
 		requestInfo, err = service.ParseSeedanceRequest(body)
 		if err != nil {
 			h.errorResponse(c, http.StatusBadRequest, "invalid_request_error", err.Error())
@@ -445,6 +451,11 @@ func (h *OpenAIGatewayHandler) handleGrokMedia(c *gin.Context, endpoint service.
 			if err := h.prechargeVideo(c, apiKey, subscription, account, endpoint, requestInfo, channelMapping, body); err != nil {
 				if accountReleaseFunc != nil {
 					accountReleaseFunc()
+				}
+				var validationErr *service.SoraVideoBridgeValidationError
+				if errors.As(err, &validationErr) {
+					h.errorResponse(c, http.StatusBadRequest, "invalid_request_error", validationErr.Error())
+					return
 				}
 				status, code, message, _ := billingErrorDetails(err)
 				h.errorResponse(c, status, code, message)

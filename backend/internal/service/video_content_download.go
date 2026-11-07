@@ -84,7 +84,7 @@ func (s *OpenAIGatewayService) customMediaVideoContentFallback(ctx context.Conte
 		if err != nil {
 			return nil, err
 		}
-		target, _, err := customMediaVideoContentURL(body, original.URL, false)
+		target, _, err := customMediaVideoContentURL(soraBridgeDownloadStatus(ctx, body), original.URL, false)
 		if err != nil {
 			return nil, err
 		}
@@ -122,7 +122,7 @@ func (s *OpenAIGatewayService) customMediaVideoContentFallback(ctx context.Conte
 	if err != nil {
 		return nil, fmt.Errorf("read video content fallback status: %w", err)
 	}
-	target, _, err := customMediaVideoContentURL(body, original.URL, true)
+	target, _, err := customMediaVideoContentURL(soraBridgeDownloadStatus(ctx, body), original.URL, true)
 	if err != nil || target == "" {
 		return nil, err
 	}
@@ -174,7 +174,7 @@ func (s *OpenAIGatewayService) customMediaVideoContentDownload(ctx context.Conte
 			if readErr != nil {
 				return nil, readErr
 			}
-			raw, _, err = customMediaVideoContentURL(body, target, false)
+			raw, _, err = customMediaVideoContentURL(soraBridgeDownloadStatus(ctx, body), target, false)
 			if err != nil || raw == "" {
 				return nil, fmt.Errorf("video content upstream returned JSON instead of a video file")
 			}

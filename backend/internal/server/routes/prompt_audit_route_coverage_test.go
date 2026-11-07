@@ -43,6 +43,7 @@ func TestEveryGatewayPOSTRouteIsClassifiedForPromptAuditCoverage(t *testing.T) {
 		"/images/batches":           {"batch_image_handler.go"},
 		"/videos/generations":       {"grok_media.go"},
 		"/videos":                   {"grok_media.go"},
+		"/sora/videos":              {"grok_media.go"},
 		"/videos/edits":             {"grok_media.go"},
 		"/videos/extensions":        {"grok_media.go"},
 		// The workbench worker delegates generation to CustomVideoGeneration.

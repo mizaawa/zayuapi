@@ -43,12 +43,24 @@ func mediaProtocolValidationMessage() string {
 	return "unsupported media protocol; select default, sora or 8yes in account settings"
 }
 
-func VideoPrechargeRequestInfo(ctx context.Context, account *Account, body []byte, contentType string) (GrokMediaRequestInfo, error) {
+func VideoPrechargeRequestInfo(ctx context.Context, account *Account, body []byte, contentType string) (_ GrokMediaRequestInfo, err error) {
+	defer func() {
+		if err != nil && IsSoraVideoBridge(ctx) {
+			err = &SoraVideoBridgeValidationError{Err: err}
+		}
+	}()
 	if err := validateVideoBillingFields(body, contentType); err != nil {
 		return GrokMediaRequestInfo{}, err
 	}
 	if !validMediaProtocol(account.MediaProtocol()) {
 		return GrokMediaRequestInfo{}, fmt.Errorf("%s", mediaProtocolValidationMessage())
+	}
+	if IsSoraVideoBridge(ctx) {
+		var err error
+		body, contentType, err = normalizeSoraBridgeVideoRequest(account, body, contentType)
+		if err != nil {
+			return GrokMediaRequestInfo{}, err
+		}
 	}
 	if account.MediaProtocol() == "8yes" {
 		adapted, adaptedType, err := normalizeEightYesVideoRequest(body, contentType)

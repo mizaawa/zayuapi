@@ -779,6 +779,18 @@ func (s *OpenAIGatewayService) ForwardGrokMedia(
 			return nil, err
 		}
 	}
+	var err error
+	soraBridgeRequest := soraBridgeVideoRequest{}
+	if account.Platform == PlatformCustom && endpoint == GrokMediaEndpointVideosGenerations && IsSoraVideoBridge(ctx) {
+		soraBridgeRequest, err = parseSoraBridgeVideoRequest(body, contentType)
+		if err != nil {
+			return nil, err
+		}
+		body, contentType, err = normalizeSoraBridgeVideoRequest(account, body, contentType)
+		if err != nil {
+			return nil, err
+		}
+	}
 
 	token, _, err := s.getRequestCredential(ctx, c, account)
 	if err != nil {
@@ -872,7 +884,11 @@ func (s *OpenAIGatewayService) ForwardGrokMedia(
 	if protocol := account.MediaProtocol(); account.Platform == PlatformCustom && endpoint == GrokMediaEndpointVideosGenerations && protocol != "sora" && protocol != "8yes" {
 		// MiniMax workbench metadata is built after extracting the original
 		// reference and duration metadata used for billing and audit.
-		body, err = normalizeVideoProtocolBody(ctx, account, body)
+		normalizeCtx := ctx
+		if IsSoraVideoBridge(ctx) && miniMaxVideoWorkbenchFamily(forwardedRequestInfo.Model) != "" {
+			normalizeCtx = WithVideoWorkbenchContext(ctx)
+		}
+		body, err = normalizeVideoProtocolBody(normalizeCtx, account, body)
 		if err != nil {
 			return nil, err
 		}
@@ -955,6 +971,24 @@ func (s *OpenAIGatewayService) ForwardGrokMedia(
 	if account.MediaProtocol() == "8yes" && endpoint.IsVideoGenerationRequest() {
 		// task_id identifies an internal provider task and cannot be polled.
 		usage.ResponseID = strings.TrimSpace(gjson.GetBytes(respBody, "id").String())
+	}
+	if account.Platform == PlatformCustom && IsSoraVideoBridge(ctx) &&
+		(endpoint == GrokMediaEndpointVideoStatus || endpoint == GrokMediaEndpointVideosGenerations && usage.ResponseID != "") {
+		if model, ok := RequestedPublicModelFromContext(ctx); ok {
+			soraBridgeRequest.Model = model
+		}
+		respBody, err = normalizeSoraBridgeVideoResponse(endpoint, requestID, soraBridgeRequest, respBody)
+		if err != nil {
+			return nil, err
+		}
+		resp.Header = resp.Header.Clone()
+		if resp.Header == nil {
+			resp.Header = make(http.Header)
+		}
+		resp.Header.Set("Content-Type", "application/json")
+		resp.Header.Del("Content-Length")
+		resp.Header.Del("Content-Encoding")
+		resp.Header.Del("ETag")
 	}
 	result := &OpenAIForwardResult{
 		RequestID:            requestIDHeader,
@@ -1136,7 +1170,7 @@ func (s *OpenAIGatewayService) forwardGrokMediaVideoContent(
 	if contentResp == nil {
 		return nil, fmt.Errorf("grok media content upstream returned an empty response")
 	}
-	if account.Platform == PlatformCustom && account.MediaProtocol() == "sora" && ((contentResp.StatusCode >= 400 && contentResp.StatusCode != http.StatusRequestedRangeNotSatisfiable) || isVideoContentJSONResponse(contentResp)) {
+	if account.Platform == PlatformCustom && (account.MediaProtocol() == "sora" || IsSoraVideoBridge(ctx)) && ((contentResp.StatusCode >= 400 && contentResp.StatusCode != http.StatusRequestedRangeNotSatisfiable) || isVideoContentJSONResponse(contentResp)) {
 		fallbackResp, fallbackErr := s.customMediaVideoContentFallback(upstreamCtx, account, token, requestID, contentReq, contentResp)
 		if fallbackErr != nil {
 			_ = contentResp.Body.Close()
@@ -1147,7 +1181,7 @@ func (s *OpenAIGatewayService) forwardGrokMediaVideoContent(
 			contentResp = fallbackResp
 		}
 	}
-	if contentResp.StatusCode >= 300 && contentResp.StatusCode < 400 && account.Platform == PlatformCustom && (account.MediaProtocol() == "8yes" || account.MediaProtocol() == "sora") {
+	if contentResp.StatusCode >= 300 && contentResp.StatusCode < 400 && account.Platform == PlatformCustom && (account.MediaProtocol() == "8yes" || account.MediaProtocol() == "sora" || IsSoraVideoBridge(ctx)) {
 		base := contentReq.URL
 		if contentResp.Request != nil {
 			base = contentResp.Request.URL
@@ -1724,18 +1758,32 @@ func (s *OpenAIGatewayService) handleGrokMediaErrorResponse(
 			Detail:               upstreamDetail,
 			UpstreamResponseBody: upstreamDetail,
 		})
+		clientBody, clientHeaders := body, resp.Header
+		if IsSoraVideoBridge(ctx) {
+			clientBody, _ = json.Marshal(map[string]any{"error": map[string]string{
+				"type": grokMediaErrorType(resp.StatusCode), "message": truncateString(upstreamMsg, 512),
+				"code": "upstream_error",
+			}})
+			clientHeaders = resp.Header.Clone()
+			if clientHeaders == nil {
+				clientHeaders = make(http.Header)
+			}
+			clientHeaders.Set("Content-Type", "application/json")
+			clientHeaders.Del("Content-Length")
+			clientHeaders.Del("Content-Encoding")
+		}
 		if shouldFailover {
 			failoverErr := newOpenAIUpstreamFailoverError(
 				resp.StatusCode,
-				resp.Header,
-				body,
+				clientHeaders,
+				clientBody,
 				upstreamMsg,
 				!shouldDisable && account.IsPoolMode() && account.IsPoolModeRetryableStatus(resp.StatusCode),
 			)
 			failoverErr.RawResponsePassthrough = true
 			return nil, failoverErr
 		}
-		s.WriteCustomRawUpstreamResponse(c, resp.StatusCode, resp.Header, body)
+		s.WriteCustomRawUpstreamResponse(c, resp.StatusCode, clientHeaders, clientBody)
 		return nil, fmt.Errorf("custom media upstream error: %d", resp.StatusCode)
 	}
 	if account.Platform == PlatformGrok && isGrokContentPolicyRejection(resp.StatusCode, body) {

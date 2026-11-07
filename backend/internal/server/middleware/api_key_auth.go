@@ -408,6 +408,7 @@ func isAsyncVideoTaskRead(method, path string) bool {
 		return false
 	}
 	path = strings.TrimPrefix(path, "/v1")
+	path = strings.TrimPrefix(path, "/sora")
 	if strings.HasPrefix(path, "/videos/") {
 		tail := strings.TrimPrefix(path, "/videos/")
 		return tail != "" && tail != "generations" && tail != "edits" && tail != "extensions"

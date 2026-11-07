@@ -179,6 +179,20 @@ func RegisterGatewayRoutes(
 		service.MarkOpsClientBusinessLimited(c, service.OpsClientBusinessLimitedReasonLocalFeatureGate)
 		c.JSON(http.StatusNotFound, gin.H{"error": gin.H{"type": "not_found_error", "message": "Videos API is not supported for this platform"}})
 	}
+	soraVideoBridge := func(next gin.HandlerFunc, required bool) gin.HandlerFunc {
+		return func(c *gin.Context) {
+			if required || strings.EqualFold(strings.TrimSpace(c.GetHeader("X-Zayu-Video-Protocol")), "sora") {
+				platform := getGroupPlatform(c)
+				if platform != service.PlatformCustom && platform != service.PlatformComposite {
+					service.MarkOpsClientBusinessLimited(c, service.OpsClientBusinessLimitedReasonLocalFeatureGate)
+					c.JSON(http.StatusNotFound, gin.H{"error": gin.H{"type": "not_found_error", "message": "Sora video bridge requires a Custom group"}})
+					return
+				}
+				c.Request = c.Request.WithContext(service.WithSoraVideoBridge(c.Request.Context()))
+			}
+			next(c)
+		}
+	}
 	// /responses/*subpath 的子路径会被转发到上游同名端点之后，因此在入口就拒掉
 	// 不可转发的子路径，不让它进入调度与转发流程。可转发的判定见
 	// service.IsForwardableOpenAIResponsesRequestPath 及 upstream_path_guard.go。
@@ -283,12 +297,15 @@ func RegisterGatewayRoutes(
 		gateway.POST("/images/batches/:id/cancel", h.BatchImage.Cancel)
 		gateway.DELETE("/images/batches/:id", h.BatchImage.DeleteRecord)
 		gateway.DELETE("/images/batches/:id/outputs", h.BatchImage.DeleteOutputs)
-		gateway.POST("/videos/generations", videoGenerationHandler)
-		gateway.POST("/videos", videoGenerationHandler)
+		gateway.POST("/videos/generations", soraVideoBridge(videoGenerationHandler, false))
+		gateway.POST("/videos", soraVideoBridge(videoGenerationHandler, false))
 		gateway.POST("/videos/edits", videoEditHandler)
 		gateway.POST("/videos/extensions", videoExtensionHandler)
-		gateway.GET("/videos/:request_id", videoStatusHandler)
-		gateway.GET("/videos/:request_id/content", videoContentHandler)
+		gateway.GET("/videos/:request_id", soraVideoBridge(videoStatusHandler, false))
+		gateway.GET("/videos/:request_id/content", soraVideoBridge(videoContentHandler, false))
+		gateway.POST("/sora/videos", soraVideoBridge(videoGenerationHandler, true))
+		gateway.GET("/sora/videos/:request_id", soraVideoBridge(videoStatusHandler, true))
+		gateway.GET("/sora/videos/:request_id/content", soraVideoBridge(videoContentHandler, true))
 	}
 
 	// Gemini 原生 API 兼容层（Gemini SDK/CLI 直连）
@@ -388,12 +405,15 @@ func RegisterGatewayRoutes(
 	r.POST("/images/generations/async", bodyLimit, clientRequestID, opsErrorLogger, endpointNorm, gin.HandlerFunc(apiKeyAuth), h.AsyncImage.WorkbenchUploadAdmission, compositeTarget, requireGroupAnthropic, h.AsyncImage.Submit)
 	r.POST("/images/edits/async", bodyLimit, clientRequestID, opsErrorLogger, endpointNorm, gin.HandlerFunc(apiKeyAuth), h.AsyncImage.WorkbenchUploadAdmission, compositeTarget, requireGroupAnthropic, h.AsyncImage.Submit)
 	r.GET("/images/tasks/:task_id", bodyLimit, clientRequestID, opsErrorLogger, endpointNorm, gin.HandlerFunc(apiKeyAuth), compositeTarget, requireGroupAnthropic, h.AsyncImage.Get)
-	r.POST("/videos/generations", bodyLimit, clientRequestID, opsErrorLogger, endpointNorm, gin.HandlerFunc(apiKeyAuth), compositeTarget, requireGroupAnthropic, videoGenerationHandler)
-	r.POST("/videos", bodyLimit, clientRequestID, opsErrorLogger, endpointNorm, gin.HandlerFunc(apiKeyAuth), compositeTarget, requireGroupAnthropic, videoGenerationHandler)
+	r.POST("/videos/generations", bodyLimit, clientRequestID, opsErrorLogger, endpointNorm, gin.HandlerFunc(apiKeyAuth), compositeTarget, requireGroupAnthropic, soraVideoBridge(videoGenerationHandler, false))
+	r.POST("/videos", bodyLimit, clientRequestID, opsErrorLogger, endpointNorm, gin.HandlerFunc(apiKeyAuth), compositeTarget, requireGroupAnthropic, soraVideoBridge(videoGenerationHandler, false))
 	r.POST("/videos/edits", bodyLimit, clientRequestID, opsErrorLogger, endpointNorm, gin.HandlerFunc(apiKeyAuth), compositeTarget, requireGroupAnthropic, videoEditHandler)
 	r.POST("/videos/extensions", bodyLimit, clientRequestID, opsErrorLogger, endpointNorm, gin.HandlerFunc(apiKeyAuth), compositeTarget, requireGroupAnthropic, videoExtensionHandler)
-	r.GET("/videos/:request_id", bodyLimit, clientRequestID, opsErrorLogger, endpointNorm, gin.HandlerFunc(apiKeyAuth), compositeTarget, requireGroupAnthropic, videoStatusHandler)
-	r.GET("/videos/:request_id/content", bodyLimit, clientRequestID, opsErrorLogger, endpointNorm, gin.HandlerFunc(apiKeyAuth), compositeTarget, requireGroupAnthropic, videoContentHandler)
+	r.GET("/videos/:request_id", bodyLimit, clientRequestID, opsErrorLogger, endpointNorm, gin.HandlerFunc(apiKeyAuth), compositeTarget, requireGroupAnthropic, soraVideoBridge(videoStatusHandler, false))
+	r.GET("/videos/:request_id/content", bodyLimit, clientRequestID, opsErrorLogger, endpointNorm, gin.HandlerFunc(apiKeyAuth), compositeTarget, requireGroupAnthropic, soraVideoBridge(videoContentHandler, false))
+	r.POST("/sora/videos", bodyLimit, clientRequestID, opsErrorLogger, endpointNorm, gin.HandlerFunc(apiKeyAuth), compositeTarget, requireGroupAnthropic, soraVideoBridge(videoGenerationHandler, true))
+	r.GET("/sora/videos/:request_id", bodyLimit, clientRequestID, opsErrorLogger, endpointNorm, gin.HandlerFunc(apiKeyAuth), compositeTarget, requireGroupAnthropic, soraVideoBridge(videoStatusHandler, true))
+	r.GET("/sora/videos/:request_id/content", bodyLimit, clientRequestID, opsErrorLogger, endpointNorm, gin.HandlerFunc(apiKeyAuth), compositeTarget, requireGroupAnthropic, soraVideoBridge(videoContentHandler, true))
 
 	// Antigravity 模型列表
 	r.GET("/antigravity/models", gin.HandlerFunc(apiKeyAuth), requireGroupAnthropic, h.Gateway.AntigravityModels)
