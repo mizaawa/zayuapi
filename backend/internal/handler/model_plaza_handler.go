@@ -57,10 +57,11 @@ type modelPlazaOfficialPricing struct {
 
 // modelPlazaModel 广场模型条目：分组/渠道定价（白名单形态）+ 官方参考价。
 type modelPlazaModel struct {
-	Name            string                     `json:"name"`
-	Platform        string                     `json:"platform"`
-	Pricing         *userSupportedModelPricing `json:"pricing"`
-	OfficialPricing *modelPlazaOfficialPricing `json:"official_pricing"`
+	Name            string                         `json:"name"`
+	Platform        string                         `json:"platform"`
+	Pricing         *userSupportedModelPricing     `json:"pricing"`
+	OfficialPricing *modelPlazaOfficialPricing     `json:"official_pricing"`
+	PricingCurrency service.ChannelPricingCurrency `json:"pricing_currency"`
 }
 
 // modelPlazaGroup 广场分组条目（白名单字段）。
@@ -304,6 +305,7 @@ func toModelPlazaGroupDTO(g *service.PlazaGroup, userRates map[int64]float64) mo
 			Platform:        m.Platform,
 			Pricing:         toUserPricing(m.Pricing),
 			OfficialPricing: toModelPlazaOfficialPricing(m.OfficialPricing),
+			PricingCurrency: m.PricingCurrency,
 		})
 	}
 	dto := modelPlazaGroup{

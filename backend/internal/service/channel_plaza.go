@@ -23,6 +23,7 @@ type PlazaModel struct {
 	Platform        string
 	Pricing         *ChannelModelPricing
 	OfficialPricing *PlazaOfficialPricing
+	PricingCurrency ChannelPricingCurrency
 }
 
 // PlazaGroup 模型广场中以分组为顶层的条目。
@@ -202,14 +203,16 @@ func (s *ChannelService) ListPlazaGroups(ctx context.Context) ([]PlazaGroup, err
 					// 先见者胜；仅当已存条目无定价而新条目有定价时升级。
 					if pg.Models[at].Pricing == nil && pricing != nil {
 						pg.Models[at].Pricing = pricing
+						pg.Models[at].PricingCurrency = ch.PricingCurrency(m.Platform)
 					}
 					continue
 				}
 				idx[key] = len(pg.Models)
 				pg.Models = append(pg.Models, PlazaModel{
-					Name:     m.Name,
-					Platform: m.Platform,
-					Pricing:  pricing,
+					Name:            m.Name,
+					Platform:        m.Platform,
+					Pricing:         pricing,
+					PricingCurrency: ch.PricingCurrency(m.Platform),
 				})
 			}
 		}

@@ -730,7 +730,9 @@ export default {
       perRequestPrice: 'Per Request',
       intervals: 'Tiered Pricing',
       unitPerMillion: '/ 1M tokens',
-      unitPerRequest: '/ request'
+      unitPerRequest: '/ request',
+      unitPerImage: '/ image',
+      unitPerSecond: '/ second'
     }
   },
 
@@ -777,7 +779,7 @@ export default {
       paidPrice: 'Your Price (Discounted)',
       officialPrice: 'Official Price',
       rate: 'Rate',
-      unitPerMillion: '$ / 1M tokens',
+      unitPerMillion: '/ 1M tokens',
       perUnitRequest: '/ request',
       perUnitImage: '/ image',
       perUnitSecond: '/ second',

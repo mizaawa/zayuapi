@@ -34,8 +34,10 @@ export default {
         imageOutputPrice: '图片输出',
         perRequestPrice: '每次请求',
         intervals: '阶梯定价',
-        unitPerMillion: '/ 1M token',
-        unitPerRequest: '/ 次'
+        unitPerMillion: '／百万 Token',
+        unitPerRequest: '/ 次',
+        unitPerImage: '／张',
+        unitPerSecond: '／秒'
       }
     },
 
@@ -97,6 +99,23 @@ export default {
         video: '视频（按秒）'
       },
       form: {
+        perMillionTokenUnit: '／百万 Token',
+        officialPriceCNY: '官方参考价以人民币显示',
+        discountedPriceCNY: '折后价格以人民币输入和显示',
+        cnyPerUSD: '汇率（1 USD = CNY）',
+        cnyCurrencyHint: '渠道价格存储和余额扣费仍为 USD；人民币金额按此汇率换算。',
+        invalidCnyRate: '请输入大于 0 且不超过 1000000 的有效汇率',
+        invalidPrice: '价格必须是有限的非负数',
+        importPricingJson: '导入定价 JSON',
+        exportPricingJson: '导出定价 JSON',
+        importPreviewTitle: '确认导入渠道定价',
+        importPreviewHint: '确认后仅替换此平台的渠道定价；保存渠道后才写入服务器。',
+        importAppliedSaveHint: '已应用到表单，仍需点击“更新”保存渠道才会生效。',
+        importDiscarded: '已关闭编辑窗口；未保存的定价导入已丢弃。',
+        currencyChange: '币种设置变更',
+        addedModels: '新增模型',
+        removedModels: '删除模型',
+        changedPrices: '定价修改（字段对比）',
         name: '名称',
         namePlaceholder: '输入渠道名称',
         description: '描述',

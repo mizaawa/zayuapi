@@ -490,7 +490,7 @@ export default {
     cacheHitRate: '缓存命中率',
     inputTokenPrice: '输入单价',
     outputTokenPrice: '输出单价',
-    perMillionTokens: '/ 1M Token',
+    perMillionTokens: '／百万 Token',
     unitPrice: '单次价格',
     imageUnitPrice: '单张价格',
     imageTotalPrice: '图片总价',
@@ -734,8 +734,10 @@ export default {
       imageOutputPrice: '图片输出',
       perRequestPrice: '每次请求',
       intervals: '阶梯定价',
-      unitPerMillion: '/ 1M token',
-      unitPerRequest: '/ 次'
+      unitPerMillion: '／百万 Token',
+      unitPerRequest: '/ 次',
+      unitPerImage: '／张',
+      unitPerSecond: '／秒'
     }
   },
 
@@ -782,7 +784,7 @@ export default {
       paidPrice: '实付价格(折后)',
       officialPrice: '官方价格',
       rate: '折扣倍率',
-      unitPerMillion: '$ / 1M token',
+      unitPerMillion: '／百万 Token',
       perUnitRequest: '/ 次',
       perUnitImage: '/ 张',
       perUnitSecond: '/ 秒',

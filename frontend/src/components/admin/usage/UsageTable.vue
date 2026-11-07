@@ -231,7 +231,7 @@
         <template #cell-cost="{ row }">
           <div class="text-sm">
             <div class="flex items-center gap-1.5">
-              <span class="usage-cost">${{ row.actual_cost?.toFixed(6) || '0.000000' }}</span>
+              <span class="usage-cost">{{ billingAmount(row, row.actual_cost) }}</span>
               <span
                 v-if="row.long_context_billing_applied"
                 data-testid="long-context-billing-marker"
@@ -254,10 +254,10 @@
             </div>
             <div v-if="hasRateAdjustment(row) || showsDiscountedOriginal(row)" class="mt-1 flex items-center gap-1.5 text-[11px]">
               <span v-if="hasRateAdjustment(row)" class="usage-rate-chip" :class="rateChipClass(row)" :title="t('usage.rate')">×{{ formatMultiplier(row.rate_multiplier) }}</span>
-              <s v-if="showsDiscountedOriginal(row)" class="tabular-nums text-gray-400" :title="t('usage.original')">${{ row.total_cost.toFixed(6) }}</s>
+              <s v-if="showsDiscountedOriginal(row)" class="tabular-nums text-gray-400" :title="t('usage.original')">{{ billingAmount(row, row.total_cost) }}</s>
             </div>
             <div v-if="showAccountBilling && row.account_rate_multiplier != null" class="mt-0.5 text-[11px] text-orange-500 dark:text-orange-400">
-              A ${{ accountBilled(row).toFixed(6) }}
+              A {{ billingAmount(row, accountBilled(row)) }}
             </div>
             <ol v-if="row.billing_events?.length" class="mt-1.5 grid w-44 max-w-full gap-1 text-[11px]" data-testid="media-payment-events">
               <li
@@ -268,7 +268,7 @@
                 :title="new Date(event.created_at).toLocaleString()"
               >
                 <span class="min-w-0 break-words">{{ t(`usage.mediaPayment.${event.stage}`) }}</span>
-                <span v-if="event.stage !== 'request_created'" class="ml-auto min-w-0 break-all text-right tabular-nums">{{ event.stage === 'refunded' ? '+' : event.stage === 'prepaid' ? '-' : '' }}${{ event.amount.toFixed(6) }}</span>
+                <span v-if="event.stage !== 'request_created'" class="ml-auto min-w-0 break-all text-right tabular-nums">{{ event.stage === 'refunded' ? '+' : event.stage === 'prepaid' ? '-' : '' }}{{ billingAmount(row, event.amount) }}</span>
               </li>
             </ol>
           </div>
@@ -360,7 +360,7 @@
               </div>
               <div v-if="hasColumn('cost')" class="usage-card-price">
                 <div class="flex items-center justify-end gap-1">
-                  <span class="usage-card-cost">${{ row.actual_cost?.toFixed(6) || '0.000000' }}</span>
+                  <span class="usage-card-cost">{{ billingAmount(row, row.actual_cost) }}</span>
                   <button
                     type="button"
                     class="usage-info-trigger group relative"
@@ -376,7 +376,7 @@
                 <div v-if="hasRateAdjustment(row) || showsDiscountedOriginal(row) || row.long_context_billing_applied" class="mt-1 flex items-center justify-end gap-1 text-[11px]">
                   <span v-if="row.long_context_billing_applied" class="usage-rate-chip bg-amber-100 text-amber-700" :title="t('admin.usage.longContextPricingTooltip')">{{ t('admin.usage.longContext') }}</span>
                   <span v-if="hasRateAdjustment(row)" class="usage-rate-chip" :class="rateChipClass(row)">×{{ formatMultiplier(row.rate_multiplier) }}</span>
-                  <s v-if="showsDiscountedOriginal(row)" class="tabular-nums text-gray-400">${{ row.total_cost.toFixed(6) }}</s>
+                  <s v-if="showsDiscountedOriginal(row)" class="tabular-nums text-gray-400">{{ billingAmount(row, row.total_cost) }}</s>
                 </div>
               </div>
             </header>
@@ -491,7 +491,7 @@
                 :class="mediaPaymentBadgeClass(event.stage)"
               >
                 <span>{{ t(`usage.mediaPayment.${event.stage}`) }}</span>
-                <span v-if="event.stage !== 'request_created'" class="tabular-nums">{{ event.stage === 'refunded' ? '+' : event.stage === 'prepaid' ? '-' : '' }}${{ event.amount.toFixed(6) }}</span>
+                <span v-if="event.stage !== 'request_created'" class="tabular-nums">{{ event.stage === 'refunded' ? '+' : event.stage === 'prepaid' ? '-' : '' }}{{ billingAmount(row, event.amount) }}</span>
               </li>
             </ol>
 
@@ -626,37 +626,37 @@
             <div class="text-xs font-semibold text-gray-300 mb-1">{{ t('usage.costDetails') }}</div>
             <div v-if="tooltipData && tooltipData.input_cost > 0" class="flex items-center justify-between gap-4">
               <span class="text-gray-400">{{ t('admin.usage.inputCost') }}</span>
-              <span class="font-medium text-white">${{ tooltipData.input_cost.toFixed(6) }}</span>
+              <span class="font-medium text-white">{{ billingAmount(tooltipData, tooltipData.input_cost) }}</span>
             </div>
             <div v-if="tooltipData && hasImageInputCost(tooltipData)" class="flex items-center justify-between gap-4">
               <span class="text-gray-400">{{ t('usage.imageInputCost') }}</span>
-              <span class="font-medium text-fuchsia-300">${{ tooltipData.image_input_cost.toFixed(6) }}</span>
+              <span class="font-medium text-fuchsia-300">{{ billingAmount(tooltipData, tooltipData.image_input_cost) }}</span>
             </div>
             <div v-if="tooltipData && tooltipData.output_cost > 0" class="flex items-center justify-between gap-4">
               <span class="text-gray-400">{{ t('admin.usage.outputCost') }}</span>
-              <span class="font-medium text-white">${{ tooltipData.output_cost.toFixed(6) }}</span>
+              <span class="font-medium text-white">{{ billingAmount(tooltipData, tooltipData.output_cost) }}</span>
             </div>
             <div v-if="tooltipData && hasImageOutputCost(tooltipData)" class="flex items-center justify-between gap-4">
               <span class="text-gray-400">{{ t('usage.imageOutputCost') }}</span>
-              <span class="font-medium text-pink-300">${{ tooltipData.image_output_cost.toFixed(6) }}</span>
+              <span class="font-medium text-pink-300">{{ billingAmount(tooltipData, tooltipData.image_output_cost) }}</span>
             </div>
             <!-- Token billing: show unit prices per 1M tokens -->
             <template v-if="tooltipData && !isImageUsage(tooltipData) && (!tooltipData.billing_mode || tooltipData.billing_mode === BILLING_MODE_TOKEN)">
               <div v-if="tooltipData && textInputTokens(tooltipData) > 0" class="flex items-center justify-between gap-4">
                 <span class="text-gray-400">{{ t('usage.inputTokenPrice') }}</span>
-                <span class="font-medium text-sky-300">{{ formatTokenPricePerMillion(tooltipData.input_cost, textInputTokens(tooltipData)) }} {{ t('usage.perMillionTokens') }}</span>
+                <span class="font-medium text-sky-300">{{ billingTokenPrice(tooltipData, tooltipData.input_cost, textInputTokens(tooltipData)) }} {{ t('usage.perMillionTokens') }}</span>
               </div>
               <div v-if="tooltipData && hasImageInputTokens(tooltipData)" class="flex items-center justify-between gap-4">
                 <span class="text-gray-400">{{ t('usage.imageInputTokenPrice') }}</span>
-                <span class="font-medium text-fuchsia-300">{{ formatTokenPricePerMillion(tooltipData.image_input_cost ?? 0, tooltipData.image_input_tokens) }} {{ t('usage.perMillionTokens') }}</span>
+                <span class="font-medium text-fuchsia-300">{{ billingTokenPrice(tooltipData, tooltipData.image_input_cost ?? 0, tooltipData.image_input_tokens) }} {{ t('usage.perMillionTokens') }}</span>
               </div>
               <div v-if="tooltipData && tooltipData.output_cost > 0 && textOutputTokens(tooltipData) > 0" class="flex items-center justify-between gap-4">
                 <span class="text-gray-400">{{ t('usage.outputTokenPrice') }}</span>
-                <span class="font-medium text-violet-300">{{ formatTokenPricePerMillion(tooltipData.output_cost, textOutputTokens(tooltipData)) }} {{ t('usage.perMillionTokens') }}</span>
+                <span class="font-medium text-violet-300">{{ billingTokenPrice(tooltipData, tooltipData.output_cost, textOutputTokens(tooltipData)) }} {{ t('usage.perMillionTokens') }}</span>
               </div>
               <div v-if="tooltipData && hasImageOutputTokens(tooltipData)" class="flex items-center justify-between gap-4">
                 <span class="text-gray-400">{{ t('usage.imageOutputTokenPrice') }}</span>
-                <span class="font-medium text-pink-300">{{ formatTokenPricePerMillion(tooltipData.image_output_cost ?? 0, tooltipData.image_output_tokens) }} {{ t('usage.perMillionTokens') }}</span>
+                <span class="font-medium text-pink-300">{{ billingTokenPrice(tooltipData, tooltipData.image_output_cost ?? 0, tooltipData.image_output_tokens) }} {{ t('usage.perMillionTokens') }}</span>
               </div>
             </template>
             <template v-else-if="tooltipData && isImageUsage(tooltipData)">
@@ -686,24 +686,24 @@
               </div>
               <div class="flex items-center justify-between gap-4">
                 <span class="text-gray-400">{{ t('usage.imageUnitPrice') }}</span>
-                <span class="font-medium text-sky-300">${{ imageUnitPrice(tooltipData).toFixed(6) }}</span>
+                <span class="font-medium text-sky-300">{{ billingAmount(tooltipData, imageUnitPrice(tooltipData)) }}</span>
               </div>
               <div class="flex items-center justify-between gap-4">
                 <span class="text-gray-400">{{ t('usage.imageTotalPrice') }}</span>
-                <span class="font-medium text-white">${{ tooltipData.total_cost?.toFixed(6) || '0.000000' }}</span>
+                <span class="font-medium text-white">{{ billingAmount(tooltipData, tooltipData.total_cost) }}</span>
               </div>
             </template>
             <div v-else class="flex items-center justify-between gap-4">
               <span class="text-gray-400">{{ t('usage.unitPrice') }}</span>
-              <span class="font-medium text-sky-300">${{ tooltipData?.total_cost?.toFixed(6) || '0.000000' }}</span>
+              <span class="font-medium text-sky-300">{{ billingAmount(tooltipData, tooltipData?.total_cost) }}</span>
             </div>
             <div v-if="tooltipData && tooltipData.cache_creation_cost > 0" class="flex items-center justify-between gap-4">
               <span class="text-gray-400">{{ t('admin.usage.cacheCreationCost') }}</span>
-              <span class="font-medium text-white">${{ tooltipData.cache_creation_cost.toFixed(6) }}</span>
+              <span class="font-medium text-white">{{ billingAmount(tooltipData, tooltipData.cache_creation_cost) }}</span>
             </div>
             <div v-if="tooltipData && tooltipData.cache_read_cost > 0" class="flex items-center justify-between gap-4">
               <span class="text-gray-400">{{ t('admin.usage.cacheReadCost') }}</span>
-              <span class="font-medium text-white">${{ tooltipData.cache_read_cost.toFixed(6) }}</span>
+              <span class="font-medium text-white">{{ billingAmount(tooltipData, tooltipData.cache_read_cost) }}</span>
             </div>
           </div>
           <!-- Rate and Summary -->
@@ -717,11 +717,11 @@
           </div>
           <div class="flex items-center justify-between gap-6">
             <span class="text-gray-400">{{ t('usage.original') }}</span>
-            <span class="font-medium text-white">${{ tooltipData?.total_cost?.toFixed(6) || '0.000000' }}</span>
+            <span class="font-medium text-white">{{ billingAmount(tooltipData, tooltipData?.total_cost) }}</span>
           </div>
           <div class="flex items-center justify-between gap-6">
             <span class="text-gray-400">{{ t('usage.userBilled') }}</span>
-            <span class="font-semibold text-green-400">${{ tooltipData?.actual_cost?.toFixed(6) || '0.000000' }}</span>
+            <span class="font-semibold text-green-400">{{ billingAmount(tooltipData, tooltipData?.actual_cost) }}</span>
           </div>
           <!-- Account billing (separated from user billing) -->
           <template v-if="showAccountBilling">
@@ -732,11 +732,11 @@
             <div class="flex items-center justify-between gap-6">
               <span class="text-gray-400">{{ t('usage.accountBilled') }}</span>
               <span class="font-semibold text-green-400">
-                ${{ accountBilled({
+                {{ billingAmount(tooltipData, accountBilled({
                   total_cost: tooltipData?.total_cost,
                   account_stats_cost: tooltipData?.account_stats_cost,
                   account_rate_multiplier: tooltipData?.account_rate_multiplier,
-                }).toFixed(6) }}
+                })) }}
               </span>
             </div>
           </template>
@@ -755,6 +755,16 @@ import { useAppStore } from '@/stores/app'
 import { formatDate, formatDateTime, formatReasoningEffort } from '@/utils/format'
 import { formatCacheTokens, formatMultiplier } from '@/utils/formatters'
 import { formatTokenPricePerMillion } from '@/utils/usagePricing'
+
+function billingAmount(row: { display_cny_rate?: number | null } | null, usd: number | null | undefined): string {
+  const rate = row?.display_cny_rate && row.display_cny_rate > 0 ? row.display_cny_rate : null
+  return `${rate ? '¥' : '$'}${((usd ?? 0) * (rate ?? 1)).toFixed(6)}`
+}
+
+function billingTokenPrice(row: { display_cny_rate?: number | null }, usd: number, tokens: number): string {
+  const rate = row.display_cny_rate && row.display_cny_rate > 0 ? row.display_cny_rate : null
+  return `${rate ? '¥' : '$'}${formatTokenPricePerMillion(usd * (rate ?? 1), tokens, { withCurrencySymbol: false })}`
+}
 import { formatCacheHitRate, getCacheHitRate, getCacheHitRateClass } from '@/utils/cacheHitRate'
 import { getUsageServiceTierLabel } from '@/utils/usageServiceTier'
 import { resolveUsageRequestType } from '@/utils/usageRequestType'

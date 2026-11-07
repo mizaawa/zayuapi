@@ -116,6 +116,18 @@ describe('PlazaModelPricingTable', () => {
     expect(text).toContain('0.8x')
   })
 
+  it('converts official and discounted prices independently with their own symbols', async () => {
+    const model = tokenModel({ pricing_currency: { official_cny: true, discounted_cny: false, cny_per_usd: 7 } })
+    const wrapper = mountTable([model], 0.5)
+    const cells = wrapper.findAll('tbody td')
+    expect(cells[1].text()).toBe('$1.50')
+    expect(cells[4].text()).toBe('¥21.00')
+    await wrapper.setProps({ models: [tokenModel({ pricing_currency: { official_cny: false, discounted_cny: true, cny_per_usd: 7 } })] })
+    const switched = wrapper.findAll('tbody td')
+    expect(switched[1].text()).toBe('¥10.50')
+    expect(switched[4].text()).toBe('$3.00')
+  })
+
   it('模型按官方输出价从高到低排序,无官方价的排最后', () => {
     const expensive = tokenModel({
       name: 'model-expensive',

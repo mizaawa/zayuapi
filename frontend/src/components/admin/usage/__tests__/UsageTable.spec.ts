@@ -138,6 +138,16 @@ const baseImageRow = {
 }
 
 describe('admin UsageTable tooltip', () => {
+  it('converts each cost and media event when a CNY display rate is supplied', () => {
+    const wrapper = mount(UsageTable, {
+      props: { data: [{ ...baseImageRow, display_cny_rate: 7.2, billing_events: [
+        { stage: 'prepaid', amount: 0.4, created_at: '2026-10-12T00:00:00Z' },
+      ] }], columns: [{ key: 'cost', label: 'Cost' }] },
+      global: { stubs: { DataTable: DataTableStub, Icon: true } },
+    })
+    expect(wrapper.get('.usage-cost').text()).toBe('¥2.880000')
+    expect(wrapper.get('[data-testid="media-payment-events"]').text()).toContain('-¥2.880000')
+  })
   it.each(['settled', 'refunded'] as const)('shows three associated media payment stages for %s', (outcome) => {
     const wrapper = mount(UsageTable, {
       props: {

@@ -31,12 +31,12 @@
         </div>
         <div class="dash-recent-numbers">
           <p class="dash-recent-cost">
-            <span :title="t('dashboard.actual')">${{ formatCost(log.actual_cost) }}</span>
+            <span :title="t('dashboard.actual')">{{ formatCost(log, log.actual_cost) }}</span>
             <span
               v-if="log.total_cost > log.actual_cost"
               class="dash-recent-list-price"
               :title="t('dashboard.standard')"
-            >${{ formatCost(log.total_cost) }}</span>
+            >{{ formatCost(log, log.total_cost) }}</span>
           </p>
           <p class="dash-recent-tokens">{{ (log.input_tokens + log.output_tokens).toLocaleString() }} tokens</p>
         </div>
@@ -59,7 +59,10 @@ defineProps<{
   loading: boolean
 }>()
 const { t } = useI18n()
-const formatCost = (c: number) => c.toFixed(4)
+const formatCost = (log: UsageLog, usd: number) => {
+  const rate = log.display_cny_rate && log.display_cny_rate > 0 ? log.display_cny_rate : null
+  return `${rate ? '¥' : '$'}${(usd * (rate ?? 1)).toFixed(4)}`
+}
 </script>
 
 <style scoped>

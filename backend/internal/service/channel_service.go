@@ -777,6 +777,9 @@ func (s *ChannelService) Create(ctx context.Context, input *CreateChannelInput) 
 		AccountStatsPricingRules:   input.AccountStatsPricingRules,
 	}
 	channel.normalizeBillingModelSource()
+	if err := validateChannelPricingCurrency(channel.FeaturesConfig); err != nil {
+		return nil, err
+	}
 
 	if err := validateChannelConfig(channel.ModelPricing, channel.ModelMapping); err != nil {
 		return nil, err
@@ -819,6 +822,9 @@ func (s *ChannelService) Update(ctx context.Context, id int64, input *UpdateChan
 	}
 
 	if err := s.applyUpdateInput(ctx, channel, input); err != nil {
+		return nil, err
+	}
+	if err := validateChannelPricingCurrency(channel.FeaturesConfig); err != nil {
 		return nil, err
 	}
 

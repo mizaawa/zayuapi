@@ -101,7 +101,7 @@
           <!-- Default prices (fallback when no interval matches) -->
           <label class="mt-3 block text-xs font-medium text-gray-500 dark:text-gray-400">
             {{ t('admin.channels.form.defaultPrices') }}
-            <span class="ml-1 font-normal text-gray-400">$/MTok</span>
+            <span class="ml-1 font-normal text-gray-400">{{ priceSymbol }}{{ t('admin.channels.form.perMillionTokenUnit') }}</span>
           </label>
           <div class="pricing-price-grid mt-1">
             <div>
@@ -153,6 +153,7 @@
                 :key="idx"
                 :interval="iv"
                 :mode="entry.billing_mode"
+                :currency="currency"
                 @update="updateInterval(idx, $event)"
                 @remove="removeInterval(idx)"
               />
@@ -165,7 +166,7 @@
           <!-- Default per-request price -->
           <label class="mt-3 block text-xs font-medium text-gray-500 dark:text-gray-400">
             {{ t('admin.channels.form.defaultPerRequestPrice') }}
-            <span class="ml-1 font-normal text-gray-400">$</span>
+            <span class="ml-1 font-normal text-gray-400">{{ priceSymbol }}</span>
           </label>
           <div class="mt-1 w-full sm:w-48">
             <input :value="entry.per_request_price" @input="emitField('per_request_price', ($event.target as HTMLInputElement).value)"
@@ -187,6 +188,7 @@
               :key="idx"
               :interval="iv"
               :mode="entry.billing_mode"
+              :currency="currency"
               @update="updateInterval(idx, $event)"
               @remove="removeInterval(idx)"
             />
@@ -201,7 +203,7 @@
           <!-- Default image price (per-request, same as per_request mode) -->
           <label class="mt-3 block text-xs font-medium text-gray-500 dark:text-gray-400">
             {{ entry.billing_mode === 'video' ? t('admin.channels.form.defaultVideoPrice') : t('admin.channels.form.defaultImagePrice') }}
-            <span class="ml-1 font-normal text-gray-400">$</span>
+            <span class="ml-1 font-normal text-gray-400">{{ priceSymbol }}</span>
           </label>
           <div class="mt-1 w-full sm:w-48">
             <input :value="entry.per_request_price" @input="emitField('per_request_price', ($event.target as HTMLInputElement).value)"
@@ -223,6 +225,7 @@
               :key="idx"
               :interval="iv"
               :mode="entry.billing_mode"
+              :currency="currency"
               @update="updateInterval(idx, $event)"
               @remove="removeInterval(idx)"
             />
@@ -242,6 +245,8 @@ import IntervalRow from './IntervalRow.vue'
 import ModelTagInput from './ModelTagInput.vue'
 import type { PricingFormEntry, IntervalFormEntry } from './types'
 import { perTokenToMTok, getPlatformTagClass } from './types'
+import { displayPrice } from '@/utils/channelPricingCurrency'
+import type { PlatformPricingCurrency } from '@/utils/channelPricingCurrency'
 import type { BillingMode } from '@/api/admin/channels'
 import channelsAPI from '@/api/admin/channels'
 
@@ -251,6 +256,7 @@ const props = withDefaults(defineProps<{
   entry: PricingFormEntry
   platform?: string
   hideTokenIntervals?: boolean
+  currency?: PlatformPricingCurrency
 }>(), {
   hideTokenIntervals: false,
 })
@@ -262,6 +268,7 @@ const emit = defineEmits<{
 
 // Collapse state: entries with existing models default to collapsed
 const collapsed = ref(props.entry.models.length > 0)
+const priceSymbol = computed(() => props.currency?.discounted_cny ? '¥' : '$')
 
 const billingModeOptions = computed(() => [
   { value: 'token', label: t('admin.channels.billingMode.token') },
@@ -339,12 +346,12 @@ async function onModelsUpdate(newModels: string[]) {
       emit('update', {
         ...props.entry,
         models: newModels,
-        input_price: perTokenToMTok(result.input_price ?? null),
-        output_price: perTokenToMTok(result.output_price ?? null),
-        cache_write_price: perTokenToMTok(result.cache_write_price ?? null),
-        cache_read_price: perTokenToMTok(result.cache_read_price ?? null),
-        image_input_price: perTokenToMTok(result.image_input_price ?? null),
-        image_output_price: perTokenToMTok(result.image_output_price ?? null),
+        input_price: displayPrice(perTokenToMTok(result.input_price ?? null), !!props.currency?.discounted_cny, props.currency?.cny_per_usd ?? 1),
+        output_price: displayPrice(perTokenToMTok(result.output_price ?? null), !!props.currency?.discounted_cny, props.currency?.cny_per_usd ?? 1),
+        cache_write_price: displayPrice(perTokenToMTok(result.cache_write_price ?? null), !!props.currency?.discounted_cny, props.currency?.cny_per_usd ?? 1),
+        cache_read_price: displayPrice(perTokenToMTok(result.cache_read_price ?? null), !!props.currency?.discounted_cny, props.currency?.cny_per_usd ?? 1),
+        image_input_price: displayPrice(perTokenToMTok(result.image_input_price ?? null), !!props.currency?.discounted_cny, props.currency?.cny_per_usd ?? 1),
+        image_output_price: displayPrice(perTokenToMTok(result.image_output_price ?? null), !!props.currency?.discounted_cny, props.currency?.cny_per_usd ?? 1),
       })
     }
   } catch {

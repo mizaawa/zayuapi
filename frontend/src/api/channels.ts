@@ -5,6 +5,7 @@
 
 import { apiClient } from './client'
 import type { BillingMode } from '@/constants/channel'
+import type { PlatformPricingCurrency } from '@/utils/channelPricingCurrency'
 
 export interface UserAvailableGroup {
   id: number
@@ -60,6 +61,7 @@ export interface UserChannelPlatformSection {
   platform: string
   groups: UserAvailableGroup[]
   supported_models: UserSupportedModel[]
+  pricing_currency?: PlatformPricingCurrency
 }
 
 export interface UserAvailableChannel {

@@ -35,7 +35,9 @@ export default {
         perRequestPrice: 'Per Request',
         intervals: 'Tiered Pricing',
         unitPerMillion: '/ 1M tokens',
-        unitPerRequest: '/ request'
+        unitPerRequest: '/ request',
+        unitPerImage: '/ image',
+        unitPerSecond: '/ second'
       }
     },
 
@@ -97,6 +99,23 @@ export default {
         video: 'Video (Per Second)'
       },
       form: {
+        perMillionTokenUnit: '/MTok',
+        officialPriceCNY: 'Show official reference prices in CNY',
+        discountedPriceCNY: 'Enter and show discounted prices in CNY',
+        cnyPerUSD: 'Exchange rate (1 USD = CNY)',
+        cnyCurrencyHint: 'Channel prices and wallet charges remain USD; CNY amounts use this rate.',
+        invalidCnyRate: 'Enter a valid exchange rate above 0 and at most 1000000',
+        invalidPrice: 'Price must be a finite non-negative number',
+        importPricingJson: 'Import pricing JSON',
+        exportPricingJson: 'Export pricing JSON',
+        importPreviewTitle: 'Confirm pricing import',
+        importPreviewHint: 'Confirmation replaces only this platform’s channel prices; save the channel to persist.',
+        importAppliedSaveHint: 'Applied to the form. Click Update to save the channel and make the import effective.',
+        importDiscarded: 'Editor closed; the unsaved pricing import was discarded.',
+        currencyChange: 'Currency settings change',
+        addedModels: 'Added models',
+        removedModels: 'Removed models',
+        changedPrices: 'Price changes (by field)',
         name: 'Name',
         namePlaceholder: 'Enter channel name',
         description: 'Description',

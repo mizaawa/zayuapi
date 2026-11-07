@@ -202,13 +202,24 @@ func (s *UsageService) GetByID(ctx context.Context, id int64) (*UsageLog, error)
 			GetByIDWithFilters(context.Context, int64, usagestats.UsageLogFilters) (*UsageLog, error)
 		}
 		if repo, ok := s.usageRepo.(filteredUsageLogReader); ok {
-			return repo.GetByIDWithFilters(ctx, id, filters)
+			log, err := repo.GetByIDWithFilters(ctx, id, filters)
+			if err == nil && log != nil {
+				rows := []UsageLog{*log}
+				s.displayCNYRateForLogs(ctx, rows)
+				*log = rows[0]
+			}
+			return log, err
 		}
 		return nil, ErrUsageLogNotFound
 	}
 	log, err := s.usageRepo.GetByID(ctx, id)
 	if err != nil {
 		return nil, fmt.Errorf("get usage log: %w", err)
+	}
+	if log != nil {
+		rows := []UsageLog{*log}
+		s.displayCNYRateForLogs(ctx, rows)
+		*log = rows[0]
 	}
 	return log, nil
 }
@@ -223,6 +234,7 @@ func (s *UsageService) ListByUser(ctx context.Context, userID int64, params pagi
 	if err != nil {
 		return nil, nil, fmt.Errorf("list usage logs: %w", err)
 	}
+	s.displayCNYRateForLogs(ctx, logs)
 	return logs, pagination, nil
 }
 
@@ -236,6 +248,7 @@ func (s *UsageService) ListByAPIKey(ctx context.Context, apiKeyID int64, params 
 	if err != nil {
 		return nil, nil, fmt.Errorf("list usage logs: %w", err)
 	}
+	s.displayCNYRateForLogs(ctx, logs)
 	return logs, pagination, nil
 }
 
@@ -249,6 +262,7 @@ func (s *UsageService) ListByAccount(ctx context.Context, accountID int64, param
 	if err != nil {
 		return nil, nil, fmt.Errorf("list usage logs: %w", err)
 	}
+	s.displayCNYRateForLogs(ctx, logs)
 	return logs, pagination, nil
 }
 
@@ -579,6 +593,7 @@ func (s *UsageService) ListWithFilters(ctx context.Context, params pagination.Pa
 	if err != nil {
 		return nil, nil, fmt.Errorf("list usage logs with filters: %w", err)
 	}
+	s.displayCNYRateForLogs(ctx, logs)
 	return logs, result, nil
 }
 

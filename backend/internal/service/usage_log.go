@@ -130,6 +130,8 @@ type UsageLog struct {
 	UpstreamModelMismatch *bool
 	// ChannelID 渠道 ID
 	ChannelID *int64
+	// DisplayCNYRate is a read-only display conversion hint; costs remain USD.
+	DisplayCNYRate *float64
 	// ModelMappingChain 模型映射链，如 "a→b→c"
 	ModelMappingChain *string
 	// BillingTier 计费层级标签（per_request/image 模式）

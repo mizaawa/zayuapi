@@ -100,9 +100,10 @@ type userSupportedModel struct {
 // 支持的模型。按 platform 聚合后让前端可以把渠道名作为 row-group 一次渲染，
 // 后面的平台行按 sections 顺序铺开。
 type userChannelPlatformSection struct {
-	Platform        string               `json:"platform"`
-	Groups          []userAvailableGroup `json:"groups"`
-	SupportedModels []userSupportedModel `json:"supported_models"`
+	Platform        string                         `json:"platform"`
+	Groups          []userAvailableGroup           `json:"groups"`
+	SupportedModels []userSupportedModel           `json:"supported_models"`
+	PricingCurrency service.ChannelPricingCurrency `json:"pricing_currency"`
 }
 
 // userAvailableChannel 用户可见的渠道条目（白名单字段）。
@@ -209,6 +210,7 @@ func buildPlatformSections(
 			Platform:        platform,
 			Groups:          groupsByPlatform[platform],
 			SupportedModels: toUserSupportedModels(ch.SupportedModels, platformSet),
+			PricingCurrency: ch.PricingCurrency[platform],
 		})
 	}
 	return sections

@@ -36,6 +36,7 @@ type AvailableChannel struct {
 	RestrictModels     bool
 	Groups             []AvailableGroupRef
 	SupportedModels    []SupportedModel
+	PricingCurrency    map[string]ChannelPricingCurrency
 }
 
 // ListAvailable 返回所有渠道的可用视图：每个渠道附带关联分组信息与支持模型列表。
@@ -91,6 +92,10 @@ func (s *ChannelService) ListAvailable(ctx context.Context) ([]AvailableChannel,
 
 		supported := ch.SupportedModels()
 		s.fillGlobalPricingFallback(supported)
+		currency := make(map[string]ChannelPricingCurrency)
+		for _, model := range supported {
+			currency[model.Platform] = ch.PricingCurrency(model.Platform)
+		}
 
 		out = append(out, AvailableChannel{
 			ID:                 ch.ID,
@@ -101,6 +106,7 @@ func (s *ChannelService) ListAvailable(ctx context.Context) ([]AvailableChannel,
 			RestrictModels:     ch.RestrictModels,
 			Groups:             groups,
 			SupportedModels:    supported,
+			PricingCurrency:    currency,
 		})
 	}
 
