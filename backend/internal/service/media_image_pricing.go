@@ -14,6 +14,7 @@ type MediaImagePricing struct {
 	TokenMultiplier           float64                  `json:"token_multiplier"`
 	ImageMultiplier           float64                  `json:"image_multiplier"`
 	ServiceTier               string                   `json:"service_tier,omitempty"`
+	FastRateMultiplier        float64                  `json:"fast_rate_multiplier,omitempty"`
 	LongContextBillingEnabled bool                     `json:"long_context_billing_enabled"`
 	Resolved                  *ResolvedPricing         `json:"resolved,omitempty"`
 	ChannelPricing            *ChannelModelPricing     `json:"channel_pricing,omitempty"`
@@ -22,7 +23,7 @@ type MediaImagePricing struct {
 
 func (s *OpenAIGatewayService) captureMediaImagePricing(ctx context.Context, apiKey *APIKey, result *OpenAIForwardResult, models []string, tokenMultiplier, imageMultiplier float64, serviceTier string, longContext bool) (*MediaImagePricing, error) {
 	model := firstUsageBillingModel(models)
-	pricing := &MediaImagePricing{Model: model, TokenMultiplier: tokenMultiplier, ImageMultiplier: imageMultiplier, ServiceTier: serviceTier, LongContextBillingEnabled: longContext}
+	pricing := &MediaImagePricing{Model: model, TokenMultiplier: tokenMultiplier, ImageMultiplier: imageMultiplier, ServiceTier: serviceTier, FastRateMultiplier: openAIFastRateMultiplier(apiKey.Group, serviceTier), LongContextBillingEnabled: longContext}
 	resolved := s.resolveOpenAIChannelPricing(ctx, model, apiKey)
 	if resolved != nil && resolved.Mode == BillingModeToken {
 		pricing.Resolved, pricing.ChannelPricing = resolved, resolved.channelPricing
@@ -67,7 +68,8 @@ func (p *MediaImagePricing) calculate(s *BillingService, result *OpenAIForwardRe
 		return s.CalculateCostUnified(CostInput{
 			Model: p.Model, Tokens: tokens, RequestCount: result.ImageCount,
 			RateMultiplier: p.TokenMultiplier, ServiceTier: p.ServiceTier,
-			Resolver: &ModelPricingResolver{}, Resolved: &resolved,
+			FastRateMultiplier: p.FastRateMultiplier,
+			Resolver:           &ModelPricingResolver{}, Resolved: &resolved,
 			LongContextBillingEnabled: &p.LongContextBillingEnabled,
 		})
 	}

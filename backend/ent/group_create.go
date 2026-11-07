@@ -106,6 +106,34 @@ func (_c *GroupCreate) SetNillableRateMultiplier(v *float64) *GroupCreate {
 	return _c
 }
 
+// SetFastRateEnabled sets the "fast_rate_enabled" field.
+func (_c *GroupCreate) SetFastRateEnabled(v bool) *GroupCreate {
+	_c.mutation.SetFastRateEnabled(v)
+	return _c
+}
+
+// SetNillableFastRateEnabled sets the "fast_rate_enabled" field if the given value is not nil.
+func (_c *GroupCreate) SetNillableFastRateEnabled(v *bool) *GroupCreate {
+	if v != nil {
+		_c.SetFastRateEnabled(*v)
+	}
+	return _c
+}
+
+// SetFastRateMultiplier sets the "fast_rate_multiplier" field.
+func (_c *GroupCreate) SetFastRateMultiplier(v float64) *GroupCreate {
+	_c.mutation.SetFastRateMultiplier(v)
+	return _c
+}
+
+// SetNillableFastRateMultiplier sets the "fast_rate_multiplier" field if the given value is not nil.
+func (_c *GroupCreate) SetNillableFastRateMultiplier(v *float64) *GroupCreate {
+	if v != nil {
+		_c.SetFastRateMultiplier(*v)
+	}
+	return _c
+}
+
 // SetPeakRateEnabled sets the "peak_rate_enabled" field.
 func (_c *GroupCreate) SetPeakRateEnabled(v bool) *GroupCreate {
 	_c.mutation.SetPeakRateEnabled(v)
@@ -990,6 +1018,14 @@ func (_c *GroupCreate) defaults() error {
 		v := group.DefaultRateMultiplier
 		_c.mutation.SetRateMultiplier(v)
 	}
+	if _, ok := _c.mutation.FastRateEnabled(); !ok {
+		v := group.DefaultFastRateEnabled
+		_c.mutation.SetFastRateEnabled(v)
+	}
+	if _, ok := _c.mutation.FastRateMultiplier(); !ok {
+		v := group.DefaultFastRateMultiplier
+		_c.mutation.SetFastRateMultiplier(v)
+	}
 	if _, ok := _c.mutation.PeakRateEnabled(); !ok {
 		v := group.DefaultPeakRateEnabled
 		_c.mutation.SetPeakRateEnabled(v)
@@ -1167,6 +1203,12 @@ func (_c *GroupCreate) check() error {
 	}
 	if _, ok := _c.mutation.RateMultiplier(); !ok {
 		return &ValidationError{Name: "rate_multiplier", err: errors.New(`ent: missing required field "Group.rate_multiplier"`)}
+	}
+	if _, ok := _c.mutation.FastRateEnabled(); !ok {
+		return &ValidationError{Name: "fast_rate_enabled", err: errors.New(`ent: missing required field "Group.fast_rate_enabled"`)}
+	}
+	if _, ok := _c.mutation.FastRateMultiplier(); !ok {
+		return &ValidationError{Name: "fast_rate_multiplier", err: errors.New(`ent: missing required field "Group.fast_rate_multiplier"`)}
 	}
 	if _, ok := _c.mutation.PeakRateEnabled(); !ok {
 		return &ValidationError{Name: "peak_rate_enabled", err: errors.New(`ent: missing required field "Group.peak_rate_enabled"`)}
@@ -1375,6 +1417,14 @@ func (_c *GroupCreate) createSpec() (*Group, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.RateMultiplier(); ok {
 		_spec.SetField(group.FieldRateMultiplier, field.TypeFloat64, value)
 		_node.RateMultiplier = value
+	}
+	if value, ok := _c.mutation.FastRateEnabled(); ok {
+		_spec.SetField(group.FieldFastRateEnabled, field.TypeBool, value)
+		_node.FastRateEnabled = value
+	}
+	if value, ok := _c.mutation.FastRateMultiplier(); ok {
+		_spec.SetField(group.FieldFastRateMultiplier, field.TypeFloat64, value)
+		_node.FastRateMultiplier = value
 	}
 	if value, ok := _c.mutation.PeakRateEnabled(); ok {
 		_spec.SetField(group.FieldPeakRateEnabled, field.TypeBool, value)
@@ -1839,6 +1889,36 @@ func (u *GroupUpsert) UpdateRateMultiplier() *GroupUpsert {
 // AddRateMultiplier adds v to the "rate_multiplier" field.
 func (u *GroupUpsert) AddRateMultiplier(v float64) *GroupUpsert {
 	u.Add(group.FieldRateMultiplier, v)
+	return u
+}
+
+// SetFastRateEnabled sets the "fast_rate_enabled" field.
+func (u *GroupUpsert) SetFastRateEnabled(v bool) *GroupUpsert {
+	u.Set(group.FieldFastRateEnabled, v)
+	return u
+}
+
+// UpdateFastRateEnabled sets the "fast_rate_enabled" field to the value that was provided on create.
+func (u *GroupUpsert) UpdateFastRateEnabled() *GroupUpsert {
+	u.SetExcluded(group.FieldFastRateEnabled)
+	return u
+}
+
+// SetFastRateMultiplier sets the "fast_rate_multiplier" field.
+func (u *GroupUpsert) SetFastRateMultiplier(v float64) *GroupUpsert {
+	u.Set(group.FieldFastRateMultiplier, v)
+	return u
+}
+
+// UpdateFastRateMultiplier sets the "fast_rate_multiplier" field to the value that was provided on create.
+func (u *GroupUpsert) UpdateFastRateMultiplier() *GroupUpsert {
+	u.SetExcluded(group.FieldFastRateMultiplier)
+	return u
+}
+
+// AddFastRateMultiplier adds v to the "fast_rate_multiplier" field.
+func (u *GroupUpsert) AddFastRateMultiplier(v float64) *GroupUpsert {
+	u.Add(group.FieldFastRateMultiplier, v)
 	return u
 }
 
@@ -2836,6 +2916,41 @@ func (u *GroupUpsertOne) AddRateMultiplier(v float64) *GroupUpsertOne {
 func (u *GroupUpsertOne) UpdateRateMultiplier() *GroupUpsertOne {
 	return u.Update(func(s *GroupUpsert) {
 		s.UpdateRateMultiplier()
+	})
+}
+
+// SetFastRateEnabled sets the "fast_rate_enabled" field.
+func (u *GroupUpsertOne) SetFastRateEnabled(v bool) *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.SetFastRateEnabled(v)
+	})
+}
+
+// UpdateFastRateEnabled sets the "fast_rate_enabled" field to the value that was provided on create.
+func (u *GroupUpsertOne) UpdateFastRateEnabled() *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.UpdateFastRateEnabled()
+	})
+}
+
+// SetFastRateMultiplier sets the "fast_rate_multiplier" field.
+func (u *GroupUpsertOne) SetFastRateMultiplier(v float64) *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.SetFastRateMultiplier(v)
+	})
+}
+
+// AddFastRateMultiplier adds v to the "fast_rate_multiplier" field.
+func (u *GroupUpsertOne) AddFastRateMultiplier(v float64) *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.AddFastRateMultiplier(v)
+	})
+}
+
+// UpdateFastRateMultiplier sets the "fast_rate_multiplier" field to the value that was provided on create.
+func (u *GroupUpsertOne) UpdateFastRateMultiplier() *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.UpdateFastRateMultiplier()
 	})
 }
 
@@ -4142,6 +4257,41 @@ func (u *GroupUpsertBulk) AddRateMultiplier(v float64) *GroupUpsertBulk {
 func (u *GroupUpsertBulk) UpdateRateMultiplier() *GroupUpsertBulk {
 	return u.Update(func(s *GroupUpsert) {
 		s.UpdateRateMultiplier()
+	})
+}
+
+// SetFastRateEnabled sets the "fast_rate_enabled" field.
+func (u *GroupUpsertBulk) SetFastRateEnabled(v bool) *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.SetFastRateEnabled(v)
+	})
+}
+
+// UpdateFastRateEnabled sets the "fast_rate_enabled" field to the value that was provided on create.
+func (u *GroupUpsertBulk) UpdateFastRateEnabled() *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.UpdateFastRateEnabled()
+	})
+}
+
+// SetFastRateMultiplier sets the "fast_rate_multiplier" field.
+func (u *GroupUpsertBulk) SetFastRateMultiplier(v float64) *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.SetFastRateMultiplier(v)
+	})
+}
+
+// AddFastRateMultiplier adds v to the "fast_rate_multiplier" field.
+func (u *GroupUpsertBulk) AddFastRateMultiplier(v float64) *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.AddFastRateMultiplier(v)
+	})
+}
+
+// UpdateFastRateMultiplier sets the "fast_rate_multiplier" field to the value that was provided on create.
+func (u *GroupUpsertBulk) UpdateFastRateMultiplier() *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.UpdateFastRateMultiplier()
 	})
 }
 

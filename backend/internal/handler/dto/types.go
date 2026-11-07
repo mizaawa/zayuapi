@@ -111,14 +111,16 @@ type UsageAPIKey struct {
 }
 
 type Group struct {
-	ID             int64   `json:"id"`
-	Name           string  `json:"name"`
-	Description    string  `json:"description"`
-	Platform       string  `json:"platform"`
-	RateMultiplier float64 `json:"rate_multiplier"`
-	IsExclusive    bool    `json:"is_exclusive"`
-	Status         string  `json:"status"`
-	BlockedForUser bool    `json:"is_blocked_for_user,omitempty"`
+	ID                 int64   `json:"id"`
+	Name               string  `json:"name"`
+	Description        string  `json:"description"`
+	Platform           string  `json:"platform"`
+	RateMultiplier     float64 `json:"rate_multiplier"`
+	FastRateEnabled    bool    `json:"fast_rate_enabled"`
+	FastRateMultiplier float64 `json:"fast_rate_multiplier"`
+	IsExclusive        bool    `json:"is_exclusive"`
+	Status             string  `json:"status"`
+	BlockedForUser     bool    `json:"is_blocked_for_user,omitempty"`
 
 	SubscriptionType string   `json:"subscription_type"`
 	DailyLimitUSD    *float64 `json:"daily_limit_usd"`

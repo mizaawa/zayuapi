@@ -11,6 +11,7 @@ vi.mock('vue-i18n', async () => {
     useI18n: () => ({
       t: (key: string, params?: Record<string, unknown>) => {
         if (key === 'modelPlaza.detail.modelCount') return `${params?.count ?? 0} models`
+        if (key === 'modelPlaza.detail.fastRateNote') return `Fast billed at ${params?.multiplier}x`
         return key
       }
     })
@@ -111,6 +112,15 @@ describe('PlazaGroupSection', () => {
     const wrapper = mountSection({ id: 44, is_exclusive: true })
 
     expect(wrapper.text()).toContain('modelPlaza.badges.exclusive')
+  })
+
+  it('shows the Fast rate only for enabled OpenAI groups', () => {
+    const enabled = mountSection({ fast_rate_enabled: true, fast_rate_multiplier: 2.5 } as Partial<ModelPlazaGroup>)
+    expect(enabled.get('.plaza-badge-fast').text()).toContain('Fast ×2.5')
+    expect(enabled.get('.plaza-fast-note').text()).toContain('Fast billed at 2.5x')
+
+    expect(mountSection({ fast_rate_enabled: false } as Partial<ModelPlazaGroup>).find('.plaza-badge-fast').exists()).toBe(false)
+    expect(mountSection({ platform: 'anthropic', fast_rate_enabled: true } as Partial<ModelPlazaGroup>).find('.plaza-badge-fast').exists()).toBe(false)
   })
 
   it('passes video independent pricing to the expanded table', async () => {

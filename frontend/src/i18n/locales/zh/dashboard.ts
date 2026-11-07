@@ -772,7 +772,8 @@ export default {
       effectiveRate: '计费倍率',
       expandPricing: '查看价格明细',
       collapsePricing: '收起价格明细',
-      peakNote: '高峰时段 {window} 计费倍率 ×{multiplier}'
+      peakNote: '高峰时段 {window} 计费倍率 ×{multiplier}',
+      fastRateNote: 'Fast（最终 priority）token 请求：普通模型价 × 当前倍率 ×{multiplier}；策略过滤或上游降级后沿用原计费，高峰倍率照常叠加'
     },
     table: {
       model: '模型',

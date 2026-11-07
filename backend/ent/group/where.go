@@ -85,6 +85,16 @@ func RateMultiplier(v float64) predicate.Group {
 	return predicate.Group(sql.FieldEQ(FieldRateMultiplier, v))
 }
 
+// FastRateEnabled applies equality check predicate on the "fast_rate_enabled" field. It's identical to FastRateEnabledEQ.
+func FastRateEnabled(v bool) predicate.Group {
+	return predicate.Group(sql.FieldEQ(FieldFastRateEnabled, v))
+}
+
+// FastRateMultiplier applies equality check predicate on the "fast_rate_multiplier" field. It's identical to FastRateMultiplierEQ.
+func FastRateMultiplier(v float64) predicate.Group {
+	return predicate.Group(sql.FieldEQ(FieldFastRateMultiplier, v))
+}
+
 // PeakRateEnabled applies equality check predicate on the "peak_rate_enabled" field. It's identical to PeakRateEnabledEQ.
 func PeakRateEnabled(v bool) predicate.Group {
 	return predicate.Group(sql.FieldEQ(FieldPeakRateEnabled, v))
@@ -633,6 +643,56 @@ func RateMultiplierLT(v float64) predicate.Group {
 // RateMultiplierLTE applies the LTE predicate on the "rate_multiplier" field.
 func RateMultiplierLTE(v float64) predicate.Group {
 	return predicate.Group(sql.FieldLTE(FieldRateMultiplier, v))
+}
+
+// FastRateEnabledEQ applies the EQ predicate on the "fast_rate_enabled" field.
+func FastRateEnabledEQ(v bool) predicate.Group {
+	return predicate.Group(sql.FieldEQ(FieldFastRateEnabled, v))
+}
+
+// FastRateEnabledNEQ applies the NEQ predicate on the "fast_rate_enabled" field.
+func FastRateEnabledNEQ(v bool) predicate.Group {
+	return predicate.Group(sql.FieldNEQ(FieldFastRateEnabled, v))
+}
+
+// FastRateMultiplierEQ applies the EQ predicate on the "fast_rate_multiplier" field.
+func FastRateMultiplierEQ(v float64) predicate.Group {
+	return predicate.Group(sql.FieldEQ(FieldFastRateMultiplier, v))
+}
+
+// FastRateMultiplierNEQ applies the NEQ predicate on the "fast_rate_multiplier" field.
+func FastRateMultiplierNEQ(v float64) predicate.Group {
+	return predicate.Group(sql.FieldNEQ(FieldFastRateMultiplier, v))
+}
+
+// FastRateMultiplierIn applies the In predicate on the "fast_rate_multiplier" field.
+func FastRateMultiplierIn(vs ...float64) predicate.Group {
+	return predicate.Group(sql.FieldIn(FieldFastRateMultiplier, vs...))
+}
+
+// FastRateMultiplierNotIn applies the NotIn predicate on the "fast_rate_multiplier" field.
+func FastRateMultiplierNotIn(vs ...float64) predicate.Group {
+	return predicate.Group(sql.FieldNotIn(FieldFastRateMultiplier, vs...))
+}
+
+// FastRateMultiplierGT applies the GT predicate on the "fast_rate_multiplier" field.
+func FastRateMultiplierGT(v float64) predicate.Group {
+	return predicate.Group(sql.FieldGT(FieldFastRateMultiplier, v))
+}
+
+// FastRateMultiplierGTE applies the GTE predicate on the "fast_rate_multiplier" field.
+func FastRateMultiplierGTE(v float64) predicate.Group {
+	return predicate.Group(sql.FieldGTE(FieldFastRateMultiplier, v))
+}
+
+// FastRateMultiplierLT applies the LT predicate on the "fast_rate_multiplier" field.
+func FastRateMultiplierLT(v float64) predicate.Group {
+	return predicate.Group(sql.FieldLT(FieldFastRateMultiplier, v))
+}
+
+// FastRateMultiplierLTE applies the LTE predicate on the "fast_rate_multiplier" field.
+func FastRateMultiplierLTE(v float64) predicate.Group {
+	return predicate.Group(sql.FieldLTE(FieldFastRateMultiplier, v))
 }
 
 // PeakRateEnabledEQ applies the EQ predicate on the "peak_rate_enabled" field.

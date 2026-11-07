@@ -167,6 +167,10 @@ type CostBreakdown struct {
 	ActualCost                float64 // 应用倍率后的实际费用
 	BillingMode               string  // 计费模式（"token"/"per_request"/"image"），由 CalculateCostUnified 填充
 	LongContextBillingApplied bool
+	// CustomerBase is the tier-neutral breakdown used only when a group Fast
+	// multiplier replaces the priority uplift for customer billing. TotalCost
+	// on this breakdown remains the upstream priority cost for account quota.
+	CustomerBase *CostBreakdown `json:"-"`
 }
 
 // ErrModelPricingUnavailable indicates that none of the configured pricing
@@ -1043,6 +1047,7 @@ type CostInput struct {
 	SizeTier                  string // 按次/图片模式的层级标签（"1K","2K","4K","HD" 等）
 	RateMultiplier            float64
 	ServiceTier               string                // "priority","flex","" 等
+	FastRateMultiplier        float64               // OpenAI 分组开启时替代 priority 的用户计费倍数；0 表示沿用原逻辑
 	Resolver                  *ModelPricingResolver // 定价解析器
 	Resolved                  *ResolvedPricing      // 可选：预解析的定价结果（避免重复 Resolve 调用）
 	LongContextBillingEnabled *bool
@@ -1060,7 +1065,7 @@ func (s *BillingService) CalculateCostUnified(input CostInput) (*CostBreakdown, 
 		if input.LongContextBillingEnabled != nil {
 			applyLongContextBilling = *input.LongContextBillingEnabled
 		}
-		return s.calculateCostInternalWithPolicy(
+		cost, err := s.calculateCostInternalWithPolicy(
 			input.Model,
 			input.Tokens,
 			input.RateMultiplier,
@@ -1068,6 +1073,19 @@ func (s *BillingService) CalculateCostUnified(input CostInput) (*CostBreakdown, 
 			nil,
 			applyLongContextBilling,
 		)
+		if err != nil || input.FastRateMultiplier <= 0 || normalizeBillingServiceTier(input.ServiceTier) != "priority" {
+			return cost, err
+		}
+		customerCost, err := s.calculateCostInternalWithPolicy(
+			input.Model, input.Tokens, input.RateMultiplier*input.FastRateMultiplier,
+			"", nil, applyLongContextBilling,
+		)
+		if err != nil {
+			return nil, err
+		}
+		cost.ActualCost = customerCost.ActualCost
+		cost.CustomerBase = customerCost
+		return cost, nil
 	}
 
 	// 优先使用预解析结果，避免重复 Resolve 调用
@@ -1131,7 +1149,16 @@ func (s *BillingService) calculateTokenCost(resolved *ResolvedPricing, input Cos
 		applyLongCtx = applyLongCtx && *input.LongContextBillingEnabled
 	}
 
-	return s.computeTokenBreakdown(pricing, input.Tokens, input.RateMultiplier, input.ServiceTier, applyLongCtx), nil
+	cost := s.computeTokenBreakdown(pricing, input.Tokens, input.RateMultiplier, input.ServiceTier, applyLongCtx)
+	if input.FastRateMultiplier > 0 && normalizeBillingServiceTier(input.ServiceTier) == "priority" {
+		// Priority prices and the global 2x tier fallback remain upstream cost.
+		// The group's Fast rule replaces that tier uplift only for customer billing.
+		customerCost := s.computeTokenBreakdown(pricing, input.Tokens,
+			input.RateMultiplier*input.FastRateMultiplier, "", applyLongCtx)
+		cost.ActualCost = customerCost.ActualCost
+		cost.CustomerBase = customerCost
+	}
+	return cost, nil
 }
 
 // computeTokenBreakdown 是 token 计费的核心逻辑，由 calculateTokenCost 和 calculateCostInternal 共用。

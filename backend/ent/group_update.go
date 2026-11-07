@@ -118,6 +118,41 @@ func (_u *GroupUpdate) AddRateMultiplier(v float64) *GroupUpdate {
 	return _u
 }
 
+// SetFastRateEnabled sets the "fast_rate_enabled" field.
+func (_u *GroupUpdate) SetFastRateEnabled(v bool) *GroupUpdate {
+	_u.mutation.SetFastRateEnabled(v)
+	return _u
+}
+
+// SetNillableFastRateEnabled sets the "fast_rate_enabled" field if the given value is not nil.
+func (_u *GroupUpdate) SetNillableFastRateEnabled(v *bool) *GroupUpdate {
+	if v != nil {
+		_u.SetFastRateEnabled(*v)
+	}
+	return _u
+}
+
+// SetFastRateMultiplier sets the "fast_rate_multiplier" field.
+func (_u *GroupUpdate) SetFastRateMultiplier(v float64) *GroupUpdate {
+	_u.mutation.ResetFastRateMultiplier()
+	_u.mutation.SetFastRateMultiplier(v)
+	return _u
+}
+
+// SetNillableFastRateMultiplier sets the "fast_rate_multiplier" field if the given value is not nil.
+func (_u *GroupUpdate) SetNillableFastRateMultiplier(v *float64) *GroupUpdate {
+	if v != nil {
+		_u.SetFastRateMultiplier(*v)
+	}
+	return _u
+}
+
+// AddFastRateMultiplier adds value to the "fast_rate_multiplier" field.
+func (_u *GroupUpdate) AddFastRateMultiplier(v float64) *GroupUpdate {
+	_u.mutation.AddFastRateMultiplier(v)
+	return _u
+}
+
 // SetPeakRateEnabled sets the "peak_rate_enabled" field.
 func (_u *GroupUpdate) SetPeakRateEnabled(v bool) *GroupUpdate {
 	_u.mutation.SetPeakRateEnabled(v)
@@ -1471,6 +1506,15 @@ func (_u *GroupUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	if value, ok := _u.mutation.AddedRateMultiplier(); ok {
 		_spec.AddField(group.FieldRateMultiplier, field.TypeFloat64, value)
 	}
+	if value, ok := _u.mutation.FastRateEnabled(); ok {
+		_spec.SetField(group.FieldFastRateEnabled, field.TypeBool, value)
+	}
+	if value, ok := _u.mutation.FastRateMultiplier(); ok {
+		_spec.SetField(group.FieldFastRateMultiplier, field.TypeFloat64, value)
+	}
+	if value, ok := _u.mutation.AddedFastRateMultiplier(); ok {
+		_spec.AddField(group.FieldFastRateMultiplier, field.TypeFloat64, value)
+	}
 	if value, ok := _u.mutation.PeakRateEnabled(); ok {
 		_spec.SetField(group.FieldPeakRateEnabled, field.TypeBool, value)
 	}
@@ -2196,6 +2240,41 @@ func (_u *GroupUpdateOne) SetNillableRateMultiplier(v *float64) *GroupUpdateOne 
 // AddRateMultiplier adds value to the "rate_multiplier" field.
 func (_u *GroupUpdateOne) AddRateMultiplier(v float64) *GroupUpdateOne {
 	_u.mutation.AddRateMultiplier(v)
+	return _u
+}
+
+// SetFastRateEnabled sets the "fast_rate_enabled" field.
+func (_u *GroupUpdateOne) SetFastRateEnabled(v bool) *GroupUpdateOne {
+	_u.mutation.SetFastRateEnabled(v)
+	return _u
+}
+
+// SetNillableFastRateEnabled sets the "fast_rate_enabled" field if the given value is not nil.
+func (_u *GroupUpdateOne) SetNillableFastRateEnabled(v *bool) *GroupUpdateOne {
+	if v != nil {
+		_u.SetFastRateEnabled(*v)
+	}
+	return _u
+}
+
+// SetFastRateMultiplier sets the "fast_rate_multiplier" field.
+func (_u *GroupUpdateOne) SetFastRateMultiplier(v float64) *GroupUpdateOne {
+	_u.mutation.ResetFastRateMultiplier()
+	_u.mutation.SetFastRateMultiplier(v)
+	return _u
+}
+
+// SetNillableFastRateMultiplier sets the "fast_rate_multiplier" field if the given value is not nil.
+func (_u *GroupUpdateOne) SetNillableFastRateMultiplier(v *float64) *GroupUpdateOne {
+	if v != nil {
+		_u.SetFastRateMultiplier(*v)
+	}
+	return _u
+}
+
+// AddFastRateMultiplier adds value to the "fast_rate_multiplier" field.
+func (_u *GroupUpdateOne) AddFastRateMultiplier(v float64) *GroupUpdateOne {
+	_u.mutation.AddFastRateMultiplier(v)
 	return _u
 }
 
@@ -3581,6 +3660,15 @@ func (_u *GroupUpdateOne) sqlSave(ctx context.Context) (_node *Group, err error)
 	}
 	if value, ok := _u.mutation.AddedRateMultiplier(); ok {
 		_spec.AddField(group.FieldRateMultiplier, field.TypeFloat64, value)
+	}
+	if value, ok := _u.mutation.FastRateEnabled(); ok {
+		_spec.SetField(group.FieldFastRateEnabled, field.TypeBool, value)
+	}
+	if value, ok := _u.mutation.FastRateMultiplier(); ok {
+		_spec.SetField(group.FieldFastRateMultiplier, field.TypeFloat64, value)
+	}
+	if value, ok := _u.mutation.AddedFastRateMultiplier(); ok {
+		_spec.AddField(group.FieldFastRateMultiplier, field.TypeFloat64, value)
 	}
 	if value, ok := _u.mutation.PeakRateEnabled(); ok {
 		_spec.SetField(group.FieldPeakRateEnabled, field.TypeBool, value)

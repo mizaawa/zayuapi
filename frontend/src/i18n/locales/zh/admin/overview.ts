@@ -1045,6 +1045,12 @@ export default {
           '公开分组费率 0.8，您可以创建一个费率 0.7 的专属分组，手动分配给 VIP 用户，让他们享受更优惠的价格。'
       },
       rateMultiplierHint: '1.0 = 标准费率，0.5 = 半价，2.0 = 双倍',
+      fastRate: {
+        enable: '启用 Fast 单独计费倍率',
+        multiplier: 'Fast 计费倍率',
+        hint: '仅 OpenAI 请求最终按 Fast（service_tier=priority）计费时生效。token 实付 = 普通模型价 × 分组/用户倍率 × 此倍率；策略过滤或上游降级后沿用原计费。可设 0.1–100，默认 2。',
+        invalid: 'Fast 计费倍率须在 0.1–100 之间'
+      },
       platforms: {
         all: '全部平台',
         anthropic: 'Anthropic',

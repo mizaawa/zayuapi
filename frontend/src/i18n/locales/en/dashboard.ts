@@ -767,7 +767,8 @@ export default {
       effectiveRate: 'Billing rate',
       expandPricing: 'View pricing details',
       collapsePricing: 'Hide pricing details',
-      peakNote: 'Peak hours {window}: billing rate ×{multiplier}'
+      peakNote: 'Peak hours {window}: billing rate ×{multiplier}',
+      fastRateNote: 'Fast (final priority) token requests: standard model price × your rate ×{multiplier}; filtered or downgraded requests keep existing billing, and peak rates still apply'
     },
     table: {
       model: 'Model',

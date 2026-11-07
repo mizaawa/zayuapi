@@ -384,6 +384,14 @@ func (s *adminServiceImpl) CreateGroup(ctx context.Context, input *CreateGroupIn
 	if err := ValidatePeakRateConfig(subscriptionType, peakRateEnabled, peakStart, peakEnd, peakRateMultiplier); err != nil {
 		return nil, err
 	}
+	fastRateMultiplier := DefaultOpenAIFastRateMultiplier
+	if input.FastRateMultiplier != nil {
+		fastRateMultiplier = *input.FastRateMultiplier
+	}
+	fastRateEnabled, fastRateMultiplier := NormalizeOpenAIFastRateConfig(platform, input.FastRateEnabled, fastRateMultiplier)
+	if err := ValidateOpenAIFastRateConfig(platform, fastRateEnabled, fastRateMultiplier); err != nil {
+		return nil, err
+	}
 
 	profitMinMargin := 0.0
 	if input.ProfitMinMargin != nil {
@@ -473,6 +481,8 @@ func (s *adminServiceImpl) CreateGroup(ctx context.Context, input *CreateGroupIn
 		Description:                     input.Description,
 		Platform:                        platform,
 		RateMultiplier:                  input.RateMultiplier,
+		FastRateEnabled:                 fastRateEnabled,
+		FastRateMultiplier:              fastRateMultiplier,
 		ModelPricing:                    modelPricing,
 		IsExclusive:                     input.IsExclusive,
 		Status:                          StatusActive,
@@ -741,6 +751,19 @@ func (s *adminServiceImpl) UpdateGroup(ctx context.Context, id int64, input *Upd
 	}
 	if input.PeakRateMultiplier != nil {
 		group.PeakRateMultiplier = *input.PeakRateMultiplier
+	}
+	if input.FastRateEnabled != nil {
+		group.FastRateEnabled = *input.FastRateEnabled
+	}
+	if input.FastRateMultiplier != nil {
+		group.FastRateMultiplier = *input.FastRateMultiplier
+	} else if group.FastRateMultiplier == 0 {
+		// Pre-migration objects and in-memory test groups have no stored preset.
+		group.FastRateMultiplier = DefaultOpenAIFastRateMultiplier
+	}
+	group.FastRateEnabled, group.FastRateMultiplier = NormalizeOpenAIFastRateConfig(group.Platform, group.FastRateEnabled, group.FastRateMultiplier)
+	if err := ValidateOpenAIFastRateConfig(group.Platform, group.FastRateEnabled, group.FastRateMultiplier); err != nil {
+		return nil, err
 	}
 	// 先归一化（非订阅分组——含本次更新转为非订阅——静默清空高峰配置，清洗停用状态下的脏字段），
 	// 再收敛校验：Update 可能只传部分 peak 字段，需对合并后的最终配置统一校验，

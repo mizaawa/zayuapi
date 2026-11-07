@@ -22879,6 +22879,9 @@ type GroupMutation struct {
 	description                             *string
 	rate_multiplier                         *float64
 	addrate_multiplier                      *float64
+	fast_rate_enabled                       *bool
+	fast_rate_multiplier                    *float64
+	addfast_rate_multiplier                 *float64
 	peak_rate_enabled                       *bool
 	peak_start                              *string
 	peak_end                                *string
@@ -23344,6 +23347,98 @@ func (m *GroupMutation) AddedRateMultiplier() (r float64, exists bool) {
 func (m *GroupMutation) ResetRateMultiplier() {
 	m.rate_multiplier = nil
 	m.addrate_multiplier = nil
+}
+
+// SetFastRateEnabled sets the "fast_rate_enabled" field.
+func (m *GroupMutation) SetFastRateEnabled(b bool) {
+	m.fast_rate_enabled = &b
+}
+
+// FastRateEnabled returns the value of the "fast_rate_enabled" field in the mutation.
+func (m *GroupMutation) FastRateEnabled() (r bool, exists bool) {
+	v := m.fast_rate_enabled
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldFastRateEnabled returns the old "fast_rate_enabled" field's value of the Group entity.
+// If the Group object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GroupMutation) OldFastRateEnabled(ctx context.Context) (v bool, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldFastRateEnabled is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldFastRateEnabled requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldFastRateEnabled: %w", err)
+	}
+	return oldValue.FastRateEnabled, nil
+}
+
+// ResetFastRateEnabled resets all changes to the "fast_rate_enabled" field.
+func (m *GroupMutation) ResetFastRateEnabled() {
+	m.fast_rate_enabled = nil
+}
+
+// SetFastRateMultiplier sets the "fast_rate_multiplier" field.
+func (m *GroupMutation) SetFastRateMultiplier(f float64) {
+	m.fast_rate_multiplier = &f
+	m.addfast_rate_multiplier = nil
+}
+
+// FastRateMultiplier returns the value of the "fast_rate_multiplier" field in the mutation.
+func (m *GroupMutation) FastRateMultiplier() (r float64, exists bool) {
+	v := m.fast_rate_multiplier
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldFastRateMultiplier returns the old "fast_rate_multiplier" field's value of the Group entity.
+// If the Group object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GroupMutation) OldFastRateMultiplier(ctx context.Context) (v float64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldFastRateMultiplier is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldFastRateMultiplier requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldFastRateMultiplier: %w", err)
+	}
+	return oldValue.FastRateMultiplier, nil
+}
+
+// AddFastRateMultiplier adds f to the "fast_rate_multiplier" field.
+func (m *GroupMutation) AddFastRateMultiplier(f float64) {
+	if m.addfast_rate_multiplier != nil {
+		*m.addfast_rate_multiplier += f
+	} else {
+		m.addfast_rate_multiplier = &f
+	}
+}
+
+// AddedFastRateMultiplier returns the value that was added to the "fast_rate_multiplier" field in this mutation.
+func (m *GroupMutation) AddedFastRateMultiplier() (r float64, exists bool) {
+	v := m.addfast_rate_multiplier
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetFastRateMultiplier resets all changes to the "fast_rate_multiplier" field.
+func (m *GroupMutation) ResetFastRateMultiplier() {
+	m.fast_rate_multiplier = nil
+	m.addfast_rate_multiplier = nil
 }
 
 // SetPeakRateEnabled sets the "peak_rate_enabled" field.
@@ -26415,7 +26510,7 @@ func (m *GroupMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *GroupMutation) Fields() []string {
-	fields := make([]string, 0, 60)
+	fields := make([]string, 0, 62)
 	if m.created_at != nil {
 		fields = append(fields, group.FieldCreatedAt)
 	}
@@ -26433,6 +26528,12 @@ func (m *GroupMutation) Fields() []string {
 	}
 	if m.rate_multiplier != nil {
 		fields = append(fields, group.FieldRateMultiplier)
+	}
+	if m.fast_rate_enabled != nil {
+		fields = append(fields, group.FieldFastRateEnabled)
+	}
+	if m.fast_rate_multiplier != nil {
+		fields = append(fields, group.FieldFastRateMultiplier)
 	}
 	if m.peak_rate_enabled != nil {
 		fields = append(fields, group.FieldPeakRateEnabled)
@@ -26616,6 +26717,10 @@ func (m *GroupMutation) Field(name string) (ent.Value, bool) {
 		return m.Description()
 	case group.FieldRateMultiplier:
 		return m.RateMultiplier()
+	case group.FieldFastRateEnabled:
+		return m.FastRateEnabled()
+	case group.FieldFastRateMultiplier:
+		return m.FastRateMultiplier()
 	case group.FieldPeakRateEnabled:
 		return m.PeakRateEnabled()
 	case group.FieldPeakStart:
@@ -26745,6 +26850,10 @@ func (m *GroupMutation) OldField(ctx context.Context, name string) (ent.Value, e
 		return m.OldDescription(ctx)
 	case group.FieldRateMultiplier:
 		return m.OldRateMultiplier(ctx)
+	case group.FieldFastRateEnabled:
+		return m.OldFastRateEnabled(ctx)
+	case group.FieldFastRateMultiplier:
+		return m.OldFastRateMultiplier(ctx)
 	case group.FieldPeakRateEnabled:
 		return m.OldPeakRateEnabled(ctx)
 	case group.FieldPeakStart:
@@ -26903,6 +27012,20 @@ func (m *GroupMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetRateMultiplier(v)
+		return nil
+	case group.FieldFastRateEnabled:
+		v, ok := value.(bool)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetFastRateEnabled(v)
+		return nil
+	case group.FieldFastRateMultiplier:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetFastRateMultiplier(v)
 		return nil
 	case group.FieldPeakRateEnabled:
 		v, ok := value.(bool)
@@ -27293,6 +27416,9 @@ func (m *GroupMutation) AddedFields() []string {
 	if m.addrate_multiplier != nil {
 		fields = append(fields, group.FieldRateMultiplier)
 	}
+	if m.addfast_rate_multiplier != nil {
+		fields = append(fields, group.FieldFastRateMultiplier)
+	}
 	if m.addpeak_rate_multiplier != nil {
 		fields = append(fields, group.FieldPeakRateMultiplier)
 	}
@@ -27372,6 +27498,8 @@ func (m *GroupMutation) AddedField(name string) (ent.Value, bool) {
 	switch name {
 	case group.FieldRateMultiplier:
 		return m.AddedRateMultiplier()
+	case group.FieldFastRateMultiplier:
+		return m.AddedFastRateMultiplier()
 	case group.FieldPeakRateMultiplier:
 		return m.AddedPeakRateMultiplier()
 	case group.FieldDailyLimitUsd:
@@ -27433,6 +27561,13 @@ func (m *GroupMutation) AddField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.AddRateMultiplier(v)
+		return nil
+	case group.FieldFastRateMultiplier:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddFastRateMultiplier(v)
 		return nil
 	case group.FieldPeakRateMultiplier:
 		v, ok := value.(float64)
@@ -27744,6 +27879,12 @@ func (m *GroupMutation) ResetField(name string) error {
 		return nil
 	case group.FieldRateMultiplier:
 		m.ResetRateMultiplier()
+		return nil
+	case group.FieldFastRateEnabled:
+		m.ResetFastRateEnabled()
+		return nil
+	case group.FieldFastRateMultiplier:
+		m.ResetFastRateMultiplier()
 		return nil
 	case group.FieldPeakRateEnabled:
 		m.ResetPeakRateEnabled()

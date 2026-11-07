@@ -38,6 +38,8 @@ type PlazaGroup struct {
 	Platform           string
 	SubscriptionType   string
 	RateMultiplier     float64
+	FastRateEnabled    bool
+	FastRateMultiplier float64
 	PeakRateEnabled    bool
 	PeakStart          string
 	PeakEnd            string
@@ -97,6 +99,8 @@ func (s *ChannelService) ListPlazaGroups(ctx context.Context) ([]PlazaGroup, err
 			Platform:             g.Platform,
 			SubscriptionType:     g.SubscriptionType,
 			RateMultiplier:       g.RateMultiplier,
+			FastRateEnabled:      g.FastRateEnabled,
+			FastRateMultiplier:   g.FastRateMultiplier,
 			PeakRateEnabled:      g.PeakRateEnabled,
 			PeakStart:            g.PeakStart,
 			PeakEnd:              g.PeakEnd,

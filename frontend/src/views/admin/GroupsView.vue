@@ -672,6 +672,17 @@
           />
           <p class="input-hint">{{ t("admin.groups.rateMultiplierHint") }}</p>
         </div>
+        <div v-if="createForm.platform === 'openai'" class="rounded-lg border border-sky-200 p-4 dark:border-sky-900">
+          <label class="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-300">
+            <input v-model="createForm.fast_rate_enabled" type="checkbox" class="rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
+            {{ t("admin.groups.fastRate.enable") }}
+          </label>
+          <div v-if="createForm.fast_rate_enabled" class="mt-3">
+            <label class="input-label">{{ t("admin.groups.fastRate.multiplier") }}</label>
+            <input v-model.number="createForm.fast_rate_multiplier" type="number" min="0.1" max="100" step="0.0001" required class="input" />
+            <p class="input-hint">{{ t("admin.groups.fastRate.hint") }}</p>
+          </div>
+        </div>
         <div>
           <label class="input-label">{{ t("admin.groups.form.rpmLimit") }}</label>
           <input
@@ -2355,6 +2366,17 @@
             class="input"
             data-tour="group-form-multiplier"
           />
+        </div>
+        <div v-if="editForm.platform === 'openai'" class="rounded-lg border border-sky-200 p-4 dark:border-sky-900">
+          <label class="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-300">
+            <input v-model="editForm.fast_rate_enabled" type="checkbox" class="rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
+            {{ t("admin.groups.fastRate.enable") }}
+          </label>
+          <div v-if="editForm.fast_rate_enabled" class="mt-3">
+            <label class="input-label">{{ t("admin.groups.fastRate.multiplier") }}</label>
+            <input v-model.number="editForm.fast_rate_multiplier" type="number" min="0.1" max="100" step="0.0001" required class="input" />
+            <p class="input-hint">{{ t("admin.groups.fastRate.hint") }}</p>
+          </div>
         </div>
         <div>
           <label class="input-label">{{ t("admin.groups.form.rpmLimit") }}</label>
@@ -5011,6 +5033,8 @@ const createForm = reactive({
   description: "",
   platform: "anthropic" as GroupPlatform,
   rate_multiplier: 1.0,
+  fast_rate_enabled: false,
+  fast_rate_multiplier: 2.0,
   is_exclusive: false,
   subscription_type: "standard" as SubscriptionType,
   daily_limit_usd: null as number | null,
@@ -5369,6 +5393,8 @@ const editForm = reactive({
   description: "",
   platform: "anthropic" as GroupPlatform,
   rate_multiplier: 1.0,
+  fast_rate_enabled: false,
+  fast_rate_multiplier: 2.0,
   is_exclusive: false,
   status: "active" as "active" | "inactive",
   subscription_type: "standard" as SubscriptionType,
@@ -5891,6 +5917,8 @@ const closeCreateModal = () => {
   createForm.description = "";
   createForm.platform = "anthropic";
   createForm.rate_multiplier = 1.0;
+  createForm.fast_rate_enabled = false;
+  createForm.fast_rate_multiplier = 2.0;
   createForm.is_exclusive = false;
   createForm.subscription_type = "standard";
   createForm.daily_limit_usd = null;
@@ -5990,6 +6018,25 @@ const validateCyberAutoChargeForm = (form: CyberAutoChargeFormState): boolean =>
   return true;
 };
 
+const normalizedFastRateMultiplier = (value: unknown): number => {
+  const multiplier = Number(value);
+  return Number.isFinite(multiplier) && multiplier >= 0.1 && multiplier <= 100
+    ? multiplier
+    : 2;
+};
+
+const validateFastRateForm = (form: {
+  platform: GroupPlatform;
+  fast_rate_enabled: boolean;
+  fast_rate_multiplier: number;
+}): boolean => {
+  if (form.platform !== "openai" || !form.fast_rate_enabled) return true;
+  const multiplier = Number(form.fast_rate_multiplier);
+  if (Number.isFinite(multiplier) && multiplier >= 0.1 && multiplier <= 100) return true;
+  appStore.showError(t("admin.groups.fastRate.invalid"));
+  return false;
+};
+
 const handleCreateGroup = async () => {
   if (submitting.value) return;
   if (!createForm.name.trim()) {
@@ -6000,6 +6047,9 @@ const handleCreateGroup = async () => {
     return;
   }
   if (!validateCyberAutoChargeForm(createForm)) {
+    return;
+  }
+  if (!validateFastRateForm(createForm)) {
     return;
   }
   submitting.value = true;
@@ -6085,6 +6135,8 @@ const handleCreateGroup = async () => {
     requestData.peak_rate_multiplier = normalizeRateMultiplier(
       createForm.peak_rate_multiplier,
     );
+    requestData.fast_rate_enabled = createForm.platform === "openai" && createForm.fast_rate_enabled;
+    requestData.fast_rate_multiplier = normalizedFastRateMultiplier(createForm.fast_rate_multiplier);
     await adminAPI.groups.create(requestData);
     appStore.showSuccess(t("admin.groups.groupCreated"));
     closeCreateModal();
@@ -6110,6 +6162,8 @@ const handleEdit = async (group: AdminGroup) => {
   editForm.description = group.description || "";
   editForm.platform = group.platform;
   editForm.rate_multiplier = group.rate_multiplier;
+  editForm.fast_rate_enabled = group.fast_rate_enabled ?? false;
+  editForm.fast_rate_multiplier = group.fast_rate_multiplier ?? 2.0;
   editForm.is_exclusive = group.is_exclusive;
   editForm.status = group.status;
   editForm.subscription_type = group.subscription_type || "standard";
@@ -6200,6 +6254,8 @@ const closeEditModal = () => {
   editForm.peak_start = "";
   editForm.peak_end = "";
   editForm.peak_rate_multiplier = 1.0;
+  editForm.fast_rate_enabled = false;
+  editForm.fast_rate_multiplier = 2.0;
   editForm.profit_control_enabled = false;
   editForm.profit_min_margin_percent = 0;
   editForm.profit_safety_buffer_percent = 0;
@@ -6229,6 +6285,9 @@ const handleUpdateGroup = async () => {
     return;
   }
   if (!validateCyberAutoChargeForm(editForm)) {
+    return;
+  }
+  if (!validateFastRateForm(editForm)) {
     return;
   }
 
@@ -6323,6 +6382,8 @@ const handleUpdateGroup = async () => {
     payload.peak_rate_multiplier = normalizeRateMultiplier(
       editForm.peak_rate_multiplier,
     );
+    payload.fast_rate_enabled = editForm.platform === "openai" && editForm.fast_rate_enabled;
+    payload.fast_rate_multiplier = normalizedFastRateMultiplier(editForm.fast_rate_multiplier);
     await adminAPI.groups.update(editingGroup.value.id, payload);
     appStore.showSuccess(t("admin.groups.groupUpdated"));
     closeEditModal();

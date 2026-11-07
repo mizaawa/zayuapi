@@ -244,13 +244,24 @@ func (s *OpenAIGatewayService) RecordUsage(ctx context.Context, input *OpenAIRec
 	if billedServiceTier != nil {
 		serviceTier = *billedServiceTier
 	}
+	fastRateMultiplier := openAIFastRateMultiplier(apiKey.Group, serviceTier)
 	longContextBillingEnabled := billingAccount.IsOpenAILongContextBillingEnabled()
 	imageReservation, reservationErr := mediaImagePricingReservation(ctx, input)
 	if reservationErr != nil {
 		return reservationErr
 	}
 	if imageReservation != nil && !isVideoUsageResult(result) {
-		pricing := imageReservation.ImagePricing
+		pricingSnapshot := *imageReservation.ImagePricing
+		pricing := &pricingSnapshot
+		if result.UpstreamServiceTier != nil {
+			// The reservation freezes prices, but an authoritative upstream tier
+			// downgrade must still remove a Fast charge at settlement.
+			pricing.ServiceTier = serviceTier
+			if serviceTier != "priority" {
+				pricing.FastRateMultiplier = 0
+			}
+		}
+		fastRateMultiplier = pricing.FastRateMultiplier
 		multiplier, imageMultiplier = pricing.TokenMultiplier, pricing.ImageMultiplier
 		cost, err = pricing.calculate(s.billingService, result, tokens)
 	} else if input.captureImagePricing != nil && result.ImageCount > 0 && !isVideoUsageResult(result) {
@@ -259,6 +270,7 @@ func (s *OpenAIGatewayService) RecordUsage(ctx context.Context, input *OpenAIRec
 			return captureErr
 		}
 		*input.captureImagePricing = pricing
+		fastRateMultiplier = pricing.FastRateMultiplier
 		cost, err = pricing.calculate(s.billingService, result, tokens)
 	} else {
 		cost, err = s.calculateOpenAIRecordUsageCost(
@@ -378,15 +390,22 @@ func (s *OpenAIGatewayService) RecordUsage(ctx context.Context, input *OpenAIRec
 		usageLog.VideoDurationSeconds = &videoDurationSeconds
 	}
 	if cost != nil {
-		usageLog.InputCost = cost.InputCost
-		usageLog.ImageInputCost = cost.ImageInputCost
-		usageLog.OutputCost = cost.OutputCost
-		usageLog.ImageOutputCost = cost.ImageOutputCost
-		usageLog.CacheCreationCost = cost.CacheCreationCost
-		usageLog.CacheReadCost = cost.CacheReadCost
-		usageLog.TotalCost = cost.TotalCost
+		logBase := cost
+		if cost.CustomerBase != nil {
+			logBase = cost.CustomerBase
+		}
+		usageLog.InputCost = logBase.InputCost
+		usageLog.ImageInputCost = logBase.ImageInputCost
+		usageLog.OutputCost = logBase.OutputCost
+		usageLog.ImageOutputCost = logBase.ImageOutputCost
+		usageLog.CacheCreationCost = logBase.CacheCreationCost
+		usageLog.CacheReadCost = logBase.CacheReadCost
+		usageLog.TotalCost = logBase.TotalCost
 		usageLog.ActualCost = cost.ActualCost
 		usageLog.LongContextBillingApplied = cost.LongContextBillingApplied
+	}
+	if cost != nil && cost.BillingMode == string(BillingModeToken) && fastRateMultiplier > 0 {
+		multiplier *= fastRateMultiplier
 	}
 	if isVideoUsage && (cost == nil || cost.BillingMode != string(BillingModeToken)) {
 		usageLog.RateMultiplier = videoMultiplier
@@ -448,6 +467,12 @@ func (s *OpenAIGatewayService) RecordUsage(ctx context.Context, input *OpenAIRec
 			account.ID, *apiKey.GroupID, result.UpstreamModel, result.Model,
 			tokens, cost.TotalCost,
 		)
+		if cost.CustomerBase != nil && usageLog.AccountStatsCost == nil {
+			// UsageLog.TotalCost is the customer's standard-price base. Keep the
+			// upstream priority cost available for account statistics separately.
+			upstreamCost := cost.TotalCost
+			usageLog.AccountStatsCost = &upstreamCost
+		}
 	}
 
 	if s.cfg != nil && s.cfg.RunMode == config.RunModeSimple {
@@ -621,17 +646,30 @@ func (s *OpenAIGatewayService) calculateOpenAIRecordUsageTokenCost(
 			RequestCount:              1,
 			RateMultiplier:            multiplier,
 			ServiceTier:               serviceTier,
+			FastRateMultiplier:        openAIFastRateMultiplier(apiKey.Group, serviceTier),
 			Resolver:                  s.resolver,
 			LongContextBillingEnabled: &longContextBillingEnabled,
 		})
 	}
-	return s.billingService.calculateCostWithServiceTierPolicy(
+	cost, err := s.billingService.calculateCostWithServiceTierPolicy(
 		billingModel,
 		tokens,
 		multiplier,
 		serviceTier,
 		longContextBillingEnabled,
 	)
+	fastRate := openAIFastRateMultiplier(apiKey.Group, serviceTier)
+	if err != nil || fastRate <= 0 {
+		return cost, err
+	}
+	customerCost, err := s.billingService.calculateCostWithServiceTierPolicy(
+		billingModel, tokens, multiplier*fastRate, "", longContextBillingEnabled)
+	if err != nil {
+		return nil, err
+	}
+	cost.ActualCost = customerCost.ActualCost
+	cost.CustomerBase = customerCost
+	return cost, nil
 }
 
 func (s *OpenAIGatewayService) calculateOpenAIImageCost(

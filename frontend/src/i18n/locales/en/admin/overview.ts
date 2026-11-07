@@ -1061,6 +1061,12 @@ export default {
       groupUpdatedSuccess: 'Group updated successfully',
       groupDeletedSuccess: 'Group deleted successfully',
       rateMultiplierHint: 'Cost multiplier for this group (e.g., 1.5 = 150% of base cost)',
+      fastRate: {
+        enable: 'Enable separate Fast billing multiplier',
+        multiplier: 'Fast billing multiplier',
+        hint: 'Applies only when an OpenAI request is finally billed as Fast (service_tier=priority). Token cost = standard model price × group/user rate × this multiplier. Filtered or downgraded requests keep existing billing. Range: 0.1–100; default: 2.',
+        invalid: 'Fast billing multiplier must be between 0.1 and 100'
+      },
       exclusiveHint: 'Exclusive group, manually assign to specific users',
       exclusiveTooltip: {
         title: 'What is an exclusive group?',

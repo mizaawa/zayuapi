@@ -22,6 +22,9 @@
         <span class="plaza-group-main">
           <span class="plaza-group-titlebar">
             <span class="plaza-group-name">{{ group.name }}</span>
+            <span v-if="fastRateEnabled" class="plaza-badge plaza-badge-fast" :title="fastRateNote">
+              Fast ×{{ group.fast_rate_multiplier ?? 2 }}
+            </span>
             <span
               v-if="group.is_exclusive"
               class="plaza-badge plaza-badge-exclusive"
@@ -50,6 +53,9 @@
             >
               <Icon name="clock" size="xs" class="h-3 w-3" />
               {{ peakNote }}
+            </span>
+            <span v-if="fastRateEnabled" class="plaza-fast-note">
+              {{ fastRateNote }}
             </span>
           </span>
           <!-- 收起时先露出前几个模型,不用展开也知道这个分组里有什么。 -->
@@ -130,6 +136,10 @@ const effectiveRate = computed(() => props.group.user_rate_multiplier ?? props.g
 const hasCustomRate = computed(
   () => props.group.user_rate_multiplier != null && props.group.user_rate_multiplier !== props.group.rate_multiplier
 )
+const fastRateEnabled = computed(() => props.group.platform === 'openai' && props.group.fast_rate_enabled)
+const fastRateNote = computed(() => t('modelPlaza.detail.fastRateNote', {
+  multiplier: props.group.fast_rate_multiplier ?? 2
+}))
 
 const previewModels = computed(() => props.group.models.slice(0, PREVIEW_MODEL_LIMIT))
 const hiddenModelCount = computed(() => Math.max(props.group.models.length - PREVIEW_MODEL_LIMIT, 0))
@@ -238,6 +248,19 @@ const peakNote = computed(() => {
 .plaza-badge-subscription {
   background: #e4f0df;
   color: #2e5038;
+}
+
+.plaza-badge-fast {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
+.plaza-fast-note {
+  color: #1d4ed8;
+}
+
+:global(.dark) .plaza-fast-note {
+  color: #93c5fd;
 }
 
 .plaza-group-description {
