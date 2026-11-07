@@ -100,7 +100,7 @@ func (r *rateNotifyAccountRepository) ListDueUpstreamBillingProbeAccounts(ctx co
 	if lister, ok := r.AccountRepository.(upstreamBillingProbeDueAccountLister); ok {
 		return lister.ListDueUpstreamBillingProbeAccounts(ctx, now, limit)
 	}
-	return r.AccountRepository.FindByExtraField(ctx, UpstreamBillingProbeEnabledExtraKey, true)
+	return r.FindByExtraField(ctx, UpstreamBillingProbeEnabledExtraKey, true)
 }
 
 // ProvideRateNotifyUpstreamBillingProbeService replaces the plain provider in
@@ -250,7 +250,7 @@ func (r *rateNotifyAccountRepository) deliverRateNotification(ctx context.Contex
 	if r.sender == nil || r.AccountRepository == nil {
 		return
 	}
-	account, err := r.AccountRepository.GetByID(ctx, accountID)
+	account, err := r.GetByID(ctx, accountID)
 	if err != nil || !upstreamBillingRateSyncEnabled(account) {
 		return
 	}
@@ -304,7 +304,7 @@ func (r *rateNotifyAccountRepository) deliverRateNotification(ctx context.Contex
 		slog.Error("upstream_rate_notification_send_failed", "account_id", accountID,
 			"recipient", state.Recipient, "attempt", state.Attempts, "error", sendErr)
 	}
-	latest, err := r.AccountRepository.GetByID(ctx, accountID)
+	latest, err := r.GetByID(ctx, accountID)
 	if err != nil {
 		slog.Error("upstream_rate_notification_state_reload_failed", "account_id", accountID, "error", err)
 		return
@@ -371,13 +371,13 @@ func buildUpstreamRateNotificationEmail(account *Account, state *UpstreamRateNot
 		"持续时长：" + detectedAt.Sub(*state.ChangedAt).Round(time.Second).String(),
 	}
 	var body strings.Builder
-	body.WriteString("<p>上游声明倍率持续变化，请核对以下账号：</p><ul>")
+	_, _ = body.WriteString("<p>上游声明倍率持续变化，请核对以下账号：</p><ul>")
 	for _, line := range lines {
-		body.WriteString("<li>")
-		body.WriteString(html.EscapeString(line))
-		body.WriteString("</li>")
+		_, _ = body.WriteString("<li>")
+		_, _ = body.WriteString(html.EscapeString(line))
+		_, _ = body.WriteString("</li>")
 	}
-	body.WriteString("</ul>")
+	_, _ = body.WriteString("</ul>")
 	return subject, body.String()
 }
 

@@ -32,7 +32,7 @@ func (s *UsageService) displayCNYRateForLogs(ctx context.Context, logs []UsageLo
 	if err != nil {
 		return
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	type configAtTime struct {
 		features map[string]any
 		updated  time.Time

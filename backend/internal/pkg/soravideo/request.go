@@ -23,7 +23,7 @@ type Request struct {
 
 func Parse(body []byte, contentType string, maxBytes int, validReferenceURL func(string) bool) (Request, error) {
 	if maxBytes <= 0 || len(body) > maxBytes {
-		return Request{}, fmt.Errorf("Sora request exceeds the body limit")
+		return Request{}, fmt.Errorf("sora request exceeds the body limit")
 	}
 	var fields map[string]json.RawMessage
 	if mediaType, params, err := mime.ParseMediaType(contentType); err == nil && mediaType == "multipart/form-data" {
@@ -48,7 +48,7 @@ func Parse(body []byte, contentType string, maxBytes int, validReferenceURL func
 			data, err := io.ReadAll(io.LimitReader(part, int64(maxBytes)+1))
 			_ = part.Close()
 			if err != nil || len(data) > maxBytes {
-				return Request{}, fmt.Errorf("Sora upload exceeds the request limit")
+				return Request{}, fmt.Errorf("sora upload exceeds the request limit")
 			}
 			if part.FileName() != "" {
 				if name != "input_reference" || len(data) == 0 {
@@ -64,7 +64,7 @@ func Parse(body []byte, contentType string, maxBytes int, validReferenceURL func
 			fields[name], _ = json.Marshal(string(data))
 		}
 	} else if err := json.Unmarshal(body, &fields); err != nil || fields == nil {
-		return Request{}, fmt.Errorf("Sora request must be a JSON object or multipart form")
+		return Request{}, fmt.Errorf("sora request must be a JSON object or multipart form")
 	}
 	for name := range fields {
 		if !requestField(name) {
@@ -77,7 +77,7 @@ func Parse(body []byte, contentType string, maxBytes int, validReferenceURL func
 		}
 		var value string
 		if json.Unmarshal(fields[name], &value) != nil {
-			return "", fmt.Errorf("Sora %s must be a string", name)
+			return "", fmt.Errorf("sora %s must be a string", name)
 		}
 		return strings.TrimSpace(value), nil
 	}
@@ -93,10 +93,10 @@ func Parse(body []byte, contentType string, maxBytes int, validReferenceURL func
 		return input, err
 	}
 	if input.Model == "" || input.Prompt == "" || input.Size == "" || len(input.Model) > 256 || strings.ContainsAny(input.Model, "\r\n\x00") || len(input.Prompt) > 32000 {
-		return input, fmt.Errorf("Sora model and prompt are required")
+		return input, fmt.Errorf("sora model and prompt are required")
 	}
 	if len(fields["seconds"]) == 0 {
-		return input, fmt.Errorf("Sora seconds is required")
+		return input, fmt.Errorf("sora seconds is required")
 	}
 	seconds := strings.TrimSpace(string(fields["seconds"]))
 	if fields["seconds"][0] == '"' {
@@ -107,7 +107,7 @@ func Parse(body []byte, contentType string, maxBytes int, validReferenceURL func
 	}
 	input.Seconds, err = strconv.Atoi(seconds)
 	if err != nil || input.Seconds < 1 || input.Seconds > 86400 {
-		return input, fmt.Errorf("Sora seconds must be a positive whole number no greater than 86400")
+		return input, fmt.Errorf("sora seconds must be a positive whole number no greater than 86400")
 	}
 	if raw := fields["input_reference"]; len(raw) > 0 && string(raw) != "null" {
 		if raw[0] == '"' {

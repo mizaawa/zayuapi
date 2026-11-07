@@ -20,7 +20,15 @@ func TestChannelPricingCurrencyLegacyAndIndependentSwitches(t *testing.T) {
 	if err := validateChannelPricingCurrency(channel.FeaturesConfig); err != nil {
 		t.Fatal(err)
 	}
-	channel.FeaturesConfig["pricing_currency"].(map[string]any)[PlatformOpenAI].(map[string]any)["cny_per_usd"] = -1.0
+	pricingCurrencies, ok := channel.FeaturesConfig["pricing_currency"].(map[string]any)
+	if !ok {
+		t.Fatal("pricing currency config has an unexpected type")
+	}
+	openAICurrency, ok := pricingCurrencies[PlatformOpenAI].(map[string]any)
+	if !ok {
+		t.Fatal("OpenAI currency config has an unexpected type")
+	}
+	openAICurrency["cny_per_usd"] = -1.0
 	if err := validateChannelPricingCurrency(channel.FeaturesConfig); err == nil {
 		t.Fatal("negative rate accepted")
 	}

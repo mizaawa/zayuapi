@@ -147,7 +147,10 @@ func TestUpstreamRateNotificationRetriesFailedSend(t *testing.T) {
 func TestUpstreamRateNotificationDisableAndRecipientChangeResetBaseline(t *testing.T) {
 	svc, repo, sender, now := newRateNotifyTestService(t, true)
 	observeRateNotify(t, svc, repo, *now, 2)
-	settingsRepo := svc.settingService.settingRepo.(*upstreamBillingProbeSettingRepo)
+	settingsRepo, ok := svc.settingService.settingRepo.(*upstreamBillingProbeSettingRepo)
+	if !ok {
+		t.Fatal("unexpected settings repository type")
+	}
 	settingsRepo.values[SettingKeyUpstreamBillingProbeSettings] = `{"enabled":true,"interval_seconds":1800,"rate_change_notify_enabled":false,"rate_change_notify_email":"notice@example.com","rate_change_notify_epoch":"epoch-2"}`
 	*now = now.Add(5 * time.Minute)
 	disabled := observeRateNotify(t, svc, repo, *now, 2)

@@ -404,7 +404,9 @@ func (s *OpenAIGatewayService) RecordUsage(ctx context.Context, input *OpenAIRec
 		usageLog.ActualCost = cost.ActualCost
 		usageLog.LongContextBillingApplied = cost.LongContextBillingApplied
 	}
-	if cost != nil && cost.BillingMode == string(BillingModeToken) && fastRateMultiplier > 0 {
+	isTokenBilling := cost != nil && (cost.BillingMode == string(BillingModeToken) ||
+		(cost.BillingMode == "" && !isVideoUsage && result.ImageCount == 0))
+	if isTokenBilling && fastRateMultiplier > 0 {
 		multiplier *= fastRateMultiplier
 	}
 	if isVideoUsage && (cost == nil || cost.BillingMode != string(BillingModeToken)) {
