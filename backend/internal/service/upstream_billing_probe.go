@@ -104,9 +104,12 @@ const (
 
 // UpstreamBillingProbeSettings controls the periodic probe runner.
 type UpstreamBillingProbeSettings struct {
-	Enabled                        bool `json:"enabled"`
-	IntervalSeconds                int  `json:"interval_seconds"`
-	NewAPIMultiplierConsensusCount int  `json:"newapi_multiplier_consensus_count"`
+	Enabled                        bool   `json:"enabled"`
+	IntervalSeconds                int    `json:"interval_seconds"`
+	NewAPIMultiplierConsensusCount int    `json:"newapi_multiplier_consensus_count"`
+	RateChangeNotifyEnabled        bool   `json:"rate_change_notify_enabled"`
+	RateChangeNotifyEmail          string `json:"rate_change_notify_email"`
+	RateChangeNotifyEpoch          string `json:"rate_change_notify_epoch,omitempty"`
 }
 
 // UpstreamBillingProbeSnapshot is persisted in accounts.extra. Data is kept as
@@ -130,7 +133,8 @@ type UpstreamBillingProbeSnapshot struct {
 	// sync and the declared value passed the write-back range check, so the
 	// stored snapshot always answers "did this probe move the account rate, and
 	// to what" without a separate history table.
-	SyncedRateMultiplier *float64 `json:"synced_rate_multiplier,omitempty"`
+	SyncedRateMultiplier *float64                  `json:"synced_rate_multiplier,omitempty"`
+	RateNotification     *UpstreamRateNotification `json:"rate_notification,omitempty"`
 }
 
 // UpstreamBillingProbeResult is returned by manual probe endpoints.
@@ -174,10 +178,13 @@ func (s *SettingService) GetUpstreamBillingProbeSettings(ctx context.Context) (*
 		return defaults, nil
 	}
 	var stored struct {
-		Enabled                        *bool `json:"enabled"`
-		IntervalSeconds                int   `json:"interval_seconds"`
-		LegacyIntervalMinutes          int   `json:"interval_minutes"`
-		NewAPIMultiplierConsensusCount int   `json:"newapi_multiplier_consensus_count"`
+		Enabled                        *bool  `json:"enabled"`
+		IntervalSeconds                int    `json:"interval_seconds"`
+		LegacyIntervalMinutes          int    `json:"interval_minutes"`
+		NewAPIMultiplierConsensusCount int    `json:"newapi_multiplier_consensus_count"`
+		RateChangeNotifyEnabled        bool   `json:"rate_change_notify_enabled"`
+		RateChangeNotifyEmail          string `json:"rate_change_notify_email"`
+		RateChangeNotifyEpoch          string `json:"rate_change_notify_epoch"`
 	}
 	if err := json.Unmarshal([]byte(value), &stored); err != nil {
 		return nil, fmt.Errorf("parse upstream billing probe settings: %w", err)
@@ -196,6 +203,9 @@ func (s *SettingService) GetUpstreamBillingProbeSettings(ctx context.Context) (*
 	if stored.NewAPIMultiplierConsensusCount > 0 {
 		settings.NewAPIMultiplierConsensusCount = stored.NewAPIMultiplierConsensusCount
 	}
+	settings.RateChangeNotifyEnabled = stored.RateChangeNotifyEnabled
+	settings.RateChangeNotifyEmail = strings.TrimSpace(stored.RateChangeNotifyEmail)
+	settings.RateChangeNotifyEpoch = strings.TrimSpace(stored.RateChangeNotifyEpoch)
 	normalizeUpstreamBillingProbeSettings(&settings)
 	return &settings, nil
 }
@@ -221,6 +231,21 @@ func (s *SettingService) SetUpstreamBillingProbeSettings(ctx context.Context, se
 		)
 	}
 	normalizeUpstreamBillingProbeSettings(settings)
+	settings.RateChangeNotifyEmail = strings.TrimSpace(settings.RateChangeNotifyEmail)
+	if settings.RateChangeNotifyEnabled {
+		if err := validateUpstreamRateNotifyEmail(settings.RateChangeNotifyEmail); err != nil {
+			return infraerrors.BadRequest("INVALID_UPSTREAM_RATE_NOTIFICATION_EMAIL", err.Error())
+		}
+	}
+	previous, err := s.GetUpstreamBillingProbeSettings(ctx)
+	if err != nil {
+		return err
+	}
+	if previous.RateChangeNotifyEpoch == "" || previous.RateChangeNotifyEnabled != settings.RateChangeNotifyEnabled || previous.RateChangeNotifyEmail != settings.RateChangeNotifyEmail {
+		settings.RateChangeNotifyEpoch = uuid.NewString()
+	} else {
+		settings.RateChangeNotifyEpoch = previous.RateChangeNotifyEpoch
+	}
 	data, err := json.Marshal(settings)
 	if err != nil {
 		return fmt.Errorf("marshal upstream billing probe settings: %w", err)

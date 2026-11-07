@@ -26,7 +26,13 @@ describe('admin account upstream billing probe API', () => {
   })
 
   it('reads and updates global settings', async () => {
-    const settings = { enabled: true, interval_minutes: 30 }
+    const settings = {
+      enabled: true,
+      interval_seconds: 1800,
+      newapi_multiplier_consensus_count: 3,
+      rate_change_notify_enabled: true,
+      rate_change_notify_email: 'notice@example.com'
+    }
     get.mockResolvedValueOnce({ data: settings })
     put.mockResolvedValueOnce({ data: settings })
 

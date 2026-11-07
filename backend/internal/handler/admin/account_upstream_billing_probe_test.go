@@ -37,6 +37,8 @@ func TestAccountHandlerGetUpstreamBillingProbeSettingsReturnsDefaults(t *testing
 	require.True(t, response.Data.Enabled)
 	require.Equal(t, 30*60, response.Data.IntervalSeconds)
 	require.Equal(t, 3, response.Data.NewAPIMultiplierConsensusCount)
+	require.False(t, response.Data.RateChangeNotifyEnabled)
+	require.Empty(t, response.Data.RateChangeNotifyEmail)
 }
 
 func TestAccountHandlerProbeUpstreamBillingBatchValidatesIDs(t *testing.T) {

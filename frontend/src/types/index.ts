@@ -1130,6 +1130,9 @@ export interface UpstreamBillingProbeSettings {
   enabled: boolean
   interval_seconds: number
   newapi_multiplier_consensus_count: number
+  rate_change_notify_enabled: boolean
+  rate_change_notify_email: string
+  rate_change_notify_epoch?: string
 }
 
 export interface UpstreamBillingProbeResult {

@@ -481,6 +481,9 @@ export default {
         intervalHint: 'Range: 5–86400 seconds. Successful results remain valid for two intervals.',
         newapiMultiplierConsensusCount: 'New API consumption log rate confirmations',
         newapiMultiplierConsensusCountHint: 'Used when token usage does not return a group rate: write only after this many consecutive logs show the same multiplier and it differs from the account rate. A valid rate returned directly by token usage is synced immediately. Range: 1–100; default: 3.',
+        rateChangeNotifyEnabled: 'Notify on upstream rate changes',
+        rateChangeNotifyHint: 'Only monitors accounts with upstream rate sync enabled. Sends one email after a declared rate stays changed for five minutes. Recovery or another change restarts the timer.',
+        rateChangeNotifyEmail: 'Notification email address',
         saved: 'Account rate sync settings saved',
         saveFailed: 'Failed to save account rate sync settings'
       },

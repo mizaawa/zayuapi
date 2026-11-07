@@ -4656,6 +4656,38 @@
                   </p>
                 </div>
 
+                <div class="border-t border-gray-100 pt-4 dark:border-dark-700">
+                  <div class="flex items-center justify-between gap-4">
+                    <div>
+                      <label class="font-medium text-gray-900 dark:text-white">
+                        {{ t("admin.settings.upstreamBillingProbe.rateChangeNotifyEnabled") }}
+                      </label>
+                      <p class="text-sm text-gray-500 dark:text-gray-400">
+                        {{ t("admin.settings.upstreamBillingProbe.rateChangeNotifyHint") }}
+                      </p>
+                    </div>
+                    <Toggle
+                      v-model="upstreamBillingProbeForm.rate_change_notify_enabled"
+                      :aria-label="t('admin.settings.upstreamBillingProbe.rateChangeNotifyEnabled')"
+                      data-testid="upstream-rate-change-notify-enabled"
+                    />
+                  </div>
+                  <div v-if="upstreamBillingProbeForm.rate_change_notify_enabled" class="mt-4">
+                    <label class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300" for="upstream-rate-change-notify-email">
+                      {{ t("admin.settings.upstreamBillingProbe.rateChangeNotifyEmail") }}
+                    </label>
+                    <input
+                      id="upstream-rate-change-notify-email"
+                      v-model.trim="upstreamBillingProbeForm.rate_change_notify_email"
+                      type="email"
+                      autocomplete="email"
+                      class="input w-full max-w-md"
+                      data-testid="upstream-rate-change-notify-email"
+                      @keydown.enter.prevent="saveUpstreamBillingProbeSettings"
+                    />
+                  </div>
+                </div>
+
                 <div
                   v-if="upstreamBillingProbeForm.enabled"
                   class="border-t border-gray-100 pt-4 dark:border-dark-700"
@@ -8694,6 +8726,8 @@ const upstreamBillingProbeForm = reactive({
   enabled: true,
   interval_seconds: 1800,
   newapi_multiplier_consensus_count: 3,
+  rate_change_notify_enabled: false,
+  rate_change_notify_email: "",
 });
 
 const ollamaCloudUsageLoading = ref(true);

@@ -283,7 +283,7 @@ func initializeApplication(buildInfo handler.BuildInfo) (*Application, error) {
 	resourceLibraryStorage := repository.ProvideResourceLibraryStorage()
 	resourceLibraryService := service.NewResourceLibraryService(settingService, imageTaskService, videoWorkbenchService, resourceLibraryRepository, resourceLibraryStorage)
 	resourceLibraryHandler := admin.NewResourceLibraryHandler(resourceLibraryService)
-	upstreamBillingProbeService := service.ProvideUpstreamBillingProbeService(accountRepository, accountTestService, settingService, leaderLockCache, db)
+	upstreamBillingProbeService := service.ProvideRateNotifyUpstreamBillingProbeService(accountRepository, accountTestService, settingService, leaderLockCache, db, emailService)
 	ollamaCloudUsageService := service.ProvideOllamaCloudUsageService(accountRepository, httpUpstream, settingService, secretEncryptor, configConfig, leaderLockCache, db)
 	adminHandlers := handler.ProvideAdminHandlers(dashboardHandler, adminUserHandler, groupHandler, accountHandler, adminAnnouncementHandler, dataManagementHandler, backupHandler, openAIOAuthHandler, grokOAuthHandler, proxyHandler, adminRedeemHandler, promoHandler, settingHandler, opsHandler, systemHandler, adminSubscriptionHandler, adminUsageHandler, userAttributeHandler, errorPassthroughHandler, tlsFingerprintProfileHandler, adminAPIKeyHandler, scheduledTestHandler, channelHandler, channelMonitorHandler, channelMonitorRequestTemplateHandler, degradationMonitorHandler, contentModerationHandler, promptAdminHandler, paymentHandler, affiliateHandler, complianceHandler, auditLogHandler, resourceLibraryHandler, upstreamBillingProbeService, ollamaCloudUsageService, settingService, secretEncryptor)
 	usageRecordWorkerPool := service.NewUsageRecordWorkerPool(configConfig)

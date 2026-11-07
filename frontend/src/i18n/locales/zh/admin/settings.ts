@@ -474,6 +474,9 @@ export default {
         intervalHint: '范围 5–86400 秒。成功探测结果的有效期为两个探测周期。',
         newapiMultiplierConsensusCount: 'New API 消费日志倍率确认次数',
         newapiMultiplierConsensusCountHint: '用量接口未提供分组倍率时，才使用消费日志：连续出现相同倍率达到此次数且与当前账号倍率不同时写回。接口直接提供有效分组倍率时直接同步。范围 1–100，默认 3。',
+        rateChangeNotifyEnabled: '启用上游倍率波动通知',
+        rateChangeNotifyHint: '仅监控已开启“同步上游倍率”的账号；上游声明倍率连续变化 5 分钟后发送一次邮件。恢复或再次变化会重新计时。',
+        rateChangeNotifyEmail: '接收通知邮箱',
         saved: '账号倍率同步设置已保存',
         saveFailed: '保存账号倍率同步设置失败'
       },

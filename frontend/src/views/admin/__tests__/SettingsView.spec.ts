@@ -59,6 +59,8 @@ const {
     enabled: true,
     interval_seconds: 1800,
     newapi_multiplier_consensus_count: 3,
+    rate_change_notify_enabled: false,
+    rate_change_notify_email: "",
   }),
   updateUpstreamBillingProbeSettings: vi.fn().mockImplementation(async (payload) => payload),
   getOllamaCloudUsageSettings: vi.fn().mockResolvedValue({
@@ -727,6 +729,8 @@ describe("admin SettingsView payment visible method controls", () => {
       enabled: true,
       interval_seconds: 1800,
       newapi_multiplier_consensus_count: 3,
+      rate_change_notify_enabled: false,
+      rate_change_notify_email: "",
     });
     updateUpstreamBillingProbeSettings.mockImplementation(async (payload) => payload);
     getOllamaCloudUsageSettings.mockResolvedValue({
@@ -2131,6 +2135,8 @@ describe("admin SettingsView payment visible method controls", () => {
       enabled: false,
       interval_seconds: 2700,
       newapi_multiplier_consensus_count: 4,
+      rate_change_notify_enabled: false,
+      rate_change_notify_email: "",
     });
 
     const wrapper = mountView();
@@ -2146,10 +2152,13 @@ describe("admin SettingsView payment visible method controls", () => {
         .checked,
     ).toBe(false);
     expect(card.find('[data-testid="upstream-billing-probe-interval"]').exists()).toBe(false);
+    expect(card.find('[data-testid="upstream-rate-change-notify-email"]').exists()).toBe(false);
 
     await card.get('[data-testid="upstream-billing-probe-enabled"]').setValue(true);
     await card.get('[data-testid="upstream-billing-probe-interval"]').setValue(60);
     await card.get('[data-testid="upstream-billing-probe-consensus-count"]').setValue(5);
+    await card.get('[data-testid="upstream-rate-change-notify-enabled"]').setValue(true);
+    await card.get('[data-testid="upstream-rate-change-notify-email"]').setValue("notice@example.com");
     await card.get('[data-testid="upstream-billing-probe-save"]').trigger("click");
     await flushPromises();
 
@@ -2157,6 +2166,8 @@ describe("admin SettingsView payment visible method controls", () => {
       enabled: true,
       interval_seconds: 60,
       newapi_multiplier_consensus_count: 5,
+      rate_change_notify_enabled: true,
+      rate_change_notify_email: "notice@example.com",
     });
     expect(showSuccess).toHaveBeenCalledWith("账号倍率同步设置已保存");
   });
