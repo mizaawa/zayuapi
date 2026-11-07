@@ -100,7 +100,7 @@ export default {
       },
       form: {
         perMillionTokenUnit: '／百万 Token',
-        officialPriceCNY: '官方参考价以人民币显示',
+        officialPriceCNY: '渠道原价以人民币显示',
         discountedPriceCNY: '折后价格以人民币输入和显示',
         cnyPerUSD: '汇率（1 USD = CNY）',
         cnyCurrencyHint: '渠道价格存储和余额扣费仍为 USD；人民币金额按此汇率换算。',

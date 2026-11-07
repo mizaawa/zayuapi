@@ -77,9 +77,8 @@ describe('ModelPlazaContent', () => {
     expect(cells[0].text()).toContain('vendor-chat-model')
     expect(cells[1].text()).toBe('$1.00')
     expect(cells[2].text()).toBe('$4.00')
-    expect(cells[4].text()).toBe('-')
-    expect(cells[5].text()).toBe('-')
-    expect(cells[7].text()).toBe('0.5x')
+    expect(cells[4].text()).toBe('modelPlaza.table.channelPriceMissing')
+    expect(cells.at(-1)!.text()).toBe('0.5x')
   })
 
   it('keeps the Custom group available when selecting its platform', async () => {

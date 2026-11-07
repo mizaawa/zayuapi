@@ -32,8 +32,8 @@
             class="border-l border-gray-100 pt-2 text-center dark:border-dark-700/60"
           >
             <div class="border-b border-gray-200 pb-2 text-gray-400 dark:border-dark-600 dark:text-dark-500">
-              {{ t('modelPlaza.table.officialPrice') }}
-              <span class="ml-1 normal-case font-normal text-gray-400 dark:text-dark-500">{{ t('modelPlaza.table.unitPerMillion') }}</span>
+              <span :title="t('modelPlaza.table.channelPriceHint')">{{ t('modelPlaza.table.officialPrice') }}</span>
+              <span v-if="models.some((model) => model.official_pricing && (!model.official_pricing.billing_mode || model.official_pricing.billing_mode === BILLING_MODE_TOKEN))" class="ml-1 normal-case font-normal text-gray-400 dark:text-dark-500">{{ t('modelPlaza.table.unitPerMillion') }}</span>
             </div>
           </th>
           <th
@@ -80,6 +80,9 @@
                 {{ billingModeLabel(m) }}
               </span>
             </div>
+            <p v-if="m.pricing_source === 'group' || m.pricing_source === 'reference'" class="mt-1 text-[10px] text-gray-400 dark:text-dark-500">
+              {{ t(m.pricing_source === 'group' ? 'modelPlaza.table.groupPriceSource' : 'modelPlaza.table.referencePriceSource') }}
+            </p>
           </td>
 
           <!-- token 计费:输入 / 输出(阶梯内联)/ 缓存(写/读) -->
@@ -171,35 +174,7 @@
             </td>
           </template>
 
-          <!-- 官方价格(LiteLLM 参考价,不乘倍率) -->
-          <td
-            class="border-l border-gray-100 px-3 py-2.5 align-middle font-mono text-xs text-gray-500 dark:border-dark-700/60 dark:text-dark-400"
-          >
-            {{ official(m, m.official_pricing?.input_price) }}
-          </td>
-          <td class="px-3 py-2.5 align-middle font-mono text-xs text-gray-500 dark:text-dark-400">
-            {{ official(m, m.official_pricing?.output_price) }}
-          </td>
-          <td class="px-3 py-2.5 align-middle">
-            <div
-              v-if="m.official_pricing && hasOfficialCache(m.official_pricing)"
-              class="space-y-0.5 font-mono text-xs text-gray-500 dark:text-dark-400"
-            >
-              <div>
-                <span class="mr-1 font-sans font-normal text-gray-400 dark:text-dark-500">{{ t('modelPlaza.table.cacheWrite') }}</span>
-                {{ official(m, m.official_pricing.cache_write_price)
-                }}<template v-if="m.official_pricing.cache_write_1h_price != null"
-                  ><span class="font-sans text-gray-400 dark:text-dark-500"> (1h </span>{{ official(m, m.official_pricing.cache_write_1h_price)
-                  }}<span class="font-sans text-gray-400 dark:text-dark-500">)</span></template
-                >
-              </div>
-              <div>
-                <span class="mr-1 font-sans font-normal text-gray-400 dark:text-dark-500">{{ t('modelPlaza.table.cacheRead') }}</span>
-                {{ official(m, m.official_pricing.cache_read_price) }}
-              </div>
-            </div>
-            <span v-else class="text-gray-400 dark:text-dark-500">-</span>
-          </td>
+          <PlazaOriginalPriceCells :pricing="m.official_pricing" :currency="displayCurrency(m, true)" />
 
           <!-- Independent media rates override group and user rates. -->
           <td
@@ -228,6 +203,8 @@ import { useI18n } from 'vue-i18n'
 import { formatScaled } from '@/utils/pricing'
 import { DEFAULT_CNY_PER_USD } from '@/utils/channelPricingCurrency'
 import PlatformIcon from '@/components/common/PlatformIcon.vue'
+import PlazaOriginalPriceCells from './PlazaOriginalPriceCells.vue'
+import { pricingTierLabel as tierLabel, tokenPricingIntervals } from './plazaPricing'
 import { platformLabel } from '@/utils/platformColors'
 import type { GroupPlatform } from '@/types'
 import {
@@ -260,8 +237,8 @@ const PER_MILLION = 1_000_000
 
 /**
  * 展示顺序:
- * 1. token 计费的排在前,按图/按次计费的沉到末尾——它们的官方 token 价与实付的按张/按次价不同量纲,混排无意义;
- * 2. 组内按官方输出价从高到低,无官方价的排最后;
+ * 1. token 计费的排在前,按图/按次计费的沉到末尾——不同计费模式的单价量纲不同;
+ * 2. 组内按渠道原价输出价从高到低,无渠道原价的排最后;
  * 3. 同价按名称降序(新版本号在前,如 gpt-5.6 先于 gpt-5.5)。
  */
 const sortedModels = computed(() => {
@@ -335,13 +312,6 @@ function paidRequestPrice(m: PlazaModel, value: number | null | undefined): stri
   return formatScaled(value * requestRate(m) * currency.rate, 1, MIN_DECIMALS, currency.symbol)
 }
 
-/** 官方参考价不乘倍率。 */
-function official(m: PlazaModel, value: number | null | undefined): string {
-  if (value == null) return '-'
-  const currency = displayCurrency(m, true)
-  return formatScaled(value * currency.rate, PER_MILLION, MIN_DECIMALS, currency.symbol)
-}
-
 /** Media units must not fall back to the per-request suffix. */
 function perUnitSuffix(m: PlazaModel): string {
   switch (billingMode(m)) {
@@ -359,28 +329,8 @@ function hasCachePricing(m: PlazaModel): boolean {
   return m.pricing?.cache_write_price != null || m.pricing?.cache_read_price != null
 }
 
-function hasOfficialCache(o: NonNullable<PlazaModel['official_pricing']>): boolean {
-  return o.cache_write_price != null || o.cache_read_price != null || o.cache_write_1h_price != null
-}
-
-/** Include the base range when the API only supplies long-context overrides. */
 function tokenIntervals(m: PlazaModel): UserPricingInterval[] {
-  const pricing = m.pricing
-  if (!pricing?.intervals?.length) return []
-  const intervals = [...pricing.intervals].sort((a, b) => a.min_tokens - b.min_tokens)
-  const firstMin = intervals[0].min_tokens
-  if (firstMin > 0) {
-    intervals.unshift({
-      min_tokens: 0,
-      max_tokens: firstMin,
-      input_price: pricing.input_price,
-      output_price: pricing.output_price,
-      cache_write_price: pricing.cache_write_price,
-      cache_read_price: pricing.cache_read_price,
-      per_request_price: null
-    })
-  }
-  return intervals
+  return tokenPricingIntervals(m.pricing)
 }
 
 /** 按次/按图模式的阶梯定价(仅保留配了按次价的档位)。 */
@@ -388,24 +338,6 @@ function requestIntervals(m: PlazaModel): UserPricingInterval[] {
   return (m.pricing?.intervals ?? []).filter((iv) => iv.per_request_price != null)
 }
 
-/** 档位标签:优先管理员配置的 tier_label,否则按 token 区间生成(≤200K / >200K / 200K–1M)。 */
-function tierLabel(iv: UserPricingInterval): string {
-  if (iv.tier_label) return iv.tier_label
-  const { min_tokens: min, max_tokens: max } = iv
-  if (max == null) return `>${formatTokenCount(min)}`
-  if (min === 0) return `≤${formatTokenCount(max)}`
-  return `${formatTokenCount(min)}–${formatTokenCount(max)}`
-}
-
-function formatTokenCount(n: number): string {
-  if (n >= 1_000_000) return `${trimZero(n / 1_000_000)}M`
-  if (n >= 1_000) return `${trimZero(n / 1_000)}K`
-  return String(n)
-}
-
-function trimZero(n: number): string {
-  return String(Math.round(n * 100) / 100)
-}
 </script>
 
 <style scoped>

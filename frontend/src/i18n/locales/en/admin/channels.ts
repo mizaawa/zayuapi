@@ -100,7 +100,7 @@ export default {
       },
       form: {
         perMillionTokenUnit: '/MTok',
-        officialPriceCNY: 'Show official reference prices in CNY',
+        officialPriceCNY: 'Show channel original prices in CNY',
         discountedPriceCNY: 'Enter and show discounted prices in CNY',
         cnyPerUSD: 'Exchange rate (1 USD = CNY)',
         cnyCurrencyHint: 'Channel prices and wallet charges remain USD; CNY amounts use this rate.',

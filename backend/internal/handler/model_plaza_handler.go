@@ -46,21 +46,16 @@ func NewModelPlazaHandler(
 	}
 }
 
-// modelPlazaOfficialPricing LiteLLM 官方参考价（USD per token）。
-type modelPlazaOfficialPricing struct {
-	InputPrice        *float64 `json:"input_price"`
-	OutputPrice       *float64 `json:"output_price"`
-	CacheWritePrice   *float64 `json:"cache_write_price"`
-	CacheWrite1hPrice *float64 `json:"cache_write_1h_price,omitempty"`
-	CacheReadPrice    *float64 `json:"cache_read_price"`
-}
+// modelPlazaOfficialPricing exposes the channel's undiscounted price card.
+type modelPlazaOfficialPricing = userSupportedModelPricing
 
-// modelPlazaModel 广场模型条目：分组/渠道定价（白名单形态）+ 官方参考价。
+// modelPlazaModel exposes effective billing prices and separate channel originals.
 type modelPlazaModel struct {
 	Name            string                         `json:"name"`
 	Platform        string                         `json:"platform"`
 	Pricing         *userSupportedModelPricing     `json:"pricing"`
 	OfficialPricing *modelPlazaOfficialPricing     `json:"official_pricing"`
+	PricingSource   string                         `json:"pricing_source"`
 	PricingCurrency service.ChannelPricingCurrency `json:"pricing_currency"`
 }
 
@@ -308,6 +303,7 @@ func toModelPlazaGroupDTO(g *service.PlazaGroup, userRates map[int64]float64) mo
 			Pricing:         toUserPricing(m.Pricing),
 			OfficialPricing: toModelPlazaOfficialPricing(m.OfficialPricing),
 			PricingCurrency: m.PricingCurrency,
+			PricingSource:   m.PricingSource,
 		})
 	}
 	dto := modelPlazaGroup{
@@ -337,16 +333,7 @@ func toModelPlazaGroupDTO(g *service.PlazaGroup, userRates map[int64]float64) mo
 	return dto
 }
 
-// toModelPlazaOfficialPricing 转换官方参考价；nil 透传（前端显示 "-"）。
+// Nil stays null; the frontend reports that no channel original is configured.
 func toModelPlazaOfficialPricing(p *service.PlazaOfficialPricing) *modelPlazaOfficialPricing {
-	if p == nil {
-		return nil
-	}
-	return &modelPlazaOfficialPricing{
-		InputPrice:        p.InputPrice,
-		OutputPrice:       p.OutputPrice,
-		CacheWritePrice:   p.CacheWritePrice,
-		CacheWrite1hPrice: p.CacheWrite1hPrice,
-		CacheReadPrice:    p.CacheReadPrice,
-	}
+	return toUserPricing(p)
 }

@@ -33,7 +33,6 @@ function tokenModel(overrides: Partial<PlazaModel> = {}): PlazaModel {
       input_price: 3e-6,
       output_price: 1.5e-5,
       cache_write_price: 3.75e-6,
-      cache_write_1h_price: 6e-6,
       cache_read_price: 3e-7
     },
     ...overrides
@@ -135,7 +134,6 @@ describe('PlazaModelPricingTable', () => {
         input_price: 1e-5,
         output_price: 7.5e-5,
         cache_write_price: null,
-        cache_write_1h_price: null,
         cache_read_price: null
       }
     })
@@ -145,7 +143,6 @@ describe('PlazaModelPricingTable', () => {
         input_price: 1e-6,
         output_price: 5e-6,
         cache_write_price: null,
-        cache_write_1h_price: null,
         cache_read_price: null
       }
     })
@@ -184,7 +181,6 @@ describe('PlazaModelPricingTable', () => {
         input_price: 5e-6,
         output_price: 1e-5,
         cache_write_price: null,
-        cache_write_1h_price: null,
         cache_read_price: 1.25e-6
       }
     })
@@ -194,7 +190,6 @@ describe('PlazaModelPricingTable', () => {
         input_price: 2.5e-6,
         output_price: 1.5e-5,
         cache_write_price: null,
-        cache_write_1h_price: null,
         cache_read_price: null
       }
     })
@@ -204,7 +199,6 @@ describe('PlazaModelPricingTable', () => {
         input_price: 1e-6,
         output_price: 6e-6,
         cache_write_price: null,
-        cache_write_1h_price: null,
         cache_read_price: null
       }
     })
@@ -226,17 +220,13 @@ describe('PlazaModelPricingTable', () => {
     expect(wrapper.findAll('tbody td')).toHaveLength(8)
   })
 
-  it('官方价包含 1h 缓存写入价;official_pricing 为 null 时官方三列显示 -', () => {
-    const withOfficial = mountTable([tokenModel()], 1)
-    expect(withOfficial.text()).toContain('$6.00')
-    expect(withOfficial.text()).toContain('(1h')
-
-    const withoutOfficial = mountTable([tokenModel({ official_pricing: null })], 1)
-    const cells = withoutOfficial.findAll('tbody td')
-    // 官方 输入/输出/缓存 三列均为 -
-    expect(cells[4].text().trim()).toBe('-')
-    expect(cells[5].text().trim()).toBe('-')
-    expect(cells[6].text().trim()).toBe('-')
+  it('渠道原价只展示渠道缓存价，缺价时明确说明', () => {
+    const withOriginal = mountTable([tokenModel()], 1)
+    expect(withOriginal.text()).toContain('$3.75')
+    expect(withOriginal.text()).not.toContain('(1h')
+    const withoutOriginal = mountTable([tokenModel({ official_pricing: null })], 1)
+    const cells = withoutOriginal.findAll('tbody td')
+    expect(cells[4].text()).toBe('modelPlaza.table.channelPriceMissing')
   })
 
   it('per_request 模型按单次价 × 倍率展示,官方价列显示 -', () => {

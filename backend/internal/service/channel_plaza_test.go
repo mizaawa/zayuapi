@@ -155,9 +155,8 @@ func TestListPlazaGroups_CustomAndOrdinaryGroupsDoNotLeakPlatforms(t *testing.T)
 		byName[group.Name] = group
 	}
 	require.Len(t, byName["anthropic-only"].Models, 1)
-	require.Equal(t, []PlazaModel{{
-		Name: "claude-sonnet", Platform: PlatformAnthropic, Pricing: byName["anthropic-only"].Models[0].Pricing,
-	}}, byName["anthropic-only"].Models)
+	require.Equal(t, "claude-sonnet", byName["anthropic-only"].Models[0].Name)
+	require.Equal(t, PlatformAnthropic, byName["anthropic-only"].Models[0].Platform)
 	require.Len(t, byName["composite"].Models, 1)
 	require.Equal(t, "vendor-model", byName["composite"].Models[0].Name)
 	require.Equal(t, PlatformCustom, byName["composite"].Models[0].Platform)
@@ -193,7 +192,7 @@ func TestListPlazaGroups_SortedByGroupSortOrder(t *testing.T) {
 	require.Equal(t, 3, out[3].SortOrder)
 }
 
-func TestListPlazaGroups_OfficialPricingFill(t *testing.T) {
+func TestListPlazaGroups_OriginalPricingIgnoresCatalog(t *testing.T) {
 	pricingSvc := newStubPricingServiceFromMap(map[string]*LiteLLMModelPricing{
 		"claude-sonnet": {
 			Mode:                                "chat",
@@ -219,16 +218,14 @@ func TestListPlazaGroups_OfficialPricingFill(t *testing.T) {
 	for _, m := range out[0].Models {
 		byName[m.Name] = m
 	}
-	// 命中:填充完整官方价(含 1h 缓存写入)
-	official := byName["claude-sonnet"].OfficialPricing
-	require.NotNil(t, official)
-	require.InDelta(t, 3e-6, *official.InputPrice, 1e-12)
-	require.InDelta(t, 6e-6, *official.CacheWrite1hPrice, 1e-12)
-	require.InDelta(t, 3e-7, *official.CacheReadPrice, 1e-12)
-	// 未命中:nil(GetModelPricing 的 claude 系列模糊匹配对非 claude 名不生效)
-	require.Nil(t, byName["unknown-model"].OfficialPricing)
-	// TokenPricingAbsent 条目不作为官方 token 价展示
-	require.Nil(t, byName["token-absent"].OfficialPricing)
+	// Every model has channel prices, regardless of external catalog coverage.
+	for _, name := range []string{"claude-sonnet", "unknown-model", "token-absent"} {
+		original := byName[name].OfficialPricing
+		require.NotNil(t, original)
+		require.InDelta(t, 3e-6, *original.InputPrice, 1e-12)
+		require.Nil(t, original.CacheReadPrice, "missing channel fields must not borrow catalog prices")
+		require.Equal(t, "channel", byName[name].PricingSource)
+	}
 }
 
 func TestListPlazaGroups_GroupImagePriceOverridesChannelPricing(t *testing.T) {
