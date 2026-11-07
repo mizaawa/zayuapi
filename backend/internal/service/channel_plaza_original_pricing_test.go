@@ -205,7 +205,7 @@ func TestListPlazaGroups_ChannelChoiceKeepsPricesAndCurrencyTogether(t *testing.
 		require.Zero(t, *model.OfficialPricing.InputPrice)
 		require.True(t, model.PricingCurrency.OfficialCNY)
 		require.False(t, model.PricingCurrency.DiscountedCNY)
-		require.Equal(t, 8.0, model.PricingCurrency.CNYPerUSD)
+		require.True(t, model.PricingCurrency.OfficialCNY)
 	}
 }
 

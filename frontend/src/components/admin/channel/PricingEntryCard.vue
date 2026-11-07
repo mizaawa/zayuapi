@@ -245,7 +245,6 @@ import IntervalRow from './IntervalRow.vue'
 import ModelTagInput from './ModelTagInput.vue'
 import type { PricingFormEntry, IntervalFormEntry } from './types'
 import { perTokenToMTok, getPlatformTagClass } from './types'
-import { displayPrice } from '@/utils/channelPricingCurrency'
 import type { PlatformPricingCurrency } from '@/utils/channelPricingCurrency'
 import type { BillingMode } from '@/api/admin/channels'
 import channelsAPI from '@/api/admin/channels'
@@ -346,12 +345,12 @@ async function onModelsUpdate(newModels: string[]) {
       emit('update', {
         ...props.entry,
         models: newModels,
-        input_price: displayPrice(perTokenToMTok(result.input_price ?? null), !!props.currency?.discounted_cny, props.currency?.cny_per_usd ?? 1),
-        output_price: displayPrice(perTokenToMTok(result.output_price ?? null), !!props.currency?.discounted_cny, props.currency?.cny_per_usd ?? 1),
-        cache_write_price: displayPrice(perTokenToMTok(result.cache_write_price ?? null), !!props.currency?.discounted_cny, props.currency?.cny_per_usd ?? 1),
-        cache_read_price: displayPrice(perTokenToMTok(result.cache_read_price ?? null), !!props.currency?.discounted_cny, props.currency?.cny_per_usd ?? 1),
-        image_input_price: displayPrice(perTokenToMTok(result.image_input_price ?? null), !!props.currency?.discounted_cny, props.currency?.cny_per_usd ?? 1),
-        image_output_price: displayPrice(perTokenToMTok(result.image_output_price ?? null), !!props.currency?.discounted_cny, props.currency?.cny_per_usd ?? 1),
+        input_price: perTokenToMTok(result.input_price ?? null),
+        output_price: perTokenToMTok(result.output_price ?? null),
+        cache_write_price: perTokenToMTok(result.cache_write_price ?? null),
+        cache_read_price: perTokenToMTok(result.cache_read_price ?? null),
+        image_input_price: perTokenToMTok(result.image_input_price ?? null),
+        image_output_price: perTokenToMTok(result.image_output_price ?? null),
       })
     }
   } catch {

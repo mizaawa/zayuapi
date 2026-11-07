@@ -756,14 +756,12 @@ import { formatDate, formatDateTime, formatReasoningEffort } from '@/utils/forma
 import { formatCacheTokens, formatMultiplier } from '@/utils/formatters'
 import { formatTokenPricePerMillion } from '@/utils/usagePricing'
 
-function billingAmount(row: { display_cny_rate?: number | null } | null, usd: number | null | undefined): string {
-  const rate = row?.display_cny_rate && row.display_cny_rate > 0 ? row.display_cny_rate : null
-  return `${rate ? '¥' : '$'}${((usd ?? 0) * (rate ?? 1)).toFixed(6)}`
+function billingAmount(row: { display_cny?: boolean } | null, usd: number | null | undefined): string {
+  return `${row?.display_cny ? '¥' : '$'}${(usd ?? 0).toFixed(6)}`
 }
 
-function billingTokenPrice(row: { display_cny_rate?: number | null }, usd: number, tokens: number): string {
-  const rate = row.display_cny_rate && row.display_cny_rate > 0 ? row.display_cny_rate : null
-  return `${rate ? '¥' : '$'}${formatTokenPricePerMillion(usd * (rate ?? 1), tokens, { withCurrencySymbol: false })}`
+function billingTokenPrice(row: { display_cny?: boolean }, usd: number, tokens: number): string {
+  return `${row.display_cny ? '¥' : '$'}${formatTokenPricePerMillion(usd, tokens, { withCurrencySymbol: false })}`
 }
 import { formatCacheHitRate, getCacheHitRate, getCacheHitRateClass } from '@/utils/cacheHitRate'
 import { getUsageServiceTierLabel } from '@/utils/usageServiceTier'

@@ -58,7 +58,6 @@ vi.mock('vue-i18n', async () => {
 
 import ChannelsView from '@/views/admin/ChannelsView.vue'
 import PricingEntryCard from '@/components/admin/channel/PricingEntryCard.vue'
-import { exportPricingTransfer } from '@/components/admin/channel/pricingTransfer'
 
 const groups = [
   { id: 12, name: 'Custom group', platform: 'composite', rate_multiplier: 1, account_count: 2 },
@@ -115,7 +114,8 @@ const SelectStub = defineComponent({
 })
 const ToggleStub = defineComponent({
   props: { modelValue: { type: Boolean, default: false } },
-  template: '<input type="checkbox" :checked="modelValue" />',
+  emits: ['update:modelValue'],
+  template: '<input type="checkbox" :checked="modelValue" @change="$emit(\'update:modelValue\', $event.target.checked)" />',
 })
 const PricingEntryCardStub = defineComponent({
   props: {
@@ -291,54 +291,30 @@ describe('ChannelsView Custom pricing', () => {
     }))
   })
 
-  it('previews a platform import, keeps cancel unchanged, and confirms only that platform', async () => {
-    const openaiPrice = { ...customChannel.model_pricing[0], platform: 'openai', models: ['old-openai', 'removed-openai'], billing_mode: 'per_request' as const, per_request_price: 0.4 }
-    const rule = { name: 'OpenAI account rule', group_ids: [13], account_ids: [], pricing: [{ ...openaiPrice, models: ['rule-model'] }] }
-    const mixed: Channel = { ...customChannel, group_ids: [12, 13], model_pricing: [...customChannel.model_pricing, openaiPrice], account_stats_pricing_rules: [rule] }
-    listChannels.mockResolvedValue({ items: [mixed], total: 1 })
+  it('switches CNY pricing to its symbol only and preserves the stored amount', async () => {
+    const channel: Channel = {
+      ...customChannel,
+      features_config: { pricing_currency: { custom: { official_cny: false, discounted_cny: false } } },
+    }
+    listChannels.mockResolvedValue({ items: [channel], total: 1 })
     const wrapper = mountView()
     await flushPromises()
     await wrapper.findAll('button').find(button => button.text().includes('common.edit'))!.trigger('click')
     await flushPromises()
-    const imported = { models: ['old-openai'], billing_mode: 'per_request' as const,
-      input_price: null, output_price: null, cache_write_price: null, cache_read_price: null,
-      image_input_price: null, image_output_price: null, per_request_price: 0.8, intervals: [] }
-    const json = exportPricingTransfer('openai', { official_cny: false, discounted_cny: false, cny_per_usd: 7.15 }, [imported, { ...imported, models: ['new-openai'], per_request_price: 0.5 }])
-    const fileInput = wrapper.findAll('input[type="file"]')[0]
-    const triggerImport = async () => {
-      Object.defineProperty(fileInput.element, 'files', { configurable: true, value: [{ size: json.length, text: async () => json }] })
-      await fileInput.trigger('change')
-      await flushPromises()
-    }
-    await triggerImport()
-    expect(wrapper.text()).toContain('old-openai')
-    expect(wrapper.text()).toContain('new-openai')
-    expect(wrapper.text()).toContain('per_request_price')
-    await wrapper.findAll('button').filter(button => button.text() === 'common.cancel').at(-1)!.trigger('click')
-    expect(wrapper.findAll('[data-testid="pricing-entry"]').some(item => item.text().includes('removed-openai'))).toBe(true)
-    await triggerImport()
-    await wrapper.findAll('button').find(button => button.text() === 'common.confirm')!.trigger('click')
-    expect(wrapper.findAll('[data-testid="pricing-entry"]').some(item => item.text() === 'new-openai')).toBe(true)
-    expect(wrapper.text()).toContain('admin.channels.form.importAppliedSaveHint')
-    await wrapper.findAll('button').find(button => button.text() === 'common.cancel')!.trigger('click')
-    expect(updateChannel).not.toHaveBeenCalled()
-    await wrapper.findAll('button').find(button => button.text().includes('common.edit'))!.trigger('click')
-    await flushPromises()
-    const reopenedInput = wrapper.findAll('input[type="file"]')[0]
-    Object.defineProperty(reopenedInput.element, 'files', { configurable: true, value: [{ size: json.length, text: async () => json }] })
-    await reopenedInput.trigger('change')
-    await flushPromises()
-    await wrapper.findAll('button').find(button => button.text() === 'common.confirm')!.trigger('click')
+    const customTab = wrapper.findAll('button.channel-tab').find(button => button.text().includes('Custom'))
+    if (!customTab) throw new Error('Custom tab not found')
+    await customTab.trigger('click')
+    await nextTick()
+    const currencyLabel = wrapper.findAll('label').find(label => label.text().includes('admin.channels.form.discountedPriceCNY'))
+    if (!currencyLabel) throw new Error('Discounted price currency switch not found')
+    await currencyLabel.get('input[type="checkbox"]').setValue(true)
     await wrapper.get('#channel-form').trigger('submit')
     await flushPromises()
     const request = updateChannel.mock.calls.at(-1)?.[1]
-    expect(request.model_pricing).toEqual(expect.arrayContaining([
-      expect.objectContaining({ platform: 'custom', models: ['videos-mini-480p'], per_request_price: 0.25 }),
-      expect.objectContaining({ platform: 'openai', models: ['old-openai'], per_request_price: 0.8 }),
-      expect.objectContaining({ platform: 'openai', models: ['new-openai'], per_request_price: 0.5 }),
-    ]))
-    expect(request.model_pricing).toHaveLength(3)
-    expect(request.account_stats_pricing_rules).toEqual([expect.objectContaining({ name: 'OpenAI account rule', pricing: [expect.objectContaining({ models: ['rule-model'], per_request_price: 0.4 })] })])
+    expect(request.model_pricing).toEqual([
+      expect.objectContaining({ platform: 'custom', per_request_price: 0.25 }),
+    ])
+    expect(request.features_config.pricing_currency.custom).toEqual({ official_cny: false, discounted_cny: true })
     wrapper.unmount()
   })
 

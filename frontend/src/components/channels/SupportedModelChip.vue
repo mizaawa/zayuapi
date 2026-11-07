@@ -170,7 +170,6 @@ import { computed, nextTick, onBeforeUnmount, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import PricingRow from './PricingRow.vue'
 import { formatScaled } from '@/utils/pricing'
-import { displayPrice } from '@/utils/channelPricingCurrency'
 import type { PlatformPricingCurrency } from '@/utils/channelPricingCurrency'
 import {
   BILLING_MODE_TOKEN,
@@ -216,7 +215,7 @@ const { t } = useI18n()
 const perMillionScale = 1_000_000
 const priceSymbol = computed(() => props.currency?.discounted_cny ? '¥' : '$')
 function displayValue(value: number | null | undefined): number | null {
-  return displayPrice(value, !!props.currency?.discounted_cny, props.currency?.cny_per_usd ?? 1)
+  return value ?? null
 }
 
 // Popover border + header classes echo the platform theme so each card reads

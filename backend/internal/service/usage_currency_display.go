@@ -8,10 +8,9 @@ import (
 	"time"
 )
 
-// displayCNYRateForLogs annotates only records whose channel configuration has
-// not changed since the record was written. Earlier/legacy rows remain USD;
-// current toggles and rates must never reinterpret historical USD amounts.
-func (s *UsageService) displayCNYRateForLogs(ctx context.Context, logs []UsageLog) {
+// displayCNYForLogs annotates the symbol for records whose channel configuration
+// has not changed since they were written. The recorded cost is never converted.
+func (s *UsageService) displayCNYForLogs(ctx context.Context, logs []UsageLog) {
 	if s.entClient == nil || len(logs) == 0 {
 		return
 	}
@@ -69,8 +68,7 @@ func (s *UsageService) displayCNYRateForLogs(ctx context.Context, logs []UsageLo
 		}
 		currency := (&Channel{FeaturesConfig: cfg.features}).PricingCurrency(platform)
 		if currency.DiscountedCNY {
-			rate := currency.CNYPerUSD
-			log.DisplayCNYRate = &rate
+			log.DisplayCNY = true
 		}
 	}
 }

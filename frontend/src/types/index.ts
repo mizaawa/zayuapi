@@ -1638,8 +1638,8 @@ export interface UsageLogAPIKeySummary {
 }
 
 export interface UsageLog {
-  /** CNY per USD for this row's display only; stored costs and wallet deductions are USD. */
-  display_cny_rate?: number | null
+  /** Display the unchanged cost amount with the CNY symbol. */
+  display_cny?: boolean
   billing_events?: Array<{
     stage: 'request_created' | 'prepaid' | 'settled' | 'refunded'
     amount: number

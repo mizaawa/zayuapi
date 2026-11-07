@@ -92,10 +92,10 @@ describe('model plaza channel original prices', () => {
 
   it('uses independent official and paid currency switches, and explains missing channel prices', () => {
     const m = model(price('token', { input_price: 2e-6 }), price('token', { input_price: 4e-6 }))
-    m.pricing_currency = { official_cny: true, discounted_cny: false, cny_per_usd: 7 }
+    m.pricing_currency = { official_cny: true, discounted_cny: false }
     const row = cells(m)
     expect(row[1].text()).toBe('$1.00')
-    expect(row[4].text()).toBe('¥28.00')
+    expect(row[4].text()).toBe('¥4.00')
 
     m.official_pricing = null
     m.pricing_source = 'reference'

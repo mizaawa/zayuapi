@@ -17,12 +17,13 @@ describe('SupportedModelChip currency display', () => {
     const wrapper = mount(SupportedModelChip, {
       props: {
         model: { name: 'media-model', platform: 'openai', pricing: { ...basePricing, billing_mode: mode } },
-        currency: { official_cny: false, discounted_cny: true, cny_per_usd: 8 },
+        currency: { official_cny: false, discounted_cny: true },
       },
       global: { stubs: { Teleport: true, PlatformIcon: true } },
     })
     await wrapper.get('[tabindex="0"]').trigger('mouseenter')
-    expect(wrapper.text()).toContain('¥2')
+    expect(wrapper.text()).toContain('¥0.25')
+    expect(wrapper.text()).not.toContain('¥2')
     expect(wrapper.text()).toContain(mode === 'image' ? 'unitPerImage' : 'unitPerSecond')
     wrapper.unmount()
   })

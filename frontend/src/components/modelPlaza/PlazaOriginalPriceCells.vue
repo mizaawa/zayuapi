@@ -49,7 +49,7 @@ import { pricingTierLabel, tokenPricingIntervals } from './plazaPricing'
 
 const props = defineProps<{
   pricing: PlazaOfficialPricing | null
-  currency: { symbol: string; rate: number }
+  currency: { symbol: string }
 }>()
 const { t } = useI18n()
 const tokenFields = ['input_price', 'output_price'] as const
@@ -64,7 +64,7 @@ const hasCache = computed(() => cacheRows.value.some((row) => row.cache_write_pr
 const unit = computed(() => t(`modelPlaza.table.${mode.value === 'image' ? 'perUnitImage' : mode.value === 'video' ? 'perUnitSecond' : 'perUnitRequest'}`))
 
 function amount(value: number | null | undefined, scale: number): string {
-  return value == null ? '-' : formatScaled(value * props.currency.rate, scale, 2, props.currency.symbol)
+  return value == null ? '-' : formatScaled(value, scale, 2, props.currency.symbol)
 }
 
 function imageTokenPrice(field: typeof tokenFields[number]): number | null | undefined {

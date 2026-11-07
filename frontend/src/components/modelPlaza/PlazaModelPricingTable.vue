@@ -201,7 +201,6 @@
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { formatScaled } from '@/utils/pricing'
-import { DEFAULT_CNY_PER_USD } from '@/utils/channelPricingCurrency'
 import PlatformIcon from '@/components/common/PlatformIcon.vue'
 import PlazaOriginalPriceCells from './PlazaOriginalPriceCells.vue'
 import { pricingTierLabel as tierLabel, tokenPricingIntervals } from './plazaPricing'
@@ -275,17 +274,17 @@ function billingModeLabel(m: PlazaModel): string {
 /** 价格统一保底 2 位小数,更长的有效小数原样保留。 */
 const MIN_DECIMALS = 2
 
-function displayCurrency(m: PlazaModel, officialPrice: boolean): { symbol: string; rate: number } {
+function displayCurrency(m: PlazaModel, officialPrice: boolean): { symbol: string } {
   const settings = m.pricing_currency
   const cny = officialPrice ? settings?.official_cny : settings?.discounted_cny
-  return { symbol: cny ? '¥' : '$', rate: cny ? (settings?.cny_per_usd || DEFAULT_CNY_PER_USD) : 1 }
+  return { symbol: cny ? '¥' : '$' }
 }
 
-/** Persisted USD prices are converted only at the display boundary. */
+/** Price numbers and rate multipliers stay unchanged; only the symbol follows channel settings. */
 function paidPerMillion(m: PlazaModel, value: number | null | undefined): string {
   if (value == null) return '-'
   const currency = displayCurrency(m, false)
-  return formatScaled(value * effectiveRate.value * currency.rate, PER_MILLION, MIN_DECIMALS, currency.symbol)
+  return formatScaled(value * effectiveRate.value, PER_MILLION, MIN_DECIMALS, currency.symbol)
 }
 
 /** Media rates use the same independent multiplier as billing. */
@@ -309,7 +308,7 @@ function requestRate(m: PlazaModel): number {
 function paidRequestPrice(m: PlazaModel, value: number | null | undefined): string {
   if (value == null) return '-'
   const currency = displayCurrency(m, false)
-  return formatScaled(value * requestRate(m) * currency.rate, 1, MIN_DECIMALS, currency.symbol)
+  return formatScaled(value * requestRate(m), 1, MIN_DECIMALS, currency.symbol)
 }
 
 /** Media units must not fall back to the per-request suffix. */

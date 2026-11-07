@@ -60,8 +60,7 @@ defineProps<{
 }>()
 const { t } = useI18n()
 const formatCost = (log: UsageLog, usd: number) => {
-  const rate = log.display_cny_rate && log.display_cny_rate > 0 ? log.display_cny_rate : null
-  return `${rate ? '¥' : '$'}${(usd * (rate ?? 1)).toFixed(4)}`
+  return `${log.display_cny ? '¥' : '$'}${usd.toFixed(4)}`
 }
 </script>
 

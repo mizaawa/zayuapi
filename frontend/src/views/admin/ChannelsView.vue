@@ -419,19 +419,14 @@
 
             <!-- Model Pricing -->
             <div>
-              <div class="mb-3 grid gap-2 rounded-lg border border-gray-200 p-3 text-xs dark:border-dark-600 sm:grid-cols-2">
-                <label class="flex items-center gap-2">
-                  <input type="checkbox" :checked="section.pricing_currency.official_cny" @change="section.pricing_currency.official_cny = ($event.target as HTMLInputElement).checked" />
+              <div class="mb-3 flex flex-wrap gap-x-6 gap-y-3 rounded-lg border border-gray-200 p-3 text-xs dark:border-dark-600">
+                <label class="flex items-center gap-3 text-gray-700 dark:text-gray-300">
+                  <Toggle v-model="section.pricing_currency.official_cny" />
                   {{ t('admin.channels.form.officialPriceCNY') }}
                 </label>
-                <label class="flex items-center gap-2">
-                  <input type="checkbox" :checked="section.pricing_currency.discounted_cny" @change="toggleDiscountedCNY(sIdx, ($event.target as HTMLInputElement).checked)" />
+                <label class="flex items-center gap-3 text-gray-700 dark:text-gray-300">
+                  <Toggle v-model="section.pricing_currency.discounted_cny" />
                   {{ t('admin.channels.form.discountedPriceCNY') }}
-                </label>
-                <label v-if="section.pricing_currency.official_cny || section.pricing_currency.discounted_cny" class="flex items-center gap-2 sm:col-span-2">
-                  {{ t('admin.channels.form.cnyPerUSD') }}
-                  <input v-model.number="section.pricing_currency.cny_per_usd" type="number" step="any" min="0.000001" class="input w-28 text-xs" />
-                  <span class="text-gray-400">{{ t('admin.channels.form.cnyCurrencyHint') }}</span>
                 </label>
               </div>
               <div class="mb-1.5 flex flex-wrap items-center justify-between gap-2">
@@ -440,11 +435,6 @@
                   <button type="button" @click="addPricingEntry(sIdx)" class="btn btn-secondary btn-sm shrink-0 gap-1 whitespace-nowrap">
                     <Icon name="plus" size="xs" :stroke-width="2" />{{ t('common.add', 'Add') }}
                   </button>
-                  <button type="button" @click="exportPricingJson(sIdx)" class="btn btn-ghost btn-sm">{{ t('admin.channels.form.exportPricingJson') }}</button>
-                  <label class="btn btn-ghost btn-sm cursor-pointer">
-                    {{ t('admin.channels.form.importPricingJson') }}
-                    <input type="file" accept=".json,application/json" class="sr-only" @change="importPricingJson(sIdx, $event)" />
-                  </label>
                   <button
                     v-if="section.platform !== 'custom'"
                     type="button"
@@ -613,7 +603,6 @@
 
       <template #footer>
         <div class="flex flex-wrap items-center justify-end gap-3">
-          <span v-if="pricingImportApplied" class="mr-auto text-xs text-amber-600 dark:text-amber-400">{{ t('admin.channels.form.importAppliedSaveHint') }}</span>
           <button @click="closeDialog" type="button" class="btn btn-secondary">
             {{ t('common.cancel', 'Cancel') }}
           </button>
@@ -631,27 +620,6 @@
             }}
           </button>
         </div>
-      </template>
-    </BaseDialog>
-
-    <BaseDialog :show="!!pendingPricingImport" :z-index="70" width="wide" :title="t('admin.channels.form.importPreviewTitle')" @close="pendingPricingImport = null">
-      <div v-if="pendingPricingImport" class="max-h-[60vh] space-y-3 overflow-y-auto text-sm">
-        <p class="text-gray-600 dark:text-gray-300">{{ pendingPricingImport.platform }} · {{ t('admin.channels.form.importPreviewHint') }}</p>
-        <p v-if="pendingPricingImport.currencyChanged" class="rounded bg-amber-50 p-2 text-amber-800 dark:bg-amber-900/20 dark:text-amber-300">
-          {{ t('admin.channels.form.currencyChange') }}: {{ JSON.stringify(pendingPricingImport.currencyBefore) }} → {{ JSON.stringify(pendingPricingImport.data.currency) }}
-        </p>
-        <div><strong>{{ t('admin.channels.form.addedModels') }} ({{ pendingPricingImport.preview.added.length }})</strong><p class="break-all">{{ pendingPricingImport.preview.added.join(', ') || '-' }}</p></div>
-        <div><strong>{{ t('admin.channels.form.removedModels') }} ({{ pendingPricingImport.preview.removed.length }})</strong><p class="break-all">{{ pendingPricingImport.preview.removed.join(', ') || '-' }}</p></div>
-        <div><strong>{{ t('admin.channels.form.changedPrices') }} ({{ pendingPricingImport.preview.changed.length }})</strong>
-          <div v-for="change in pendingPricingImport.preview.changed" :key="change.model" class="mt-2 rounded border p-2 dark:border-dark-600">
-            <strong>{{ change.model }}</strong>
-            <div v-for="field in change.fields" :key="field.field" class="break-all text-xs">{{ field.field }}: {{ field.before ?? 'null' }} → {{ field.after ?? 'null' }}</div>
-          </div>
-        </div>
-      </div>
-      <template #footer>
-        <button type="button" class="btn btn-secondary" @click="pendingPricingImport = null">{{ t('common.cancel') }}</button>
-        <button type="button" class="btn btn-primary" @click="confirmPricingImport">{{ t('common.confirm') }}</button>
       </template>
     </BaseDialog>
 
@@ -678,9 +646,7 @@ import { adminAPI } from '@/api/admin'
 import type { Channel, ChannelModelPricing, CreateChannelRequest, UpdateChannelRequest, AccountStatsPricingRule } from '@/api/admin/channels'
 import type { PricingFormEntry } from '@/components/admin/channel/types'
 import { mTokToPerToken, perTokenToMTok, apiIntervalsToForm, formIntervalsToAPI, findModelConflict, validateIntervals } from '@/components/admin/channel/types'
-import { exportPricingTransfer, parsePricingTransfer, previewPricingTransfer } from '@/components/admin/channel/pricingTransfer'
-import type { PricingTransfer, PricingPreview } from '@/components/admin/channel/pricingTransfer'
-import { displayPrice, pricingCurrencyFromConfig, usdPrice, DEFAULT_CNY_PER_USD } from '@/utils/channelPricingCurrency'
+import { pricingCurrencyFromConfig } from '@/utils/channelPricingCurrency'
 import type { PlatformPricingCurrency } from '@/utils/channelPricingCurrency'
 import type { AdminGroup, GroupPlatform } from '@/types'
 import type { Column } from '@/components/common/types'
@@ -842,7 +808,7 @@ function addPlatformSection(platform: ChannelPricingPlatform) {
     group_ids: [],
     model_mapping: {},
     model_pricing: [],
-    pricing_currency: { official_cny: false, discounted_cny: false, cny_per_usd: DEFAULT_CNY_PER_USD },
+    pricing_currency: { official_cny: false, discounted_cny: false },
     web_search_emulation: false,
     codex_image_generation_bridge: false,
     bedrock_cc_compat: false,
@@ -918,126 +884,30 @@ function toggleGroupInSection(sectionIdx: number, groupId: number) {
 const pricingFields = ['input_price', 'output_price', 'cache_write_price', 'cache_read_price', 'image_input_price', 'image_output_price', 'per_request_price'] as const
 const intervalPriceFields = ['input_price', 'output_price', 'cache_write_price', 'cache_read_price', 'per_request_price'] as const
 
-function toggleDiscountedCNY(sectionIdx: number, enabled: boolean) {
-  const section = form.platforms[sectionIdx]
-  const old = section.pricing_currency.discounted_cny
-  if (old === enabled) return
-  const rate = section.pricing_currency.cny_per_usd
-  if (!Number.isFinite(rate) || rate <= 0) {
-    appStore.showError(t('admin.channels.form.invalidCnyRate'))
-    return
-  }
-  for (const entry of [...section.model_pricing, ...section.account_stats_pricing_rules.flatMap(rule => rule.pricing)]) {
-    for (const field of pricingFields) entry[field] = displayPrice(usdPrice(entry[field], old, rate), enabled, rate)
-    for (const interval of entry.intervals) {
-      for (const field of intervalPriceFields) interval[field] = displayPrice(usdPrice(interval[field], old, rate), enabled, rate)
-    }
-  }
-  section.pricing_currency.discounted_cny = enabled
+function toAPIPrice(value: number | string | null, token: boolean): number | null {
+  if (value === null || value === '') return null
+  const amount = Number(value)
+  if (!Number.isFinite(amount) || amount < 0) return null
+  return token ? mTokToPerToken(amount) : amount
 }
 
-function rebaseEntryCurrency(entry: PricingFormEntry, from: PlatformPricingCurrency, to: PlatformPricingCurrency): PricingFormEntry {
-  const copy: PricingFormEntry = { ...entry, intervals: entry.intervals.map(iv => ({ ...iv })) }
-  for (const field of pricingFields) copy[field] = displayPrice(usdPrice(copy[field], from.discounted_cny, from.cny_per_usd), to.discounted_cny, to.cny_per_usd)
-  for (const interval of copy.intervals) {
-    for (const field of intervalPriceFields) interval[field] = displayPrice(usdPrice(interval[field], from.discounted_cny, from.cny_per_usd), to.discounted_cny, to.cny_per_usd)
-  }
-  return copy
+function fromAPIPrice(value: number | null, token: boolean): number | null {
+  return token ? perTokenToMTok(value) : value
 }
 
-function toAPIPrice(value: number | string | null, currency: PlatformPricingCurrency, token: boolean): number | null {
-  const usd = usdPrice(value, currency.discounted_cny, currency.cny_per_usd)
-  return token ? mTokToPerToken(usd) : usd
-}
-
-function fromAPIPrice(value: number | null, currency: PlatformPricingCurrency, token: boolean): number | null {
-  return displayPrice(token ? perTokenToMTok(value) : value, currency.discounted_cny, currency.cny_per_usd)
-}
-
-function toAPIIntervals(intervals: PricingFormEntry['intervals'], currency: PlatformPricingCurrency) {
+function toAPIIntervals(intervals: PricingFormEntry['intervals']) {
   return formIntervalsToAPI(intervals).map((iv, index) => ({
     ...iv,
-    input_price: toAPIPrice(intervals[index].input_price, currency, true),
-    output_price: toAPIPrice(intervals[index].output_price, currency, true),
-    cache_write_price: toAPIPrice(intervals[index].cache_write_price, currency, true),
-    cache_read_price: toAPIPrice(intervals[index].cache_read_price, currency, true),
-    per_request_price: toAPIPrice(intervals[index].per_request_price, currency, false),
+    input_price: toAPIPrice(intervals[index].input_price, true),
+    output_price: toAPIPrice(intervals[index].output_price, true),
+    cache_write_price: toAPIPrice(intervals[index].cache_write_price, true),
+    cache_read_price: toAPIPrice(intervals[index].cache_read_price, true),
+    per_request_price: toAPIPrice(intervals[index].per_request_price, false),
   }))
 }
 
-function fromAPIIntervals(intervals: ChannelModelPricing['intervals'], currency: PlatformPricingCurrency) {
-  return apiIntervalsToForm(intervals).map(iv => ({
-    ...iv,
-    input_price: displayPrice(iv.input_price as number | null, currency.discounted_cny, currency.cny_per_usd),
-    output_price: displayPrice(iv.output_price as number | null, currency.discounted_cny, currency.cny_per_usd),
-    cache_write_price: displayPrice(iv.cache_write_price as number | null, currency.discounted_cny, currency.cny_per_usd),
-    cache_read_price: displayPrice(iv.cache_read_price as number | null, currency.discounted_cny, currency.cny_per_usd),
-    per_request_price: displayPrice(iv.per_request_price as number | null, currency.discounted_cny, currency.cny_per_usd),
-  }))
-}
-
-const pendingPricingImport = ref<{ platform: ChannelPricingPlatform; data: PricingTransfer; preview: PricingPreview; currencyBefore: PlatformPricingCurrency; currencyChanged: boolean } | null>(null)
-const pricingImportApplied = ref(false)
-
-function exportPricingJson(sectionIdx: number) {
-  const section = form.platforms[sectionIdx]
-  try {
-    const contents = exportPricingTransfer(section.platform, section.pricing_currency, section.model_pricing)
-    const href = URL.createObjectURL(new Blob([contents], { type: 'application/json;charset=utf-8' }))
-    const link = document.createElement('a')
-    link.href = href
-    link.download = `channel-${editingChannel.value?.id ?? 'new'}-${section.platform}-pricing.json`
-    link.click()
-    setTimeout(() => URL.revokeObjectURL(href), 0)
-  } catch (error) {
-    appStore.showError(`${t('admin.channels.form.exportPricingJson')}: ${(error as Error).message}`)
-  }
-}
-
-async function importPricingJson(sectionIdx: number, event: Event) {
-  const input = event.target as HTMLInputElement
-  const file = input.files?.[0]
-  input.value = ''
-  if (!file) return
-  const section = form.platforms[sectionIdx]
-  try {
-    if (file.size > 2_000_000) throw new Error('File exceeds 2 MB')
-    const data = parsePricingTransfer(await file.text(), section.platform)
-    if (form.platforms[sectionIdx] !== section) return
-    const comparableBefore = section.model_pricing.map(entry => rebaseEntryCurrency(entry, section.pricing_currency, data.currency))
-    const preview = previewPricingTransfer(comparableBefore, data.entries)
-    pendingPricingImport.value = {
-      platform: section.platform, data, preview,
-      currencyBefore: { ...section.pricing_currency },
-      currencyChanged: JSON.stringify(section.pricing_currency) !== JSON.stringify(data.currency),
-    }
-  } catch (error) {
-    appStore.showError(`${t('admin.channels.form.importPricingJson')}: ${(error as Error).message}`)
-  }
-}
-
-function confirmPricingImport() {
-  const pending = pendingPricingImport.value
-  if (!pending) return
-  const section = form.platforms.find(item => item.platform === pending.platform && item.enabled)
-  if (!section) { pendingPricingImport.value = null; return }
-  // Account-stat rules are outside the imported channel price list. Keep their
-  // underlying USD amounts stable when the imported currency switches differ.
-  for (const entry of section.account_stats_pricing_rules.flatMap(rule => rule.pricing)) {
-    for (const field of pricingFields) entry[field] = displayPrice(
-      usdPrice(entry[field], section.pricing_currency.discounted_cny, section.pricing_currency.cny_per_usd),
-      pending.data.currency.discounted_cny, pending.data.currency.cny_per_usd)
-    for (const interval of entry.intervals) {
-      for (const field of intervalPriceFields) interval[field] = displayPrice(
-        usdPrice(interval[field], section.pricing_currency.discounted_cny, section.pricing_currency.cny_per_usd),
-        pending.data.currency.discounted_cny, pending.data.currency.cny_per_usd)
-    }
-  }
-  section.model_pricing = pending.data.entries.map(entry => ({ ...entry, key: nextPricingEntryKey++ }))
-  section.pricing_currency = { ...pending.data.currency }
-  pendingPricingImport.value = null
-  pricingImportApplied.value = true
-  appStore.showSuccess(t('admin.channels.form.importAppliedSaveHint'))
+function fromAPIIntervals(intervals: ChannelModelPricing['intervals']) {
+  return apiIntervalsToForm(intervals)
 }
 
 function addPricingEntry(sectionIdx: number) {
@@ -1252,7 +1122,6 @@ function accountStatsRulesToAPI(): AccountStatsPricingRule[] {
   const rules: AccountStatsPricingRule[] = [...retainedRetiredPlatformConfig().account_stats_pricing_rules]
   for (const section of form.platforms) {
     if (!section.enabled) continue
-    const currency = section.pricing_currency
     for (const rule of section.account_stats_pricing_rules) {
       rules.push({
         name: rule.name,
@@ -1264,14 +1133,14 @@ function accountStatsRulesToAPI(): AccountStatsPricingRule[] {
             platform: section.platform,
             models: p.models,
             billing_mode: p.billing_mode,
-            input_price: toAPIPrice(p.input_price, currency, true),
-            output_price: toAPIPrice(p.output_price, currency, true),
-            cache_write_price: toAPIPrice(p.cache_write_price, currency, true),
-            cache_read_price: toAPIPrice(p.cache_read_price, currency, true),
-            image_input_price: toAPIPrice(p.image_input_price, currency, true),
-            image_output_price: toAPIPrice(p.image_output_price, currency, true),
-            per_request_price: toAPIPrice(p.per_request_price, currency, false),
-            intervals: toAPIIntervals(p.intervals || [], currency)
+            input_price: toAPIPrice(p.input_price, true),
+            output_price: toAPIPrice(p.output_price, true),
+            cache_write_price: toAPIPrice(p.cache_write_price, true),
+            cache_read_price: toAPIPrice(p.cache_read_price, true),
+            image_input_price: toAPIPrice(p.image_input_price, true),
+            image_output_price: toAPIPrice(p.image_output_price, true),
+            per_request_price: toAPIPrice(p.per_request_price, false),
+            intervals: toAPIIntervals(p.intervals || [])
           }))
       })
     }
@@ -1307,14 +1176,14 @@ function formToAPI(): { group_ids: number[], model_pricing: ChannelModelPricing[
         platform: section.platform,
         models: entry.models,
         billing_mode: entry.billing_mode,
-        input_price: toAPIPrice(entry.input_price, section.pricing_currency, true),
-        output_price: toAPIPrice(entry.output_price, section.pricing_currency, true),
-        cache_write_price: toAPIPrice(entry.cache_write_price, section.pricing_currency, true),
-        cache_read_price: toAPIPrice(entry.cache_read_price, section.pricing_currency, true),
-        image_input_price: toAPIPrice(entry.image_input_price, section.pricing_currency, true),
-        image_output_price: toAPIPrice(entry.image_output_price, section.pricing_currency, true),
-        per_request_price: toAPIPrice(entry.per_request_price, section.pricing_currency, false),
-        intervals: toAPIIntervals(entry.intervals || [], section.pricing_currency)
+        input_price: toAPIPrice(entry.input_price, true),
+        output_price: toAPIPrice(entry.output_price, true),
+        cache_write_price: toAPIPrice(entry.cache_write_price, true),
+        cache_read_price: toAPIPrice(entry.cache_read_price, true),
+        image_input_price: toAPIPrice(entry.image_input_price, true),
+        image_output_price: toAPIPrice(entry.image_output_price, true),
+        per_request_price: toAPIPrice(entry.per_request_price, false),
+        intervals: toAPIIntervals(entry.intervals || [])
       })
     }
   }
@@ -1441,14 +1310,14 @@ function apiToForm(channel: Channel): PlatformSection[] {
         key: nextPricingEntryKey++,
         models: p.models || [],
         billing_mode: p.billing_mode,
-        input_price: fromAPIPrice(p.input_price, currency, true),
-        output_price: fromAPIPrice(p.output_price, currency, true),
-        cache_write_price: fromAPIPrice(p.cache_write_price, currency, true),
-        cache_read_price: fromAPIPrice(p.cache_read_price, currency, true),
-        image_input_price: fromAPIPrice(p.image_input_price, currency, true),
-        image_output_price: fromAPIPrice(p.image_output_price, currency, true),
-        per_request_price: fromAPIPrice(p.per_request_price, currency, false),
-        intervals: fromAPIIntervals(p.intervals || [], currency)
+        input_price: fromAPIPrice(p.input_price, true),
+        output_price: fromAPIPrice(p.output_price, true),
+        cache_write_price: fromAPIPrice(p.cache_write_price, true),
+        cache_read_price: fromAPIPrice(p.cache_read_price, true),
+        image_input_price: fromAPIPrice(p.image_input_price, true),
+        image_output_price: fromAPIPrice(p.image_output_price, true),
+        per_request_price: fromAPIPrice(p.per_request_price, false),
+        intervals: fromAPIIntervals(p.intervals || [])
       } as ModelPricingFormEntry))
 
     // Read web_search_emulation from features_config
@@ -1563,8 +1432,6 @@ function resetForm() {
   form.restrict_models = false
   form.billing_model_source = 'channel_mapped'
   form.platforms = []
-  pendingPricingImport.value = null
-  pricingImportApplied.value = false
   form.apply_pricing_to_account_stats = false
   activeTab.value = 'basic'
   ruleAccountSearchRunner.clearAll()
@@ -1626,7 +1493,6 @@ function distributeRulesToPlatforms(apiRules: AccountStatsPricingRule[]) {
 
     const section = form.platforms.find(s => s.platform === targetPlatform)
     if (!section) continue
-    const currency = section.pricing_currency
 
     const formRule: FormPricingRule = {
       name: apiRule.name || '',
@@ -1635,14 +1501,14 @@ function distributeRulesToPlatforms(apiRules: AccountStatsPricingRule[]) {
       pricing: (apiRule.pricing || []).map(p => ({
         models: [...(p.models || [])],
         billing_mode: p.billing_mode,
-        input_price: fromAPIPrice(p.input_price, currency, true),
-        output_price: fromAPIPrice(p.output_price, currency, true),
-        cache_write_price: fromAPIPrice(p.cache_write_price, currency, true),
-        cache_read_price: fromAPIPrice(p.cache_read_price, currency, true),
-        image_input_price: fromAPIPrice(p.image_input_price, currency, true),
-        image_output_price: fromAPIPrice(p.image_output_price, currency, true),
-        per_request_price: fromAPIPrice(p.per_request_price, currency, false),
-        intervals: fromAPIIntervals(p.intervals || [], currency)
+        input_price: fromAPIPrice(p.input_price, true),
+        output_price: fromAPIPrice(p.output_price, true),
+        cache_write_price: fromAPIPrice(p.cache_write_price, true),
+        cache_read_price: fromAPIPrice(p.cache_read_price, true),
+        image_input_price: fromAPIPrice(p.image_input_price, true),
+        image_output_price: fromAPIPrice(p.image_output_price, true),
+        per_request_price: fromAPIPrice(p.per_request_price, false),
+        intervals: fromAPIIntervals(p.intervals || [])
       } as PricingFormEntry))
     }
     section.account_stats_pricing_rules.push(formRule)
@@ -1676,8 +1542,6 @@ async function populateRuleAccountNameCache() {
 }
 
 function closeDialog() {
-  if (pricingImportApplied.value) appStore.showWarning(t('admin.channels.form.importDiscarded'))
-  pendingPricingImport.value = null
   showDialog.value = false
   editingChannel.value = null
   resetForm()
@@ -1691,12 +1555,6 @@ async function handleSubmit() {
   }
 
   for (const section of form.platforms.filter(s => s.enabled)) {
-    const rate = section.pricing_currency.cny_per_usd
-    if (!Number.isFinite(rate) || rate <= 0 || rate > 1e6) {
-      appStore.showError(`${section.platform}: ${t('admin.channels.form.invalidCnyRate')}`)
-      activeTab.value = section.platform
-      return
-    }
     for (const entry of [...section.model_pricing, ...section.account_stats_pricing_rules.flatMap(rule => rule.pricing)]) {
       const values = [...pricingFields.map(field => [field, entry[field]] as const),
         ...entry.intervals.flatMap((iv, index) => intervalPriceFields.map(field => [`intervals[${index}].${field}`, iv[field]] as const))]
@@ -1828,7 +1686,6 @@ async function handleSubmit() {
       await adminAPI.channels.create(req)
       appStore.showSuccess(t('admin.channels.createSuccess', 'Channel created'))
     }
-    pricingImportApplied.value = false
     closeDialog()
     loadChannels()
   } catch (error: unknown) {
