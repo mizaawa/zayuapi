@@ -138,6 +138,66 @@ describe('UpstreamBillingRateCell', () => {
     wrapper.unmount()
   })
 
+  it('distinguishes a New API zero declaration from a missing declaration and keeps it unsynced', async () => {
+    const account = makeAccount({
+      rate_multiplier: 0.5,
+      extra: {
+        upstream_billing_probe_enabled: true,
+        upstream_billing_rate_sync_enabled: true,
+        upstream_billing_probe: {
+          status: 'ok', protocol: 'newapi',
+          data: { source: 'token_usage', group: 'standard', resolved_rate_multiplier: 0 },
+          observed_multiplier: 0,
+          received_at: '2026-07-13T00:00:00Z',
+          fresh_until: '2026-07-13T01:00:00Z',
+          last_attempt_at: '2026-07-13T00:00:00Z',
+          next_probe_at: '2026-07-13T00:30:00Z'
+        }
+      }
+    })
+    const wrapper = mount(UpstreamBillingRateCell, { props: { account, now: Date.now() } })
+    expect(wrapper.get('[data-testid="upstream-billing-rate"]').text()).toBe('0.0x')
+    expect(wrapper.text()).toContain('admin.accounts.upstreamBilling.notSynced')
+
+    await wrapper.setProps({ account: makeAccount({
+      extra: {
+        upstream_billing_probe_enabled: true,
+        upstream_billing_rate_sync_enabled: true,
+        upstream_billing_probe: {
+          status: 'waiting_logs', protocol: 'newapi',
+          last_attempt_at: '2026-07-13T00:00:00Z',
+          next_probe_at: '2026-07-13T00:30:00Z'
+        }
+      }
+    }) })
+    expect(wrapper.get('[data-testid="upstream-billing-rate"]').text()).toBe('admin.accounts.upstreamBilling.noDeclaration')
+    expect(wrapper.text()).not.toContain('0.0x')
+    wrapper.unmount()
+  })
+
+  it('shows an unsynced New API rate and reads an observed-only snapshot', async () => {
+    const snapshot = {
+      status: 'ok' as const, protocol: 'newapi' as const,
+      observed_multiplier: 0.75,
+      observed_multiplier_at: '2026-07-13T00:00:00Z',
+      fresh_until: '2026-07-13T01:00:00Z',
+      last_attempt_at: '2026-07-13T00:00:00Z',
+      next_probe_at: '2026-07-13T00:30:00Z'
+    }
+    const wrapper = mount(UpstreamBillingRateCell, {
+      props: { account: makeAccount({ rate_multiplier: 0.5, extra: { upstream_billing_probe: snapshot } }), now: Date.now() }
+    })
+    expect(wrapper.get('[data-testid="upstream-billing-rate"]').text()).toBe('0.75x')
+    expect(wrapper.text()).toContain('admin.accounts.upstreamBilling.notSynced')
+
+    await wrapper.setProps({ account: makeAccount({
+      rate_multiplier: 0.75,
+      extra: { upstream_billing_rate_sync_enabled: true, upstream_billing_probe: snapshot }
+    }) })
+    expect(wrapper.text()).not.toContain('admin.accounts.upstreamBilling.notSynced')
+    wrapper.unmount()
+  })
+
   it('uses retained failed data only while it is still fresh', async () => {
     const account = makeAccount({
       extra: {

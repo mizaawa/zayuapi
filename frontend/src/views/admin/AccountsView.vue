@@ -515,6 +515,18 @@
                     {{ t('admin.accounts.card.userCost', { cost: cardTodayValue(row, 'user_cost') }) }}
                   </dd>
                 </div>
+                <div v-if="row.type === 'apikey'" class="account-card-metric" data-testid="account-card-upstream-billing-rate">
+                  <dt>{{ t('admin.accounts.columns.upstreamBillingRate') }}</dt>
+                  <dd>
+                    <UpstreamBillingRateCell
+                      :account="row"
+                      :global-probe-enabled="upstreamBillingProbeGloballyEnabled"
+                      :now="upstreamBillingNow"
+                      :probing="probingUpstreamBilling.has(row.id)"
+                      @probe="handleProbeUpstreamBilling(row)"
+                    />
+                  </dd>
+                </div>
               </dl>
 
               <AccountCapacityCell

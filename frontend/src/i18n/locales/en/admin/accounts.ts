@@ -266,6 +266,8 @@ export default {
         stale: 'Stale',
         unsupported: 'Unsupported',
         waitingLogs: 'Waiting for consumption logs',
+        noDeclaration: 'No declared rate',
+        notSynced: 'Not synced',
         waitingConsensus: 'Waiting for rate confirmation',
         failed: 'Failed',
         notProbed: 'Not probed',

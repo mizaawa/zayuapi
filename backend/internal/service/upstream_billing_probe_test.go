@@ -389,6 +389,45 @@ func TestUpstreamBillingProbeDetectsNewAPITokenUsageGroupRateAndSyncs(t *testing
 	require.Equal(t, "Bearer sk-test", upstream.requests[1].Header.Get("Authorization"))
 }
 
+func TestUpstreamBillingProbeRetainsUnsyncableNewAPIUsageDeclarations(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		rate float64
+	}{
+		{name: "zero", rate: 0},
+		{name: "above automatic sync limit", rate: 150},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			initialRate := 0.25
+			account := &Account{
+				ID: 73, Platform: PlatformOpenAI, Type: AccountTypeAPIKey,
+				Status: StatusActive, Concurrency: 1,
+				Credentials: map[string]any{"api_key": "sk-test", "base_url": "https://upstream.example"},
+				Extra: map[string]any{
+					"provider_binding":                     map[string]any{"site_type": "newapi"},
+					UpstreamBillingProbeEnabledExtraKey:    true,
+					UpstreamBillingRateSyncEnabledExtraKey: true,
+				},
+				RateMultiplier: &initialRate,
+			}
+			repo := &upstreamBillingProbeAccountRepo{accounts: map[int64]*Account{account.ID: account}}
+			body := fmt.Sprintf(`{"code":true,"data":{"object":"token_usage","name":"test-key","total_used":10,"total_available":90,"group":"standard","group_ratio":%g}}`, tc.rate)
+			upstream := &httpUpstreamRecorder{responses: []*http.Response{{StatusCode: http.StatusOK, Header: http.Header{}, Body: io.NopCloser(strings.NewReader(body))}}}
+			svc := newUpstreamBillingProbeTestService(repo, upstream, &upstreamBillingProbeSettingRepo{})
+
+			snapshot, err := svc.ProbeAccount(context.Background(), account.ID)
+			require.NoError(t, err)
+			require.Equal(t, UpstreamBillingProbeStatusOK, snapshot.Status)
+			require.Equal(t, UpstreamBillingProtocolNewAPI, snapshot.Protocol)
+			require.Equal(t, tc.rate, snapshot.Data["resolved_rate_multiplier"])
+			require.Equal(t, tc.rate, *snapshot.ObservedMultiplier)
+			require.Nil(t, snapshot.SyncedRateMultiplier)
+			require.Equal(t, initialRate, account.BillingRateMultiplier())
+			require.Len(t, upstream.requests, 1)
+		})
+	}
+}
+
 func TestUpstreamBillingProbeNewAPIRequiresConsecutiveMatchingLogsBeforeSync(t *testing.T) {
 	initialRate := 0.25
 	account := &Account{

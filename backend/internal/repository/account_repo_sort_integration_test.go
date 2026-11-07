@@ -52,19 +52,34 @@ func (s *AccountRepoSuite) TestListWithFilters_SortByUpstreamBillingRateWithMiss
 	makeAccount("low-rate", service.UpstreamBillingProbeStatusOK, 0.03)
 	makeAccount("missing-rate", "", nil)
 	makeAccount("unsupported-with-retained-rate", service.UpstreamBillingProbeStatusUnsupported, 0.01)
+	for _, item := range []struct {
+		name, status, source string
+		rate                 float64
+	}{
+		{name: "newapi-zero", status: service.UpstreamBillingProbeStatusOK, source: "token_usage", rate: 0},
+		{name: "newapi-waiting", status: service.UpstreamBillingProbeStatusWaitingConsensus, source: "consumption_log", rate: 0.4},
+		{name: "newapi-usage", status: service.UpstreamBillingProbeStatusOK, source: "token_usage", rate: 0.6},
+	} {
+		mustCreateAccount(s.T(), s.client, &service.Account{Name: item.name, Extra: map[string]any{
+			service.UpstreamBillingProbeExtraKey: map[string]any{
+				"status": item.status,
+				"data":   map[string]any{"source": item.source, "resolved_rate_multiplier": item.rate},
+			},
+		}})
+	}
 
 	for _, tc := range []struct {
 		order string
 		want  []string
 	}{
-		{order: "asc", want: []string{"low-rate", "high-rate", "missing-rate", "unsupported-with-retained-rate"}},
-		{order: "desc", want: []string{"high-rate", "low-rate", "unsupported-with-retained-rate", "missing-rate"}},
+		{order: "asc", want: []string{"newapi-zero", "low-rate", "newapi-waiting", "newapi-usage", "high-rate", "missing-rate", "unsupported-with-retained-rate"}},
+		{order: "desc", want: []string{"high-rate", "newapi-usage", "newapi-waiting", "low-rate", "newapi-zero", "unsupported-with-retained-rate", "missing-rate"}},
 	} {
 		accounts, _, err := s.repo.ListWithFilters(s.ctx, pagination.PaginationParams{
 			Page: 1, PageSize: 10, SortBy: "upstream_billing_rate", SortOrder: tc.order,
 		}, "", "", "", "", 0, "")
 		s.Require().NoError(err)
-		s.Require().Len(accounts, 4)
+		s.Require().Len(accounts, 7)
 		for i, name := range tc.want {
 			s.Require().Equal(name, accounts[i].Name)
 		}

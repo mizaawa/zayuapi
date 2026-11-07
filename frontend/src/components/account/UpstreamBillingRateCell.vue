@@ -11,7 +11,18 @@
         </span>
       </template>
       <div class="space-y-1">
-        <template v-if="logData">
+        <template v-if="stale && lastDetectedRate != null">
+          <p data-testid="upstream-billing-last-rate">
+            {{ t('admin.accounts.upstreamBilling.lastDetectedRate', { value: lastDetectedRate }) }}
+          </p>
+          <p data-testid="upstream-billing-last-time">
+            {{ t('admin.accounts.upstreamBilling.lastDetectedAt', { value: formatDate(snapshot?.received_at || snapshot?.observed_multiplier_at) }) }}
+          </p>
+          <p data-testid="upstream-billing-elapsed">
+            {{ t('admin.accounts.upstreamBilling.elapsedSince', { value: elapsedSinceLastSuccess }) }}
+          </p>
+        </template>
+        <template v-else-if="logData">
           <p>{{ t('admin.accounts.upstreamBilling.newapiGroup', { group: logData.group }) }}</p>
           <p>{{ t('admin.accounts.upstreamBilling.newapiConsensus', { count: snapshot?.multiplier_match_count ?? 0, required: logData.consensus_required }) }}</p>
           <p>{{ t('admin.accounts.upstreamBilling.lastDetectedRate', { value: logData.resolved_rate_multiplier }) }}</p>
@@ -42,18 +53,11 @@
           <p>{{ t('admin.accounts.upstreamBilling.effectiveRate', { value: currentEffectiveRate ?? '-' }) }}</p>
           <p>{{ t('admin.accounts.upstreamBilling.updatedAt', { value: formatDate(snapshot?.received_at) }) }}</p>
         </template>
-        <template v-else-if="stale && lastDetectedRate != null">
-          <p data-testid="upstream-billing-last-rate">
-            {{ t('admin.accounts.upstreamBilling.lastDetectedRate', { value: lastDetectedRate }) }}
-          </p>
-          <p data-testid="upstream-billing-last-time">
-            {{ t('admin.accounts.upstreamBilling.lastDetectedAt', { value: formatDate(snapshot?.received_at) }) }}
-          </p>
-          <p data-testid="upstream-billing-elapsed">
-            {{ t('admin.accounts.upstreamBilling.elapsedSince', { value: elapsedSinceLastSuccess }) }}
-          </p>
+        <template v-else-if="observedRate != null">
+          <p>{{ t('admin.accounts.upstreamBilling.lastDetectedRate', { value: observedRate }) }}</p>
+          <p>{{ t('admin.accounts.upstreamBilling.lastDetectedAt', { value: formatDate(snapshot?.observed_multiplier_at || snapshot?.received_at) }) }}</p>
         </template>
-        <p v-else>{{ statusLabel || '-' }}</p>
+        <p v-else>{{ statusLabel || '-' }}<span v-if="snapshot?.status === 'waiting_logs'"> · {{ t('admin.accounts.upstreamBilling.waitingLogs') }}</span></p>
         <p
           v-if="probeEnabled && globalProbeEnabled !== false && nextProbeAt"
           data-testid="upstream-billing-next-probe"
@@ -76,8 +80,8 @@
         </p>
       </div>
     </HelpTooltip>
-    <span v-if="hasEffectiveRate && statusLabel" :class="statusClass" class="whitespace-nowrap text-[10px] font-medium">
-      {{ statusLabel }}
+    <span v-if="hasEffectiveRate && (statusLabel || unsyncedDeclaration)" :class="statusClass" class="whitespace-nowrap text-[10px] font-medium">
+      {{ statusLabel || t('admin.accounts.upstreamBilling.notSynced') }}
     </span>
     <button
       type="button"
@@ -143,12 +147,20 @@ const billingData = computed<UpstreamBillingData | null>(() => {
   const value = data.value
   return value && 'billing_scope' in value ? value : null
 })
+const observedRate = computed(() => {
+  if (snapshot.value?.protocol !== 'newapi') return null
+  const value = snapshot.value.observed_multiplier
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : null
+})
 const probeEnabled = computed(() => props.account.extra?.upstream_billing_probe_enabled === true)
 const nextProbeAt = computed(() => {
   const value = snapshot.value?.next_probe_at
   return typeof value === 'string' && Number.isFinite(Date.parse(value)) ? value : ''
 })
-const receivedAt = computed(() => typeof snapshot.value?.received_at === 'string' ? Date.parse(snapshot.value.received_at) : Number.NaN)
+const receivedAt = computed(() => {
+  const value = snapshot.value?.received_at || (snapshot.value?.protocol === 'newapi' ? snapshot.value.observed_multiplier_at : undefined)
+  return typeof value === 'string' ? Date.parse(value) : Number.NaN
+})
 const freshUntil = computed(() => {
   if (typeof snapshot.value?.fresh_until === 'string') return Date.parse(snapshot.value.fresh_until)
   if (snapshot.value?.status !== 'ok' || typeof snapshot.value.next_probe_at !== 'string') return Number.NaN
@@ -200,6 +212,7 @@ const currentEffectiveRate = computed(() => {
     const rate = usageData.value.resolved_rate_multiplier
     return typeof rate === 'number' && Number.isFinite(rate) && rate >= 0 ? rate : null
   }
+  if (observedRate.value != null) return observedRate.value
   const billing = billingData.value
   if (!billing) return null
   if (billing.billing_scope !== 'token') return null
@@ -228,6 +241,7 @@ const lastDetectedRate = computed(() => {
       ? Number(rate.toPrecision(12))
       : null
   }
+  if (observedRate.value != null) return Number(observedRate.value.toPrecision(12))
   const value = billingData.value?.effective_rate_multiplier
   return typeof value === 'number' && Number.isFinite(value) && value >= 0
     ? Number(value.toPrecision(12))
@@ -249,7 +263,7 @@ const effectiveRate = computed(() => {
 })
 const statusLabel = computed(() => {
   if (!snapshot.value) return t('admin.accounts.upstreamBilling.notProbed')
-  if (snapshot.value.status === 'waiting_logs') return t('admin.accounts.upstreamBilling.waitingLogs')
+  if (snapshot.value.status === 'waiting_logs') return t('admin.accounts.upstreamBilling.noDeclaration')
   if (snapshot.value.status === 'waiting_consensus') return t('admin.accounts.upstreamBilling.waitingConsensus')
   if (snapshot.value.status === 'unsupported') return t('admin.accounts.upstreamBilling.unsupported')
   if (stale.value) return t('admin.accounts.upstreamBilling.stale')
@@ -264,6 +278,14 @@ const statusClass = computed(() => {
   return ''
 })
 const hasEffectiveRate = computed(() => effectiveRate.value !== '-')
+const unsyncedDeclaration = computed(() => {
+  if (!hasEffectiveRate.value) return false
+  if (props.account.extra?.upstream_billing_rate_sync_enabled !== true) return true
+  const declared = logData.value?.resolved_rate_multiplier ?? usageData.value?.resolved_rate_multiplier ?? billingData.value?.resolved_rate_multiplier ?? observedRate.value
+  if (typeof declared !== 'number' || !Number.isFinite(declared) || declared <= 0 || declared > 100) return true
+  const current = props.account.rate_multiplier
+  return typeof current !== 'number' || !Number.isFinite(current) || Math.abs(current - Math.round(declared * 10_000) / 10_000) > 0.00005
+})
 const primaryValue = computed(() => hasEffectiveRate.value ? effectiveRate.value : statusLabel.value || '-')
 const formatDate = (value?: string) => value
   ? new Date(value).toLocaleString(undefined, {

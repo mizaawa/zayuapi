@@ -126,6 +126,10 @@ function mountView() {
         AccountTodayStatsCell: true,
         AccountGroupsCell: true,
         AccountUsageCell: true,
+        UpstreamBillingRateCell: {
+          props: ['account'],
+          template: '<span data-testid="card-declared-rate">{{ account.extra?.upstream_billing_probe?.data?.resolved_rate_multiplier ?? "-" }}</span>'
+        },
         GroupBadge: true,
         Icon: true
       }
@@ -177,5 +181,19 @@ describe('admin AccountsView phone card billing multiplier', () => {
 
     expect(rate(3).get('strong').text()).toBe('1.00x')
     expect(rate(4).get('strong').text()).toBe('0.0x')
+  })
+
+  it('passes the upstream declaration to the phone card for ordinary and New API accounts', async () => {
+    listAccounts.mockResolvedValueOnce({
+      items: [
+        account(1, { extra: { upstream_billing_probe: { data: { resolved_rate_multiplier: 0.6 } } } }),
+        account(2, { extra: { upstream_billing_probe: { data: { source: 'token_usage', resolved_rate_multiplier: 0 } } } })
+      ],
+      total: 2, page: 1, page_size: 20, pages: 1
+    })
+    const wrapper = mountView()
+    await flushPromises()
+    expect(wrapper.get('[data-test="card-1"] [data-testid="card-declared-rate"]').text()).toBe('0.6')
+    expect(wrapper.get('[data-test="card-2"] [data-testid="card-declared-rate"]').text()).toBe('0')
   })
 })

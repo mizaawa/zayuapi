@@ -877,7 +877,11 @@ func newAPIUsageGroupMultiplier(usage *newAPIUsageResponse) (float64, bool) {
 	if usage == nil || strings.TrimSpace(usage.Group) == "" || usage.GroupRatio == nil {
 		return 0, false
 	}
-	return upstreamBillingProbeSyncRate(map[string]any{"resolved_rate_multiplier": *usage.GroupRatio})
+	rate := *usage.GroupRatio
+	// A declared zero (or a rate outside the automatic sync range) is still a
+	// declaration. Keep it in the snapshot for the account list, but never
+	// write it into the account's billing multiplier automatically.
+	return rate, rate >= 0 && !math.IsNaN(rate) && !math.IsInf(rate, 0)
 }
 
 func (s *UpstreamBillingProbeService) persistNewAPIUsageProbeResult(
@@ -908,9 +912,11 @@ func (s *UpstreamBillingProbeService) persistNewAPIUsageProbeResult(
 		HTTPStatus:    status,
 	}
 	var syncRate *float64
-	if upstreamBillingRateSyncEnabled(account) && !equalBillingMultiplier(account.BillingRateMultiplier(), rate) {
-		syncRate = &rate
-		snapshot.SyncedRateMultiplier = &rate
+	if upstreamBillingRateSyncEnabled(account) {
+		if candidate, valid := upstreamBillingProbeSyncRate(snapshot.Data); valid && !equalBillingMultiplier(account.BillingRateMultiplier(), candidate) {
+			syncRate = &candidate
+			snapshot.SyncedRateMultiplier = &candidate
+		}
 	}
 	if err := s.updateSnapshot(ctx, account, snapshot, syncRate); err != nil {
 		return nil, err

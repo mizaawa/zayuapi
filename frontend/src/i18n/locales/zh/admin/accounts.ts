@@ -211,6 +211,8 @@ export default {
         stale: '已过期',
         unsupported: '不支持',
         waitingLogs: '等待消费记录',
+        noDeclaration: '无声明倍率',
+        notSynced: '未同步',
         waitingConsensus: '等待倍率确认',
         failed: '失败',
         notProbed: '未探测',
