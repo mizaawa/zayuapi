@@ -23,14 +23,35 @@
           </p>
         </template>
         <template v-else-if="logData">
-          <p>{{ t('admin.accounts.upstreamBilling.newapiGroup', { group: logData.group }) }}</p>
+          <p>{{ t('admin.accounts.upstreamBilling.newapiGroup', { group: logData.group || '-' }) }}</p>
           <p>{{ t('admin.accounts.upstreamBilling.newapiConsensus', { count: snapshot?.multiplier_match_count ?? 0, required: logData.consensus_required }) }}</p>
+          <p v-if="logCorroboration" data-testid="upstream-billing-corroborated">
+            {{ t('admin.accounts.upstreamBilling.newapiCorroborated', { source: logCorroboration }) }}
+          </p>
           <p>{{ t('admin.accounts.upstreamBilling.lastDetectedRate', { value: logData.resolved_rate_multiplier }) }}</p>
           <p>{{ t('admin.accounts.upstreamBilling.lastDetectedAt', { value: formatDate(snapshot?.observed_multiplier_at || snapshot?.received_at) }) }}</p>
         </template>
         <template v-else-if="usageData">
           <p>{{ t('admin.accounts.upstreamBilling.newapiGroup', { group: usageData.group }) }}</p>
           <p>{{ t('admin.accounts.upstreamBilling.newapiUsageRate', { value: usageData.resolved_rate_multiplier }) }}</p>
+          <p>{{ t('admin.accounts.upstreamBilling.lastDetectedAt', { value: formatDate(snapshot?.observed_multiplier_at || snapshot?.received_at) }) }}</p>
+        </template>
+        <template v-else-if="catalogData">
+          <p data-testid="upstream-billing-catalog-group">
+            {{
+              catalogData.source === 'model_inference'
+                ? t('admin.accounts.upstreamBilling.newapiInferredGroup', { group: catalogData.group })
+                : t('admin.accounts.upstreamBilling.newapiGroup', { group: catalogData.group })
+            }}
+          </p>
+          <p data-testid="upstream-billing-catalog-basis">
+            {{
+              catalogData.source === 'model_inference'
+                ? t('admin.accounts.upstreamBilling.newapiModelInferenceBasis', { count: catalogData.model_count ?? '-' })
+                : t('admin.accounts.upstreamBilling.newapiGroupPricingBasis')
+            }}
+          </p>
+          <p>{{ t('admin.accounts.upstreamBilling.newapiPricingRate', { value: catalogData.resolved_rate_multiplier }) }}</p>
           <p>{{ t('admin.accounts.upstreamBilling.lastDetectedAt', { value: formatDate(snapshot?.observed_multiplier_at || snapshot?.received_at) }) }}</p>
         </template>
         <template v-else-if="hasEffectiveRate && billingData">
@@ -58,6 +79,13 @@
           <p>{{ t('admin.accounts.upstreamBilling.lastDetectedAt', { value: formatDate(snapshot?.observed_multiplier_at || snapshot?.received_at) }) }}</p>
         </template>
         <p v-else>{{ statusLabel || '-' }}<span v-if="snapshot?.status === 'waiting_logs'"> · {{ t('admin.accounts.upstreamBilling.waitingLogs') }}</span></p>
+        <p v-if="candidateGroups" data-testid="upstream-billing-candidates">
+          {{ t('admin.accounts.upstreamBilling.newapiCandidates', { groups: candidateGroups }) }}
+        </p>
+        <p v-if="probeReason" class="text-amber-300" data-testid="upstream-billing-reason">{{ probeReason }}</p>
+        <p v-if="upstreamVersion" data-testid="upstream-billing-version">
+          {{ t('admin.accounts.upstreamBilling.upstreamVersion', { version: upstreamVersion }) }}
+        </p>
         <p
           v-if="probeEnabled && globalProbeEnabled !== false && nextProbeAt"
           data-testid="upstream-billing-next-probe"
@@ -106,6 +134,7 @@ import Icon from '@/components/icons/Icon.vue'
 import { formatMultiplier } from '@/utils/formatters'
 import type {
   Account,
+  UpstreamBillingCatalogData,
   UpstreamBillingData,
   UpstreamBillingLogData,
   UpstreamBillingProbeSnapshot,
@@ -131,10 +160,15 @@ const CLOCK_SKEW_TOLERANCE_MS = 5 * 60 * 1000
 const eligible = computed(() => props.account.type === 'apikey')
 const snapshot = computed<UpstreamBillingProbeSnapshot | undefined>(() => props.account.extra?.upstream_billing_probe)
 const data = computed(() => snapshot.value?.data)
-const isConsumptionLogData = (value: UpstreamBillingData | UpstreamBillingLogData | UpstreamBillingUsageData): value is UpstreamBillingLogData =>
+type ProbeData = NonNullable<UpstreamBillingProbeSnapshot['data']>
+const isConsumptionLogData = (value: ProbeData): value is UpstreamBillingLogData =>
   'source' in value && value.source === 'consumption_log'
-const isTokenUsageData = (value: UpstreamBillingData | UpstreamBillingLogData | UpstreamBillingUsageData): value is UpstreamBillingUsageData =>
+const isTokenUsageData = (value: ProbeData): value is UpstreamBillingUsageData =>
   'source' in value && value.source === 'token_usage'
+// group_pricing / model_inference carry a rate only when the group resolved;
+// an ambiguous model match carries candidates instead.
+const isCatalogData = (value: ProbeData): value is UpstreamBillingCatalogData =>
+  'source' in value && (value.source === 'group_pricing' || value.source === 'model_inference') && 'resolved_rate_multiplier' in value
 const logData = computed<UpstreamBillingLogData | null>(() => {
   const value = data.value
   return value && isConsumptionLogData(value) ? value : null
@@ -142,6 +176,53 @@ const logData = computed<UpstreamBillingLogData | null>(() => {
 const usageData = computed<UpstreamBillingUsageData | null>(() => {
   const value = data.value
   return value && isTokenUsageData(value) ? value : null
+})
+const catalogData = computed<UpstreamBillingCatalogData | null>(() => {
+  const value = data.value
+  return value && isCatalogData(value) ? value : null
+})
+const catalogSourceLabel = (source: unknown) =>
+  source === 'group_pricing' || source === 'model_inference'
+    ? t(`admin.accounts.upstreamBilling.catalogSource.${source}`)
+    : ''
+const logCorroboration = computed(() => catalogSourceLabel(logData.value?.corroborated_by))
+const candidateGroups = computed(() => {
+  const value = data.value
+  if (!value || !('candidates' in value) || !Array.isArray(value.candidates)) return ''
+  return value.candidates
+    .filter(candidate => typeof candidate?.group === 'string' && typeof candidate.rate_multiplier === 'number' && Number.isFinite(candidate.rate_multiplier))
+    .map(candidate => `${candidate.group} (${formatMultiplier(candidate.rate_multiplier)}x)`)
+    .join(', ')
+})
+const upstreamVersion = computed(() => {
+  const value = snapshot.value?.upstream_version
+  return snapshot.value?.protocol === 'newapi' && typeof value === 'string' ? value.trim() : ''
+})
+// Reasons the backend records in last_error. The two waiting reasons are
+// already told by the status line.
+const PROBE_REASONS = new Set([
+  'http_error',
+  'cloudflare_blocked',
+  'request_failed',
+  'request_build_failed',
+  'empty_response',
+  'response_too_large',
+  'response_read_failed',
+  'invalid_response',
+  'unsupported',
+  'unsupported_logs_endpoint',
+  'logs_rejected',
+  'consumption_logs_truncated',
+  'invalid_base_url',
+  'missing_api_key',
+  'proxy_unavailable',
+  'transport_unavailable'
+])
+const probeReason = computed(() => {
+  const code = snapshot.value?.last_error
+  if (!code || code === 'waiting_for_consumption_logs' || code === 'waiting_for_multiplier_consensus') return ''
+  if (!PROBE_REASONS.has(code)) return t('admin.accounts.upstreamBilling.reasons.other', { code })
+  return t(`admin.accounts.upstreamBilling.reasons.${code}`, { status: snapshot.value?.http_status || '-' })
 })
 const billingData = computed<UpstreamBillingData | null>(() => {
   const value = data.value
@@ -203,15 +284,14 @@ const minuteInTimeZone = (timestamp: number, timeZone?: string) => {
     return null
   }
 }
+// The New API sources that state a rate: consumption log, usage route, catalog.
+const newapiRateData = computed(() => logData.value ?? usageData.value ?? catalogData.value)
+const newapiRate = computed(() => {
+  const rate = newapiRateData.value?.resolved_rate_multiplier
+  return typeof rate === 'number' && Number.isFinite(rate) && rate >= 0 ? rate : null
+})
 const currentEffectiveRate = computed(() => {
-  if (logData.value) {
-    const rate = logData.value.resolved_rate_multiplier
-    return typeof rate === 'number' && Number.isFinite(rate) && rate >= 0 ? rate : null
-  }
-  if (usageData.value) {
-    const rate = usageData.value.resolved_rate_multiplier
-    return typeof rate === 'number' && Number.isFinite(rate) && rate >= 0 ? rate : null
-  }
+  if (newapiRateData.value) return newapiRate.value
   if (observedRate.value != null) return observedRate.value
   const billing = billingData.value
   if (!billing) return null
@@ -229,18 +309,7 @@ const currentEffectiveRate = computed(() => {
   return Number.isFinite(value) ? value : null
 })
 const lastDetectedRate = computed(() => {
-  if (usageData.value) {
-    const rate = usageData.value.resolved_rate_multiplier
-    return typeof rate === 'number' && Number.isFinite(rate) && rate >= 0
-      ? Number(rate.toPrecision(12))
-      : null
-  }
-  if (logData.value) {
-    const rate = logData.value.resolved_rate_multiplier
-    return typeof rate === 'number' && Number.isFinite(rate) && rate >= 0
-      ? Number(rate.toPrecision(12))
-      : null
-  }
+  if (newapiRateData.value) return newapiRate.value == null ? null : Number(newapiRate.value.toPrecision(12))
   if (observedRate.value != null) return Number(observedRate.value.toPrecision(12))
   const value = billingData.value?.effective_rate_multiplier
   return typeof value === 'number' && Number.isFinite(value) && value >= 0
@@ -281,7 +350,7 @@ const hasEffectiveRate = computed(() => effectiveRate.value !== '-')
 const unsyncedDeclaration = computed(() => {
   if (!hasEffectiveRate.value) return false
   if (props.account.extra?.upstream_billing_rate_sync_enabled !== true) return true
-  const declared = logData.value?.resolved_rate_multiplier ?? usageData.value?.resolved_rate_multiplier ?? billingData.value?.resolved_rate_multiplier ?? observedRate.value
+  const declared = newapiRateData.value?.resolved_rate_multiplier ?? billingData.value?.resolved_rate_multiplier ?? observedRate.value
   if (typeof declared !== 'number' || !Number.isFinite(declared) || declared <= 0 || declared > 100) return true
   const current = props.account.rate_multiplier
   return typeof current !== 'number' || !Number.isFinite(current) || Math.abs(current - Math.round(declared * 10_000) / 10_000) > 0.00005

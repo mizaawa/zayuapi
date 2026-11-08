@@ -44,6 +44,23 @@ describe('AccountSourceBadge', () => {
     expect(badge.attributes('title')).toContain('Claude 特价')
   })
 
+  it('names the detected New API version in the tooltip', () => {
+    const wrapper = mountBadge({
+      type: 'apikey',
+      extra: { upstream_billing_probe: { status: 'waiting_logs', protocol: 'newapi', upstream_version: 'rc.15-secfix-nobill' } }
+    })
+
+    const badge = wrapper.get('[data-testid="account-source"]')
+    expect(badge.attributes('data-source')).toBe('newapi')
+    expect(badge.attributes('title')).toContain('admin.accounts.upstreamBilling.upstreamVersion:rc.15-secfix-nobill')
+
+    const unknown = mountBadge({
+      type: 'apikey',
+      extra: { upstream_billing_probe: { status: 'unsupported', protocol: 'unknown', upstream_version: 'stale' } }
+    })
+    expect(unknown.get('[data-testid="account-source"]').attributes('title')).not.toContain('upstreamVersion')
+  })
+
   it('marks hand-entered API key accounts as unknown until detected', () => {
     const wrapper = mountBadge({ type: 'apikey', extra: {} })
 

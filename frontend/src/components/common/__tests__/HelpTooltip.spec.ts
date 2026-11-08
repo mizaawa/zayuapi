@@ -40,6 +40,41 @@ describe('HelpTooltip', () => {
     wrapper.unmount()
   })
 
+  it('keeps the panel inside the viewport and the arrow on the trigger', async () => {
+    const wrapper = mount(HelpTooltip, {
+      attachTo: document.body,
+      props: {
+        content: 'edge details',
+      },
+    })
+
+    const trigger = wrapper.get('.group')
+    const tooltip = getTooltipElement()
+    Object.defineProperty(tooltip, 'offsetWidth', { configurable: true, value: 300 })
+    trigger.element.getBoundingClientRect = () => ({
+      left: 1000, top: 200, width: 20, height: 20, right: 1020, bottom: 220, x: 1000, y: 200, toJSON: () => ({}),
+    }) as DOMRect
+
+    await trigger.trigger('mouseenter')
+    await nextTick()
+    await nextTick()
+
+    // jsdom's viewport is 1024px wide: 1024 - 8 margin - 150 half width.
+    expect(tooltip.style.left).toBe('866px')
+    const arrow = tooltip.lastElementChild as HTMLElement
+    expect(arrow.style.left).toBe('288px')
+
+    trigger.element.getBoundingClientRect = () => ({
+      left: 400, top: 200, width: 20, height: 20, right: 420, bottom: 220, x: 400, y: 200, toJSON: () => ({}),
+    }) as DOMRect
+    window.dispatchEvent(new Event('resize'))
+    await nextTick()
+    expect(tooltip.style.left).toBe('410px')
+    expect(arrow.style.left).toBe('150px')
+
+    wrapper.unmount()
+  })
+
   it('supports click-to-toggle details and closes on outside click', async () => {
     const wrapper = mount(HelpTooltip, {
       attachTo: document.body,

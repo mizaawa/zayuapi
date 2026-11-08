@@ -1871,7 +1871,7 @@ const expiresAtInput = computed({
 // Watchers
 watch(
   () => props.show,
-  (newVal) => {
+  (newVal, oldVal) => {
     if (newVal) {
       upstreamBillingToggleTouched = false
       upstreamBillingAutoProbeEnabled.value = defaultUpstreamBillingRateSyncEnabled.value
@@ -1886,7 +1886,10 @@ watch(
       } else {
         antigravityModelMappings.value = []
       }
-    } else {
+    } else if (oldVal) {
+      // Only a closing modal needs a reset. The immediate run for a modal
+      // mounted closed must not call resetForm, which is declared further
+      // down and still in its temporal dead zone during setup.
       resetForm()
     }
   },

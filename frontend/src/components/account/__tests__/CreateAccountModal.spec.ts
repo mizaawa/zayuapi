@@ -65,9 +65,9 @@ const BaseDialogStub = defineComponent({
   template: '<div v-if="show"><slot /><slot name="footer" /></div>',
 })
 
-function mountModal() {
+function mountModal(show = true) {
   return mount(CreateAccountModal, {
-    props: { show: true, proxies: [], groups: [] },
+    props: { show, proxies: [], groups: [] },
     global: {
       stubs: {
         BaseDialog: BaseDialogStub,
@@ -117,6 +117,21 @@ describe('CreateAccountModal OpenAI long-context billing', () => {
     createAccountMock.mockReset().mockResolvedValue({ id: 42, platform: 'openai', type: 'apikey' })
     probeUpstreamBillingMock.mockReset().mockResolvedValue({})
     getSettingsMock.mockReset().mockResolvedValue({ default_upstream_billing_rate_sync_enabled: true })
+  })
+
+  it('mounts closed like the accounts page does, then opens and resets between openings', async () => {
+    const wrapper = mountModal(false)
+    await flushPromises()
+    expect(wrapper.find('form#create-account-form').exists()).toBe(false)
+
+    await wrapper.setProps({ show: true })
+    await flushPromises()
+    await wrapper.get('form#create-account-form input[type="text"]').setValue('draft account')
+
+    await wrapper.setProps({ show: false })
+    await wrapper.setProps({ show: true })
+    await flushPromises()
+    expect((wrapper.get('form#create-account-form input[type="text"]').element as HTMLInputElement).value).toBe('')
   })
 
   it('sends false explicitly for normal OpenAI account creation by default', async () => {

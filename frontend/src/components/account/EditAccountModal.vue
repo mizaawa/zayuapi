@@ -4049,10 +4049,32 @@ const handleClose = () => {
   emit('close')
 }
 
+// Saving with automatic probing on runs the probe at once, as account creation
+// does, so the list shows the detected protocol and rate without waiting for
+// the next probe cycle.
+const probeUpstreamBillingAfterSave = async (account: Account): Promise<Account> => {
+  try {
+    const result = await adminAPI.accounts.probeUpstreamBilling(account.id)
+    if (!result.snapshot) return account
+    const synced = result.snapshot.synced_rate_multiplier
+    return {
+      ...account,
+      ...(typeof synced === 'number' ? { rate_multiplier: synced } : {}),
+      extra: { ...(account.extra ?? {}), upstream_billing_probe: result.snapshot }
+    }
+  } catch {
+    appStore.showWarning(t('admin.accounts.upstreamBilling.probeFailed'))
+    return account
+  }
+}
+
 const submitUpdateAccount = async (accountID: number, updatePayload: Record<string, unknown>) => {
   submitting.value = true
   try {
-    const updatedAccount = await adminAPI.accounts.update(accountID, withAntigravityConfirmFlag(updatePayload))
+    let updatedAccount = await adminAPI.accounts.update(accountID, withAntigravityConfirmFlag(updatePayload))
+    if (updatePayload.upstream_billing_probe_enabled === true) {
+      updatedAccount = await probeUpstreamBillingAfterSave(updatedAccount)
+    }
     appStore.showSuccess(t('admin.accounts.accountUpdated'))
     emit('updated', updatedAccount)
     handleClose()

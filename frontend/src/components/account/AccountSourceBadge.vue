@@ -30,13 +30,17 @@ const { t } = useI18n()
 const source = computed(() => {
   if (props.account.type !== 'apikey' && props.account.type !== 'upstream') return null
   const binding = accountProviderBinding(props.account)
-  const snapshotProtocol = props.account.extra?.upstream_billing_probe?.protocol
-  const detectedProtocol = normalizeProtocol(snapshotProtocol)
+  const snapshot = props.account.extra?.upstream_billing_probe
+  const detectedProtocol = normalizeProtocol(snapshot?.protocol)
   const bindingProtocol = normalizeProtocol(binding?.siteType)
   const protocol = detectedProtocol === 'unknown' ? bindingProtocol : detectedProtocol
   const label = t(`admin.accounts.upstreamBilling.protocol.${protocol}`)
+  const version = detectedProtocol === 'newapi' && typeof snapshot?.upstream_version === 'string'
+    ? snapshot.upstream_version.trim()
+    : ''
   const details = [
     t('admin.accounts.upstreamBilling.protocolTooltip', { protocol: label }),
+    version ? t('admin.accounts.upstreamBilling.upstreamVersion', { version }) : '',
     binding ? t('admin.accounts.source.providerTooltip', { provider: binding.providerName || '-' }) : t('admin.accounts.source.apiTooltip'),
     binding?.keyName ? t('admin.accounts.source.providerKey', { key: binding.keyName }) : '',
     binding?.groupName ? t('admin.accounts.source.providerGroup', { group: binding.groupName }) : ''

@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -445,12 +444,12 @@ func TestUpstreamBillingProbeNewAPIRequiresConsecutiveMatchingLogsBeforeSync(t *
 	svc := newUpstreamBillingProbeTestService(repo, &upstreamBillingProbeHTTPStub{}, &upstreamBillingProbeSettingRepo{})
 	now := time.Date(2026, time.November, 6, 1, 0, 0, 0, time.UTC)
 	logs := []newAPIConsumptionLog{
-		{ID: 3, CreatedAt: now.Unix(), Type: 2, Group: "standard", Other: json.RawMessage(`{"group_ratio":0.5}`)},
-		{ID: 2, CreatedAt: now.Unix() - 1, Type: 2, Group: "standard", Other: json.RawMessage(`{"group_ratio":0.5}`)},
-		{ID: 1, CreatedAt: now.Unix() - 2, Type: 2, Group: "standard", Other: json.RawMessage(`{"group_ratio":0.4}`)},
+		{CreatedAt: now.Unix(), Group: "standard", Ratio: 0.5},
+		{CreatedAt: now.Unix() - 1, Group: "standard", Ratio: 0.5},
+		{CreatedAt: now.Unix() - 2, Group: "standard", Ratio: 0.4},
 	}
 
-	snapshot, err := svc.persistNewAPIProbeResult(context.Background(), account, logs, http.StatusOK, time.Minute, 3, now)
+	snapshot, err := svc.persistNewAPILogProbeResult(context.Background(), account, logs, http.StatusOK, time.Minute, 3, now, &newAPIProbeEvidence{}, "")
 
 	require.NoError(t, err)
 	require.Equal(t, UpstreamBillingProbeStatusWaitingConsensus, snapshot.Status)
@@ -458,8 +457,8 @@ func TestUpstreamBillingProbeNewAPIRequiresConsecutiveMatchingLogsBeforeSync(t *
 	require.Nil(t, snapshot.SyncedRateMultiplier)
 	require.Equal(t, 0.25, *account.RateMultiplier)
 
-	logs[2].Other = json.RawMessage(`{"group_ratio":0.5}`)
-	snapshot, err = svc.persistNewAPIProbeResult(context.Background(), account, logs, http.StatusOK, time.Minute, 3, now)
+	logs[2].Ratio = 0.5
+	snapshot, err = svc.persistNewAPILogProbeResult(context.Background(), account, logs, http.StatusOK, time.Minute, 3, now, &newAPIProbeEvidence{}, "")
 
 	require.NoError(t, err)
 	require.Equal(t, UpstreamBillingProbeStatusOK, snapshot.Status)

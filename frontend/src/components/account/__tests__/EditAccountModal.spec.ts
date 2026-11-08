@@ -2,9 +2,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { defineComponent } from 'vue'
 import { flushPromises, mount } from '@vue/test-utils'
 
-const { updateAccountMock, checkMixedChannelRiskMock, authIsSimpleMode } = vi.hoisted(() => ({
+const { updateAccountMock, checkMixedChannelRiskMock, probeUpstreamBillingMock, showWarningMock, authIsSimpleMode } = vi.hoisted(() => ({
   updateAccountMock: vi.fn(),
   checkMixedChannelRiskMock: vi.fn(),
+  probeUpstreamBillingMock: vi.fn(),
+  showWarningMock: vi.fn(),
   authIsSimpleMode: { value: true }
 }))
 
@@ -12,7 +14,8 @@ vi.mock('@/stores/app', () => ({
   useAppStore: () => ({
     showError: vi.fn(),
     showSuccess: vi.fn(),
-    showInfo: vi.fn()
+    showInfo: vi.fn(),
+    showWarning: showWarningMock
   })
 }))
 
@@ -28,7 +31,8 @@ vi.mock('@/api/admin', () => ({
   adminAPI: {
     accounts: {
       update: updateAccountMock,
-      checkMixedChannelRisk: checkMixedChannelRiskMock
+      checkMixedChannelRisk: checkMixedChannelRiskMock,
+      probeUpstreamBilling: probeUpstreamBillingMock
     },
     settings: {
       getWebSearchEmulationConfig: vi.fn().mockResolvedValue({ enabled: false, providers: [] }),
@@ -731,6 +735,57 @@ describe('EditAccountModal', () => {
     expect(updateAccountMock.mock.calls[0]?.[1]?.extra).not.toHaveProperty(
       'upstream_billing_probe_enabled'
     )
+  })
+
+  it('probes the upstream right after saving with automatic probing on', async () => {
+    const account = buildAccount()
+    const snapshot = {
+      status: 'ok',
+      protocol: 'newapi',
+      upstream_version: 'v1.0.0-rc.15',
+      data: { source: 'model_inference', group: 'gpt-plus', resolved_rate_multiplier: 0.15, model_count: 6 },
+      synced_rate_multiplier: 0.15,
+      last_attempt_at: '2026-11-08T03:00:00Z',
+      next_probe_at: '2026-11-08T03:30:00Z'
+    }
+    updateAccountMock.mockReset().mockResolvedValue(account)
+    checkMixedChannelRiskMock.mockReset().mockResolvedValue({ has_risk: false })
+    probeUpstreamBillingMock.mockReset().mockResolvedValue({ account_id: account.id, snapshot })
+
+    const wrapper = mountModal(account)
+    await wrapper.get('[data-testid="upstream-billing-auto-probe"]').trigger('click')
+    await wrapper.get('form#edit-account-form').trigger('submit.prevent')
+    await flushPromises()
+
+    expect(probeUpstreamBillingMock).toHaveBeenCalledWith(account.id)
+    const updated = wrapper.emitted('updated')?.[0]?.[0] as any
+    expect(updated.rate_multiplier).toBe(0.15)
+    expect(updated.extra.upstream_billing_probe).toEqual(snapshot)
+  })
+
+  it('keeps the save when the follow-up probe fails and skips it with probing off', async () => {
+    const account = buildAccount()
+    updateAccountMock.mockReset().mockResolvedValue(account)
+    checkMixedChannelRiskMock.mockReset().mockResolvedValue({ has_risk: false })
+    probeUpstreamBillingMock.mockReset().mockRejectedValue(new Error('probe failed'))
+    showWarningMock.mockReset()
+
+    const wrapper = mountModal(account)
+    await wrapper.get('[data-testid="upstream-billing-auto-probe"]').trigger('click')
+    await wrapper.get('form#edit-account-form').trigger('submit.prevent')
+    await flushPromises()
+
+    expect(showWarningMock).toHaveBeenCalledWith('admin.accounts.upstreamBilling.probeFailed')
+    expect(wrapper.emitted('updated')?.[0]?.[0]).toEqual(account)
+
+    probeUpstreamBillingMock.mockReset()
+    updateAccountMock.mockClear()
+    const plain = mountModal(buildAccount())
+    await plain.get('form#edit-account-form').trigger('submit.prevent')
+    await flushPromises()
+
+    expect(updateAccountMock).toHaveBeenCalledTimes(1)
+    expect(probeUpstreamBillingMock).not.toHaveBeenCalled()
   })
 
   it('exposes the upstream billing auto-probe toggle for non-OpenAI API-key accounts', async () => {

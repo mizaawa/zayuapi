@@ -1144,7 +1144,7 @@ func upstreamBillingRateSortExpression(extra string) string {
 	legacySnapshot := "jsonb_typeof(" + resolvedJSON + ") IS NULL AND jsonb_typeof(" + peakEnabledJSON + ") IS NULL"
 
 	return "CASE WHEN " + status + " IN ('ok', 'failed', 'waiting_consensus') AND (jsonb_typeof(" + resolvedJSON + ") = 'number' OR jsonb_typeof(" + effectiveJSON + ") = 'number') THEN CASE WHEN " +
-		source + " IN ('token_usage', 'consumption_log') AND jsonb_typeof(" + resolvedJSON + ") = 'number' THEN (" + resolved + ")::numeric WHEN jsonb_typeof(" +
+		source + " IN ('token_usage', 'consumption_log', 'group_pricing', 'model_inference') AND jsonb_typeof(" + resolvedJSON + ") = 'number' THEN (" + resolved + ")::numeric WHEN jsonb_typeof(" +
 		resolvedJSON + ") = 'number' AND jsonb_typeof(" + peakEnabledJSON + ") = 'boolean' THEN CASE WHEN " + billingScope + " = 'token' THEN " + dynamicRate + " ELSE NULL END WHEN " + legacySnapshot +
 		" AND jsonb_typeof(" + effectiveJSON + ") = 'number' THEN (" + effective + ")::numeric END END"
 }

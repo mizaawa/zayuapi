@@ -14,6 +14,8 @@ const show = ref(false)
 const triggerRef = useTemplateRef<HTMLElement>('trigger')
 const tooltipRef = useTemplateRef<HTMLElement>('tooltip')
 const tooltipStyle = ref({ top: '0px', left: '0px' })
+const arrowLeft = ref('50%')
+const VIEWPORT_MARGIN = 8
 
 function openTooltip() {
   show.value = true
@@ -68,10 +70,22 @@ function updatePosition() {
   const el = triggerRef.value
   if (!el) return
   const rect = el.getBoundingClientRect()
+  const anchor = rect.left + rect.width / 2
+  // The panel is centered on the trigger; near a viewport edge shift it back
+  // inside and keep the arrow on the trigger.
+  let center = anchor
+  const width = tooltipRef.value?.offsetWidth ?? 0
+  if (width > 0 && window.innerWidth > 0) {
+    const half = width / 2
+    const min = VIEWPORT_MARGIN + half
+    const max = window.innerWidth - VIEWPORT_MARGIN - half
+    center = max < min ? window.innerWidth / 2 : Math.min(Math.max(anchor, min), max)
+  }
   tooltipStyle.value = {
     top: `${rect.top + window.scrollY}px`,
-    left: `${rect.left + rect.width / 2 + window.scrollX}px`,
+    left: `${center + window.scrollX}px`,
   }
+  arrowLeft.value = width > 0 ? `${Math.min(Math.max(anchor - center + width / 2, 12), width - 12)}px` : '50%'
 }
 
 onMounted(() => {
@@ -138,7 +152,7 @@ onBeforeUnmount(() => {
           </svg>
         </button>
         <slot>{{ content }}</slot>
-        <div class="absolute -bottom-1 left-1/2 h-2 w-2 -translate-x-1/2 rotate-45 bg-gray-900 dark:bg-gray-800"></div>
+        <div class="absolute -bottom-1 h-2 w-2 -translate-x-1/2 rotate-45 bg-gray-900 dark:bg-gray-800" :style="{ left: arrowLeft }"></div>
       </div>
     </Teleport>
   </div>

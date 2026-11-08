@@ -59,6 +59,8 @@ func (s *AccountRepoSuite) TestListWithFilters_SortByUpstreamBillingRateWithMiss
 		{name: "newapi-zero", status: service.UpstreamBillingProbeStatusOK, source: "token_usage", rate: 0},
 		{name: "newapi-waiting", status: service.UpstreamBillingProbeStatusWaitingConsensus, source: "consumption_log", rate: 0.4},
 		{name: "newapi-usage", status: service.UpstreamBillingProbeStatusOK, source: "token_usage", rate: 0.6},
+		{name: "newapi-pricing", status: service.UpstreamBillingProbeStatusOK, source: "group_pricing", rate: 0.15},
+		{name: "newapi-inferred", status: service.UpstreamBillingProbeStatusOK, source: "model_inference", rate: 0.7},
 	} {
 		mustCreateAccount(s.T(), s.client, &service.Account{Name: item.name, Extra: map[string]any{
 			service.UpstreamBillingProbeExtraKey: map[string]any{
@@ -72,14 +74,14 @@ func (s *AccountRepoSuite) TestListWithFilters_SortByUpstreamBillingRateWithMiss
 		order string
 		want  []string
 	}{
-		{order: "asc", want: []string{"newapi-zero", "low-rate", "newapi-waiting", "newapi-usage", "high-rate", "missing-rate", "unsupported-with-retained-rate"}},
-		{order: "desc", want: []string{"high-rate", "newapi-usage", "newapi-waiting", "low-rate", "newapi-zero", "unsupported-with-retained-rate", "missing-rate"}},
+		{order: "asc", want: []string{"newapi-zero", "low-rate", "newapi-pricing", "newapi-waiting", "newapi-usage", "newapi-inferred", "high-rate", "missing-rate", "unsupported-with-retained-rate"}},
+		{order: "desc", want: []string{"high-rate", "newapi-inferred", "newapi-usage", "newapi-waiting", "newapi-pricing", "low-rate", "newapi-zero", "unsupported-with-retained-rate", "missing-rate"}},
 	} {
 		accounts, _, err := s.repo.ListWithFilters(s.ctx, pagination.PaginationParams{
 			Page: 1, PageSize: 10, SortBy: "upstream_billing_rate", SortOrder: tc.order,
 		}, "", "", "", "", 0, "")
 		s.Require().NoError(err)
-		s.Require().Len(accounts, 7)
+		s.Require().Len(accounts, 9)
 		for i, name := range tc.want {
 			s.Require().Equal(name, accounts[i].Name)
 		}

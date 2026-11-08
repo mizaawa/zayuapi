@@ -1092,11 +1092,19 @@ export interface UpstreamBillingData {
   observed_at: string
 }
 
+// New API sources that state the token's current group ratio without logs:
+// the usage route's group looked up in the public pricing, or the group whose
+// model set equals the token's model list.
+export type UpstreamBillingCatalogSource = 'group_pricing' | 'model_inference'
+
 export interface UpstreamBillingLogData {
   resolved_rate_multiplier: number
   group: string
   source: 'consumption_log'
   consensus_required: number
+  // Set when fewer matching logs than required were accepted because the
+  // current group ratio from this source agreed.
+  corroborated_by?: UpstreamBillingCatalogSource
 }
 
 export interface UpstreamBillingUsageData {
@@ -1105,12 +1113,32 @@ export interface UpstreamBillingUsageData {
   source: 'token_usage'
 }
 
+export interface UpstreamBillingCatalogData {
+  resolved_rate_multiplier: number
+  group: string
+  source: UpstreamBillingCatalogSource
+  model_count?: number
+}
+
+// Several groups match the token's model list with different ratios.
+export interface UpstreamBillingCandidatesData {
+  source: 'model_inference'
+  candidates: Array<{ group: string; rate_multiplier: number }>
+}
+
 export type UpstreamBillingProbeStatus = 'ok' | 'unsupported' | 'failed' | 'waiting_logs' | 'waiting_consensus'
 
 export interface UpstreamBillingProbeSnapshot {
   status: UpstreamBillingProbeStatus
   protocol?: 'newapi' | 'sub2api' | 'unknown'
-  data?: UpstreamBillingData | UpstreamBillingLogData | UpstreamBillingUsageData
+  // X-New-Api-Version announced by a New API upstream.
+  upstream_version?: string
+  data?:
+    | UpstreamBillingData
+    | UpstreamBillingLogData
+    | UpstreamBillingUsageData
+    | UpstreamBillingCatalogData
+    | UpstreamBillingCandidatesData
   observed_multiplier?: number
   observed_multiplier_at?: string
   multiplier_match_count?: number

@@ -138,6 +138,151 @@ describe('UpstreamBillingRateCell', () => {
     wrapper.unmount()
   })
 
+  it('shows New API group rates resolved from the public pricing and the model list', async () => {
+    const snapshotFor = (data: Record<string, unknown>) => ({
+      status: 'ok' as const,
+      protocol: 'newapi' as const,
+      upstream_version: 'rc.15-secfix',
+      data: data as any,
+      observed_multiplier: 0.15,
+      received_at: '2026-07-13T00:00:00Z',
+      fresh_until: '2026-07-14T00:00:00Z',
+      last_attempt_at: '2026-07-13T00:00:00Z',
+      next_probe_at: '2026-07-13T00:30:00Z'
+    })
+    const wrapper = mount(UpstreamBillingRateCell, {
+      props: {
+        account: makeAccount({
+          rate_multiplier: 0.15,
+          extra: {
+            upstream_billing_probe_enabled: true,
+            upstream_billing_rate_sync_enabled: true,
+            upstream_billing_probe: snapshotFor({ source: 'model_inference', group: 'gpt-plus', resolved_rate_multiplier: 0.15, model_count: 6 })
+          }
+        }),
+        now: Date.now()
+      }
+    })
+
+    expect(wrapper.get('[data-testid="upstream-billing-rate"]').text()).toBe('0.15x')
+    expect(wrapper.text()).not.toContain('admin.accounts.upstreamBilling.notSynced')
+    await wrapper.get('[data-testid="upstream-billing-details"]').trigger('mouseenter')
+    await flushPromises()
+    let tooltip = Array.from(document.body.querySelectorAll('[role="tooltip"]')).pop() as HTMLElement
+    expect(tooltip.textContent).toContain('admin.accounts.upstreamBilling.newapiInferredGroup:gpt-plus')
+    expect(tooltip.textContent).toContain('admin.accounts.upstreamBilling.newapiModelInferenceBasis:6')
+    expect(tooltip.textContent).toContain('admin.accounts.upstreamBilling.newapiPricingRate:0.15')
+    expect(tooltip.textContent).toContain('admin.accounts.upstreamBilling.upstreamVersion:rc.15-secfix')
+
+    await wrapper.setProps({
+      account: makeAccount({
+        rate_multiplier: 0.38,
+        extra: {
+          upstream_billing_probe_enabled: true,
+          upstream_billing_rate_sync_enabled: true,
+          upstream_billing_probe: snapshotFor({ source: 'group_pricing', group: 'gpt-pro', resolved_rate_multiplier: 0.38 })
+        }
+      })
+    })
+    await flushPromises()
+    tooltip = Array.from(document.body.querySelectorAll('[role="tooltip"]')).pop() as HTMLElement
+    expect(wrapper.get('[data-testid="upstream-billing-rate"]').text()).toBe('0.38x')
+    expect(tooltip.textContent).toContain('admin.accounts.upstreamBilling.newapiGroup:gpt-pro')
+    expect(tooltip.textContent).toContain('admin.accounts.upstreamBilling.newapiGroupPricingBasis')
+    wrapper.unmount()
+  })
+
+  it('explains log confirmations, ambiguous groups and probe failures', async () => {
+    const wrapper = mount(UpstreamBillingRateCell, {
+      props: {
+        account: makeAccount({
+          rate_multiplier: 0.15,
+          extra: {
+            upstream_billing_probe_enabled: true,
+            upstream_billing_rate_sync_enabled: true,
+            upstream_billing_probe: {
+              status: 'ok',
+              protocol: 'newapi',
+              data: { source: 'consumption_log', group: 'gpt-plus', resolved_rate_multiplier: 0.15, consensus_required: 3, corroborated_by: 'model_inference' },
+              observed_multiplier: 0.15,
+              multiplier_match_count: 1,
+              received_at: '2026-07-13T00:00:00Z',
+              fresh_until: '2026-07-14T00:00:00Z',
+              last_attempt_at: '2026-07-13T00:00:00Z',
+              next_probe_at: '2026-07-13T00:30:00Z'
+            }
+          }
+        }),
+        now: Date.now()
+      }
+    })
+    await wrapper.get('[data-testid="upstream-billing-details"]').trigger('mouseenter')
+    await flushPromises()
+    expect(wrapper.get('[data-testid="upstream-billing-rate"]').text()).toBe('0.15x')
+    expect(document.body.querySelector('[data-testid="upstream-billing-corroborated"]')?.textContent)
+      .toContain('admin.accounts.upstreamBilling.newapiCorroborated:admin.accounts.upstreamBilling.catalogSource.model_inference')
+
+    await wrapper.setProps({
+      account: makeAccount({
+        extra: {
+          upstream_billing_probe_enabled: true,
+          upstream_billing_probe: {
+            status: 'waiting_logs',
+            protocol: 'newapi',
+            data: { source: 'model_inference', candidates: [{ group: 'cc-coding', rate_multiplier: 0.8 }, { group: 'cc-max', rate_multiplier: 0.85 }] },
+            last_error: 'waiting_for_consumption_logs',
+            last_attempt_at: '2026-07-13T00:00:00Z',
+            next_probe_at: '2026-07-13T00:30:00Z'
+          }
+        }
+      })
+    })
+    await flushPromises()
+    expect(wrapper.get('[data-testid="upstream-billing-rate"]').text()).toBe('admin.accounts.upstreamBilling.noDeclaration')
+    expect(document.body.querySelector('[data-testid="upstream-billing-candidates"]')?.textContent)
+      .toContain('admin.accounts.upstreamBilling.newapiCandidates:cc-coding (0.80x), cc-max (0.85x)')
+    expect(document.body.querySelector('[data-testid="upstream-billing-reason"]')).toBeNull()
+
+    await wrapper.setProps({
+      account: makeAccount({
+        extra: {
+          upstream_billing_probe_enabled: true,
+          upstream_billing_probe: {
+            status: 'failed',
+            protocol: 'newapi',
+            http_status: 403,
+            last_error: 'cloudflare_blocked',
+            last_attempt_at: '2026-07-13T00:00:00Z',
+            next_probe_at: '2026-07-13T00:30:00Z'
+          }
+        }
+      })
+    })
+    await flushPromises()
+    expect(wrapper.get('[data-testid="upstream-billing-rate"]').text()).toBe('admin.accounts.upstreamBilling.failed')
+    expect(document.body.querySelector('[data-testid="upstream-billing-reason"]')?.textContent)
+      .toBe('admin.accounts.upstreamBilling.reasons.cloudflare_blocked:403')
+
+    await wrapper.setProps({
+      account: makeAccount({
+        extra: {
+          upstream_billing_probe_enabled: true,
+          upstream_billing_probe: {
+            status: 'failed',
+            last_error: 'something_new',
+            last_attempt_at: '2026-07-13T00:00:00Z',
+            next_probe_at: '2026-07-13T00:30:00Z'
+          }
+        }
+      })
+    })
+    await flushPromises()
+    expect(document.body.querySelector('[data-testid="upstream-billing-reason"]')?.textContent)
+      .toBe('admin.accounts.upstreamBilling.reasons.other:something_new')
+    expect(document.body.querySelector('[data-testid="upstream-billing-version"]')).toBeNull()
+    wrapper.unmount()
+  })
+
   it('distinguishes a New API zero declaration from a missing declaration and keeps it unsynced', async () => {
     const account = makeAccount({
       rate_multiplier: 0.5,

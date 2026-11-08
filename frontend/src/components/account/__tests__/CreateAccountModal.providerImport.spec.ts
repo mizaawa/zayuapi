@@ -29,7 +29,8 @@ vi.mock('@/api/admin', () => ({
     },
     settings: {
       getWebSearchEmulationConfig: vi.fn().mockResolvedValue({ enabled: false, providers: [] }),
-      getSettings: vi.fn().mockResolvedValue({})
+      // New accounts take the auto-probe toggle from this global default.
+      getSettings: vi.fn().mockResolvedValue({ default_upstream_billing_rate_sync_enabled: true })
     },
     tlsFingerprintProfiles: { list: vi.fn().mockResolvedValue([]) }
   }
