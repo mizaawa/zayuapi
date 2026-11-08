@@ -364,6 +364,28 @@ describe('DataTable', () => {
     expect(wrapper.find('[data-test="custom-card"]').exists()).toBe(false)
   })
 
+  it('lays mobile cards two per row from the sm breakpoint when asked', async () => {
+    stubMobileMatchMedia()
+    const columns = [{ key: 'name', label: 'Name' }]
+    const list = mount(DataTable, { props: { columns, data: [{ id: 1, name: 'One' }], rowKey: 'id' } })
+    expect(list.find('[data-test="mobile-card-grid"]').exists()).toBe(false)
+    expect(list.get('.space-y-3').exists()).toBe(true)
+    list.unmount()
+
+    const grid = mount(DataTable, {
+      props: { columns, data: [{ id: 1, name: 'One' }, { id: 2, name: 'Two' }], rowKey: 'id', selectable: true, mobileCardGrid: true }
+    })
+    const container = grid.get('[data-test="mobile-card-grid"]')
+    expect(container.classes()).toEqual(expect.arrayContaining(['grid', 'grid-cols-1', 'sm:grid-cols-2']))
+    expect(container.classes()).not.toContain('space-y-3')
+    expect(container.findAll('.data-mobile-card')).toHaveLength(2)
+    // The select-all row spans both columns instead of taking a card's slot.
+    expect(grid.get('[data-test="select-all-mobile"]').element.closest('div')?.classList.contains('sm:col-span-2')).toBe(true)
+
+    await grid.setProps({ data: [] })
+    expect(grid.get('.data-empty-panel').classes()).toContain('sm:col-span-2')
+  })
+
   it('offers current-page select all in the mobile card layout', async () => {
     stubMobileMatchMedia()
     const wrapper = mount(DataTable, {

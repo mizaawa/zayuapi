@@ -651,6 +651,32 @@ describe('AccountUsageCell', () => {
 		expect(badges.some(node => node.attributes('title') === 'usage.userBilled')).toBe(true)
   })
 
+  it('Key 账号在卡片里交给调用方显示今日统计和额度条', async () => {
+    const account = makeAccount({
+      id: 3002,
+      platform: 'anthropic',
+      type: 'apikey',
+      quota_daily_limit: 20,
+      quota_daily_used: 5,
+      quota_limit: 100,
+      quota_used: 40
+    })
+    const todayStats = { requests: 10, tokens: 2000, cost: 1, standard_cost: 1, user_cost: 2 }
+    const stubs = { UsageProgressBar: { props: ['label', 'utilization'], template: '<div data-test="quota-bar">{{ label }}:{{ utilization }}</div>' }, AccountQuotaInfo: true }
+
+    const table = mount(AccountUsageCell, { props: { account, todayStats }, global: { stubs } })
+    await flushPromises()
+    expect(table.text()).toContain('10 req')
+    expect(table.findAll('[data-test="quota-bar"]').map(bar => bar.text())).toEqual(['1d:25', 'total:40'])
+    table.unmount()
+
+    const card = mount(AccountUsageCell, { props: { account, todayStats, hideKeyStats: true }, global: { stubs } })
+    await flushPromises()
+    expect(card.text()).not.toContain('req')
+    expect(card.find('[data-test="quota-bar"]').exists()).toBe(false)
+    expect(card.text()).not.toContain('-')
+  })
+
   it('Grok OAuth 会展示本地 user billed 用量并把耗尽配额显示为 0% 剩余', async () => {
     getUsage.mockResolvedValue({
       grok_local_usage: {

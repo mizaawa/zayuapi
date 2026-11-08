@@ -187,12 +187,14 @@
           @select-all-results="handleSelectAllResults"
           @toggle-schedulable="handleBulkToggleSchedulable"
         />
-        <div ref="accountTableRef" class="flex min-h-0 flex-1 flex-col overflow-hidden">
+        <div ref="accountTableRef" class="account-table-host flex min-h-0 flex-1 flex-col overflow-hidden">
         <DataTable
           ref="dataTableRef"
           :columns="cols"
           :data="accounts"
           :loading="loading"
+          :row-class="accountRowClass"
+          mobile-card-grid
           row-key="id"
           :server-side-sort="true"
           @sort="handleSort"
@@ -438,7 +440,14 @@
             </div>
           </template>
           <template #mobile-card="{ row }">
-            <article class="account-card" :data-account-id="row.id">
+            <!-- Same language as the key cards: tinted stat tiles, a status strip
+                 on the top edge for accounts that cannot serve, actions last. -->
+            <article
+              class="account-card"
+              :class="'is-' + cardTone(row)"
+              :data-account-id="row.id"
+              :data-tone="cardTone(row)"
+            >
               <header class="account-card-head">
                 <input
                   type="checkbox"
@@ -447,11 +456,14 @@
                   :aria-label="row.name"
                   @change="toggleSel(row.id)"
                 />
-                <div class="min-w-0 flex-1">
-                  <p class="account-card-name">{{ row.name }}</p>
-                  <p v-if="accountDisplayEmail(row)" class="account-card-email">{{ accountDisplayEmail(row) }}</p>
+                <div class="account-card-title">
+                  <p class="account-card-name" :title="row.name">{{ row.name }}</p>
+                  <p class="account-card-meta">
+                    <span class="account-card-id">#{{ row.id }}</span>
+                    <span v-if="cardSubtitle(row)" class="account-card-email" :title="cardSubtitle(row)">{{ cardSubtitle(row) }}</span>
+                  </p>
                 </div>
-                <AccountStatusIndicator :account="row" @show-temp-unsched="handleShowTempUnsched" />
+                <AccountStatusIndicator class="account-card-status" :account="row" @show-temp-unsched="handleShowTempUnsched" />
               </header>
 
               <div class="account-card-tags">
@@ -461,29 +473,11 @@
                   :privacy-mode="row.extra?.privacy_mode || row.parent_privacy_mode"
                   :subscription-expires-at="row.credentials?.subscription_expires_at || row.parent_subscription_expires_at" />
                 <AccountSourceBadge :account="row" />
-                <!-- The account's own billing multiplier (what the upstream charges), not a group rate. -->
-                <span
-                  class="account-card-rate"
-                  :title="t('admin.accounts.card.rateMultiplierHint')"
-                  data-testid="account-card-rate"
-                >
-                  <span>{{ t('admin.accounts.card.rateMultiplier') }}</span>
-                  <strong>{{ formatMultiplier(row.rate_multiplier ?? 1) }}x</strong>
-                  <span
-                    v-if="row.extra?.upstream_billing_rate_sync_enabled === true"
-                    class="account-card-rate-sync"
-                    :aria-label="t('admin.accounts.upstreamBilling.syncedRateTooltip')"
-                    :title="t('admin.accounts.upstreamBilling.syncedRateTooltip')"
-                    data-testid="account-card-rate-sync"
-                  >
-                    <Icon name="sync" size="xs" />
-                  </span>
-                </span>
               </div>
 
-              <!-- One strip, one type scale: live concurrency first, then today's work. -->
-              <dl class="account-card-metrics">
-                <div class="account-card-metric">
+              <!-- Three per row: live load and the two rates, then today's work. -->
+              <dl class="account-card-stats">
+                <div class="account-card-stat">
                   <dt>{{ t('admin.accounts.card.concurrency') }}</dt>
                   <dd>
                     <span
@@ -496,29 +490,27 @@
                     </span>
                   </dd>
                 </div>
-                <div class="account-card-metric">
-                  <dt>{{ t('admin.accounts.card.requests') }}</dt>
-                  <dd>{{ cardTodayValue(row, 'requests') }}</dd>
-                </div>
-                <div class="account-card-metric">
-                  <dt>{{ t('admin.accounts.card.tokens') }}</dt>
-                  <dd>{{ cardTodayValue(row, 'tokens') }}</dd>
-                </div>
-                <div class="account-card-metric">
-                  <dt>{{ t('admin.accounts.card.cost') }}</dt>
-                  <dd :title="t('usage.accountBilled')">{{ cardTodayValue(row, 'cost') }}</dd>
-                  <dd
-                    v-if="todayStatsByAccountId[String(row.id)]?.user_cost != null"
-                    class="account-card-metric-sub"
-                    :title="t('usage.userBilled')"
-                  >
-                    {{ t('admin.accounts.card.userCost', { cost: cardTodayValue(row, 'user_cost') }) }}
+                <!-- The account's own billing multiplier (what the upstream charges), not a group rate. -->
+                <div class="account-card-stat" :title="t('admin.accounts.card.rateMultiplierHint')" data-testid="account-card-rate">
+                  <dt>{{ t('admin.accounts.card.rateMultiplier') }}</dt>
+                  <dd class="account-card-rate">
+                    <strong>{{ formatMultiplier(row.rate_multiplier ?? 1) }}x</strong>
+                    <span
+                      v-if="row.extra?.upstream_billing_rate_sync_enabled === true"
+                      class="account-card-rate-sync"
+                      :aria-label="t('admin.accounts.upstreamBilling.syncedRateTooltip')"
+                      :title="t('admin.accounts.upstreamBilling.syncedRateTooltip')"
+                      data-testid="account-card-rate-sync"
+                    >
+                      <Icon name="sync" size="xs" />
+                    </span>
                   </dd>
                 </div>
-                <div v-if="row.type === 'apikey'" class="account-card-metric" data-testid="account-card-upstream-billing-rate">
-                  <dt>{{ t('admin.accounts.columns.upstreamBillingRate') }}</dt>
+                <div v-if="row.type === 'apikey'" class="account-card-stat" data-testid="account-card-upstream-billing-rate">
+                  <dt>{{ t('admin.accounts.card.upstreamRate') }}</dt>
                   <dd>
                     <UpstreamBillingRateCell
+                      variant="card"
                       :account="row"
                       :global-probe-enabled="upstreamBillingProbeGloballyEnabled"
                       :now="upstreamBillingNow"
@@ -527,7 +519,47 @@
                     />
                   </dd>
                 </div>
+                <div v-else class="account-card-stat" data-testid="account-card-last-used">
+                  <dt>{{ t('admin.accounts.card.lastUsed') }}</dt>
+                  <dd class="account-card-stat-text">{{ row.last_used_at ? formatRelativeTime(row.last_used_at) : t('admin.accounts.card.neverUsed') }}</dd>
+                </div>
+                <div class="account-card-stat">
+                  <dt>{{ t('admin.accounts.card.requests') }}</dt>
+                  <dd>{{ cardTodayValue(row, 'requests') }}</dd>
+                </div>
+                <div class="account-card-stat">
+                  <dt>{{ t('admin.accounts.card.tokens') }}</dt>
+                  <dd>{{ cardTodayValue(row, 'tokens') }}</dd>
+                </div>
+                <div class="account-card-stat">
+                  <dt>{{ t('admin.accounts.card.cost') }}</dt>
+                  <dd :title="t('usage.accountBilled')">{{ cardTodayValue(row, 'cost') }}</dd>
+                  <dd
+                    v-if="todayStatsByAccountId[String(row.id)]?.user_cost != null"
+                    class="account-card-stat-sub"
+                    :title="t('usage.userBilled')"
+                  >
+                    {{ t('admin.accounts.card.userCost', { cost: cardTodayValue(row, 'user_cost') }) }}
+                  </dd>
+                </div>
               </dl>
+
+              <div v-if="cardQuotaBars(row).length" class="account-card-quotas" data-testid="account-card-quotas">
+                <div v-for="bar in cardQuotaBars(row)" :key="bar.period" class="account-card-quota">
+                  <div class="account-card-quota-row">
+                    <span class="account-card-quota-label">{{ cardQuotaLabel(bar.period) }}</span>
+                    <span class="account-card-quota-value" :class="'is-' + cardQuotaTone(bar)">
+                      ${{ bar.used.toFixed(2) }}<span class="account-card-quota-limit"> / ${{ bar.limit.toFixed(2) }}</span>
+                    </span>
+                  </div>
+                  <div class="account-card-meter" role="presentation">
+                    <div class="account-card-meter-fill" :class="'is-' + cardQuotaTone(bar)" :style="{ width: cardQuotaWidth(bar) }"></div>
+                  </div>
+                  <span v-if="formatCountdown(bar.resetsAt)" class="account-card-quota-reset">
+                    {{ t('admin.accounts.card.quotaResetsIn', { time: formatCountdown(bar.resetsAt) }) }}
+                  </span>
+                </div>
+              </div>
 
               <AccountCapacityCell
                 v-if="cardHasLiveLimits(row)"
@@ -536,9 +568,21 @@
                 class="account-card-limits"
               />
 
+              <div v-if="cardShowsUsageCell(row)" class="account-card-usage">
+                <AccountUsageCell
+                  :account="row"
+                  :today-stats="todayStatsByAccountId[String(row.id)] ?? null"
+                  :today-stats-loading="todayStatsLoading"
+                  :manual-refresh-token="usageManualRefreshToken"
+                  hide-key-stats
+                  @account-updated="handleAccountUpdated"
+                />
+              </div>
+
               <div v-if="row.groups?.length" class="account-card-groups">
+                <span class="account-card-groups-label">{{ t('admin.accounts.card.groups') }}</span>
                 <GroupBadge
-                  v-for="group in row.groups"
+                  v-for="group in row.groups.slice(0, CARD_GROUP_LIMIT)"
                   :key="group.id"
                   class="max-w-full"
                   :name="group.name"
@@ -546,18 +590,16 @@
                   :subscription-type="group.subscription_type"
                   :rate-multiplier="group.rate_multiplier"
                   :show-rate="false"
-                  :max-name-length="18"
+                  :max-name-length="16"
                 />
-              </div>
-
-              <div v-if="cardShowsUsageCell(row)" class="account-card-usage">
-                <AccountUsageCell
-                  :account="row"
-                  :today-stats="todayStatsByAccountId[String(row.id)] ?? null"
-                  :today-stats-loading="todayStatsLoading"
-                  :manual-refresh-token="usageManualRefreshToken"
-                  @account-updated="handleAccountUpdated"
-                />
+                <span
+                  v-if="row.groups.length > CARD_GROUP_LIMIT"
+                  class="account-card-groups-more"
+                  :title="cardMoreGroupsTitle(row)"
+                  data-testid="account-card-groups-more"
+                >
+                  +{{ row.groups.length - CARD_GROUP_LIMIT }}
+                </span>
               </div>
 
               <footer class="account-card-foot">
@@ -671,7 +713,8 @@ import ErrorPassthroughRulesModal from '@/components/admin/ErrorPassthroughRules
 import TLSFingerprintProfilesModal from '@/components/admin/TLSFingerprintProfilesModal.vue'
 import { fetchAllAccountIds } from '@/utils/accountSelection'
 import { buildGrokUsageRefreshKey, buildOpenAIUsageRefreshKey } from '@/utils/accountUsageRefresh'
-import { formatCompactNumber, formatDateTime, formatRelativeTime } from '@/utils/format'
+import { formatCompactNumber, formatCountdown, formatDateTime, formatRelativeTime } from '@/utils/format'
+import { accountQuotaBars, type AccountQuotaBar, type AccountQuotaPeriod } from '@/utils/accountQuota'
 import { isUnlimitedConcurrency } from '@/utils/accountConcurrency'
 import { proxyExpiryBadgeClass, proxyExpiryLabelKey } from '@/utils/proxyExpiry'
 import { extractApiErrorMessage } from '@/utils/apiError'
@@ -1621,15 +1664,64 @@ const cardHasLiveLimits = (account: Account) =>
   (account.type === 'oauth' || account.type === 'setup-token') &&
   ((account.window_cost_limit ?? 0) > 0 || (account.max_sessions ?? 0) > 0 || (account.base_rpm ?? 0) > 0)
 
-// The phone card already shows today's numbers; the usage cell only earns its
-// place when it adds usage windows, quota bars or provider usage on top.
+// The card draws today's numbers and key/Bedrock quotas itself; the usage cell
+// only earns its place for provider usage (OAuth windows, Gemini, Ollama Cloud).
 const cardShowsUsageCell = (account: Account) =>
   !(account.type === 'apikey' || account.type === 'bedrock') ||
   account.platform === 'gemini' ||
-  account.ollama_cloud_usage?.eligible === true ||
-  (account.quota_daily_limit ?? 0) > 0 ||
-  (account.quota_weekly_limit ?? 0) > 0 ||
-  (account.quota_limit ?? 0) > 0
+  account.ollama_cloud_usage?.eligible === true
+
+const cardQuotaBars = (account: Account): AccountQuotaBar[] =>
+  account.type === 'apikey' || account.type === 'bedrock' ? accountQuotaBars(account) : []
+
+const cardQuotaLabel = (period: AccountQuotaPeriod) =>
+  t(period === 'daily' ? 'admin.accounts.card.quotaDaily' : period === 'weekly' ? 'admin.accounts.card.quotaWeekly' : 'admin.accounts.card.quotaTotal')
+
+const cardQuotaTone = (bar: AccountQuotaBar): 'ok' | 'warn' | 'danger' =>
+  bar.utilization >= 100 ? 'danger' : bar.utilization >= 80 ? 'warn' : 'ok'
+
+const cardQuotaWidth = (bar: AccountQuotaBar) =>
+  `${Math.round(Math.min(100, Math.max(0, bar.utilization)) * 10) / 10}%`
+
+// Cards show this many groups and fold the rest into a "+N" chip.
+const CARD_GROUP_LIMIT = 3
+
+const cardMoreGroupsTitle = (account: Account) => {
+  const rest = (account.groups ?? []).slice(CARD_GROUP_LIMIT)
+  return t('admin.accounts.card.moreGroups', { count: rest.length, names: rest.map((group) => group.name).join(', ') })
+}
+
+// Email for OAuth accounts, the upstream host for API keys.
+const cardSubtitle = (account: Account): string => {
+  const email = accountDisplayEmail(account)
+  if (email) return email
+  const homepage = accountHomepageUrl(account)
+  return homepage ? new URL(homepage).host : ''
+}
+
+// The strip along a card's top edge: errors red, throttled or over quota amber,
+// paused grey. API keys only know the scheduling switch, like their status badge.
+const cardTone = (account: Account): 'ok' | 'warn' | 'error' | 'paused' => {
+  const now = Date.now()
+  const pending = (value?: string | null) => !!value && new Date(value).getTime() > now
+  const exceeded = (used?: number | null, limit?: number | null) =>
+    typeof limit === 'number' && limit > 0 && (used ?? 0) >= limit
+  if (account.type !== 'apikey') {
+    if (account.status === 'error') return 'error'
+    if (pending(account.rate_limit_reset_at) || pending(account.overload_until) || pending(account.temp_unschedulable_until)) return 'warn'
+    if (account.status !== 'active') return 'paused'
+  }
+  if (!account.schedulable) return 'paused'
+  if (
+    exceeded(account.quota_used, account.quota_limit) ||
+    exceeded(account.quota_daily_used, account.quota_daily_limit) ||
+    exceeded(account.quota_weekly_used, account.quota_weekly_limit)
+  ) return 'warn'
+  return 'ok'
+}
+
+// Selected cards get an outline; table rows ignore the class.
+const accountRowClass = (account: Account) => (isSelected(account.id) ? 'is-account-selected' : undefined)
 
 function accountDisplayEmail(row: any): string {
   return row.extra?.email_address || row.extra?.email || row.credentials?.email || row.parent_email || ''
@@ -2545,14 +2637,53 @@ onUnmounted(() => {
 .account-tools-menu-icon {
   @apply inline-flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-md;
 }
-/* ---------- Phone account card ---------- */
+/* ---------- Account card (below the desktop breakpoint) ---------- */
+/* Same language as the key cards: a rounded raised shell, tinted tiles for
+   numbers, a thin status strip on the top edge, actions at the bottom. */
+.account-table-host :deep(.data-mobile-card) {
+  border-radius: 1.25rem;
+  box-shadow: var(--theme-highlight), var(--theme-elevation-1);
+  transition: box-shadow 200ms ease;
+}
+
+.account-table-host :deep(.data-mobile-card.is-account-selected) {
+  box-shadow: inset 0 0 0 2px #e9b824, var(--theme-elevation-1);
+}
+
 .account-card {
+  position: relative;
   display: flex;
+  height: 100%;
   min-width: 0;
   flex-direction: column;
   gap: 0.75rem;
 }
 
+/* The shell pads its card by 1rem, so the strip sits on the shell's top edge. */
+.account-card::before {
+  content: '';
+  position: absolute;
+  top: -1rem;
+  right: 0.25rem;
+  left: 0.25rem;
+  height: 3px;
+  border-radius: 0 0 3px 3px;
+  background: transparent;
+}
+
+.account-card.is-error::before {
+  background: #ef4444;
+}
+
+.account-card.is-warn::before {
+  background: #f59e0b;
+}
+
+.account-card.is-paused::before {
+  background: #cdbf95;
+}
+
+/* ---------- Header ---------- */
 .account-card-head {
   display: flex;
   align-items: flex-start;
@@ -2564,21 +2695,53 @@ onUnmounted(() => {
   flex-shrink: 0;
 }
 
+.account-card-title {
+  min-width: 0;
+  flex: 1;
+}
+
 .account-card-name {
+  display: -webkit-box;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
   font-size: 0.9375rem;
   font-weight: 700;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
   color: var(--md-sys-color-on-surface);
 }
 
+.account-card-meta {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  gap: 0.375rem;
+  margin-top: 0.125rem;
+  font-size: 0.75rem;
+  color: var(--md-sys-color-on-surface-variant);
+}
+
+.account-card-id {
+  flex-shrink: 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-variant-numeric: tabular-nums;
+}
+
 .account-card-email {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 0.75rem;
-  color: var(--md-sys-color-on-surface-variant);
+}
+
+.account-card-email::before {
+  content: '·';
+  margin-right: 0.375rem;
+}
+
+.account-card-status {
+  flex-shrink: 0;
 }
 
 .account-card-tags {
@@ -2589,76 +2752,73 @@ onUnmounted(() => {
   gap: 0.375rem;
 }
 
-.account-card-rate {
-  display: inline-flex;
-  flex-shrink: 0;
-  align-items: center;
-  gap: 0.25rem;
-  padding: 0 0.5rem;
-  border-radius: 999px;
-  background: #fff3bd;
-  font-size: 0.75rem;
-  line-height: 1.375rem;
-  white-space: nowrap;
-  color: var(--md-sys-color-on-surface-variant);
-}
-
-.account-card-rate strong {
-  font-weight: 750;
-  font-variant-numeric: tabular-nums;
-  color: var(--md-sys-color-on-surface);
-}
-
-.account-card-rate-sync {
-  display: inline-flex;
-  color: #477b54;
-}
-
-.account-card-metrics {
+/* ---------- Stat tiles ---------- */
+/* Three equal columns at every width, so six tiles always make two even rows. */
+.account-card-stats {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 0.25rem;
-  padding: 0.75rem 0.875rem;
-  border-radius: 1rem;
-  background: #fffbe8;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.5rem;
 }
 
-.account-card-metric {
+.account-card-stat {
   display: flex;
   min-width: 0;
   flex-direction: column;
-  gap: 0.25rem;
+  gap: 0.1875rem;
+  padding: 0.5rem 0.625rem;
+  border-radius: 0.875rem;
+  background: #fffbe8;
 }
 
-.account-card-metric + .account-card-metric {
-  padding-left: 0.625rem;
-  box-shadow: inset 1px 0 0 rgb(215 193 106 / 0.35);
-}
-
-.account-card-metric dt {
+.account-card-stat dt {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 0.6875rem;
+  line-height: 1rem;
   color: var(--md-sys-color-on-surface-variant);
 }
 
-.account-card-metric dd {
+.account-card-stat dd {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 0.9375rem;
   font-weight: 700;
-  line-height: 1.25rem;
+  line-height: 1.375rem;
   font-variant-numeric: tabular-nums;
   color: var(--md-sys-color-on-surface);
 }
 
-.account-card-metric .account-card-metric-sub {
+.account-card-stat .account-card-stat-text {
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.account-card-stat .account-card-stat-sub {
+  white-space: normal;
+  overflow-wrap: anywhere;
   font-size: 0.6875rem;
   font-weight: 500;
   line-height: 1rem;
   color: var(--md-sys-color-on-surface-variant);
+}
+
+.account-card-rate {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.account-card-rate strong {
+  font-weight: 700;
+}
+
+.account-card-rate-sync {
+  display: inline-flex;
+  flex-shrink: 0;
+  color: #477b54;
 }
 
 /* Live concurrency: the dot carries state, the number stays in ink. */
@@ -2699,43 +2859,156 @@ onUnmounted(() => {
   color: var(--md-sys-color-on-surface-variant);
 }
 
+/* ---------- Quotas and usage ---------- */
+.account-card-quotas,
+.account-card-usage {
+  min-width: 0;
+  padding: 0.625rem 0.75rem;
+  border-radius: 0.875rem;
+  background: #fffbe8;
+}
+
+.account-card-quotas {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.account-card-quota {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.account-card-quota-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+  font-size: 0.75rem;
+}
+
+.account-card-quota-label {
+  color: var(--md-sys-color-on-surface-variant);
+}
+
+.account-card-quota-value {
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  color: var(--md-sys-color-on-surface);
+}
+
+.account-card-quota-value.is-warn {
+  color: #b45309;
+}
+
+.account-card-quota-value.is-danger {
+  color: #dc2626;
+}
+
+.account-card-quota-limit {
+  font-weight: 500;
+  color: var(--md-sys-color-on-surface-variant);
+}
+
+.account-card-meter {
+  height: 0.375rem;
+  width: 100%;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #eee5c9;
+}
+
+.account-card-meter-fill {
+  height: 100%;
+  border-radius: inherit;
+  background: #e9b824;
+  transition: width 300ms ease;
+}
+
+.account-card-meter-fill.is-warn {
+  background: #f59e0b;
+}
+
+.account-card-meter-fill.is-danger {
+  background: #ef4444;
+}
+
+.account-card-quota-reset {
+  align-self: flex-end;
+  font-size: 0.625rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--md-sys-color-on-surface-variant);
+}
+
+.account-card-usage {
+  overflow-x: auto;
+}
+
+/* Provider usage windows use the table's 32px bars; let them use the tile. */
+.account-card-usage :deep(.usage-progress-track) {
+  width: auto;
+  flex: 1 1 auto;
+}
+
 .account-card-limits {
   flex-direction: row;
   flex-wrap: wrap;
   gap: 0.375rem;
 }
 
+/* ---------- Groups ---------- */
 .account-card-groups {
   display: flex;
   min-width: 0;
   flex-wrap: wrap;
+  align-items: center;
   gap: 0.375rem;
 }
 
-.account-card-usage {
-  min-width: 0;
-  overflow-x: auto;
+.account-card-groups-label {
+  margin-right: 0.125rem;
+  font-size: 0.6875rem;
+  color: var(--md-sys-color-on-surface-variant);
 }
 
+.account-card-groups-more {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.0625rem 0.5rem;
+  border-radius: 999px;
+  background: #f3efe2;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  line-height: 1.25rem;
+  color: #716744;
+}
+
+/* ---------- Actions ---------- */
 .account-card-foot {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 0.75rem;
+  margin-top: auto;
   padding-top: 0.625rem;
   box-shadow: inset 0 1px 0 rgb(215 193 106 / 0.3);
 }
 
 .account-card-switch {
   display: inline-flex;
+  min-width: 0;
   align-items: center;
   gap: 0.5rem;
   font-size: 0.8125rem;
+  white-space: nowrap;
   color: var(--md-sys-color-on-surface-variant);
 }
 
 .account-card-actions {
   display: flex;
+  flex-shrink: 0;
   gap: 0.25rem;
 }
 
@@ -2760,5 +3033,21 @@ onUnmounted(() => {
 .account-card-action.is-danger:hover {
   background: #fee2e2;
   color: #b91c1c;
+}
+
+/* The narrowest phones (320px) keep money values in their tiles. */
+@media (max-width: 359px) {
+  .account-card-stat {
+    padding: 0.5rem;
+  }
+
+  .account-card-stat dd {
+    font-size: 0.8125rem;
+  }
+
+  .account-card-action {
+    min-width: 2.5rem;
+    padding: 0.375rem 0.375rem;
+  }
 }
 </style>

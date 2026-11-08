@@ -1,8 +1,30 @@
 <template>
-  <div v-if="eligible" class="flex h-6 min-w-[7rem] items-center gap-1">
-    <HelpTooltip class="-ml-1" width-class="w-max max-w-[calc(100vw-2rem)]" data-testid="upstream-billing-details">
+  <!-- The card variant fills an account card stat tile: the value inherits the
+       tile's type, the probe button sits at the tile's right edge and a
+       short status line goes below instead of beside the value. -->
+  <div
+    v-if="eligible"
+    :class="isCard
+      ? 'grid w-full min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-1'
+      : 'flex h-6 min-w-[7rem] items-center gap-1'"
+    :data-variant="variant"
+  >
+    <HelpTooltip
+      :class="isCard ? '!ml-0 min-w-0 justify-self-start' : '-ml-1'"
+      width-class="w-max max-w-[calc(100vw-2rem)]"
+      data-testid="upstream-billing-details"
+    >
       <template #trigger>
         <span
+          v-if="isCard"
+          class="block max-w-full cursor-help truncate border-b border-dotted border-[#d7c16a]"
+          :class="hasEffectiveRate ? 'tabular-nums' : ['text-xs font-semibold', statusClass || 'text-[#8a7d5b]']"
+          data-testid="upstream-billing-rate"
+        >
+          {{ cardPrimaryValue }}
+        </span>
+        <span
+          v-else
           class="cursor-help border-b border-dotted border-gray-300 text-sm font-medium dark:border-dark-600"
           :class="hasEffectiveRate ? 'font-mono text-gray-800 dark:text-gray-200' : statusClass || 'text-gray-400 dark:text-gray-500'"
           data-testid="upstream-billing-rate"
@@ -108,12 +130,23 @@
         </p>
       </div>
     </HelpTooltip>
-    <span v-if="hasEffectiveRate && (statusLabel || unsyncedDeclaration)" :class="statusClass" class="whitespace-nowrap text-[10px] font-medium">
-      {{ statusLabel || t('admin.accounts.upstreamBilling.notSynced') }}
+    <span
+      v-if="hasEffectiveRate && (statusLabel || unsyncedDeclaration)"
+      :class="[
+        statusClass || (isCard ? 'text-[#a96700]' : ''),
+        isCard ? 'col-span-2 row-start-2 truncate text-[0.6875rem] leading-4' : 'whitespace-nowrap text-[10px]'
+      ]"
+      class="font-medium"
+      data-testid="upstream-billing-status"
+    >
+      {{ isCard ? cardStatusLabel || t('admin.accounts.upstreamBilling.short.notSynced') : statusLabel || t('admin.accounts.upstreamBilling.notSynced') }}
     </span>
     <button
       type="button"
-      class="inline-flex h-6 w-6 flex-shrink-0 items-center justify-center rounded text-blue-600 transition-colors hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50 dark:text-blue-400 dark:hover:bg-blue-900/30"
+      class="inline-flex h-6 w-6 flex-shrink-0 items-center justify-center rounded transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+      :class="isCard
+        ? 'col-start-2 row-start-1 rounded-lg text-[#8a7d5b] hover:bg-[#fff3bd] hover:text-[#7e5600]'
+        : 'text-blue-600 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-900/30'"
       :disabled="probing"
       :aria-label="t('admin.accounts.upstreamBilling.manualProbe')"
       :title="t('admin.accounts.upstreamBilling.manualProbe')"
@@ -146,8 +179,11 @@ const props = withDefaults(defineProps<{
   now: number
   probing?: boolean
   globalProbeEnabled?: boolean
+  /** "card" fits an account card stat tile; "table" is the list column. */
+  variant?: 'table' | 'card'
 }>(), {
-  globalProbeEnabled: true
+  globalProbeEnabled: true,
+  variant: 'table'
 })
 
 defineEmits<{
@@ -356,6 +392,18 @@ const unsyncedDeclaration = computed(() => {
   return typeof current !== 'number' || !Number.isFinite(current) || Math.abs(current - Math.round(declared * 10_000) / 10_000) > 0.00005
 })
 const primaryValue = computed(() => hasEffectiveRate.value ? effectiveRate.value : statusLabel.value || '-')
+const isCard = computed(() => props.variant === 'card')
+// A stat tile is a third of a phone card: short words, the full ones stay in the tooltip.
+const cardStatusLabel = computed(() => {
+  if (!snapshot.value) return t('admin.accounts.upstreamBilling.short.notProbed')
+  if (snapshot.value.status === 'waiting_logs') return t('admin.accounts.upstreamBilling.short.noDeclaration')
+  if (snapshot.value.status === 'waiting_consensus') return t('admin.accounts.upstreamBilling.short.waitingConsensus')
+  if (snapshot.value.status === 'unsupported') return t('admin.accounts.upstreamBilling.short.unsupported')
+  if (stale.value) return t('admin.accounts.upstreamBilling.short.stale')
+  if (snapshot.value.status === 'failed') return t('admin.accounts.upstreamBilling.short.failed')
+  return ''
+})
+const cardPrimaryValue = computed(() => hasEffectiveRate.value ? effectiveRate.value : cardStatusLabel.value || '-')
 const formatDate = (value?: string) => value
   ? new Date(value).toLocaleString(undefined, {
       month: '2-digit',

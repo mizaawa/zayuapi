@@ -1,5 +1,9 @@
 <template>
-  <div v-if="!isDesktopViewport" class="space-y-3">
+  <div
+    v-if="!isDesktopViewport"
+    :class="mobileCardGrid ? 'grid grid-cols-1 gap-3 sm:grid-cols-2' : 'space-y-3'"
+    :data-test="mobileCardGrid ? 'mobile-card-grid' : undefined"
+  >
     <template v-if="loading">
       <div v-for="i in 5" :key="i" class="data-mobile-card rounded-xl border p-4">
         <div v-if="$slots['mobile-card']" class="space-y-3" data-test="mobile-card-skeleton">
@@ -23,7 +27,7 @@
     </template>
 
     <template v-else-if="!data || data.length === 0">
-      <div class="data-empty-panel p-12 text-center">
+      <div class="data-empty-panel p-12 text-center" :class="{ 'sm:col-span-2': mobileCardGrid }">
         <slot name="empty">
           <div class="flex flex-col items-center">
             <Icon
@@ -40,7 +44,7 @@
     </template>
 
     <template v-else>
-      <div v-if="selectable" class="flex items-center justify-end gap-2 px-1">
+      <div v-if="selectable" class="flex items-center justify-end gap-2 px-1" :class="{ 'sm:col-span-2': mobileCardGrid }">
         <label class="flex items-center gap-2 text-sm font-medium text-gray-600 dark:text-gray-300">
           <input
             type="checkbox"
@@ -499,6 +503,11 @@ interface Props {
   /** Optional provider/theme classes and inline custom properties for rows/cards. */
   rowClass?: string | string[] | ((row: any, index: number) => string | string[] | undefined)
   rowStyle?: Record<string, string> | ((row: any, index: number) => Record<string, string> | undefined)
+  /**
+   * Lay the below-desktop cards out two per row from the sm breakpoint
+   * (640px) instead of one long column, for cards designed at phone width.
+   */
+  mobileCardGrid?: boolean
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -509,7 +518,8 @@ const props = withDefaults(defineProps<Props>(), {
   defaultSortOrder: 'asc',
   serverSideSort: false,
   selectable: false,
-  selectedKeys: () => []
+  selectedKeys: () => [],
+  mobileCardGrid: false
 })
 
 const resolveRowClass = (row: any, index: number): string | string[] | undefined => {

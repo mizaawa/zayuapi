@@ -17,7 +17,16 @@ export default {
         userCost: '用户 {cost}',
         schedulable: '参与调度',
         rateMultiplier: '账号倍率',
-        rateMultiplierHint: '账号计费倍率，即上游对这个账号的计费倍率；只影响账号计费，0 表示不计费'
+        rateMultiplierHint: '账号计费倍率，即上游对这个账号的计费倍率；只影响账号计费，0 表示不计费',
+        upstreamRate: '上游倍率',
+        lastUsed: '最近使用',
+        neverUsed: '未使用',
+        groups: '分组',
+        moreGroups: '还有 {count} 个分组：{names}',
+        quotaDaily: '日额度',
+        quotaWeekly: '周额度',
+        quotaTotal: '总额度',
+        quotaResetsIn: '{time}后重置'
       },
       createAccount: '添加账号',
       autoRefresh: '自动刷新',
@@ -231,6 +240,15 @@ export default {
         },
         newapiCandidates: '可能的分组：{groups}（倍率不同，等待消费记录确认）',
         upstreamVersion: '上游版本：{version}',
+        short: {
+          notProbed: '未探测',
+          noDeclaration: '无声明',
+          waitingConsensus: '待确认',
+          unsupported: '不支持',
+          stale: '已过期',
+          failed: '失败',
+          notSynced: '未同步'
+        },
         reasons: {
           http_error: '上游返回 HTTP {status}',
           cloudflare_blocked: '被 Cloudflare 拦截（HTTP {status}），可为账号配置代理后重试',

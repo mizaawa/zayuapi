@@ -283,6 +283,58 @@ describe('UpstreamBillingRateCell', () => {
     wrapper.unmount()
   })
 
+  it('fits an account card tile with short status words below the value', async () => {
+    const probe = (extra: Record<string, unknown>, rate = 1) => makeAccount({
+      rate_multiplier: rate,
+      extra: { upstream_billing_probe_enabled: true, upstream_billing_rate_sync_enabled: true, ...extra }
+    })
+    const ok = (data: Record<string, unknown>, status = 'ok') => ({
+      status,
+      protocol: 'newapi',
+      data,
+      observed_multiplier: data.resolved_rate_multiplier,
+      received_at: '2026-07-13T00:00:00Z',
+      fresh_until: '2026-07-14T00:00:00Z',
+      last_attempt_at: '2026-07-13T00:00:00Z',
+      next_probe_at: '2026-07-13T00:30:00Z'
+    })
+    const wrapper = mount(UpstreamBillingRateCell, {
+      props: {
+        variant: 'card',
+        now: Date.now(),
+        account: probe({ upstream_billing_probe: ok({ source: 'token_usage', group: 'g', resolved_rate_multiplier: 0.6 }) }, 0.6)
+      }
+    })
+    const value = () => wrapper.get('[data-testid="upstream-billing-rate"]').text()
+    const status = () => wrapper.find('[data-testid="upstream-billing-status"]')
+
+    expect(wrapper.get('[data-variant]').attributes('data-variant')).toBe('card')
+    expect(value()).toBe('0.60x')
+    expect(status().exists()).toBe(false)
+    expect(wrapper.get('[data-testid="upstream-billing-probe"]').classes()).toContain('col-start-2')
+
+    await wrapper.setProps({ account: probe({ upstream_billing_probe: ok({ source: 'token_usage', group: 'g', resolved_rate_multiplier: 0.6 }) }, 1) })
+    expect(value()).toBe('0.60x')
+    expect(status().text()).toBe('admin.accounts.upstreamBilling.short.notSynced')
+
+    await wrapper.setProps({
+      account: probe({
+        upstream_billing_probe: ok({ source: 'consumption_log', group: 'vip', resolved_rate_multiplier: 0.3, consensus_required: 3 }, 'waiting_consensus')
+      })
+    })
+    expect(value()).toBe('0.30x')
+    expect(status().text()).toBe('admin.accounts.upstreamBilling.short.waitingConsensus')
+
+    await wrapper.setProps({
+      account: probe({ upstream_billing_probe: { status: 'waiting_logs', protocol: 'newapi', last_attempt_at: '2026-07-13T00:00:00Z', next_probe_at: '2026-07-13T00:30:00Z' } })
+    })
+    expect(value()).toBe('admin.accounts.upstreamBilling.short.noDeclaration')
+
+    await wrapper.setProps({ account: probe({}) })
+    expect(value()).toBe('admin.accounts.upstreamBilling.short.notProbed')
+    wrapper.unmount()
+  })
+
   it('distinguishes a New API zero declaration from a missing declaration and keeps it unsynced', async () => {
     const account = makeAccount({
       rate_multiplier: 0.5,

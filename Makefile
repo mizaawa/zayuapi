@@ -31,6 +31,11 @@ FRONTEND_CRITICAL_VITEST := \
 	src/components/account/__tests__/EditAccountModal.spec.ts \
 	src/components/account/__tests__/UpstreamBillingRateCell.spec.ts \
 	src/components/account/__tests__/AccountSourceBadge.spec.ts \
+	src/components/account/__tests__/AccountUsageCell.spec.ts \
+	src/components/common/__tests__/DataTable.spec.ts \
+	src/utils/__tests__/accountQuota.spec.ts \
+	src/views/admin/__tests__/AccountsView.cards.spec.ts \
+	src/views/admin/__tests__/AccountsView.cardRate.spec.ts \
 	src/views/user/__tests__/KeysView.spec.ts \
 	src/views/user/__tests__/UsageView.spec.ts \
 	src/views/user/__tests__/ImageWorkbenchView.spec.ts \

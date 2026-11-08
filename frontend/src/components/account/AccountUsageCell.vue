@@ -562,7 +562,7 @@
       />
       <!-- Today stats row (requests, tokens, cost, user_cost) -->
       <div
-        v-if="todayStats"
+        v-if="todayStats && !hideKeyStats"
         class="mb-0.5 flex items-center"
       >
         <div class="flex items-center gap-1.5 text-[9px] text-gray-500 dark:text-gray-400">
@@ -586,7 +586,7 @@
       </div>
       <!-- Loading skeleton for today stats -->
       <div
-        v-else-if="todayStatsLoading"
+        v-else-if="todayStatsLoading && !hideKeyStats"
         class="mb-0.5 flex items-center gap-1"
       >
         <div class="h-3 w-10 animate-pulse rounded bg-gray-200 dark:bg-gray-700"></div>
@@ -596,21 +596,21 @@
 
       <!-- API Key accounts with quota limits: show progress bars -->
       <UsageProgressBar
-        v-if="quotaDailyBar"
+        v-if="quotaDailyBar && !hideKeyStats"
         label="1d"
         :utilization="quotaDailyBar.utilization"
         :resets-at="quotaDailyBar.resetsAt"
         color="indigo"
       />
       <UsageProgressBar
-        v-if="quotaWeeklyBar"
+        v-if="quotaWeeklyBar && !hideKeyStats"
         label="7d"
         :utilization="quotaWeeklyBar.utilization"
         :resets-at="quotaWeeklyBar.resetsAt"
         color="emerald"
       />
       <UsageProgressBar
-        v-if="quotaTotalBar"
+        v-if="quotaTotalBar && !hideKeyStats"
         label="total"
         :utilization="quotaTotalBar.utilization"
         color="purple"
@@ -618,7 +618,7 @@
 
       <!-- No data at all -->
       <div
-        v-if="!todayStats && !todayStatsLoading && !hasApiKeyQuota && !account.ollama_cloud_usage?.eligible"
+        v-if="!hideKeyStats && !todayStats && !todayStatsLoading && !hasApiKeyQuota && !account.ollama_cloud_usage?.eligible"
         class="text-xs text-gray-400"
       >-</div>
     </div>
@@ -632,6 +632,7 @@ import { adminAPI } from '@/api/admin'
 import type { GrokQuotaProbeResult } from '@/api/admin/grok'
 import type { Account, AccountUsageInfo, GeminiCredentials, WindowStats } from '@/types'
 import { buildOpenAIUsageRefreshKey } from '@/utils/accountUsageRefresh'
+import { accountQuotaBar } from '@/utils/accountQuota'
 import { enqueueUsageRequest } from '@/utils/usageLoadQueue'
 import { formatCompactNumber, formatRelativeTime } from '@/utils/format'
 import UsageProgressBar from './UsageProgressBar.vue'
@@ -652,11 +653,14 @@ const props = withDefaults(
     todayStats?: WindowStats | null
     todayStatsLoading?: boolean
     manualRefreshToken?: number
+    /** Leave out the key/Bedrock today row and quota bars where the caller shows them itself. */
+    hideKeyStats?: boolean
   }>(),
   {
     todayStats: null,
     todayStatsLoading: false,
-    manualRefreshToken: 0
+    manualRefreshToken: 0,
+    hideKeyStats: false
   }
 )
 
@@ -1421,42 +1425,6 @@ const handleGrokProbed = (result: GrokQuotaProbeResult) => {
 
 // ===== API Key quota progress bars =====
 
-interface QuotaBarInfo {
-  utilization: number
-  resetsAt: string | null
-}
-
-const makeQuotaBar = (
-  used: number,
-  limit: number,
-  startKey?: string
-): QuotaBarInfo => {
-  const utilization = limit > 0 ? (used / limit) * 100 : 0
-  let resetsAt: string | null = null
-  if (startKey) {
-    const extra = props.account.extra as Record<string, unknown> | undefined
-    const isDaily = startKey.includes('daily')
-    const mode = isDaily
-      ? (extra?.quota_daily_reset_mode as string) || 'rolling'
-      : (extra?.quota_weekly_reset_mode as string) || 'rolling'
-
-    if (mode === 'fixed') {
-      // Use pre-computed next reset time for fixed mode
-      const resetAtKey = isDaily ? 'quota_daily_reset_at' : 'quota_weekly_reset_at'
-      resetsAt = (extra?.[resetAtKey] as string) || null
-    } else {
-      // Rolling mode: compute from start + period
-      const startStr = extra?.[startKey] as string | undefined
-      if (startStr) {
-        const startDate = new Date(startStr)
-        const periodMs = isDaily ? 24 * 60 * 60 * 1000 : 7 * 24 * 60 * 60 * 1000
-        resetsAt = new Date(startDate.getTime() + periodMs).toISOString()
-      }
-    }
-  }
-  return { utilization, resetsAt }
-}
-
 const hasApiKeyQuota = computed(() => {
   if (props.account.type !== 'apikey' && props.account.type !== 'bedrock') return false
   return (
@@ -1466,23 +1434,9 @@ const hasApiKeyQuota = computed(() => {
   )
 })
 
-const quotaDailyBar = computed((): QuotaBarInfo | null => {
-  const limit = props.account.quota_daily_limit ?? 0
-  if (limit <= 0) return null
-  return makeQuotaBar(props.account.quota_daily_used ?? 0, limit, 'quota_daily_start')
-})
-
-const quotaWeeklyBar = computed((): QuotaBarInfo | null => {
-  const limit = props.account.quota_weekly_limit ?? 0
-  if (limit <= 0) return null
-  return makeQuotaBar(props.account.quota_weekly_used ?? 0, limit, 'quota_weekly_start')
-})
-
-const quotaTotalBar = computed((): QuotaBarInfo | null => {
-  const limit = props.account.quota_limit ?? 0
-  if (limit <= 0) return null
-  return makeQuotaBar(props.account.quota_used ?? 0, limit)
-})
+const quotaDailyBar = computed(() => accountQuotaBar(props.account, 'daily'))
+const quotaWeeklyBar = computed(() => accountQuotaBar(props.account, 'weekly'))
+const quotaTotalBar = computed(() => accountQuotaBar(props.account, 'total'))
 
 const handleQuotaResetAccountUpdated = (account: Account) => {
   // The reset response already carries authoritative quota and account data.

@@ -17,7 +17,16 @@ export default {
         userCost: 'User {cost}',
         schedulable: 'Schedulable',
         rateMultiplier: 'Account rate',
-        rateMultiplierHint: "The account's billing multiplier, i.e. what the upstream charges for this account; it only affects account billing and 0 means free"
+        rateMultiplierHint: "The account's billing multiplier, i.e. what the upstream charges for this account; it only affects account billing and 0 means free",
+        upstreamRate: 'Upstream rate',
+        lastUsed: 'Last used',
+        neverUsed: 'Never',
+        groups: 'Groups',
+        moreGroups: '{count} more: {names}',
+        quotaDaily: 'Daily quota',
+        quotaWeekly: 'Weekly quota',
+        quotaTotal: 'Total quota',
+        quotaResetsIn: 'resets in {time}'
       },
       createAccount: 'Create Account',
       autoRefresh: 'Auto Refresh',
@@ -286,6 +295,15 @@ export default {
         },
         newapiCandidates: 'Possible groups: {groups} (different rates, waiting for consumption logs)',
         upstreamVersion: 'Upstream version: {version}',
+        short: {
+          notProbed: 'Not probed',
+          noDeclaration: 'None',
+          waitingConsensus: 'Pending',
+          unsupported: 'N/A',
+          stale: 'Stale',
+          failed: 'Failed',
+          notSynced: 'Not synced'
+        },
         reasons: {
           http_error: 'The upstream answered HTTP {status}',
           cloudflare_blocked: 'Blocked by Cloudflare (HTTP {status}); try a proxy for this account',
