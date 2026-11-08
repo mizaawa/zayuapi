@@ -36,6 +36,7 @@ FRONTEND_CRITICAL_VITEST := \
 	src/utils/__tests__/accountQuota.spec.ts \
 	src/views/admin/__tests__/AccountsView.cards.spec.ts \
 	src/views/admin/__tests__/AccountsView.cardRate.spec.ts \
+	src/views/admin/__tests__/AccountsView.cardProbe.spec.ts \
 	src/views/user/__tests__/KeysView.spec.ts \
 	src/views/user/__tests__/UsageView.spec.ts \
 	src/views/user/__tests__/ImageWorkbenchView.spec.ts \

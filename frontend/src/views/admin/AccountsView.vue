@@ -1981,14 +1981,9 @@ const probeUpstreamBillingBatch = async (accountIDs: number[]) => {
   accountIDs.forEach(id => probingUpstreamBilling.add(id))
   try {
     const results = await adminAPI.accounts.probeUpstreamBillingBatch(accountIDs)
-    let patched = false
     results.forEach(result => {
-      if (result.snapshot) {
-        patchUpstreamBillingSnapshot(result.account_id, result.snapshot)
-        patched = true
-      }
+      if (result.snapshot) patchUpstreamBillingSnapshot(result.account_id, result.snapshot)
     })
-    if (patched) await refreshAccountsAfterUpstreamBillingProbe()
     const failed = results.filter(result => result.error).length
     if (failed > 0) {
       appStore.showError(t('admin.accounts.upstreamBilling.batchPartial', { success: results.length - failed, failed }))
@@ -2297,32 +2292,27 @@ const patchAccountInList = (updatedAccount: Account) => {
   accounts.value = nextAccounts
   syncAccountRefs(mergedAccount)
 }
+// A probe writes only its snapshot and, on rate-synced accounts, the rate it
+// reports as synced_rate_multiplier. Patch both onto the probed row instead of
+// reloading the list, which swaps every card for a skeleton.
 const patchUpstreamBillingSnapshot = (accountID: number, snapshot: UpstreamBillingProbeSnapshot) => {
   const account = accounts.value.find(item => item.id === accountID)
   if (!account) return
   markUpstreamBillingSortRefresh()
   upstreamBillingNow.value = Date.now()
+  const synced = snapshot.synced_rate_multiplier
   patchAccountInList({
     ...account,
+    ...(typeof synced === 'number' ? { rate_multiplier: synced } : {}),
     extra: { ...account.extra, upstream_billing_probe: snapshot }
   })
-}
-const refreshAccountsAfterUpstreamBillingProbe = async () => {
-  try {
-    await load()
-  } catch (error) {
-    console.error('Failed to refresh accounts after upstream billing probe:', error)
-  }
 }
 const handleProbeUpstreamBilling = async (account: Account) => {
   if (probingUpstreamBilling.has(account.id)) return
   probingUpstreamBilling.add(account.id)
   try {
     const result = await adminAPI.accounts.probeUpstreamBilling(account.id)
-    if (result.snapshot) {
-      patchUpstreamBillingSnapshot(account.id, result.snapshot)
-      await refreshAccountsAfterUpstreamBillingProbe()
-    }
+    if (result.snapshot) patchUpstreamBillingSnapshot(account.id, result.snapshot)
   } catch (error) {
     console.error('Failed to probe upstream billing:', error)
     appStore.showError(extractApiErrorMessage(error, t('admin.accounts.upstreamBilling.probeFailed')))
