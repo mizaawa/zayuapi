@@ -1,16 +1,19 @@
 <template>
-  <div class="card min-w-0 overflow-visible p-0">
-    <div class="border-b border-gray-100 px-4 py-4 dark:border-dark-700">
-      <div class="flex items-center justify-between gap-3">
-        <div>
-          <h3 class="text-sm font-semibold text-gray-900 dark:text-white">{{ t('admin.operations.userRanking') }}</h3>
-          <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ t('admin.operations.userRankingHint') }}</p>
+  <div class="card flex min-w-0 flex-col overflow-visible p-0">
+    <div class="ops-panel-head">
+      <div class="flex w-full items-center justify-between gap-3">
+        <div class="flex min-w-0 items-center gap-3">
+          <span class="ops-panel-icon bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400"><Icon name="users" size="sm" :stroke-width="2" /></span>
+          <div class="min-w-0">
+            <h3 class="ops-panel-title">{{ t('admin.operations.userRanking') }}</h3>
+            <p class="ops-panel-hint">{{ t('admin.operations.userRankingHint') }}</p>
+          </div>
         </div>
-        <span class="shrink-0 rounded-full bg-primary-50 px-2.5 py-1 text-xs font-medium text-primary-600 dark:bg-primary-900/20 dark:text-primary-400">
+        <span class="ops-count shrink-0">
           {{ search.trim() ? t('admin.operations.searchResults') : t('admin.operations.top25') }}
         </span>
       </div>
-      <div class="relative mt-4">
+      <div class="relative w-full">
         <Icon name="search" size="sm" class="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
         <input :value="search" type="search" class="input ops-search"
           :placeholder="t('admin.operations.searchEmail')" :aria-label="t('admin.operations.searchEmail')" role="combobox" aria-autocomplete="list"
@@ -25,14 +28,13 @@
         </div>
       </div>
     </div>
-    <div class="flex items-center justify-between border-b border-gray-100 bg-gray-50/80 px-4 py-2.5 text-xs font-medium text-gray-500 dark:border-dark-700 dark:bg-dark-800/40 dark:text-gray-400">
-      <span>{{ t('admin.operations.users') }}</span><span>{{ t('admin.operations.userCost') }}</span>
+    <div class="ops-table-head flex items-center justify-between px-4 py-2.5 sm:px-5">
+      <span>{{ t('admin.operations.users') }}</span><span class="pr-6">{{ t('admin.operations.userCost') }}</span>
     </div>
     <div class="relative max-h-[440px] min-h-40 overflow-y-auto overscroll-contain" data-testid="users-scroll-region" :aria-busy="loading">
       <div v-if="loading" class="absolute inset-0 z-10 flex items-center justify-center bg-white/75 dark:bg-dark-800/75" role="status" data-testid="users-loading"><LoadingSpinner size="md" /><span class="sr-only">{{ t('admin.operations.loading') }}</span></div>
-      <button v-for="(user, index) in users" :key="user.user_id" type="button" class="flex w-full items-center gap-3 border-b border-gray-100 px-4 py-3 text-left transition-colors last:border-b-0 dark:border-dark-700/70" :class="[selectedUserId === user.user_id ? 'bg-primary-50/80 dark:bg-primary-900/20' : 'hover:bg-gray-50 dark:hover:bg-dark-800/50', loading && selectedUserId === user.user_id ? 'relative z-20' : '']" :aria-pressed="selectedUserId === user.user_id" :data-user="user.user_id" @click="$emit('select-user', user.user_id)">
-        <span class="w-6 shrink-0 text-center text-xs font-semibold tabular-nums text-gray-400">{{ index + 1 }}</span>
-        <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary-50 text-primary-600 dark:bg-primary-900/25 dark:text-primary-400"><Icon name="user" size="sm" /></span>
+      <button v-for="(user, index) in users" :key="user.user_id" type="button" class="ops-row flex w-full items-center gap-3 px-4 py-2.5 text-left sm:px-5" :class="[selectedUserId === user.user_id ? 'ops-row-active' : 'ops-row-hover', loading && selectedUserId === user.user_id ? 'relative z-20' : '']" :aria-pressed="selectedUserId === user.user_id" :data-user="user.user_id" @click="$emit('select-user', user.user_id)">
+        <span class="ops-rank" :class="search.trim() ? '' : rankClass(index)">{{ index + 1 }}</span>
         <span class="min-w-0 flex-1 truncate text-sm font-medium text-gray-800 dark:text-gray-200" :title="user.email">{{ user.email }}</span>
         <span class="shrink-0 text-right text-sm font-semibold tabular-nums text-gray-900 dark:text-white">{{ formatMoney(user.user_cost) }}</span>
         <LoadingSpinner v-if="loading && selectedUserId === user.user_id" size="sm" data-testid="selected-user-loading" />
@@ -42,7 +44,10 @@
         <p>{{ t('admin.operations.failedToLoadUsers') }}</p>
         <button type="button" class="mt-2 font-medium text-primary-600 hover:underline dark:text-primary-400" @click="$emit('retry')">{{ t('admin.operations.retry') }}</button>
       </div>
-      <p v-else-if="!users.length && !loading" class="px-4 py-12 text-center text-sm text-gray-400">{{ t(search.trim() ? 'admin.operations.noMatchingUsers' : 'admin.operations.noUsers') }}</p>
+      <div v-else-if="!users.length && !loading" class="ops-empty">
+        <Icon name="users" size="lg" class="text-primary-300" />
+        <p>{{ t(search.trim() ? 'admin.operations.noMatchingUsers' : 'admin.operations.noUsers') }}</p>
+      </div>
     </div>
   </div>
 </template>
@@ -75,4 +80,5 @@ defineEmits<{
   retry: []
 }>()
 const { t } = useI18n()
+const rankClass = (index: number) => ['ops-rank-gold', 'ops-rank-silver', 'ops-rank-bronze'][index] ?? ''
 </script>

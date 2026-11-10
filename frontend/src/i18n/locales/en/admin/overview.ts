@@ -126,7 +126,11 @@ export default {
       yesterdayUserRecharge: "Yesterday's recharge",
       yesterdayMonitorConsumption: "Yesterday's spend",
       yesterdayRevenue: "Yesterday's revenue",
-      comparisonGrowth: 'Change vs yesterday:',
+      comparisonGrowth: 'vs yesterday',
+      todayWindow: "Today's figures count from 00:00 on {date} · {timezone}",
+      updatedAt: 'Updated {time}',
+      todayBlock: 'Today',
+      totalBlock: 'All time',
       yesterdayIncrease: 'Added yesterday',
       yesterdayConsumption: 'Spent yesterday',
       loading: 'Loading',
@@ -173,7 +177,13 @@ export default {
         today: 'Today', last7Days: 'Last 7 days', last30Days: 'Last 30 days', searchEmail: 'Search user email',
         status: 'Status', channel: 'Recharge channel', all: 'All', paid: 'Paid', unpaid: 'Unpaid',
         code: 'Redeem code', direct: 'Direct', manual: 'Manual', email: 'User email', amount: 'Amount', time: 'Time',
-        loadFailed: 'Could not load orders', empty: 'No orders match these filters', pageSummary: 'Page {page} of {pages} · {total} orders', previous: 'Previous', next: 'Next'
+        loadFailed: 'Could not load orders', empty: 'No orders match these filters', pageSummary: 'Page {page} of {pages} · {total} orders', previous: 'Previous', next: 'Next',
+        allChannels: 'All channels', summaryTitle: 'Recharge total', summaryHint: 'Credited top-ups by regular users; the status filter does not apply', summaryCount: 'Records: {count}', summaryFailed: 'Could not load totals'
+      },
+      rechargeRanking: {
+        title: "Today's top-ups", hint: 'From 00:00 today, highest amount first', window: 'From 00:00 on {date} · {timezone}', top50: 'Top 50',
+        totalAmount: "Today's top-ups", totalUsers: 'Users', user: 'User', amount: 'Amount', count: 'Top-ups: {count}', share: '{percent}% of today',
+        loadFailed: 'Could not load the top-up ranking', empty: 'No user has topped up today'
       },
       rechargeRisk: {
         title: 'Risk activity', latest25: 'Latest 25', readOnlyHint: 'For review only; user actions are not restricted',

@@ -24,22 +24,54 @@ func (h *PaymentHandler) RechargeActivity(c *gin.Context) {
 		}
 		page = parsed
 	}
+	filter, ok := rechargeActivityFilter(c)
+	if !ok {
+		return
+	}
+	filter.Page = page
+	items, total, err := h.paymentService.AdminRechargeActivity(c.Request.Context(), filter)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Paginated(c, items, int64(total), page, 25)
+}
+
+// RechargeActivitySummary totals the recharges in the timeline's time,
+// channel and email filters.
+// GET /api/v1/admin/payment/recharge-activity/summary
+func (h *PaymentHandler) RechargeActivitySummary(c *gin.Context) {
+	filter, ok := rechargeActivityFilter(c)
+	if !ok {
+		return
+	}
+	summary, err := h.paymentService.AdminRechargeActivitySummary(c.Request.Context(), filter)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, summary)
+}
+
+// rechargeActivityFilter reads the filters the timeline and its summary
+// share; on bad input it answers 400 and returns false.
+func rechargeActivityFilter(c *gin.Context) (service.RechargeActivityFilter, bool) {
 	status := c.Query("status")
 	if status != "" && status != "paid" && status != "unpaid" {
 		response.BadRequest(c, "Invalid status")
-		return
+		return service.RechargeActivityFilter{}, false
 	}
 	channel := c.Query("channel")
 	if channel != "" && channel != "direct" && channel != "redeem" && channel != "manual" {
 		response.BadRequest(c, "Invalid channel")
-		return
+		return service.RechargeActivityFilter{}, false
 	}
 	var start, end time.Time
 	if raw := c.Query("start_time"); raw != "" {
 		parsed, err := time.Parse(time.RFC3339, raw)
 		if err != nil {
 			response.BadRequest(c, "Invalid start_time")
-			return
+			return service.RechargeActivityFilter{}, false
 		}
 		start = parsed
 	}
@@ -47,27 +79,20 @@ func (h *PaymentHandler) RechargeActivity(c *gin.Context) {
 		parsed, err := time.Parse(time.RFC3339, raw)
 		if err != nil {
 			response.BadRequest(c, "Invalid end_time")
-			return
+			return service.RechargeActivityFilter{}, false
 		}
 		end = parsed
 	}
 	if !start.IsZero() && !end.IsZero() && !end.After(start) {
 		response.BadRequest(c, "end_time must be after start_time")
-		return
+		return service.RechargeActivityFilter{}, false
 	}
 	email := strings.TrimSpace(c.Query("email"))
 	if len([]rune(email)) > 100 {
 		response.BadRequest(c, "Email search is too long")
-		return
+		return service.RechargeActivityFilter{}, false
 	}
-	items, total, err := h.paymentService.AdminRechargeActivity(c.Request.Context(), service.RechargeActivityFilter{
-		Page: page, Email: email, Status: status, Channel: channel, StartTime: start, EndTime: end,
-	})
-	if err != nil {
-		response.ErrorFrom(c, err)
-		return
-	}
-	response.Paginated(c, items, int64(total), page, 25)
+	return service.RechargeActivityFilter{Email: email, Status: status, Channel: channel, StartTime: start, EndTime: end}, true
 }
 
 // RechargeRisks returns only the latest 25 grouped recharge risk observations.

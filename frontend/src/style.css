@@ -524,6 +524,195 @@
     box-shadow: var(--theme-highlight), var(--theme-elevation-3);
   }
 
+  /* ============ 运营面板面板与列表 ============ */
+  /* Neutral borders are cleared app-wide, so operations lists separate rows
+   * and headers with inset hairlines instead. */
+  .ops-section-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 0.75rem 1rem;
+  }
+
+  .ops-section-title {
+    display: flex;
+    align-items: center;
+    gap: 0.625rem;
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--md-sys-color-on-surface);
+  }
+
+  .ops-section-mark {
+    width: 0.375rem;
+    height: 1.125rem;
+    border-radius: 999px;
+    background: linear-gradient(180deg, var(--md-sys-color-primary), #d99a00);
+  }
+
+  .ops-section-hint {
+    display: flex;
+    align-items: center;
+    gap: 0.375rem;
+    margin-top: 0.375rem;
+    font-size: 0.75rem;
+    color: var(--md-sys-color-on-surface-variant);
+  }
+
+  .ops-block-label {
+    font-size: 0.6875rem;
+    font-weight: 650;
+    letter-spacing: 0.06em;
+    color: var(--md-sys-color-on-surface-variant);
+  }
+
+  .ops-panel-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 1rem;
+    box-shadow: inset 0 -1px 0 rgb(215 193 106 / 0.28);
+  }
+
+  .ops-panel-icon {
+    display: flex;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+    width: 2.25rem;
+    height: 2.25rem;
+    border-radius: 0.875rem;
+  }
+
+  .ops-panel-title {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.375rem;
+    font-size: 0.875rem;
+    font-weight: 650;
+    color: var(--md-sys-color-on-surface);
+  }
+
+  .ops-panel-hint {
+    margin-top: 0.125rem;
+    font-size: 0.75rem;
+    line-height: 1.25rem;
+    color: var(--md-sys-color-on-surface-variant);
+  }
+
+  .ops-count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 1.5rem;
+    padding: 0.0625rem 0.5rem;
+    border-radius: 999px;
+    background: var(--md-sys-color-surface-container);
+    color: #7e5600;
+    font-size: 0.6875rem;
+    font-weight: 650;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+
+  .ops-table-head {
+    background: color-mix(in srgb, var(--md-sys-color-surface-container) 45%, var(--md-sys-color-surface));
+    color: var(--md-sys-color-on-surface-variant);
+    font-size: 0.6875rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    box-shadow: inset 0 -1px 0 rgb(215 193 106 / 0.28);
+  }
+
+  .ops-row {
+    box-shadow: inset 0 -1px 0 rgb(215 193 106 / 0.2);
+    transition: background-color 160ms ease, box-shadow 160ms ease;
+  }
+
+  .ops-row-hover:hover {
+    background: color-mix(in srgb, var(--md-sys-color-surface-container) 40%, transparent);
+  }
+
+  .ops-row-active {
+    background: color-mix(in srgb, var(--md-sys-color-surface-container) 75%, transparent);
+    box-shadow: inset 3px 0 0 var(--md-sys-color-primary), inset 0 -1px 0 rgb(215 193 106 / 0.2);
+  }
+
+  .ops-rank {
+    display: inline-flex;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+    width: 1.75rem;
+    height: 1.75rem;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--md-sys-color-surface-container) 70%, transparent);
+    color: var(--md-sys-color-on-surface-variant);
+    font-size: 0.75rem;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .ops-rank-gold {
+    background: linear-gradient(145deg, #ffe680, #f0b400);
+    color: #5c3d00;
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.6), 0 3px 8px -3px rgb(196 140 0 / 0.65);
+  }
+
+  .ops-rank-silver {
+    background: linear-gradient(145deg, #f4f1ea, #c9c2b3);
+    color: #4b4537;
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.7), 0 3px 8px -3px rgb(120 110 90 / 0.5);
+  }
+
+  .ops-rank-bronze {
+    background: linear-gradient(145deg, #f6c9a0, #c98545);
+    color: #4f2a0c;
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.55), 0 3px 8px -3px rgb(160 90 30 / 0.55);
+  }
+
+  .ops-stat {
+    min-width: 0;
+    padding: 0.625rem 0.75rem;
+    border-radius: 1rem;
+    background: color-mix(in srgb, var(--md-sys-color-surface-container) 55%, transparent);
+  }
+
+  .ops-stat-label {
+    font-size: 0.6875rem;
+    color: var(--md-sys-color-on-surface-variant);
+  }
+
+  .ops-stat-value {
+    margin-top: 0.125rem;
+    overflow-wrap: anywhere;
+    font-size: 1rem;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    color: var(--md-sys-color-on-surface);
+  }
+
+  .ops-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 3rem 1rem;
+    text-align: center;
+    font-size: 0.875rem;
+    color: #9b8c62;
+  }
+
+  @media (min-width: 640px) {
+    .ops-panel-head {
+      padding-inline: 1.25rem;
+    }
+  }
+
   /* ============ 统计卡片 ============ */
   .stat-card {
     @apply card p-5;

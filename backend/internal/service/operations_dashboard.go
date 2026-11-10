@@ -77,6 +77,32 @@ type OperationsDashboardData struct {
 	Trend   []OperationsProfitTrendPoint `json:"trend"`
 	Groups  []OperationsGroupProfitStat  `json:"groups"`
 	Models  []OperationsModelProfitStat  `json:"models"`
+	// Every "today" metric counts from TodayStart, 00:00 of TodayDate in
+	// SiteTimezone, not from a rolling 24 hours.
+	TodayDate    string    `json:"today_date"`
+	TodayStart   time.Time `json:"today_start"`
+	SiteTimezone string    `json:"site_timezone"`
+}
+
+// OperationsRechargeRankingEntry is one ordinary user's balance top-ups in the
+// ranking window.
+type OperationsRechargeRankingEntry struct {
+	UserID        int64   `json:"user_id"`
+	Email         string  `json:"email"`
+	Amount        float64 `json:"amount"`
+	RechargeCount int64   `json:"recharge_count"`
+}
+
+// OperationsRechargeRankingData ranks the users who topped up today. The
+// totals cover every such user, not only the listed ones.
+type OperationsRechargeRankingData struct {
+	Users        []OperationsRechargeRankingEntry `json:"users"`
+	TotalAmount  float64                          `json:"total_amount"`
+	TotalUsers   int64                            `json:"total_users"`
+	Date         string                           `json:"date"`
+	StartTime    time.Time                        `json:"start_time"`
+	EndTime      time.Time                        `json:"end_time"`
+	SiteTimezone string                           `json:"site_timezone"`
 }
 
 type operationsDashboardRepository interface {
@@ -101,6 +127,18 @@ func (s *DashboardService) GetOperationsUsersData(ctx context.Context, rangeStar
 		return nil, ErrOperationsDashboardUnavailable
 	}
 	return repo.GetOperationsUsersData(ctx, rangeStart, rangeEnd, search, userID)
+}
+
+type operationsRechargeRankingRepository interface {
+	GetOperationsRechargeRanking(ctx context.Context, start, end time.Time, limit int) (*OperationsRechargeRankingData, error)
+}
+
+func (s *DashboardService) GetOperationsRechargeRanking(ctx context.Context, start, end time.Time, limit int) (*OperationsRechargeRankingData, error) {
+	repo, ok := s.usageRepo.(operationsRechargeRankingRepository)
+	if !ok {
+		return nil, ErrOperationsDashboardUnavailable
+	}
+	return repo.GetOperationsRechargeRanking(ctx, start, end, limit)
 }
 
 func (s *DashboardService) GetOperationsUserSuggestions(ctx context.Context, search string) ([]OperationsUserSuggestion, error) {

@@ -276,6 +276,7 @@ func registerDashboardRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 		dashboard.GET("/operations", h.Admin.Dashboard.GetOperationsDashboard)
 		dashboard.GET("/operations/users", h.Admin.Dashboard.GetOperationsUsers)
 		dashboard.GET("/operations/users/suggest", h.Admin.Dashboard.GetOperationsUserSuggestions)
+		dashboard.GET("/operations/recharge-ranking", h.Admin.Dashboard.GetOperationsRechargeRanking)
 		dashboard.GET("/realtime", h.Admin.Dashboard.GetRealtimeMetrics)
 		dashboard.GET("/trend", h.Admin.Dashboard.GetUsageTrend)
 		dashboard.GET("/models", h.Admin.Dashboard.GetModelStats)

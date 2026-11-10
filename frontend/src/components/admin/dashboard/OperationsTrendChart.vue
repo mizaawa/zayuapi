@@ -1,9 +1,12 @@
 <template>
-  <section class="card p-4 sm:p-5" data-testid="operations-trend">
-    <div class="mb-5 flex flex-wrap items-center justify-between gap-3">
-      <div>
-        <h2 class="text-sm font-semibold text-gray-900 dark:text-white">{{ t('admin.operations.trend') }}</h2>
-        <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ range.start }} — {{ range.end }} · USD</p>
+  <section class="card flex min-w-0 flex-col p-0" data-testid="operations-trend">
+    <div class="ops-panel-head">
+      <div class="flex min-w-0 items-center gap-3">
+        <span class="ops-panel-icon bg-primary-100 text-primary-700 dark:bg-primary-900/30 dark:text-primary-400"><Icon name="trendingUp" size="sm" :stroke-width="2" /></span>
+        <div class="min-w-0">
+          <h2 class="ops-panel-title">{{ t('admin.operations.trend') }}</h2>
+          <p class="ops-panel-hint tabular-nums">{{ range.start }} — {{ range.end }} · USD</p>
+        </div>
       </div>
       <div class="segment-group">
         <button v-for="mode in modes" :key="String(mode.value)" type="button"
@@ -12,7 +15,8 @@
           :aria-pressed="profitOnly === mode.value" @click="profitOnly = mode.value">{{ t(mode.label) }}</button>
       </div>
     </div>
-    <div class="mb-4 flex flex-wrap items-center gap-x-5 gap-y-2 text-xs">
+    <div class="flex flex-1 flex-col px-4 pb-4 pt-3 sm:px-5 sm:pb-5">
+    <div class="mb-3 flex flex-wrap items-center gap-x-5 gap-y-2 text-xs">
       <button v-for="(series, index) in seriesDefinitions" :key="series.key" type="button"
         class="inline-flex items-center gap-2 transition-opacity"
         :class="profitOnly && index !== 2 ? 'opacity-35' : 'opacity-100'"
@@ -22,8 +26,9 @@
         <span class="text-gray-600 dark:text-gray-300">{{ t(series.label) }}</span>
       </button>
     </div>
-    <div class="relative h-64 sm:h-80">
+    <div class="relative h-64 sm:h-80 xl:h-auto xl:min-h-0 xl:flex-1">
       <Line :data="chartData" :options="chartOptions" />
+    </div>
     </div>
   </section>
 </template>
@@ -35,10 +40,12 @@ import { useMutationObserver } from '@vueuse/core'
 import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, Tooltip, Legend, type ChartOptions } from 'chart.js'
 import { Line } from 'vue-chartjs'
 import type { OperationsProfitTrendPoint } from '@/api/admin/dashboard'
-import { dateRange, formatMoney, localDate } from '@/views/admin/operationsUtils'
+import Icon from '@/components/icons/Icon.vue'
+import { dateRange, formatMoney, shiftDate, zonedDate } from '@/views/admin/operationsUtils'
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Tooltip, Legend)
-const props = defineProps<{ points: OperationsProfitTrendPoint[]; days: number }>()
+// timeZone is the site zone the backend buckets days in; the browser's when omitted.
+const props = defineProps<{ points: OperationsProfitTrendPoint[]; days: number; timeZone?: string }>()
 const { t } = useI18n()
 const profitOnly = ref(false)
 const dark = ref(document.documentElement.classList.contains('dark'))
@@ -49,14 +56,12 @@ const seriesDefinitions = [
   { key: 'user_cost', label: 'admin.operations.userCost', color: '#5c9865' },
   { key: 'profit', label: 'admin.operations.profit', color: '#d99a00' }
 ] as const
-const range = computed(() => dateRange(props.days))
+const range = computed(() => dateRange(props.days, new Date(), props.timeZone))
 const points = computed(() => {
   const byDate = new Map(props.points.map(point => [point.date, point]))
-  const today = new Date()
+  const today = zonedDate(new Date(), props.timeZone)
   return Array.from({ length: props.days }, (_, index) => {
-    const date = new Date(today)
-    date.setDate(date.getDate() - props.days + index + 1)
-    const key = localDate(date)
+    const key = shiftDate(today, index + 1 - props.days)
     return byDate.get(key) ?? { date: key, upstream_cost: 0, user_cost: 0, profit: 0 }
   })
 })

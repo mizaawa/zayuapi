@@ -31,6 +31,7 @@ func TestOperationsRoutesRequireAdminAuthentication(t *testing.T) {
 		"/api/v1/admin/dashboard/operations",
 		"/api/v1/admin/dashboard/operations/users",
 		"/api/v1/admin/dashboard/operations/users/suggest?q=user",
+		"/api/v1/admin/dashboard/operations/recharge-ranking",
 	} {
 		for _, tc := range []struct {
 			name       string

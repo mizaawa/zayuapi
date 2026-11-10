@@ -90,6 +90,22 @@ describe('API Client', () => {
       expect(config.params).toHaveProperty('timezone')
     })
 
+    it('GET 请求保留调用方指定的 timezone 参数', async () => {
+      const adapter = vi.fn().mockResolvedValue({
+        status: 200,
+        data: { code: 0, data: {} },
+        headers: {},
+        config: {},
+        statusText: 'OK',
+      })
+      apiClient.defaults.adapter = adapter
+
+      await apiClient.get('/test', { params: { timezone: 'Pacific/Auckland' } })
+
+      const config = adapter.mock.calls[0][0]
+      expect(config.params.timezone).toBe('Pacific/Auckland')
+    })
+
     it('POST 请求不附加 timezone 参数', async () => {
       const adapter = vi.fn().mockResolvedValue({
         status: 200,

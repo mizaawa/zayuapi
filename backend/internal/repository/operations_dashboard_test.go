@@ -22,7 +22,9 @@ func TestOperationsDashboardDataQueriesAndScans(t *testing.T) {
 	rangeStart := today.AddDate(0, 0, -6)
 	trendStart := today.AddDate(0, 0, -14)
 
-	mock.ExpectQuery(`SELECT\s+COALESCE\(\(SELECT SUM\(uc\.actual_cost\).*SUM\(po\.amount\).*SUM\(rc\.value\).*SUM\(uc\.account_cost\).*SUM\(uc\.actual_cost\).*SUM\(f\.amount\).*SUM\(uc\.account_cost\).*SUM\(f\.amount\).*SUM\(uc\.account_cost\)`).
+	// Recharge sums skip the PAY- codes that credit paid orders, today ($2-$3)
+	// and yesterday ($5-$2) alike, so each order counts once.
+	mock.ExpectQuery(`SELECT\s+COALESCE\(\(SELECT SUM\(uc\.actual_cost\).*SUM\(po\.amount\).*SUM\(rc\.value\).*rc\.code NOT LIKE 'PAY-%' AND rc\.used_at >= \$2 AND rc\.used_at < \$3.*SUM\(uc\.account_cost\).*SUM\(uc\.actual_cost\).*SUM\(f\.amount\).*SUM\(uc\.account_cost\).*SUM\(f\.amount\).*SUM\(uc\.account_cost\).*rc\.code NOT LIKE 'PAY-%' AND rc\.used_at >= \$5 AND rc\.used_at < \$2`).
 		WithArgs("2026-10-26", today, tomorrow, "2026-10-25", yesterday).
 		WillReturnRows(sqlmock.NewRows([]string{"today_user", "recharge", "today_monitor", "total_user", "user_balance", "total_monitor", "admin_balance", "today_upstream", "yesterday_user", "yesterday_recharge", "yesterday_monitor", "yesterday_upstream", "yesterday_balance_change", "yesterday_admin_consumption"}).
 			AddRow(8.25, 15.5, 0.75, 100.5, 75.25, 12.5, 200.0, 3.0, 7.0, 10.0, 0.5, 2.0, -4.0, 1.25))

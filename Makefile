@@ -37,6 +37,10 @@ FRONTEND_CRITICAL_VITEST := \
 	src/views/admin/__tests__/AccountsView.cards.spec.ts \
 	src/views/admin/__tests__/AccountsView.cardRate.spec.ts \
 	src/views/admin/__tests__/AccountsView.cardProbe.spec.ts \
+	src/views/admin/__tests__/OperationsView.spec.ts \
+	src/views/admin/__tests__/operationsUtils.spec.ts \
+	src/api/__tests__/admin.dashboard.operations.spec.ts \
+	src/components/admin/dashboard/__tests__/OperationsRechargeRankingPanel.spec.ts \
 	src/views/user/__tests__/KeysView.spec.ts \
 	src/views/user/__tests__/UsageView.spec.ts \
 	src/views/user/__tests__/ImageWorkbenchView.spec.ts \

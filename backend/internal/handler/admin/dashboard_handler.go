@@ -198,10 +198,7 @@ func (h *DashboardHandler) GetOperationsDashboard(c *gin.Context) {
 		groupID = parsed
 	}
 	trendStart := todayStart.AddDate(0, 0, -(trendDays - 1))
-	// Persistent usage counters and balance changes are bucketed in the
-	// application/database timezone; compare complete days in that same zone.
-	accountingTodayStart := timezone.StartOfDayInUserLocation(now, timezone.Name())
-	accountingTodayEnd := accountingTodayStart.AddDate(0, 0, 1)
+	accountingTodayStart, accountingTodayEnd := operationsAccountingDay()
 
 	data, err := h.dashboardService.GetOperationsDashboardData(c.Request.Context(), accountingTodayStart, accountingTodayEnd, startTime, endTime, trendStart, todayEnd, userTimezone, groupID)
 	if err != nil {
@@ -209,6 +206,47 @@ func (h *DashboardHandler) GetOperationsDashboard(c *gin.Context) {
 		response.Error(c, 500, "Failed to get operations dashboard data")
 		return
 	}
+	data.TodayDate = accountingTodayStart.Format("2006-01-02")
+	data.TodayStart = accountingTodayStart
+	data.SiteTimezone = operationsSiteTimezone()
+	response.Success(c, data)
+}
+
+// operationsRechargeRankingLimit is how many users the today recharge ranking lists.
+const operationsRechargeRankingLimit = 50
+
+// operationsAccountingDay returns today, from 00:00 to the next 00:00, in the
+// site timezone. Persistent usage counters and balance changes are bucketed
+// in that zone, so every "today" figure on the operations dashboard counts
+// whole calendar days there rather than a rolling 24 hours.
+func operationsAccountingDay() (time.Time, time.Time) {
+	start := timezone.StartOfDay(timezone.Now())
+	return start, start.AddDate(0, 0, 1)
+}
+
+// operationsSiteTimezone names the zone operationsAccountingDay uses.
+func operationsSiteTimezone() string {
+	if name := timezone.Name(); name != "Local" {
+		return name
+	}
+	return "UTC" + timezone.UTCOffset()
+}
+
+// GetOperationsRechargeRanking ranks ordinary users by the balance they topped
+// up today, counted from 00:00 in the site timezone.
+// GET /api/v1/admin/dashboard/operations/recharge-ranking
+func (h *DashboardHandler) GetOperationsRechargeRanking(c *gin.Context) {
+	start, end := operationsAccountingDay()
+	data, err := h.dashboardService.GetOperationsRechargeRanking(c.Request.Context(), start, end, operationsRechargeRankingLimit)
+	if err != nil {
+		slog.Error("operations recharge ranking query failed", "error", err)
+		response.Error(c, 500, "Failed to get operations recharge ranking")
+		return
+	}
+	data.Date = start.Format("2006-01-02")
+	data.StartTime = start
+	data.EndTime = end
+	data.SiteTimezone = operationsSiteTimezone()
 	response.Success(c, data)
 }
 

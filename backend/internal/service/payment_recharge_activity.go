@@ -155,6 +155,91 @@ func (s *PaymentService) AdminRechargeActivity(ctx context.Context, filter Recha
 	return items[start:end], total, nil
 }
 
+// RechargeActivitySummary totals the recharges behind the order list filters.
+type RechargeActivitySummary struct {
+	Amount float64 `json:"amount"`
+	Count  int     `json:"count"`
+}
+
+// AdminRechargeActivitySummary totals the recharges in the order list's time,
+// channel and email filters; the status filter does not apply. It counts what
+// the operations "today recharge" metric counts — ordinary users' paid balance
+// orders by payment time plus used balance and adjustment codes, without the
+// PAY- codes that credit those orders — so all channels over today equal that
+// metric.
+func (s *PaymentService) AdminRechargeActivitySummary(ctx context.Context, filter RechargeActivityFilter) (RechargeActivitySummary, error) {
+	var summary RechargeActivitySummary
+	email := strings.TrimSpace(filter.Email)
+
+	if filter.Channel == "" || filter.Channel == "direct" {
+		q := s.entClient.PaymentOrder.Query().Where(
+			paymentorder.OrderTypeEQ("balance"),
+			paymentorder.StatusIn(OrderStatusPaid, OrderStatusRecharging, OrderStatusCompleted),
+			paymentorder.HasUserWith(user.RoleEQ(RoleUser)),
+		)
+		if email != "" {
+			q = q.Where(paymentorder.UserEmailContainsFold(email))
+		}
+		if !filter.StartTime.IsZero() {
+			q = q.Where(paymentorder.PaidAtGTE(filter.StartTime))
+		}
+		if !filter.EndTime.IsZero() {
+			q = q.Where(paymentorder.PaidAtLT(filter.EndTime))
+		}
+		count, err := q.Clone().Count(ctx)
+		if err != nil {
+			return summary, fmt.Errorf("count direct recharges: %w", err)
+		}
+		// SUM over no rows is NULL, which does not scan into a float.
+		if count > 0 {
+			amount, err := q.Aggregate(dbent.Sum(paymentorder.FieldAmount)).Float64(ctx)
+			if err != nil {
+				return summary, fmt.Errorf("sum direct recharges: %w", err)
+			}
+			summary.Amount += amount
+			summary.Count += count
+		}
+	}
+
+	if filter.Channel != "direct" {
+		q := s.entClient.RedeemCode.Query().Where(
+			redeemcode.StatusEQ(StatusUsed), redeemcode.ValueGT(0), redeemcode.UsedAtNotNil(),
+			redeemcode.Not(redeemcode.CodeHasPrefix("PAY-")),
+			redeemcode.HasUserWith(user.RoleEQ(RoleUser)),
+		)
+		switch filter.Channel {
+		case "redeem":
+			q = q.Where(redeemcode.TypeEQ(RedeemTypeBalance))
+		case "manual":
+			q = q.Where(redeemcode.TypeEQ(AdjustmentTypeAdminBalance))
+		default:
+			q = q.Where(redeemcode.TypeIn(RedeemTypeBalance, AdjustmentTypeAdminBalance))
+		}
+		if email != "" {
+			q = q.Where(redeemcode.HasUserWith(user.EmailContainsFold(email)))
+		}
+		if !filter.StartTime.IsZero() {
+			q = q.Where(redeemcode.UsedAtGTE(filter.StartTime))
+		}
+		if !filter.EndTime.IsZero() {
+			q = q.Where(redeemcode.UsedAtLT(filter.EndTime))
+		}
+		count, err := q.Clone().Count(ctx)
+		if err != nil {
+			return summary, fmt.Errorf("count code recharges: %w", err)
+		}
+		if count > 0 {
+			amount, err := q.Aggregate(dbent.Sum(redeemcode.FieldValue)).Float64(ctx)
+			if err != nil {
+				return summary, fmt.Errorf("sum code recharges: %w", err)
+			}
+			summary.Amount += amount
+			summary.Count += count
+		}
+	}
+	return summary, nil
+}
+
 func rechargeOrderPaid(status string) bool {
 	switch status {
 	case OrderStatusPaid, OrderStatusRecharging, OrderStatusCompleted,

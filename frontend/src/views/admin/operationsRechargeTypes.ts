@@ -24,6 +24,12 @@ export interface RechargeRiskEvent {
   result: 'success' | 'failed' | string
 }
 
+/** Recharges behind the order list's time, channel and email filters. */
+export interface RechargeSummary {
+  amount: number
+  count: number
+}
+
 export interface RechargeOrderPage {
   items: RechargeOrder[]
   total: number

@@ -24,6 +24,9 @@ func (r *usageLogRepository) GetOperationsDashboardData(
 	data.Metrics.YesterdayRevenue = make(map[string]float64)
 	yesterdayStart := todayStart.AddDate(0, 0, -1)
 
+	// Recharges are paid balance orders plus used balance and administrator
+	// adjustment codes. A paid order is credited through a PAY- redeem code,
+	// so those codes are skipped or every order would count twice.
 	const metricsQuery = `
 		SELECT
 			COALESCE((SELECT SUM(uc.actual_cost)::double precision
@@ -35,7 +38,7 @@ func (r *usageLogRepository) GetOperationsDashboardData(
 				  AND po.status IN ('PAID', 'RECHARGING', 'COMPLETED') AND po.paid_at >= $2 AND po.paid_at < $3), 0) +
 			COALESCE((SELECT SUM(rc.value)::double precision FROM redeem_codes rc JOIN users u ON u.id = rc.used_by
 				WHERE u.role = 'user' AND rc.status = 'used' AND rc.type IN ('balance', 'admin_balance')
-				  AND rc.value > 0 AND rc.used_at >= $2 AND rc.used_at < $3), 0),
+				  AND rc.value > 0 AND rc.code NOT LIKE 'PAY-%' AND rc.used_at >= $2 AND rc.used_at < $3), 0),
 			COALESCE((SELECT SUM(uc.account_cost)::double precision
 				FROM usage_counters uc JOIN api_keys mk ON mk.id = uc.api_key_id AND mk.purpose = 'channel_monitor'
 				WHERE uc.bucket_date = $1::date), 0),
@@ -63,7 +66,7 @@ func (r *usageLogRepository) GetOperationsDashboardData(
 				  AND po.status IN ('PAID', 'RECHARGING', 'COMPLETED') AND po.paid_at >= $5 AND po.paid_at < $2), 0) +
 			COALESCE((SELECT SUM(rc.value)::double precision FROM redeem_codes rc JOIN users u ON u.id = rc.used_by
 				WHERE u.role = 'user' AND rc.status = 'used' AND rc.type IN ('balance', 'admin_balance')
-				  AND rc.value > 0 AND rc.used_at >= $5 AND rc.used_at < $2), 0),
+				  AND rc.value > 0 AND rc.code NOT LIKE 'PAY-%' AND rc.used_at >= $5 AND rc.used_at < $2), 0),
 			COALESCE((SELECT SUM(uc.account_cost)::double precision
 				FROM usage_counters uc JOIN api_keys mk ON mk.id = uc.api_key_id AND mk.purpose = 'channel_monitor'
 				WHERE uc.bucket_date = $4::date), 0),

@@ -126,7 +126,11 @@ export default {
       yesterdayUserRecharge: '昨日充值',
       yesterdayMonitorConsumption: '昨日消费',
       yesterdayRevenue: '昨日营收',
-      comparisonGrowth: '同比增长：',
+      comparisonGrowth: '较昨日',
+      todayWindow: '今日数据自 {date} 00:00 起统计 · {timezone}',
+      updatedAt: '更新于 {time}',
+      todayBlock: '今日',
+      totalBlock: '累计',
       yesterdayIncrease: '昨日增加',
       yesterdayConsumption: '昨日消耗',
       loading: '加载中',
@@ -173,7 +177,13 @@ export default {
         today: '今日', last7Days: '近七天', last30Days: '近30天', searchEmail: '搜索用户邮箱',
         status: '状态', channel: '充值渠道', all: '全部', paid: '已支付', unpaid: '未支付',
         code: '兑换码', direct: '直充', manual: '人工', email: '用户邮箱', amount: '充值金额', time: '时间',
-        loadFailed: '加载订单失败', empty: '当前条件下暂无订单', pageSummary: '第 {page} / {pages} 页 · 共 {total} 条', previous: '上一页', next: '下一页'
+        loadFailed: '加载订单失败', empty: '当前条件下暂无订单', pageSummary: '第 {page} / {pages} 页 · 共 {total} 条', previous: '上一页', next: '下一页',
+        allChannels: '全部渠道', summaryTitle: '充值总额', summaryHint: '仅统计已到账的普通用户充值，不受状态筛选影响', summaryCount: '{count} 笔', summaryFailed: '统计加载失败'
+      },
+      rechargeRanking: {
+        title: '今日充值排行', hint: '今日 00:00 起，按充值金额从高到低', window: '{date} 00:00 起 · {timezone}', top50: '前 50 名',
+        totalAmount: '今日充值总额', totalUsers: '充值人数', user: '用户', amount: '充值金额', count: '{count} 笔', share: '占今日充值 {percent}%',
+        loadFailed: '加载充值排行失败', empty: '今日还没有用户充值'
       },
       rechargeRisk: {
         title: '风险行为', latest25: '最近 25 条', readOnlyHint: '仅供查看，不限制用户操作',

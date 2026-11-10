@@ -3,6 +3,7 @@ package admin
 import (
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/gin-gonic/gin"
@@ -25,6 +26,28 @@ func TestRechargeActivityRejectsInvalidFiltersBeforeQuery(t *testing.T) {
 			handler := &PaymentHandler{}
 			router.GET("/recharge-activity", handler.RechargeActivity)
 			request := httptest.NewRequest(http.MethodGet, path, nil)
+			response := httptest.NewRecorder()
+			router.ServeHTTP(response, request)
+			require.Equal(t, http.StatusBadRequest, response.Code)
+		})
+	}
+}
+
+func TestRechargeActivitySummaryRejectsInvalidFiltersBeforeQuery(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	for _, query := range []string{
+		"status=unknown",
+		"channel=other",
+		"start_time=bad",
+		"end_time=bad",
+		"start_time=2026-10-27T00:00:00Z&end_time=2026-10-26T00:00:00Z",
+		"email=" + strings.Repeat("a", 101),
+	} {
+		t.Run(query, func(t *testing.T) {
+			router := gin.New()
+			handler := &PaymentHandler{}
+			router.GET("/recharge-activity/summary", handler.RechargeActivitySummary)
+			request := httptest.NewRequest(http.MethodGet, "/recharge-activity/summary?"+query, nil)
 			response := httptest.NewRecorder()
 			router.ServeHTTP(response, request)
 			require.Equal(t, http.StatusBadRequest, response.Code)
