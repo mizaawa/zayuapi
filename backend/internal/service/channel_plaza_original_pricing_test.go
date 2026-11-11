@@ -140,7 +140,7 @@ func TestListPlazaGroups_ChannelOriginalPreservesModesTiersAndZero(t *testing.T)
 	require.InDelta(t, 0.3, *channel.ModelPricing[2].Intervals[0].PerRequestPrice, 1e-12)
 }
 
-func TestListPlazaGroups_MissingChannelPriceStaysMissing(t *testing.T) {
+func TestListPlazaGroups_MissingChannelPriceFallsBackToReferencePrice(t *testing.T) {
 	bare := Channel{
 		ID: 1, Name: "bare", Status: StatusActive, GroupIDs: []int64{10},
 		ModelMapping: map[string]map[string]string{PlatformOpenAI: {"gpt-example": "gpt-example"}},
@@ -155,6 +155,9 @@ func TestListPlazaGroups_MissingChannelPriceStaysMissing(t *testing.T) {
 	require.Len(t, out, 1)
 	model := out[0].Models[0]
 	require.Nil(t, model.OfficialPricing)
+	// 渠道没配原价:参考价直接填入原价列,不再留空或提示「未配置」。
+	require.NotNil(t, model.ReferencePricing)
+	require.InDelta(t, 9e-6, *model.ReferencePricing.InputPrice, 1e-12)
 	require.Equal(t, "reference", model.PricingSource)
 	require.InDelta(t, 9e-6, *model.Pricing.InputPrice, 1e-12)
 
@@ -164,7 +167,46 @@ func TestListPlazaGroups_MissingChannelPriceStaysMissing(t *testing.T) {
 	out, err = newPlazaChannelService(nil, []Group{groupOnly}, nil).ListPlazaGroups(context.Background())
 	require.NoError(t, err)
 	require.Nil(t, out[0].Models[0].OfficialPricing)
+	require.Nil(t, out[0].Models[0].ReferencePricing, "没有任何全局定价时参考价为空")
 	require.Equal(t, "group", out[0].Models[0].PricingSource)
+}
+
+// 分组覆盖了渠道价时渠道原价仍为空,但也应给出全局参考价填满原价列。
+func TestListPlazaGroups_GroupOverrideStillExposesReferencePrice(t *testing.T) {
+	groupPrice := 1e-6
+	channel := plazaPricedChannel(1, "priced", []int64{10}, PlatformOpenAI, "gpt-example")
+	group := Group{
+		ID: 10, Platform: PlatformOpenAI, RateMultiplier: 0.5,
+		ModelPricing: []ChannelModelPricing{{
+			Platform: PlatformOpenAI, Models: []string{"gpt-example"},
+			BillingMode: BillingModeToken, InputPrice: &groupPrice,
+		}},
+	}
+	catalog := newStubPricingServiceFromMap(map[string]*LiteLLMModelPricing{
+		"gpt-example": {InputCostPerToken: 9e-6},
+	})
+
+	out, err := newPlazaChannelService([]Channel{channel}, []Group{group}, catalog).ListPlazaGroups(context.Background())
+	require.NoError(t, err)
+	model := out[0].Models[0]
+	require.NotNil(t, model.OfficialPricing)
+	require.InDelta(t, 3e-6, *model.OfficialPricing.InputPrice, 1e-12)
+	require.Nil(t, model.ReferencePricing, "渠道有原价时不需要参考价")
+
+	// 渠道存在但该模型没有定价条目:原价为空,参考价补齐。
+	bare := Channel{
+		ID: 2, Name: "bare", Status: StatusActive, GroupIDs: []int64{10},
+		ModelMapping: map[string]map[string]string{PlatformOpenAI: {"gpt-example": "gpt-example"}},
+	}
+	out, err = newPlazaChannelService([]Channel{bare}, []Group{group}, catalog).ListPlazaGroups(context.Background())
+	require.NoError(t, err)
+	require.Len(t, out[0].Models, 1)
+	other := out[0].Models[0]
+	require.Equal(t, "gpt-example", other.Name)
+	require.Nil(t, other.OfficialPricing)
+	require.NotNil(t, other.ReferencePricing)
+	require.InDelta(t, 9e-6, *other.ReferencePricing.InputPrice, 1e-12)
+	require.Equal(t, "group", other.PricingSource)
 }
 
 func TestListPlazaGroups_OriginalPricesNeverShareSameNameAcrossPlatformsOrGroups(t *testing.T) {

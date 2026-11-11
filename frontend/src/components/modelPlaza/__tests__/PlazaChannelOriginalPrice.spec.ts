@@ -90,18 +90,32 @@ describe('model plaza channel original prices', () => {
     expect(row[2].text()).toContain(`modelPlaza.table.${unit}`)
   })
 
-  it('uses independent official and paid currency switches, and explains missing channel prices', () => {
+  it('uses independent official and paid currency switches, and shows the reference price without a hint', () => {
     const m = model(price('token', { input_price: 2e-6 }), price('token', { input_price: 4e-6 }))
     m.pricing_currency = { official_cny: true, discounted_cny: false }
     const row = cells(m)
     expect(row[1].text()).toBe('$1.00')
     expect(row[4].text()).toBe('¥4.00')
 
+    // 渠道未配置原价:原价列直接显示参考价,不写「未配置」也不加回落提示。
     m.official_pricing = null
     m.pricing_source = 'reference'
-    const missing = cells(m)
-    expect(missing[0].text()).toContain('modelPlaza.table.referencePriceSource')
-    expect(missing[4].text()).toContain('modelPlaza.table.channelPriceMissing')
+    const reference = cells(m)
+    expect(reference[0].text()).not.toContain('modelPlaza.table.referencePriceSource')
+    expect(reference[4].text()).toBe('¥2.00')
+  })
+
+  it('shows reference_pricing in the original column even when the group price wins', () => {
+    const m = model(price('token', { input_price: 1e-6, output_price: 2e-6 }), null)
+    m.pricing_source = 'group'
+    m.reference_pricing = price('token', { input_price: 4e-6, output_price: 9e-6 })
+
+    const row = cells(m)
+
+    expect(row[4].text()).toBe('$4.00')
+    expect(row[5].text()).toBe('$9.00')
+    expect(row[1].text()).toBe('$0.50')
+    expect(row[0].text()).toContain('modelPlaza.table.groupPriceSource')
   })
 
   it('inherits only the same channel card defaults in partial intervals and preserves image-token units', () => {

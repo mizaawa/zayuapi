@@ -33,7 +33,7 @@
           >
             <div class="border-b border-gray-200 pb-2 text-gray-400 dark:border-dark-600 dark:text-dark-500">
               <span :title="t('modelPlaza.table.channelPriceHint')">{{ t('modelPlaza.table.officialPrice') }}</span>
-              <span v-if="models.some((model) => model.official_pricing && (!model.official_pricing.billing_mode || model.official_pricing.billing_mode === BILLING_MODE_TOKEN))" class="ml-1 normal-case font-normal text-gray-400 dark:text-dark-500">{{ t('modelPlaza.table.unitPerMillion') }}</span>
+              <span v-if="hasTokenOriginal" class="ml-1 normal-case font-normal text-gray-400 dark:text-dark-500">{{ t('modelPlaza.table.unitPerMillion') }}</span>
             </div>
           </th>
           <th
@@ -80,8 +80,8 @@
                 {{ billingModeLabel(m) }}
               </span>
             </div>
-            <p v-if="m.pricing_source === 'group' || m.pricing_source === 'reference'" class="mt-1 text-[10px] text-gray-400 dark:text-dark-500">
-              {{ t(m.pricing_source === 'group' ? 'modelPlaza.table.groupPriceSource' : 'modelPlaza.table.referencePriceSource') }}
+            <p v-if="m.pricing_source === 'group'" class="mt-1 text-[10px] text-gray-400 dark:text-dark-500">
+              {{ t('modelPlaza.table.groupPriceSource') }}
             </p>
           </td>
 
@@ -174,7 +174,7 @@
             </td>
           </template>
 
-          <PlazaOriginalPriceCells :pricing="m.official_pricing" :currency="displayCurrency(m, true)" />
+          <PlazaOriginalPriceCells :pricing="originalPricing(m)" :currency="displayCurrency(m, true)" />
 
           <!-- Independent media rates override group and user rates. -->
           <td
@@ -212,7 +212,7 @@ import {
   BILLING_MODE_VIDEO,
   type BillingMode
 } from '@/constants/channel'
-import type { PlazaModel } from '@/api/modelPlaza'
+import type { PlazaModel, PlazaOfficialPricing } from '@/api/modelPlaza'
 import type { UserPricingInterval } from '@/api/channels'
 
 const props = defineProps<{
@@ -245,8 +245,8 @@ const sortedModels = computed(() => {
     const ta = billingMode(a) === BILLING_MODE_TOKEN
     const tb = billingMode(b) === BILLING_MODE_TOKEN
     if (ta !== tb) return ta ? -1 : 1
-    const pa = a.official_pricing?.output_price ?? null
-    const pb = b.official_pricing?.output_price ?? null
+    const pa = originalPricing(a)?.output_price ?? null
+    const pb = originalPricing(b)?.output_price ?? null
     if (pa != null && pb != null && pa !== pb) return pb - pa
     if (pa != null && pb == null) return -1
     if (pa == null && pb != null) return 1
@@ -255,6 +255,25 @@ const sortedModels = computed(() => {
 })
 
 const effectiveRate = computed(() => props.userRateMultiplier ?? props.rateMultiplier)
+
+/**
+ * 渠道原价展示:优先渠道配置的定价;渠道没配时直接展示参考价(全局定价)
+ * 本身,不再提示「未配置」。旧响应没有 reference_pricing 时退回实付基价。
+ */
+function originalPricing(m: PlazaModel): PlazaOfficialPricing | null {
+  if (m.official_pricing) return m.official_pricing
+  if (m.reference_pricing) return m.reference_pricing
+  if (m.pricing_source === 'reference' && m.pricing) return m.pricing
+  return null
+}
+
+/** 原价区是否有 token 计价的模型,决定表头是否标「/百万 Token」。 */
+const hasTokenOriginal = computed(() =>
+  props.models.some((model) => {
+    const pricing = originalPricing(model)
+    return pricing != null && (!pricing.billing_mode || pricing.billing_mode === BILLING_MODE_TOKEN)
+  })
+)
 const hasCustomRate = computed(
   () => props.userRateMultiplier != null && props.userRateMultiplier !== props.rateMultiplier
 )

@@ -17,8 +17,11 @@ type PlazaModel struct {
 	Platform        string
 	Pricing         *ChannelModelPricing
 	OfficialPricing *PlazaOfficialPricing
-	PricingSource   string // channel, group, reference or unavailable (effective billing base)
-	PricingCurrency ChannelPricingCurrency
+	// ReferencePricing 是全局定价里的参考价,仅在渠道未配置原价时填充;
+	// 广场原价列直接展示它,不再提示「未配置」。
+	ReferencePricing *PlazaOfficialPricing
+	PricingSource    string // channel, group, reference or unavailable (effective billing base)
+	PricingCurrency  ChannelPricingCurrency
 }
 
 // PlazaGroup 模型广场中以分组为顶层的条目。
@@ -63,7 +66,8 @@ type PlazaGroup struct {
 //   - 分组模型定价优先于渠道定价，分组中单独定价的具体模型无需绑定渠道即可展示；
 //   - 图片计费模型的档位价按实收口径合成（分组图片价 > 渠道档位价 > 渠道默认按次价，
 //     见 plazaImageDisplayPricing）；
-//   - 原价仅取渠道配置（未配置为 nil）；实付基价的全局回落通过 PricingSource 标明；
+//   - 原价优先取渠道配置；渠道未配置时给出全局参考价 ReferencePricing（同样为 nil 表示
+//     连参考价都没有），实付基价的全局回落通过 PricingSource 标明；
 //   - 只返回 Models 非空的分组；分组按管理员设定的分组排序（SortOrder 升序，
 //     同序按 ID），组内模型按名称排序。
 //
@@ -191,13 +195,17 @@ func (s *ChannelService) ListPlazaGroups(ctx context.Context) ([]PlazaGroup, err
 						original = pricing
 					}
 				}
+				// 渠道没配价时用全局参考价填原价列;分组覆盖时参考价仍按全局数据取。
+				// 传入 channels 定价只为继承管理员已选的计费模式,不读取其中价格。
+				var reference *ChannelModelPricing
+				if original == nil {
+					reference = s.plazaReferencePricing(billingModel, pricing)
+				}
 				source := "channel"
 				if override := g.GetModelPricing(billingModel); override != nil {
 					pricing, source = override, "group"
-				} else if original == nil {
-					fallback := []SupportedModel{{Name: billingModel, Platform: m.Platform, Pricing: pricing}}
-					s.fillGlobalPricingFallback(fallback)
-					pricing, source = fallback[0].Pricing, "reference"
+				} else if original == nil && reference != nil {
+					pricing, source = reference, "reference"
 				}
 				if pricing != nil && ((pricing.BillingMode == BillingModeImage && (g.ImagePrice1K != nil || g.ImagePrice2K != nil || g.ImagePrice4K != nil)) ||
 					(pricing.BillingMode == BillingModeVideo && (g.VideoPrice480P != nil || g.VideoPrice720P != nil || g.VideoPrice1080P != nil))) {
@@ -209,7 +217,7 @@ func (s *ChannelService) ListPlazaGroups(ctx context.Context) ([]PlazaGroup, err
 				}
 				candidate := PlazaModel{
 					Name: m.Name, Platform: m.Platform, Pricing: pricing,
-					OfficialPricing: original, PricingSource: source,
+					OfficialPricing: original, ReferencePricing: reference, PricingSource: source,
 					PricingCurrency: ch.PricingCurrency(m.Platform),
 				}
 				key := modelKey{platform: m.Platform, name: strings.ToLower(m.Name)}
@@ -249,10 +257,11 @@ func (s *ChannelService) ListPlazaGroups(ctx context.Context) ([]PlazaGroup, err
 				source = "unavailable"
 			}
 			pg.Models = append(pg.Models, PlazaModel{
-				Name:          m.Name,
-				Platform:      m.Platform,
-				Pricing:       pricing,
-				PricingSource: source,
+				Name:             m.Name,
+				Platform:         m.Platform,
+				Pricing:          pricing,
+				ReferencePricing: s.plazaReferencePricing(m.Name, pricing),
+				PricingSource:    source,
 			})
 		}
 		if len(pg.Models) == 0 {
@@ -377,4 +386,24 @@ func plazaVideoDisplayPricing(p *ChannelModelPricing, g *Group) *ChannelModelPri
 // Explicit zeroes are prices. Image token inputs count as configuration too.
 func plazaHasConfiguredPrice(p *ChannelModelPricing) bool {
 	return p != nil && (p.ImageInputPrice != nil || !pricingNeedsFallback(p))
+}
+
+// plazaReferencePricing 从全局定价合成展示用参考价，供渠道未配置原价时填满原价列。
+// existing 只用来继承渠道已选的计费模式；没有任何参考价时返回 nil。
+func (s *ChannelService) plazaReferencePricing(name string, existing *ChannelModelPricing) *ChannelModelPricing {
+	if s.pricingService == nil {
+		return nil
+	}
+	lp := s.pricingService.GetModelPricing(name)
+	if lp == nil {
+		return nil
+	}
+	reference := synthesizePricingFromLiteLLM(lp, existing)
+	if !plazaHasConfiguredPrice(reference) {
+		return nil
+	}
+	if reference.BillingMode == "" {
+		reference.BillingMode = BillingModeToken
+	}
+	return reference
 }

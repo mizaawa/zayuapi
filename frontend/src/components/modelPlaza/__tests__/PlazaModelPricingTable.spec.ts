@@ -220,13 +220,14 @@ describe('PlazaModelPricingTable', () => {
     expect(wrapper.findAll('tbody td')).toHaveLength(8)
   })
 
-  it('渠道原价只展示渠道缓存价，缺价时明确说明', () => {
+  it('渠道原价只展示渠道缓存价，缺价时原价列留空', () => {
     const withOriginal = mountTable([tokenModel()], 1)
     expect(withOriginal.text()).toContain('$3.75')
     expect(withOriginal.text()).not.toContain('(1h')
     const withoutOriginal = mountTable([tokenModel({ official_pricing: null })], 1)
     const cells = withoutOriginal.findAll('tbody td')
-    expect(cells[4].text()).toBe('modelPlaza.table.channelPriceMissing')
+    expect(cells[4].text()).toBe('-')
+    expect(withoutOriginal.text()).not.toContain('modelPlaza.table.channelPriceMissing')
   })
 
   it('per_request 模型按单次价 × 倍率展示,官方价列显示 -', () => {

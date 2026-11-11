@@ -77,7 +77,7 @@ describe('ModelPlazaContent', () => {
     expect(cells[0].text()).toContain('vendor-chat-model')
     expect(cells[1].text()).toBe('$1.00')
     expect(cells[2].text()).toBe('$4.00')
-    expect(cells[4].text()).toBe('modelPlaza.table.channelPriceMissing')
+    expect(cells[4].text()).toBe('-')
     expect(cells.at(-1)!.text()).toBe('0.5x')
   })
 

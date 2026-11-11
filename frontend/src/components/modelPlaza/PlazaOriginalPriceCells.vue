@@ -1,6 +1,6 @@
 <template>
   <td v-if="!pricing" colspan="3" class="border-l border-gray-100 px-3 py-2.5 text-xs text-gray-400 dark:border-dark-700/60 dark:text-dark-500">
-    {{ t('modelPlaza.table.channelPriceMissing') }}
+    -
   </td>
   <template v-else-if="mode === 'token'">
     <td v-for="field in tokenFields" :key="field" class="border-l border-gray-100 px-3 py-2.5 align-middle font-mono text-xs text-gray-500 dark:border-dark-700/60 dark:text-dark-400">

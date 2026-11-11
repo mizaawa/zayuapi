@@ -20,6 +20,9 @@ export interface PlazaModel {
   platform: string
   pricing: UserSupportedModelPricing | null
   official_pricing: PlazaOfficialPricing | null
+  /** Reference (catalog) price, filled only when the channel has no configured price;
+   * the 渠道原价 column shows it directly instead of a "not configured" notice. */
+  reference_pricing?: PlazaOfficialPricing | null
   /** Effective billing base source; original prices never use reference fallback. */
   pricing_source?: 'channel' | 'group' | 'reference' | 'unavailable'
   pricing_currency?: PlatformPricingCurrency

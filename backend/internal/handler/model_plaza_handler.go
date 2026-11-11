@@ -51,12 +51,14 @@ type modelPlazaOfficialPricing = userSupportedModelPricing
 
 // modelPlazaModel exposes effective billing prices and separate channel originals.
 type modelPlazaModel struct {
-	Name            string                         `json:"name"`
-	Platform        string                         `json:"platform"`
-	Pricing         *userSupportedModelPricing     `json:"pricing"`
-	OfficialPricing *modelPlazaOfficialPricing     `json:"official_pricing"`
-	PricingSource   string                         `json:"pricing_source"`
-	PricingCurrency service.ChannelPricingCurrency `json:"pricing_currency"`
+	Name            string                     `json:"name"`
+	Platform        string                     `json:"platform"`
+	Pricing         *userSupportedModelPricing `json:"pricing"`
+	OfficialPricing *modelPlazaOfficialPricing `json:"official_pricing"`
+	// ReferencePricing 是渠道未配置原价时的全局参考价,广场直接展示给用户。
+	ReferencePricing *modelPlazaOfficialPricing     `json:"reference_pricing"`
+	PricingSource    string                         `json:"pricing_source"`
+	PricingCurrency  service.ChannelPricingCurrency `json:"pricing_currency"`
 }
 
 // modelPlazaGroup 广场分组条目（白名单字段）。
@@ -301,7 +303,8 @@ func toModelPlazaGroupDTO(g *service.PlazaGroup, userRates map[int64]float64) mo
 			Name:            m.Name,
 			Platform:        m.Platform,
 			Pricing:         toUserPricing(m.Pricing),
-			OfficialPricing: toModelPlazaOfficialPricing(m.OfficialPricing),
+			OfficialPricing:  toModelPlazaOfficialPricing(m.OfficialPricing),
+			ReferencePricing: toModelPlazaOfficialPricing(m.ReferencePricing),
 			PricingCurrency: m.PricingCurrency,
 			PricingSource:   m.PricingSource,
 		})
