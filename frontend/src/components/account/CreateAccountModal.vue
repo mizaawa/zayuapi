@@ -122,7 +122,7 @@
             :class="[
               'flex flex-1 items-center justify-center gap-2 rounded-md px-4 py-2.5 text-sm font-medium transition-all',
               form.platform === 'custom'
-                ? 'bg-white text-gray-900 shadow-sm dark:bg-dark-600 dark:text-white'
+                ? 'bg-white text-pink-600 shadow-sm dark:bg-dark-600 dark:text-pink-400'
                 : 'text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200'
             ]"
           >
@@ -318,17 +318,6 @@
             "
           />
           <p v-if="apiKeyHint" class="input-hint">{{ apiKeyHint }}</p>
-        </div>
-
-
-        <!-- Gemini API Key tier selection -->
-        <div v-if="form.platform === 'gemini'">
-          <label class="input-label">{{ t('admin.accounts.gemini.tier.label') }}</label>
-          <select v-model="geminiTierAIStudio" class="input">
-            <option value="aistudio_free">{{ t('admin.accounts.gemini.tier.aiStudio.free') }}</option>
-            <option value="aistudio_paid">{{ t('admin.accounts.gemini.tier.aiStudio.paid') }}</option>
-          </select>
-          <p class="input-hint">{{ t('admin.accounts.gemini.tier.aiStudioHint') }}</p>
         </div>
 
         <!-- Model Restriction Section (Antigravity 已在上层条件排除) -->
@@ -1017,55 +1006,68 @@
         <ProxySelector v-model="form.proxy_id" :proxies="proxies" />
       </div>
 
-      <div class="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <div>
-          <label class="input-label">{{ t('admin.accounts.concurrency') }}</label>
-          <input v-model.number="form.concurrency" type="number" min="1" step="1" class="input"
-            data-testid="account-concurrency-input"
-            autocomplete="off" data-1p-ignore data-lpignore="true" data-bwignore="true"
-            :placeholder="t('admin.accounts.concurrencyUnlimitedPlaceholder')"
-            @input="form.concurrency = normalizeConcurrencyInput(form.concurrency)" />
-          <p class="input-hint">{{ t('admin.accounts.concurrencyUnlimitedHint') }}</p>
-        </div>
-        <div>
-          <label class="input-label">{{ t('admin.accounts.loadFactor') }}</label>
-          <input v-model.number="form.load_factor" type="number" min="1"
-            autocomplete="off"
-            class="input" :placeholder="form.concurrency ? String(form.concurrency) : '1'"
-            @input="form.load_factor = (form.load_factor &amp;&amp; form.load_factor >= 1) ? form.load_factor : null" />
-          <p class="input-hint">{{ t('admin.accounts.loadFactorHint') }}</p>
-        </div>
-        <div>
-          <label class="input-label">{{ t('admin.accounts.priority') }}</label>
-          <input
-            v-model.number="form.priority"
-            type="number"
-            min="1"
-            class="input"
-            autocomplete="off"
-            data-tour="account-form-priority"
-          />
-          <p class="input-hint">{{ t('admin.accounts.priorityHint') }}</p>
-        </div>
-        <div>
-          <label class="input-label">{{ t('admin.accounts.billingRateMultiplier') }}</label>
-          <!-- step matches the column's 4 decimals, so an upstream group multiplier such as 0.0625 stays valid -->
-          <input v-model.number="form.rate_multiplier" type="number" min="0" step="0.0001" class="input" autocomplete="off"
-            data-testid="account-rate-multiplier" />
-          <p v-if="providerRateHint" class="input-hint" data-testid="account-rate-multiplier-source">{{ providerRateHint }}</p>
-          <p v-else class="input-hint">{{ t('admin.accounts.billingRateMultiplierHint') }}</p>
-          <div v-if="form.type === 'apikey'" class="mt-3 flex items-center justify-between gap-3">
-            <div class="min-w-0">
-              <p class="text-xs font-medium text-gray-700 dark:text-gray-200">{{ t('admin.accounts.upstreamBilling.autoProbeAndSync') }}</p>
-              <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ t('admin.accounts.upstreamBilling.autoProbeAndSyncHint') }}</p>
-            </div>
-            <Toggle
-              :model-value="upstreamBillingAutoProbeEnabled"
-              data-testid="upstream-billing-auto-probe"
-              :aria-label="t('admin.accounts.upstreamBilling.autoProbeAndSync')"
-              @update:model-value="handleUpstreamBillingAutoProbeChange"
-            />
+      <div class="space-y-3">
+        <div class="grid grid-cols-2 gap-4 lg:grid-cols-4">
+          <div>
+            <label class="input-label">{{ t('admin.accounts.concurrency') }}</label>
+            <input v-model.number="form.concurrency" type="number" min="1" step="1" class="input"
+              data-testid="account-concurrency-input"
+              autocomplete="off" data-1p-ignore data-lpignore="true" data-bwignore="true"
+              :placeholder="t('admin.accounts.concurrencyUnlimitedPlaceholder')"
+              @input="form.concurrency = normalizeConcurrencyInput(form.concurrency)" />
+            <p class="input-hint">{{ t('admin.accounts.concurrencyUnlimitedHint') }}</p>
           </div>
+          <div>
+            <label class="input-label">{{ t('admin.accounts.loadFactor') }}</label>
+            <input v-model.number="form.load_factor" type="number" min="1"
+              autocomplete="off"
+              class="input" :placeholder="form.concurrency ? String(form.concurrency) : '1'"
+              @input="form.load_factor = (form.load_factor &amp;&amp; form.load_factor >= 1) ? form.load_factor : null" />
+            <p class="input-hint">{{ t('admin.accounts.loadFactorHint') }}</p>
+          </div>
+          <div>
+            <label class="input-label">{{ t('admin.accounts.priority') }}</label>
+            <input
+              v-model.number="form.priority"
+              type="number"
+              min="1"
+              class="input"
+              autocomplete="off"
+              data-tour="account-form-priority"
+            />
+            <p class="input-hint">{{ t('admin.accounts.priorityHint') }}</p>
+          </div>
+          <div>
+            <label class="input-label">{{ t('admin.accounts.billingRateMultiplier') }}</label>
+            <!-- step matches the column's 4 decimals, so an upstream group multiplier such as 0.0625 stays valid -->
+            <input v-model.number="form.rate_multiplier" type="number" min="0" step="0.0001" class="input" autocomplete="off"
+              data-testid="account-rate-multiplier" />
+            <p v-if="providerRateHint" class="input-hint" data-testid="account-rate-multiplier-source">{{ providerRateHint }}</p>
+            <p v-else class="input-hint">{{ t('admin.accounts.billingRateMultiplierHint') }}</p>
+          </div>
+        </div>
+        <!-- The auto-probe switch governs the billing rate above; it gets a row of
+             its own instead of being squeezed into the rate column. -->
+        <div
+          v-if="form.type === 'apikey'"
+          class="flex items-center justify-between gap-4 rounded-xl border border-primary-200/70 bg-primary-50/60 px-4 py-3 dark:border-primary-800/40 dark:bg-primary-900/10"
+          data-testid="upstream-billing-auto-probe-row"
+        >
+          <div class="flex min-w-0 items-start gap-3">
+            <span class="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white text-primary-700 shadow-sm ring-1 ring-primary-200/80 dark:bg-dark-700 dark:text-primary-300 dark:ring-primary-800/40">
+              <Icon name="refresh" size="sm" />
+            </span>
+            <div class="min-w-0">
+              <p class="text-sm font-medium text-gray-900 dark:text-gray-100">{{ t('admin.accounts.upstreamBilling.autoProbeAndSync') }}</p>
+              <p class="mt-0.5 text-xs leading-relaxed text-gray-500 dark:text-gray-400">{{ t('admin.accounts.upstreamBilling.autoProbeAndSyncHint') }}</p>
+            </div>
+          </div>
+          <Toggle
+            :model-value="upstreamBillingAutoProbeEnabled"
+            data-testid="upstream-billing-auto-probe"
+            :aria-label="t('admin.accounts.upstreamBilling.autoProbeAndSync')"
+            @update:model-value="handleUpstreamBillingAutoProbeChange"
+          />
         </div>
       </div>
       <div class="border-t border-gray-200 pt-4 dark:border-dark-600">
@@ -1788,7 +1790,6 @@ const mixedChannelWarningDetails = ref<{ groupName: string; currentPlatform: str
 const mixedChannelWarningRawMessage = ref('')
 const mixedChannelWarningAction = ref<(() => Promise<void>) | null>(null)
 const antigravityMixedChannelConfirmed = ref(false)
-const geminiTierAIStudio = ref<'aistudio_free' | 'aistudio_paid'>('aistudio_free')
 
 const openAIWSModeOptions = computed(() => [
   { value: OPENAI_WS_MODE_OFF, label: t('admin.accounts.openai.wsModeOff') },
@@ -1908,8 +1909,9 @@ watch(() => form.platform, (platform) => {
   mediaProtocol.value = ''
   modelMappings.value = []
   openAICompactModelMappings.value = []
-  modelRestrictionMode.value = platform === 'grok' || platform === 'custom' ? 'mapping' : 'whitelist'
-  allowedModels.value = modelRestrictionMode.value === 'whitelist' ? [...getModelsByPlatform(platform)] : []
+  // Every platform, Grok and Custom included, opens on the whitelist tab.
+  modelRestrictionMode.value = 'whitelist'
+  allowedModels.value = [...getModelsByPlatform(platform)]
   antigravityModelMappings.value = []
   if (platform === 'antigravity') {
     fetchAntigravityDefaultMappings().then(mappings => {
@@ -2344,7 +2346,6 @@ const resetForm = () => {
   upstreamApiKey.value = ''
   tempUnschedEnabled.value = false
   tempUnschedRules.value = []
-  geminiTierAIStudio.value = 'aistudio_free'
   antigravityMixedChannelConfirmed.value = false
   clearMixedChannelDialog()
 }
@@ -2538,9 +2539,8 @@ const submitForm = async () => {
     }),
     ...(form.platform === 'custom' ? { media_protocol: mediaProtocol.value } : {})
   }
-  if (form.platform === 'gemini') {
-    credentials.tier_id = geminiTierAIStudio.value
-  }
+  // Gemini API keys carry no account tier, like OpenAI API keys: the upstream
+  // enforces its own limits, so no simulated AI Studio quota applies.
 
   // Add model mapping if configured（OpenAI 开启自动透传时不应用）
   if (!isOpenAIModelRestrictionDisabled.value) {

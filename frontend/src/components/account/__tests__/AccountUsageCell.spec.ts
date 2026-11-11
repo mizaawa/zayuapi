@@ -677,6 +677,33 @@ describe('AccountUsageCell', () => {
     expect(card.text()).not.toContain('-')
   })
 
+  it('Gemini API Key 与 OpenAI API Key 一样只显示今日统计和额度条，不再有等级与模拟配额', async () => {
+    const account = makeAccount({
+      id: 3003,
+      platform: 'gemini',
+      type: 'apikey',
+      credentials: { api_key: 'relay-key', base_url: 'https://relay.example', tier_id: 'aistudio_free' },
+      quota_daily_limit: 20,
+      quota_daily_used: 5
+    })
+    const todayStats = { requests: 12, tokens: 3400, cost: 1.5, standard_cost: 1.5, user_cost: 3 }
+    const wrapper = mount(AccountUsageCell, {
+      props: { account, todayStats },
+      global: {
+        stubs: { UsageProgressBar: { props: ['label', 'utilization'], template: '<div data-test="quota-bar">{{ label }}:{{ utilization }}</div>' } }
+      }
+    })
+    await flushPromises()
+
+    expect(getUsage).not.toHaveBeenCalled()
+    expect(wrapper.text()).toContain('12 req')
+    expect(wrapper.text()).toContain('A $1.50')
+    expect(wrapper.findAll('[data-test="quota-bar"]').map(bar => bar.text())).toEqual(['1d:25'])
+    expect(wrapper.text()).not.toContain('ai studio')
+    expect(wrapper.text()).not.toContain('admin.accounts.gemini.quotaPolicy')
+    wrapper.unmount()
+  })
+
   it('Grok OAuth 会展示本地 user billed 用量并把耗尽配额显示为 0% 剩余', async () => {
     getUsage.mockResolvedValue({
       grok_local_usage: {

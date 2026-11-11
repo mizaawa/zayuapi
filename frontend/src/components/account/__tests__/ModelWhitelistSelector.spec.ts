@@ -3,9 +3,10 @@ import { flushPromises, mount } from '@vue/test-utils'
 
 const copyToClipboard = vi.fn().mockResolvedValue(true)
 
-const { syncUpstreamModels, syncUpstreamModelsPreview } = vi.hoisted(() => ({
+const { syncUpstreamModels, syncUpstreamModelsPreview, showError } = vi.hoisted(() => ({
   syncUpstreamModels: vi.fn(),
-  syncUpstreamModelsPreview: vi.fn()
+  syncUpstreamModelsPreview: vi.fn(),
+  showError: vi.fn()
 }))
 
 vi.mock('@/api/admin/accounts', () => ({
@@ -17,14 +18,18 @@ vi.mock('vue-i18n', async () => {
   return {
     ...actual,
     useI18n: () => ({
-      t: (key: string) => (key === 'common.copy' ? '复制' : key)
+      t: (key: string, params?: Record<string, unknown>) => {
+        if (key === 'common.copy') return '复制'
+        if (key === 'admin.accounts.syncUpstreamModelsError') return `${key}:${String(params?.message)}`
+        return key
+      }
     })
   }
 })
 
 vi.mock('@/stores/app', () => ({
   useAppStore: () => ({
-    showError: vi.fn(),
+    showError,
     showSuccess: vi.fn(),
     showInfo: vi.fn()
   })
@@ -70,6 +75,7 @@ describe('ModelWhitelistSelector', () => {
     copyToClipboard.mockClear()
     syncUpstreamModels.mockReset().mockResolvedValue({ models: ['upstream-model'] })
     syncUpstreamModelsPreview.mockReset().mockResolvedValue({ models: ['preview-model'] })
+    showError.mockReset()
   })
 
   it('copies a model ID without selecting the model', async () => {
@@ -155,5 +161,57 @@ describe('ModelWhitelistSelector', () => {
     expect(syncUpstreamModelsPreview).toHaveBeenCalledWith(credentials)
     expect(syncUpstreamModels).not.toHaveBeenCalled()
     expect(wrapper.emitted('update:modelValue')).toEqual([[['preview-model']]])
+  })
+
+  it('shows the server reason when an upstream model sync fails', async () => {
+    // The API client rejects with a plain object, not an Error instance.
+    syncUpstreamModels.mockRejectedValueOnce({
+      status: 502,
+      code: 502,
+      message: 'Upstream model list request failed with HTTP 400'
+    })
+    const wrapper = mountSelector({ accountId: 7, platform: 'gemini' })
+    const syncButton = wrapper.findAll('button').find(button => button.text() === 'admin.accounts.syncUpstreamModels')!
+
+    await syncButton.trigger('click')
+    await flushPromises()
+
+    expect(showError).toHaveBeenCalledWith(
+      'admin.accounts.syncUpstreamModelsError:Upstream model list request failed with HTTP 400'
+    )
+    expect(wrapper.emitted('update:modelValue')).toBeUndefined()
+  })
+
+  it('localises provider-import failures from the model preview', async () => {
+    syncUpstreamModelsPreview.mockRejectedValueOnce({
+      status: 404,
+      reason: 'PROVIDER_KEY_NOT_FOUND',
+      message: 'Provider API key not found'
+    })
+    const wrapper = mountSelector({
+      platform: 'gemini',
+      syncCredentials: { platform: 'gemini', type: 'apikey', provider_id: 'p-1', provider_key_id: 'k-1' }
+    })
+    const syncButton = wrapper.findAll('button').find(button => button.text() === 'admin.accounts.syncUpstreamModels')!
+
+    await syncButton.trigger('click')
+    await flushPromises()
+
+    expect(showError).toHaveBeenCalledWith(
+      'admin.accounts.syncUpstreamModelsError:admin.providerImport.errors.PROVIDER_KEY_NOT_FOUND'
+    )
+  })
+
+  it.each([
+    ['openai', 'oauth', false],
+    ['gemini', 'service_account', false],
+    ['anthropic', 'service_account', false],
+    ['grok', 'oauth', true],
+    ['gemini', 'apikey', true],
+    ['anthropic', 'oauth', true]
+  ])('shows the sync button for %s %s accounts only where the server can list models', (platform, accountType, shown) => {
+    const wrapper = mountSelector({ accountId: 9, platform, accountType })
+    const hasSync = wrapper.findAll('button').some(button => button.text() === 'admin.accounts.syncUpstreamModels')
+    expect(hasSync).toBe(shown)
   })
 })

@@ -672,14 +672,45 @@
           />
           <p class="input-hint">{{ t("admin.groups.rateMultiplierHint") }}</p>
         </div>
-        <div v-if="createForm.platform === 'openai'" class="rounded-lg border border-sky-200 p-4 dark:border-sky-900">
-          <label class="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-300">
-            <input v-model="createForm.fast_rate_enabled" type="checkbox" class="rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
-            {{ t("admin.groups.fastRate.enable") }}
-          </label>
-          <div v-if="createForm.fast_rate_enabled" class="mt-3">
+        <div
+          v-if="createForm.platform === 'openai'"
+          class="rounded-xl border p-4 transition-colors"
+          :class="createForm.fast_rate_enabled
+            ? 'border-primary-300 bg-primary-50/70 dark:border-primary-700/50 dark:bg-primary-900/10'
+            : 'border-gray-200 bg-gray-50/60 dark:border-dark-600 dark:bg-dark-800/40'"
+          data-testid="create-fast-rate"
+        >
+          <div class="flex items-center justify-between gap-3">
+            <div class="flex min-w-0 items-center gap-3">
+              <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white text-primary-700 shadow-sm ring-1 ring-primary-200/80 dark:bg-dark-700 dark:text-primary-300 dark:ring-primary-800/40">
+                <Icon name="bolt" size="sm" />
+              </span>
+              <label id="create-fast-rate-label" for="create-fast-rate-toggle" class="cursor-pointer text-sm font-medium text-gray-800 dark:text-gray-200">
+                {{ t("admin.groups.fastRate.enable") }}
+              </label>
+            </div>
+            <button
+              id="create-fast-rate-toggle"
+              type="button"
+              role="switch"
+              data-testid="create-fast-rate-toggle"
+              :aria-checked="createForm.fast_rate_enabled"
+              aria-labelledby="create-fast-rate-label"
+              @click="createForm.fast_rate_enabled = !createForm.fast_rate_enabled"
+              :class="[
+                'relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2',
+                createForm.fast_rate_enabled ? 'bg-primary-500' : 'bg-gray-300 dark:bg-dark-600',
+              ]"
+            >
+              <span :class="[
+                'inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform',
+                createForm.fast_rate_enabled ? 'translate-x-6' : 'translate-x-1',
+              ]" />
+            </button>
+          </div>
+          <div v-if="createForm.fast_rate_enabled" class="mt-4 border-t border-primary-200/70 pt-4 dark:border-primary-800/40">
             <label class="input-label">{{ t("admin.groups.fastRate.multiplier") }}</label>
-            <input v-model.number="createForm.fast_rate_multiplier" type="number" min="0.1" max="100" step="0.0001" required class="input" />
+            <input v-model.number="createForm.fast_rate_multiplier" type="number" min="0.1" max="100" step="0.0001" required class="input" data-testid="create-fast-rate-multiplier" />
             <p class="input-hint">{{ t("admin.groups.fastRate.hint") }}</p>
           </div>
         </div>
@@ -2367,14 +2398,45 @@
             data-tour="group-form-multiplier"
           />
         </div>
-        <div v-if="editForm.platform === 'openai'" class="rounded-lg border border-sky-200 p-4 dark:border-sky-900">
-          <label class="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-300">
-            <input v-model="editForm.fast_rate_enabled" type="checkbox" class="rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
-            {{ t("admin.groups.fastRate.enable") }}
-          </label>
-          <div v-if="editForm.fast_rate_enabled" class="mt-3">
+        <div
+          v-if="editForm.platform === 'openai'"
+          class="rounded-xl border p-4 transition-colors"
+          :class="editForm.fast_rate_enabled
+            ? 'border-primary-300 bg-primary-50/70 dark:border-primary-700/50 dark:bg-primary-900/10'
+            : 'border-gray-200 bg-gray-50/60 dark:border-dark-600 dark:bg-dark-800/40'"
+          data-testid="edit-fast-rate"
+        >
+          <div class="flex items-center justify-between gap-3">
+            <div class="flex min-w-0 items-center gap-3">
+              <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white text-primary-700 shadow-sm ring-1 ring-primary-200/80 dark:bg-dark-700 dark:text-primary-300 dark:ring-primary-800/40">
+                <Icon name="bolt" size="sm" />
+              </span>
+              <label id="edit-fast-rate-label" for="edit-fast-rate-toggle" class="cursor-pointer text-sm font-medium text-gray-800 dark:text-gray-200">
+                {{ t("admin.groups.fastRate.enable") }}
+              </label>
+            </div>
+            <button
+              id="edit-fast-rate-toggle"
+              type="button"
+              role="switch"
+              data-testid="edit-fast-rate-toggle"
+              :aria-checked="editForm.fast_rate_enabled"
+              aria-labelledby="edit-fast-rate-label"
+              @click="editForm.fast_rate_enabled = !editForm.fast_rate_enabled"
+              :class="[
+                'relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2',
+                editForm.fast_rate_enabled ? 'bg-primary-500' : 'bg-gray-300 dark:bg-dark-600',
+              ]"
+            >
+              <span :class="[
+                'inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform',
+                editForm.fast_rate_enabled ? 'translate-x-6' : 'translate-x-1',
+              ]" />
+            </button>
+          </div>
+          <div v-if="editForm.fast_rate_enabled" class="mt-4 border-t border-primary-200/70 pt-4 dark:border-primary-800/40">
             <label class="input-label">{{ t("admin.groups.fastRate.multiplier") }}</label>
-            <input v-model.number="editForm.fast_rate_multiplier" type="number" min="0.1" max="100" step="0.0001" required class="input" />
+            <input v-model.number="editForm.fast_rate_multiplier" type="number" min="0.1" max="100" step="0.0001" required class="input" data-testid="edit-fast-rate-multiplier" />
             <p class="input-hint">{{ t("admin.groups.fastRate.hint") }}</p>
           </div>
         </div>
@@ -3981,7 +4043,9 @@
                             ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400'
                             : group.platform === 'grok'
                               ? 'bg-zinc-200 text-zinc-800 dark:bg-zinc-700 dark:text-zinc-100'
-                              : 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
+                              : group.platform === 'custom' || group.platform === 'composite'
+                                ? 'bg-pink-100 text-pink-700 dark:bg-pink-900/30 dark:text-pink-400'
+                                : 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
                     ]"
                   >
                     {{ t("admin.groups.platforms." + group.platform) }}
@@ -6860,6 +6924,7 @@ const groupRowActions: GroupRowAction[] = [
     icon: "edit",
     tone: "primary",
     label: () => t("common.edit"),
+    testId: "group-edit",
     run: (group) => void handleEdit(group),
   },
   {

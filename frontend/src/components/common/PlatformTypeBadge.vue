@@ -187,7 +187,7 @@ const platformClass = computed(() => {
     return 'bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300'
   }
   if (props.platform === 'custom') {
-    return 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300'
+    return 'bg-pink-100 text-pink-700 dark:bg-pink-900/30 dark:text-pink-400'
   }
   return 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
 })
@@ -206,7 +206,7 @@ const typeClass = computed(() => {
     return 'bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300'
   }
   if (props.platform === 'custom') {
-    return 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300'
+    return 'bg-pink-100 text-pink-600 dark:bg-pink-900/30 dark:text-pink-400'
   }
   return 'bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400'
 })

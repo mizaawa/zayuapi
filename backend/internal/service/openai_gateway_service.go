@@ -226,6 +226,12 @@ type OpenAIUsage struct {
 	CacheCreationInputTokens int `json:"cache_creation_input_tokens,omitempty"`
 	CacheReadInputTokens     int `json:"cache_read_input_tokens,omitempty"`
 	ImageOutputTokens        int `json:"image_output_tokens,omitempty"`
+
+	// hostedImageToolTokens marks image tokens copied from a Responses
+	// tool_usage.image_gen block. Those are the hosted tool's own tokens, not a
+	// subset of InputTokens/OutputTokens, so account statistics price them at
+	// the image model separately. Statistics only; billing never reads it.
+	hostedImageToolTokens bool
 }
 
 func (u OpenAIUsage) HasTokens() bool {
@@ -247,6 +253,10 @@ type OpenAIForwardResult struct {
 	// UpstreamModel is the actual model sent to the upstream provider after mapping.
 	// Empty when no mapping was applied (requested model was used as-is).
 	UpstreamModel string
+	// HostedImageToolModel is the image model of a Responses request's hosted
+	// image_generation tool. Unlike BillingModel it is never rewritten by
+	// callers; account statistics use it to price the tool's image tokens.
+	HostedImageToolModel string
 	// UpstreamResponseModel is captured from the raw successful upstream
 	// response before any client-facing rewrite or protocol conversion.
 	UpstreamResponseModel         string

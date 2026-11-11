@@ -3120,6 +3120,14 @@ func (s *GeminiMessagesCompatService) handleGeminiUpstreamError(ctx context.Cont
 	if statusCode != 429 {
 		return
 	}
+	// API keys follow the OpenAI API-key 429 policy: a reset time parsed from
+	// the body (daily quota, quotaResetDelay, "retry in Xs") is honoured, and
+	// anything else gets the short configurable cooldown instead of a lock
+	// until Pacific midnight, which only fits AI Studio free-tier quotas.
+	if account.Type == AccountTypeAPIKey && s.rateLimitService != nil {
+		s.rateLimitService.HandleUpstreamError(ctx, account, statusCode, headers, body)
+		return
+	}
 	// The admin switch disables all automatic transient scheduling blockers,
 	// including this compatibility path's account-level 429 cooldown. Keep the
 	// current request's error handling intact, but leave the account eligible

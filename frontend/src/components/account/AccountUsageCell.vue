@@ -552,10 +552,8 @@
 
   <!-- Non-OAuth/Setup-Token accounts -->
   <div ref="rootRef" v-else>
-    <!-- Gemini API Key accounts: show quota info -->
-    <AccountQuotaInfo v-if="account.platform === 'gemini'" :account="account" />
-    <!-- Key/Bedrock accounts: show today stats + optional quota bars -->
-    <div v-else class="space-y-1">
+    <!-- Key/Bedrock accounts (Gemini API keys included): today stats + optional quota bars -->
+    <div class="space-y-1">
       <OllamaCloudUsageCell
         v-if="account.ollama_cloud_usage?.eligible"
         :account="account"
@@ -636,7 +634,6 @@ import { accountQuotaBar } from '@/utils/accountQuota'
 import { enqueueUsageRequest } from '@/utils/usageLoadQueue'
 import { formatCompactNumber, formatRelativeTime } from '@/utils/format'
 import UsageProgressBar from './UsageProgressBar.vue'
-import AccountQuotaInfo from './AccountQuotaInfo.vue'
 import OpenAIQuotaResetCell from './OpenAIQuotaResetCell.vue'
 import GrokQuotaProbeCell from './GrokQuotaProbeCell.vue'
 import OllamaCloudUsageCell from './OllamaCloudUsageCell.vue'
@@ -693,8 +690,9 @@ let visibilityObserver: IntersectionObserver | null = null
 
 // Show usage windows for OAuth and Setup Token accounts
 const showUsageWindows = computed(() => {
-  // Gemini: we can always compute local usage windows from DB logs (simulated quotas).
-  if (props.account.platform === 'gemini') return true
+  // Gemini OAuth/Vertex accounts get local usage windows from DB logs (simulated
+  // quotas). Gemini API keys have no tier and render like OpenAI API keys.
+  if (props.account.platform === 'gemini') return props.account.type !== 'apikey'
   return props.account.type === 'oauth' || props.account.type === 'setup-token'
 })
 
@@ -703,7 +701,7 @@ const shouldFetchUsage = computed(() => {
     return props.account.type === 'oauth' || props.account.type === 'setup-token'
   }
   if (props.account.platform === 'gemini') {
-    return true
+    return props.account.type !== 'apikey'
   }
   if (props.account.platform === 'antigravity') {
     return props.account.type === 'oauth'
@@ -872,9 +870,6 @@ const isGeminiCodeAssist = computed(() => {
 const geminiChannelShort = computed((): 'ai studio' | 'gcp' | 'google one' | 'client' | null => {
   if (props.account.platform !== 'gemini') return null
 
-  // API Key accounts are AI Studio.
-  if (props.account.type === 'apikey') return 'ai studio'
-
   if (geminiOAuthType.value === 'google_one') return 'google one'
   if (isGeminiCodeAssist.value) return 'gcp'
   if (geminiOAuthType.value === 'ai_studio') return 'client'
@@ -914,15 +909,14 @@ const geminiUserLevel = computed((): string | null => {
     return 'standard'
   }
 
-  // AI Studio (API Key) and Client OAuth: free / paid
-  if (props.account.type === 'apikey' || geminiOAuthType.value === 'ai_studio') {
+  // AI Studio client OAuth: free / paid
+  if (geminiOAuthType.value === 'ai_studio') {
     if (tierLower === 'aistudio_paid') return 'paid'
     if (tierLower === 'aistudio_free') return 'free'
 
     // Backward compatibility
     if (tierUpper.includes('PAID') || tierUpper.includes('PAYG') || tierUpper.includes('PAY')) return 'paid'
     if (tierUpper.includes('FREE')) return 'free'
-    if (props.account.type === 'apikey') return 'free'
     return null
   }
 

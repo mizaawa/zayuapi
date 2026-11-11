@@ -17,6 +17,10 @@ import (
 
 const upstreamModelsBodyLimit int64 = 8 << 20
 
+// upstreamModelsMaxPages bounds paginated model lists (Google pages 50 models,
+// Anthropic 20 by default).
+const upstreamModelsMaxPages = 20
+
 // UpstreamModelSyncErrorKind classifies model sync failures for safe HTTP mapping.
 type UpstreamModelSyncErrorKind string
 
@@ -95,7 +99,67 @@ func (s *AccountTestService) FetchUpstreamSupportedModels(ctx context.Context, a
 		return nil, err
 	}
 
+	extractModels := extractUpstreamModelIDs
+	if account.IsGrok() {
+		extractModels = extractGrokUpstreamModelIDs
+	}
+	models, err := s.fetchUpstreamModelList(req, account, extractModels)
+	if err == nil {
+		return models, nil
+	}
+
+	// Relays (New API, sub2api and their forks) often list a platform's
+	// models only through the OpenAI-compatible endpoint, for example when the
+	// key belongs to an upstream group that speaks the OpenAI protocol. Try
+	// that list before reporting the native failure.
+	fallbackReq, ok := s.buildCompatibleModelsFallbackRequest(ctx, account)
+	if !ok {
+		return nil, err
+	}
+	if models, fallbackErr := s.fetchUpstreamModelList(fallbackReq, account, extractUpstreamModelIDs); fallbackErr == nil {
+		return models, nil
+	}
+	return nil, err
+}
+
+// fetchUpstreamModelList reads every page of one model list. Google's list
+// pages with nextPageToken and Anthropic's with has_more/last_id; both default
+// to page sizes smaller than current catalogs.
+func (s *AccountTestService) fetchUpstreamModelList(req *http.Request, account *Account, extractModels func([]byte) ([]string, error)) ([]string, error) {
 	proxyURL := upstreamModelsProxyURL(account)
+	var models []string
+	previousCursor := ""
+	for page := 1; ; page++ {
+		body, err := s.readUpstreamModelsPage(req, proxyURL, account)
+		if err != nil {
+			return nil, err
+		}
+		pageModels, err := extractModels(body)
+		if err != nil {
+			return nil, newUpstreamModelSyncUpstreamError("Upstream model list response was not valid JSON", err)
+		}
+		models = append(models, pageModels...)
+
+		param, cursor := upstreamModelsNextPage(body)
+		if cursor == "" || cursor == previousCursor || page >= upstreamModelsMaxPages {
+			break
+		}
+		previousCursor = cursor
+		next := req.Clone(req.Context())
+		query := next.URL.Query()
+		query.Set(param, cursor)
+		next.URL.RawQuery = query.Encode()
+		req = next
+	}
+
+	models = dedupeAndSortModelIDs(models)
+	if len(models) == 0 {
+		return nil, newUpstreamModelSyncUpstreamError("Upstream returned no supported models", nil)
+	}
+	return models, nil
+}
+
+func (s *AccountTestService) readUpstreamModelsPage(req *http.Request, proxyURL string, account *Account) ([]byte, error) {
 	resp, err := s.doUpstreamModelsRequest(req, proxyURL, account)
 	if err != nil {
 		return nil, newUpstreamModelSyncUpstreamError("Failed to request upstream model list", err)
@@ -116,20 +180,83 @@ func (s *AccountTestService) FetchUpstreamSupportedModels(ctx context.Context, a
 			fmt.Errorf("upstream model list returned HTTP %d", resp.StatusCode),
 		)
 	}
+	return body, nil
+}
 
-	extractModels := extractUpstreamModelIDs
-	if account.IsGrok() {
-		extractModels = extractGrokUpstreamModelIDs
+// upstreamModelsNextPage returns the query parameter and cursor of the next
+// page, or an empty cursor on the last page.
+func upstreamModelsNextPage(body []byte) (string, string) {
+	var page struct {
+		NextPageToken string `json:"nextPageToken"`
+		HasMore       bool   `json:"has_more"`
+		LastID        string `json:"last_id"`
 	}
-	models, err := extractModels(body)
+	if err := json.Unmarshal(body, &page); err != nil {
+		return "", ""
+	}
+	if token := strings.TrimSpace(page.NextPageToken); token != "" {
+		return "pageToken", token
+	}
+	if lastID := strings.TrimSpace(page.LastID); page.HasMore && lastID != "" {
+		return "after_id", lastID
+	}
+	return "", ""
+}
+
+// buildCompatibleModelsFallbackRequest builds the OpenAI-compatible model list
+// request (GET {base}/v1/models with a Bearer key) for Gemini and Anthropic
+// API-key accounts on relays. Official upstreams have no such fallback: their
+// native list is authoritative.
+func (s *AccountTestService) buildCompatibleModelsFallbackRequest(ctx context.Context, account *Account) (*http.Request, bool) {
+	if account == nil || account.Type != AccountTypeAPIKey {
+		return nil, false
+	}
+	var baseURL string
+	switch {
+	case account.IsGemini():
+		baseURL = geminiCompatibleModelsBaseURL(account.GetCredential("base_url"))
+	case account.IsAnthropic():
+		baseURL = strings.TrimSpace(account.GetCredential("base_url"))
+	default:
+		return nil, false
+	}
+	apiKey := strings.TrimSpace(account.GetCredential("api_key"))
+	if baseURL == "" || apiKey == "" || isOfficialModelsUpstream(baseURL) {
+		return nil, false
+	}
+	normalizedBaseURL, err := s.validateUpstreamBaseURL(baseURL)
 	if err != nil {
-		return nil, newUpstreamModelSyncUpstreamError("Upstream model list response was not valid JSON", err)
+		return nil, false
 	}
-	if len(models) == 0 {
-		return nil, newUpstreamModelSyncUpstreamError("Upstream returned no supported models", nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, buildOpenAIModelsURL(normalizedBaseURL), nil)
+	if err != nil {
+		return nil, false
 	}
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Authorization", "Bearer "+apiKey)
+	account.ApplyHeaderOverrides(req.Header)
+	return req, true
+}
 
-	return models, nil
+// geminiCompatibleModelsBaseURL strips the Gemini-native path from a relay
+// base URL so the OpenAI-compatible list is requested at the relay root.
+func geminiCompatibleModelsBaseURL(raw string) string {
+	baseURL := strings.TrimRight(strings.TrimSpace(raw), "/")
+	for _, suffix := range []string{"/v1beta/models", "/v1beta/openai", "/v1beta"} {
+		if strings.HasSuffix(strings.ToLower(baseURL), suffix) {
+			return baseURL[:len(baseURL)-len(suffix)]
+		}
+	}
+	return baseURL
+}
+
+func isOfficialModelsUpstream(raw string) bool {
+	parsed, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil {
+		return false
+	}
+	host := strings.ToLower(parsed.Hostname())
+	return host == "api.anthropic.com" || host == "generativelanguage.googleapis.com" || strings.HasSuffix(host, ".googleapis.com")
 }
 
 func (s *AccountTestService) buildUpstreamModelsRequest(ctx context.Context, account *Account) (*http.Request, error) {

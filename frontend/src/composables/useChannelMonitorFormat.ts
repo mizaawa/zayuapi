@@ -82,7 +82,7 @@ export function useChannelMonitorFormat() {
       case PROVIDER_GROK:
         return 'bg-zinc-100 text-zinc-700 dark:bg-zinc-500/15 dark:text-zinc-300'
       case PROVIDER_CUSTOM:
-        return 'bg-gray-100 text-gray-700 dark:bg-gray-500/15 dark:text-gray-300'
+        return 'bg-pink-100 text-pink-700 dark:bg-pink-500/15 dark:text-pink-300'
       default:
         return NEUTRAL_BADGE
     }
@@ -162,7 +162,7 @@ export function providerGradient(provider: string): string {
     case PROVIDER_GROK:
       return 'bg-gradient-to-br from-zinc-50 to-neutral-200 dark:from-zinc-500/10 dark:to-neutral-500/20'
     case PROVIDER_CUSTOM:
-      return 'bg-gradient-to-br from-gray-50 to-gray-200 dark:from-gray-500/10 dark:to-gray-500/20'
+      return 'bg-gradient-to-br from-pink-50 to-rose-100 dark:from-pink-500/10 dark:to-rose-500/20'
     default:
       return 'bg-gradient-to-br from-gray-100 to-gray-200 dark:from-dark-700 dark:to-dark-600'
   }

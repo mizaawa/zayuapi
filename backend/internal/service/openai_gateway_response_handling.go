@@ -1062,6 +1062,9 @@ func mergeHostedImageGenToolUsage(imageGen gjson.Result, usage *OpenAIUsage) {
 	if !sanitizeOpenAIUsage(&candidate) {
 		return
 	}
+	if candidate.ImageOutputTokens != usage.ImageOutputTokens || candidate.ImageInputTokens != usage.ImageInputTokens {
+		candidate.hostedImageToolTokens = true
+	}
 	*usage = candidate
 }
 

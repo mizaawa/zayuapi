@@ -211,8 +211,9 @@ describe('admin AccountsView account cards', () => {
   it('draws key quotas as meters and keeps the usage cell for provider usage', async () => {
     const wrapper = await mountWith([
       account(1, { quota_daily_limit: 20, quota_daily_used: 13.2, quota_limit: 500, quota_used: 470 }),
-      account(2, { platform: 'gemini' }),
-      account(3, { type: 'oauth', credentials: {} })
+      account(2, { platform: 'gemini', type: 'oauth', credentials: { oauth_type: 'google_one' } }),
+      account(3, { type: 'oauth', credentials: {} }),
+      account(4, { platform: 'gemini', quota_daily_limit: 10, quota_daily_used: 2.5 })
     ])
 
     const quotas = wrapper.findAll('[data-test="card-1"] .account-card-quota')
@@ -229,6 +230,13 @@ describe('admin AccountsView account cards', () => {
     expect(wrapper.get('[data-test="card-2"] [data-testid="card-usage"]').attributes('data-hide-key-stats')).toBe('true')
     expect(wrapper.find('[data-test="card-2"] [data-testid="account-card-quotas"]').exists()).toBe(false)
     expect(wrapper.find('[data-test="card-3"] [data-testid="card-usage"]').exists()).toBe(true)
+
+    // Gemini API keys carry no tier or simulated quota: their card shows key
+    // quotas itself, exactly like an OpenAI or Anthropic API key.
+    expect(wrapper.find('[data-test="card-4"] [data-testid="card-usage"]').exists()).toBe(false)
+    expect(wrapper.findAll('[data-test="card-4"] .account-card-quota-label').map((label) => label.text())).toEqual([
+      'admin.accounts.card.quotaDaily'
+    ])
   })
 
   it('folds groups beyond three into a +N chip that names them', async () => {

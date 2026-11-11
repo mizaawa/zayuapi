@@ -94,7 +94,7 @@ describe('channel monitor Custom provider', () => {
     showError.mockReset()
   })
 
-  it('offers Custom as the fifth provider with the supplied seven-node icon', async () => {
+  it('offers Custom as the fifth provider with the jigsaw icon', async () => {
     const wrapper = mountDialog()
     await flushPromises()
 
@@ -106,8 +106,9 @@ describe('channel monitor Custom provider', () => {
 
     const customButton = wrapper.get('[data-testid="monitor-provider-custom"]')
     expect(customButton.text()).toContain('monitorCommon.providers.custom')
-    expect(customButton.get('svg').attributes('viewBox')).toBe('0 0 48 48')
-    expect(customButton.findAll('path')).toHaveLength(7)
+    expect(customButton.get('svg').attributes('viewBox')).toBe('0 0 24 24')
+    expect(customButton.get('svg').attributes('fill')).toBe('currentColor')
+    expect(customButton.findAll('path')).toHaveLength(1)
   })
 
   it('includes Custom in the admin provider filter', () => {

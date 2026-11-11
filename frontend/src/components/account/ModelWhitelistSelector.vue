@@ -154,6 +154,8 @@ import { useClipboard } from '@/composables/useClipboard'
 import ModelIcon from '@/components/common/ModelIcon.vue'
 import Icon from '@/components/icons/Icon.vue'
 import { allModels, getModelsByPlatform } from '@/composables/useModelWhitelist'
+import { extractApiErrorMessage } from '@/utils/apiError'
+import { providerImportErrorMessage } from '@/components/account/providerImport'
 
 const { t } = useI18n()
 
@@ -162,6 +164,8 @@ const props = defineProps<{
   platform?: string
   platforms?: string[]
   accountId?: number
+  /** Saved account's type; hides the sync button where the server cannot list models. */
+  accountType?: string
   syncOverrides?: SyncUpstreamModelsOverrides
   syncCredentials?: SyncUpstreamPreviewParams
 }>()
@@ -196,10 +200,21 @@ const normalizedPlatforms = computed(() => {
 })
 
 const upstreamSyncPlatforms = new Set(['anthropic', 'openai', 'gemini', 'antigravity', 'grok', 'custom'])
+// Account types whose model list the server refuses to fetch (OpenAI OAuth,
+// Vertex service accounts, Bedrock); the button would only ever fail there.
+const unsupportedSyncTypes: Record<string, ReadonlySet<string>> = {
+  openai: new Set(['oauth', 'setup-token']),
+  anthropic: new Set(['service_account', 'bedrock']),
+  gemini: new Set(['service_account'])
+}
 const canSyncUpstream = computed(() => {
   if (props.accountId) {
     if (normalizedPlatforms.value.length === 0) return true
-    return normalizedPlatforms.value.some(platform => upstreamSyncPlatforms.has(platform.toLowerCase()))
+    const accountType = props.accountType?.toLowerCase() ?? ''
+    return normalizedPlatforms.value.some(platform => {
+      const key = platform.toLowerCase()
+      return upstreamSyncPlatforms.has(key) && !unsupportedSyncTypes[key]?.has(accountType)
+    })
   }
   if (props.syncCredentials) {
     return upstreamSyncPlatforms.has(props.syncCredentials.platform.toLowerCase())
@@ -314,7 +329,10 @@ const syncUpstreamModels = async () => {
       appStore.showInfo(t('admin.accounts.syncUpstreamModelsNoChanges', { count: upstreamModels.length }))
     }
   } catch (error) {
-    const message = error instanceof Error ? error.message : t('admin.accounts.syncUpstreamModelsFailed')
+    // The API client rejects with plain {message, reason} objects, so show the
+    // server's reason (provider errors localised) instead of a generic text.
+    const message = providerImportErrorMessage(error, t) ||
+      extractApiErrorMessage(error, t('admin.accounts.syncUpstreamModelsFailed'))
     appStore.showError(t('admin.accounts.syncUpstreamModelsError', { message }))
   } finally {
     isSyncingUpstream.value = false

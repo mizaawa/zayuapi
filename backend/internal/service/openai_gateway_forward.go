@@ -784,6 +784,7 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 				wsResult.ImageSize = imageSizeTier
 				wsResult.ImageInputSize = imageInputSize
 				wsResult.BillingModel = imageBillingModel
+				wsResult.HostedImageToolModel = imageBillingModel
 			}
 			return wsResult, nil
 		}
@@ -1015,6 +1016,7 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 			forwardResult.ImageInputSize = imageInputSize
 			forwardResult.ImageOutputSizes = imageOutputSizes
 			forwardResult.BillingModel = imageBillingModel
+			forwardResult.HostedImageToolModel = imageBillingModel
 		}
 		return forwardResult, responseErr
 	}

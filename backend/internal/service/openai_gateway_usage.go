@@ -463,18 +463,36 @@ func (s *OpenAIGatewayService) RecordUsage(ctx context.Context, input *OpenAIRec
 		usageLog.SubscriptionID = &subscription.ID
 	}
 
-	// 计算账号统计定价费用（使用最终上游模型匹配自定义规则）
+	// 计算账号统计定价费用（使用最终上游模型匹配自定义规则）。统计只看上游
+	// 实际回报的用量和上游模型价：分组/渠道按张、按次或单独 token 售价都不参与。
+	statsGroupID := int64(0)
 	if apiKey.GroupID != nil {
-		applyAccountStatsCost(ctx, usageLog, s.channelService, s.billingService,
-			account.ID, *apiKey.GroupID, result.UpstreamModel, result.Model,
-			tokens, cost.TotalCost,
-		)
-		if cost.CustomerBase != nil && usageLog.AccountStatsCost == nil {
-			// UsageLog.TotalCost is the customer's standard-price base. Keep the
-			// upstream priority cost available for account statistics separately.
-			upstreamCost := cost.TotalCost
-			usageLog.AccountStatsCost = &upstreamCost
-		}
+		statsGroupID = *apiKey.GroupID
+	}
+	statsOpts := accountStatsPricingOptions{
+		serviceTier: serviceTier,
+		// The API long-context switch says whether an OpenAI account's upstream
+		// charges the long-context rate; it exists only for OpenAI accounts.
+		// Other upstreams (Grok, Custom relays) keep the catalog's tier.
+		longContextBilling: !billingAccount.IsOpenAI() || longContextBillingEnabled,
+		fallbackModels:     []string{billingModel, strings.TrimSpace(result.BillingModel)},
+		webSearchCalls:     result.WebSearchCalls,
+	}
+	if result.ImageCount > 0 && result.Usage.hostedImageToolTokens {
+		// The hosted image_generation tool reported its own tokens next to
+		// the text model's usage: the upstream bills them at the image
+		// model's rates.
+		statsOpts.imageModel = strings.TrimSpace(result.HostedImageToolModel)
+	}
+	applyAccountStatsCost(ctx, usageLog, s.channelService, s.billingService,
+		account.ID, statsGroupID, result.UpstreamModel, result.Model,
+		tokens, statsOpts,
+	)
+	if cost != nil && cost.CustomerBase != nil && usageLog.AccountStatsCost == nil {
+		// UsageLog.TotalCost is the customer's standard-price base. Keep the
+		// upstream priority cost available for account statistics separately.
+		upstreamCost := cost.TotalCost
+		usageLog.AccountStatsCost = &upstreamCost
 	}
 
 	if s.cfg != nil && s.cfg.RunMode == config.RunModeSimple {

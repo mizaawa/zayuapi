@@ -1665,10 +1665,9 @@ const cardHasLiveLimits = (account: Account) =>
   ((account.window_cost_limit ?? 0) > 0 || (account.max_sessions ?? 0) > 0 || (account.base_rpm ?? 0) > 0)
 
 // The card draws today's numbers and key/Bedrock quotas itself; the usage cell
-// only earns its place for provider usage (OAuth windows, Gemini, Ollama Cloud).
+// only earns its place for provider usage (OAuth windows, Ollama Cloud).
 const cardShowsUsageCell = (account: Account) =>
   !(account.type === 'apikey' || account.type === 'bedrock') ||
-  account.platform === 'gemini' ||
   account.ollama_cloud_usage?.eligible === true
 
 const cardQuotaBars = (account: Account): AccountQuotaBar[] =>

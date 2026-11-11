@@ -127,6 +127,14 @@ type LiteLLMModelPricing struct {
 	OutputCostPerImageToken             float64 `json:"output_cost_per_image_token"` // 图片输出 token 价格
 	InputCostPerImageToken              float64 `json:"input_cost_per_image_token"`  // 图片输入 token 价格（如 gpt-image-2 图片编辑）
 
+	// Above-200k tier (Gemini Pro, Claude 1M context): the upstream prices the
+	// whole request at these rates once the prompt exceeds 200k tokens. They
+	// are read only by account statistics and never by customer billing.
+	InputCostPerTokenAbove200k           float64 `json:"input_cost_per_token_above_200k_tokens,omitempty"`
+	OutputCostPerTokenAbove200k          float64 `json:"output_cost_per_token_above_200k_tokens,omitempty"`
+	CacheReadInputTokenCostAbove200k     float64 `json:"cache_read_input_token_cost_above_200k_tokens,omitempty"`
+	CacheCreationInputTokenCostAbove200k float64 `json:"cache_creation_input_token_cost_above_200k_tokens,omitempty"`
+
 	// TokenPricingAbsent 表示源数据中 input/output token 价格均缺失（仅有图片价）。
 	// 此类条目只可用于图片计费，token 计费必须回退到 fallback 或 fail-closed，
 	// 否则 token 流量会被按 $0 计费。零值（false）表示条目具备 token 价格。
@@ -168,6 +176,11 @@ type LiteLLMRawEntry struct {
 	OutputCostPerImage                  *float64 `json:"output_cost_per_image"`
 	OutputCostPerImageToken             *float64 `json:"output_cost_per_image_token"`
 	InputCostPerImageToken              *float64 `json:"input_cost_per_image_token"`
+
+	InputCostPerTokenAbove200k           *float64 `json:"input_cost_per_token_above_200k_tokens"`
+	OutputCostPerTokenAbove200k          *float64 `json:"output_cost_per_token_above_200k_tokens"`
+	CacheReadInputTokenCostAbove200k     *float64 `json:"cache_read_input_token_cost_above_200k_tokens"`
+	CacheCreationInputTokenCostAbove200k *float64 `json:"cache_creation_input_token_cost_above_200k_tokens"`
 }
 
 // PricingService 动态价格服务
@@ -506,6 +519,18 @@ func (s *PricingService) parsePricingData(body []byte) (map[string]*LiteLLMModel
 		}
 		if entry.InputCostPerImageToken != nil {
 			pricing.InputCostPerImageToken = *entry.InputCostPerImageToken
+		}
+		if entry.InputCostPerTokenAbove200k != nil {
+			pricing.InputCostPerTokenAbove200k = *entry.InputCostPerTokenAbove200k
+		}
+		if entry.OutputCostPerTokenAbove200k != nil {
+			pricing.OutputCostPerTokenAbove200k = *entry.OutputCostPerTokenAbove200k
+		}
+		if entry.CacheReadInputTokenCostAbove200k != nil {
+			pricing.CacheReadInputTokenCostAbove200k = *entry.CacheReadInputTokenCostAbove200k
+		}
+		if entry.CacheCreationInputTokenCostAbove200k != nil {
+			pricing.CacheCreationInputTokenCostAbove200k = *entry.CacheCreationInputTokenCostAbove200k
 		}
 
 		result[modelName] = pricing

@@ -11,6 +11,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// resolveAccountStatsCost keeps the old test signature: totalCost (the
+// customer's pre-multiplier cost) no longer feeds account statistics and is
+// accepted only so the cases can show that it is ignored.
 func resolveAccountStatsCost(
 	ctx context.Context,
 	channelService *ChannelService,
@@ -22,10 +25,19 @@ func resolveAccountStatsCost(
 	requestCount int,
 	totalCost float64,
 ) *float64 {
+	_ = totalCost
 	return resolveAccountStatsCostWithUnits(
 		ctx, channelService, billingService, accountID, groupID, upstreamModel,
-		tokens, accountStatsRequestUnits{requestCount: requestCount}, totalCost,
+		tokens, accountStatsRequestUnits{requestCount: requestCount}, defaultAccountStatsPricingOptions(),
 	)
+}
+
+// tryModelFilePricing prices tokens at the catalog's standard rates.
+func tryModelFilePricing(billingService *BillingService, model string, tokens UsageTokens) *float64 {
+	if billingService == nil || !validUsageTokens(tokens) || !hasAccountStatsTokens(tokens) {
+		return nil
+	}
+	return catalogTokenStatsCost(billingService, model, tokens, defaultAccountStatsPricingOptions())
 }
 
 func tryCustomRules(
@@ -280,8 +292,9 @@ func TestCalculateStatsCost_TokenBilling_WithImageOutput(t *testing.T) {
 	}
 	result := calculateStatsCost(pricing, tokens, 1)
 	require.NotNil(t, result)
-	// 100*0.001 + 50*0.002 + 10*0.01 = 0.1 + 0.1 + 0.1 = 0.3
-	require.InDelta(t, 0.3, *result, 1e-12)
+	// Image output tokens are part of the 50 output tokens (same split as billing):
+	// 100*0.001 + 40*0.002 + 10*0.01 = 0.1 + 0.08 + 0.1 = 0.28
+	require.InDelta(t, 0.28, *result, 1e-12)
 }
 
 func TestCalculateStatsCost_TokenBilling_PartialPricesNil(t *testing.T) {
@@ -644,8 +657,9 @@ func TestTryModelFilePricing_WithImageOutput(t *testing.T) {
 	}
 	result := tryModelFilePricing(bs, "claude-sonnet-4", tokens)
 	require.NotNil(t, result)
-	// 100*0.001 + 50*0.002 + 10*0.01 = 0.1 + 0.1 + 0.1 = 0.3
-	require.InDelta(t, 0.3, *result, 1e-12)
+	// Image output tokens are part of the 50 output tokens (same split as billing):
+	// 100*0.001 + 40*0.002 + 10*0.01 = 0.1 + 0.08 + 0.1 = 0.28
+	require.InDelta(t, 0.28, *result, 1e-12)
 }
 
 func TestTryModelFilePricing_WithCacheTokens(t *testing.T) {
@@ -751,25 +765,27 @@ func TestResolveAccountStatsCost_HitsCustomRule(t *testing.T) {
 	require.InDelta(t, 2.0, *result, 1e-12)
 }
 
-func TestResolveAccountStatsCost_ApplyPricingToAccountStats_UsesTotalCost(t *testing.T) {
+func TestResolveAccountStatsCost_ApplyPricingToAccountStats_IgnoresCustomerTotalCost(t *testing.T) {
 	channel := &Channel{
 		ID:                         1,
 		Status:                     StatusActive,
 		ApplyPricingToAccountStats: true,
-		// No custom rules
+		// No custom rules and no channel price for the model.
 	}
 	cs := newTestChannelServiceForStats(t, channel, 10, "anthropic")
 
 	tokens := UsageTokens{InputTokens: 100, OutputTokens: 50}
 
+	// The customer's pre-multiplier cost (which may hold group selling prices)
+	// is not an upstream cost; with neither a channel price nor a catalog the
+	// row keeps the historical fallback.
 	result := resolveAccountStatsCost(
 		context.Background(),
 		cs, nil,
 		1, 10, "claude-sonnet-4",
-		tokens, 1, 0.75, // totalCost = 0.75
+		tokens, 1, 0.75, // totalCost = 0.75 is ignored
 	)
-	require.NotNil(t, result)
-	require.InDelta(t, 0.75, *result, 1e-12)
+	require.Nil(t, result)
 }
 
 func TestResolveAccountStatsCost_ApplyPricingToAccountStats_ZeroTotalCost_ReturnsNil(t *testing.T) {

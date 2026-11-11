@@ -356,6 +356,35 @@ describe('CreateAccountModal OpenAI long-context billing', () => {
     wrapper.unmount()
   })
 
+  it('creates Gemini API keys like OpenAI keys, without an account tier', async () => {
+    const wrapper = mountModal()
+    await selectButtonByText(wrapper, 'Gemini')
+    await flushPromises()
+    expect(wrapper.text()).not.toContain('admin.accounts.gemini.tier.label')
+    expect(wrapper.find('option[value="aistudio_free"]').exists()).toBe(false)
+
+    await wrapper.get('[data-tour="account-form-name"]').setValue('gemini relay')
+    await wrapper.get('input[type="password"]').setValue('relay-key')
+    await wrapper.get('form#create-account-form').trigger('submit.prevent')
+    await flushPromises()
+
+    expect(createAccountMock).toHaveBeenCalledTimes(1)
+    const payload = createAccountMock.mock.calls[0][0]
+    expect(payload).toEqual(expect.objectContaining({ platform: 'gemini', type: 'apikey' }))
+    expect(payload.credentials).toEqual(expect.objectContaining({ api_key: 'relay-key' }))
+    expect(payload.credentials).not.toHaveProperty('tier_id')
+    wrapper.unmount()
+  })
+
+  it.each(['Grok', 'Custom'])('opens %s on the model whitelist tab', async label => {
+    const wrapper = mountModal()
+    await selectButtonByText(wrapper, label)
+    await flushPromises()
+    expect(wrapper.findComponent(ModelWhitelistSelector).exists()).toBe(true)
+    expect(wrapper.findAll('button').some(button => button.text().includes('admin.accounts.addMapping'))).toBe(false)
+    wrapper.unmount()
+  })
+
   it.each(['Grok', 'Custom'])('preserves model mapping for %s', async label => {
     const wrapper = mountModal()
     await selectButtonByText(wrapper, label)
@@ -365,6 +394,7 @@ describe('CreateAccountModal OpenAI long-context billing', () => {
     if (label === 'Custom') {
       await wrapper.get('input[placeholder="https://api.example.com/v1"]').setValue('https://relay.example/v1')
     }
+    await selectButtonByText(wrapper, 'admin.accounts.modelMapping')
     await selectButtonByText(wrapper, 'admin.accounts.addMapping')
     await wrapper.get('input[placeholder="admin.accounts.requestModel"]').setValue('client-model')
     await wrapper.get('input[placeholder="admin.accounts.actualModel"]').setValue('upstream-model')

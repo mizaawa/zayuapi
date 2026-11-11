@@ -28,7 +28,7 @@ type GeminiQuota struct {
 	// When SharedRPM > 0, callers should treat ProRPM/FlashRPM as not applicable for minute quota checks.
 	SharedRPM int64 `json:"shared_rpm,omitempty"`
 
-	// Per-model quotas (AI Studio / API key).
+	// Per-model quotas (AI Studio OAuth).
 	// A value of -1 means "unlimited" (pay-as-you-go).
 	ProRPD   int64 `json:"pro_rpd,omitempty"`
 	ProRPM   int64 `json:"pro_rpm,omitempty"`
@@ -188,7 +188,7 @@ func (s *GeminiQuotaService) CooldownForAccount(ctx context.Context, account *Ac
 func newGeminiQuotaPolicy() *GeminiQuotaPolicy {
 	return &GeminiQuotaPolicy{
 		tiers: map[string]GeminiTierPolicy{
-			// --- AI Studio / API Key (per-model) ---
+			// --- AI Studio OAuth (per-model) ---
 			// aistudio_free:
 			//   - gemini_pro:   50 RPD / 2 RPM
 			//   - gemini_flash: 1500 RPD / 15 RPM
@@ -373,6 +373,12 @@ func geminiQuotaTierKeyForAccount(account *Account) string {
 	if account == nil || account.Platform != PlatformGemini {
 		return ""
 	}
+	// Gemini API keys work like OpenAI API keys: no account tier and no
+	// simulated local quota; the upstream enforces its own limits. A tier_id
+	// saved by older versions (aistudio_free / aistudio_paid) is ignored.
+	if account.Type == AccountTypeAPIKey {
+		return ""
+	}
 
 	// Note: GeminiOAuthType() already defaults legacy (project_id present) to code_assist.
 	oauthType := strings.ToLower(strings.TrimSpace(account.GeminiOAuthType()))
@@ -392,7 +398,7 @@ func geminiQuotaTierKeyForAccount(account *Account) string {
 	case "ai_studio":
 		return GeminiTierAIStudioFree
 	default:
-		// API Key accounts (type=apikey) have empty oauth_type and are treated as AI Studio.
+		// OAuth accounts without a recognised oauth_type are treated as AI Studio.
 		return GeminiTierAIStudioFree
 	}
 }

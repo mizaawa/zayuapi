@@ -322,6 +322,7 @@ func (s *OpenAIGatewayService) proxyOpenAIWSHTTPBridgeTurn(
 			result.ImageInputSize = imageInputSize
 			result.ImageOutputSizes = imageCounter.Sizes()
 			result.BillingModel = imageBillingModel
+			result.HostedImageToolModel = imageBillingModel
 		}
 		return result
 	}

@@ -1274,25 +1274,6 @@ export default {
         modelPassthroughDesc: '所有模型请求将直接转发至 Gemini API，不进行模型限制或映射。',
         baseUrlHint: '留空使用官方 Gemini API',
         apiKeyHint: '您的 Gemini API Key（以 AIza 开头）',
-        tier: {
-          label: '账号等级',
-          hint: '提示：系统会优先尝试自动识别账号等级；若自动识别不可用或失败，则使用你选择的等级作为回退（本地模拟配额）。',
-          aiStudioHint:
-            'AI Studio 的配额是按模型分别限流（Pro/Flash 独立）。若已绑卡（按量付费），请选 Pay-as-you-go。',
-          googleOne: {
-            free: 'Google One Free',
-            pro: 'Google One Pro',
-            ultra: 'Google One Ultra'
-          },
-          gcp: {
-            standard: 'GCP Standard',
-            enterprise: 'GCP Enterprise'
-          },
-          aiStudio: {
-            free: 'Google AI Free',
-            paid: 'Google AI Pay-as-you-go'
-          }
-        },
         accountType: {
           oauthTitle: 'OAuth 授权（Gemini）',
           oauthDesc: '使用 Google 账号授权，并选择 OAuth 子类型。',
@@ -1385,7 +1366,7 @@ export default {
               limits: 'RPD ~1000；RPM ~60（预览期）'
             },
             aiStudio: {
-              channel: 'AI Studio API Key / OAuth',
+              channel: 'AI Studio OAuth',
               free: '未绑卡（免费层）',
               paid: '已绑卡（按量付费）',
               limitsFree: 'RPD 50；RPM 2（Pro）/ 15（Flash）',
@@ -1401,10 +1382,7 @@ export default {
           }
         },
         rateLimit: {
-          ok: '未限流',
-          unlimited: '无限流',
-          limited: '限流 {time}',
-          now: '现在'
+          unlimited: '无限流'
         }
       },
       // Re-Auth Modal

@@ -318,6 +318,7 @@ func (s *OpenAIGatewayService) forwardOpenAIPassthrough(
 		forwardResult.ImageInputSize = imageInputSize
 		forwardResult.ImageOutputSizes = imageOutputSizes
 		forwardResult.BillingModel = imageBillingModel
+		forwardResult.HostedImageToolModel = imageBillingModel
 	}
 	return forwardResult, responseErr
 }

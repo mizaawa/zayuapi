@@ -724,6 +724,28 @@ type recordUsageCoreInput struct {
 	ChannelUsageFields
 }
 
+// accountStatsTokensFromClaudeUsage builds the account statistics tokens from
+// the upstream's usage report. Anthropic's input_tokens excludes cache_read and
+// cache_creation (billed separately). Accounts with a cache TTL override had
+// their 5m/1h split rewritten to the billing target while the response was
+// parsed, so only the aggregate cache writes are trusted there.
+func accountStatsTokensFromClaudeUsage(usage ClaudeUsage, account *Account) UsageTokens {
+	tokens := UsageTokens{
+		InputTokens:           usage.InputTokens,
+		OutputTokens:          usage.OutputTokens,
+		CacheCreationTokens:   usage.CacheCreationInputTokens,
+		CacheReadTokens:       usage.CacheReadInputTokens,
+		CacheCreation5mTokens: usage.CacheCreation5mTokens,
+		CacheCreation1hTokens: usage.CacheCreation1hTokens,
+		ImageOutputTokens:     usage.ImageOutputTokens,
+	}
+	if account != nil && account.IsCacheTTLOverrideEnabled() {
+		tokens.CacheCreation5mTokens = 0
+		tokens.CacheCreation1hTokens = 0
+	}
+	return tokens
+}
+
 // recordUsageCore 是 RecordUsage 和 RecordUsageWithLongContext 的统一实现。
 // LongContextThreshold > 0 时 Token 计费回退走 CalculateCostWithLongContext。
 func (s *GatewayService) recordUsageCore(ctx context.Context, input *recordUsageCoreInput, opts *recordUsageOpts) error {
@@ -741,6 +763,16 @@ func (s *GatewayService) recordUsageCore(ctx context.Context, input *recordUsage
 		logger.LegacyPrintf("service.gateway", "invalid upstream usage rejected: request_id=%s account_id=%d", result.RequestID, accountID)
 	}
 	ApplyForwardImageBillingResolution(result)
+
+	// Account statistics price what the upstream actually reported. Keep that
+	// report before forced cache billing (below) rewrites how the customer is
+	// billed. A cache TTL override is already applied while the response is
+	// parsed, so for such accounts the 5m/1h split is the billing target, not
+	// the upstream's; statistics then price the aggregate cache writes.
+	var upstreamUsage ClaudeUsage
+	if result != nil {
+		upstreamUsage = result.Usage
+	}
 
 	// 强制缓存计费：将 input_tokens 转为 cache_read_input_tokens
 	// 用于粘性会话切换时的特殊计费处理
@@ -841,22 +873,19 @@ func (s *GatewayService) recordUsageCore(ctx context.Context, input *recordUsage
 		usageLog.RequestType = RequestTypeCyberBlocked
 	}
 
-	// 计算账号统计定价费用（使用最终上游模型匹配自定义规则）
+	// 计算账号统计定价费用（使用最终上游模型匹配自定义规则）。统计只看上游
+	// 实际回报的用量和上游模型价，不使用分组/渠道售价，也不受客户侧用量改写影响。
+	statsGroupID := int64(0)
 	if apiKey.GroupID != nil {
-		applyAccountStatsCost(ctx, usageLog, s.channelService, s.billingService,
-			account.ID, *apiKey.GroupID, result.UpstreamModel, result.Model,
-			// Anthropic's input_tokens excludes cache_read and cache_creation (billed separately);
-			// OpenAI gateway uses actualInputTokens which also excludes cache_read for the same reason.
-			UsageTokens{
-				InputTokens:         result.Usage.InputTokens,
-				OutputTokens:        result.Usage.OutputTokens,
-				CacheCreationTokens: result.Usage.CacheCreationInputTokens,
-				CacheReadTokens:     result.Usage.CacheReadInputTokens,
-				ImageOutputTokens:   result.Usage.ImageOutputTokens,
-			},
-			cost.TotalCost,
-		)
+		statsGroupID = *apiKey.GroupID
 	}
+	statsOpts := defaultAccountStatsPricingOptions()
+	statsOpts.fallbackModels = []string{billingModel}
+	applyAccountStatsCost(ctx, usageLog, s.channelService, s.billingService,
+		account.ID, statsGroupID, result.UpstreamModel, result.Model,
+		accountStatsTokensFromClaudeUsage(upstreamUsage, account),
+		statsOpts,
+	)
 
 	if s.cfg != nil && s.cfg.RunMode == config.RunModeSimple {
 		writeUsageLogBestEffort(ctx, s.usageLogRepo, usageLog, "service.gateway")

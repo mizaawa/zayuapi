@@ -1223,25 +1223,6 @@ export default {
           'All model requests are forwarded directly to the Gemini API without model restrictions or mappings.',
         baseUrlHint: 'Leave default for official Gemini API',
         apiKeyHint: 'Your Gemini API Key (starts with AIza)',
-        tier: {
-          label: 'Account Tier',
-          hint: 'Tip: The system will try to auto-detect the tier first; if auto-detection is unavailable or fails, your selected tier is used as a fallback (simulated quota).',
-          aiStudioHint:
-            'AI Studio quotas are per-model (Pro/Flash are limited independently). If billing is enabled, choose Pay-as-you-go.',
-          googleOne: {
-            free: 'Google One Free',
-            pro: 'Google One Pro',
-            ultra: 'Google One Ultra'
-          },
-          gcp: {
-            standard: 'GCP Standard',
-            enterprise: 'GCP Enterprise'
-          },
-          aiStudio: {
-            free: 'Google AI Free',
-            paid: 'Google AI Pay-as-you-go'
-          }
-        },
         accountType: {
           oauthTitle: 'OAuth (Gemini)',
           oauthDesc: 'Authorize with your Google account and choose an OAuth type.',
@@ -1335,7 +1316,7 @@ export default {
               limits: 'RPD ~1000; RPM ~60 (preview)'
             },
             aiStudio: {
-              channel: 'AI Studio API Key / OAuth',
+              channel: 'AI Studio OAuth',
               free: 'No billing (free tier)',
               paid: 'Billing enabled (pay-as-you-go)',
               limitsFree: 'RPD 50; RPM 2 (Pro) / 15 (Flash)',
@@ -1351,10 +1332,7 @@ export default {
           }
         },
         rateLimit: {
-          ok: 'Not rate limited',
-          unlimited: 'Unlimited',
-          limited: 'Rate limited {time}',
-          now: 'now'
+          unlimited: 'Unlimited'
         }
       },
       // Re-Auth Modal

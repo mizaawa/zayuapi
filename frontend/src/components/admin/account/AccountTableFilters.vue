@@ -230,7 +230,7 @@ const gOpts = computed(() => [
 }
 
 .tone-custom {
-  background: #faf6e8;
-  color: #5b5238;
+  background: #fce7f3;
+  color: #9d174d;
 }
 </style>

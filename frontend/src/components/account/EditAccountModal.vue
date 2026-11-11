@@ -154,7 +154,7 @@
 
             <!-- Whitelist Mode -->
             <div v-if="modelRestrictionMode === 'whitelist'">
-              <ModelWhitelistSelector v-model="allowedModels" :platform="account?.platform || 'anthropic'" :account-id="account?.id" :sync-overrides="syncModelOverrides" />
+              <ModelWhitelistSelector v-model="allowedModels" :platform="account?.platform || 'anthropic'" :account-id="account?.id" :account-type="account?.type" :sync-overrides="syncModelOverrides" />
               <p class="text-xs text-gray-500 dark:text-gray-400">
                 {{ t('admin.accounts.selectedModels', { count: allowedModels.length }) }}
                 <span v-if="allowedModels.length === 0 && modelMappings.length === 0">{{
@@ -583,7 +583,7 @@
 
           <!-- Whitelist Mode -->
           <div v-if="modelRestrictionMode === 'whitelist'">
-            <ModelWhitelistSelector v-model="allowedModels" :platform="account?.platform || 'anthropic'" :account-id="account?.id" />
+            <ModelWhitelistSelector v-model="allowedModels" :platform="account?.platform || 'anthropic'" :account-id="account?.id" :account-type="account?.type" />
             <p class="text-xs text-gray-500 dark:text-gray-400">
               {{ t('admin.accounts.selectedModels', { count: allowedModels.length }) }}
               <span v-if="allowedModels.length === 0 && modelMappings.length === 0">{{
@@ -799,7 +799,7 @@
 
           <!-- Whitelist Mode -->
           <div v-if="modelRestrictionMode === 'whitelist'">
-            <ModelWhitelistSelector v-model="allowedModels" :platform="account?.platform || 'anthropic'" :account-id="account?.id" />
+            <ModelWhitelistSelector v-model="allowedModels" :platform="account?.platform || 'anthropic'" :account-id="account?.id" :account-type="account?.type" />
             <p class="text-xs text-gray-500 dark:text-gray-400">
               {{ t('admin.accounts.selectedModels', { count: allowedModels.length }) }}
               <span v-if="allowedModels.length === 0 && modelMappings.length === 0">{{
@@ -1437,73 +1437,79 @@
         <ProxySelector v-model="form.proxy_id" :proxies="proxies" />
       </div>
 
-      <div class="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <div>
-          <label class="input-label">{{ t('admin.accounts.concurrency') }}</label>
-          <input v-model.number="form.concurrency" type="number" min="1" step="1" class="input"
-            data-testid="account-concurrency-input"
-            autocomplete="off" data-1p-ignore data-lpignore="true" data-bwignore="true"
-            :placeholder="t('admin.accounts.concurrencyUnlimitedPlaceholder')"
-            @input="form.concurrency = normalizeConcurrencyInput(form.concurrency)" />
-          <p class="input-hint">{{ t('admin.accounts.concurrencyUnlimitedHint') }}</p>
-        </div>
-        <div>
-          <label class="input-label">{{ t('admin.accounts.loadFactor') }}</label>
-          <input v-model.number="form.load_factor" type="number" min="1"
-            class="input" :placeholder="form.concurrency ? String(form.concurrency) : '1'"
-            @input="form.load_factor = (form.load_factor &amp;&amp; form.load_factor >= 1) ? form.load_factor : null" />
-          <p class="input-hint">{{ t('admin.accounts.loadFactorHint') }}</p>
-        </div>
-        <div>
-          <label class="input-label">{{ t('admin.accounts.priority') }}</label>
-          <input
-            v-model.number="form.priority"
-            type="number"
-            min="1"
-            class="input"
-            data-tour="account-form-priority"
-          />
-          <p class="input-hint">{{ t('admin.accounts.priorityHint') }}</p>
-        </div>
-        <div>
-          <label class="input-label">{{ t('admin.accounts.billingRateMultiplier') }}</label>
-          <input
-            v-model.number="form.rate_multiplier"
-            type="number"
-            min="0"
-            step="0.0001"
-            class="input disabled:cursor-not-allowed disabled:opacity-60"
-            data-testid="account-rate-multiplier"
-            :disabled="upstreamBillingAutoProbeEnabled"
-          />
-          <p class="input-hint">
-            {{
-              t(
-                upstreamBillingAutoProbeEnabled
-                  ? 'admin.accounts.upstreamBilling.syncRateManagedHint'
-                  : 'admin.accounts.billingRateMultiplierHint'
-              )
-            }}
-          </p>
-          <div
-            v-if="account?.type === 'apikey'"
-            class="mt-3 flex items-center justify-between gap-3"
-          >
-            <div class="min-w-0">
-              <p class="text-xs font-medium text-gray-700 dark:text-gray-200">
-                {{ t('admin.accounts.upstreamBilling.autoProbeAndSync') }}
-              </p>
-              <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                {{ t('admin.accounts.upstreamBilling.autoProbeAndSyncHint') }}
-              </p>
-            </div>
-            <Toggle
-              :model-value="upstreamBillingAutoProbeEnabled"
-              data-testid="upstream-billing-auto-probe"
-              :aria-label="t('admin.accounts.upstreamBilling.autoProbeAndSync')"
-              @update:model-value="handleUpstreamBillingAutoProbeChange"
-            />
+      <div class="space-y-3">
+        <div class="grid grid-cols-2 gap-4 lg:grid-cols-4">
+          <div>
+            <label class="input-label">{{ t('admin.accounts.concurrency') }}</label>
+            <input v-model.number="form.concurrency" type="number" min="1" step="1" class="input"
+              data-testid="account-concurrency-input"
+              autocomplete="off" data-1p-ignore data-lpignore="true" data-bwignore="true"
+              :placeholder="t('admin.accounts.concurrencyUnlimitedPlaceholder')"
+              @input="form.concurrency = normalizeConcurrencyInput(form.concurrency)" />
+            <p class="input-hint">{{ t('admin.accounts.concurrencyUnlimitedHint') }}</p>
           </div>
+          <div>
+            <label class="input-label">{{ t('admin.accounts.loadFactor') }}</label>
+            <input v-model.number="form.load_factor" type="number" min="1"
+              class="input" :placeholder="form.concurrency ? String(form.concurrency) : '1'"
+              @input="form.load_factor = (form.load_factor &amp;&amp; form.load_factor >= 1) ? form.load_factor : null" />
+            <p class="input-hint">{{ t('admin.accounts.loadFactorHint') }}</p>
+          </div>
+          <div>
+            <label class="input-label">{{ t('admin.accounts.priority') }}</label>
+            <input
+              v-model.number="form.priority"
+              type="number"
+              min="1"
+              class="input"
+              data-tour="account-form-priority"
+            />
+            <p class="input-hint">{{ t('admin.accounts.priorityHint') }}</p>
+          </div>
+          <div>
+            <label class="input-label">{{ t('admin.accounts.billingRateMultiplier') }}</label>
+            <input
+              v-model.number="form.rate_multiplier"
+              type="number"
+              min="0"
+              step="0.0001"
+              class="input disabled:cursor-not-allowed disabled:opacity-60"
+              data-testid="account-rate-multiplier"
+              :disabled="upstreamBillingAutoProbeEnabled"
+            />
+            <p class="input-hint">
+              {{
+                t(
+                  upstreamBillingAutoProbeEnabled
+                    ? 'admin.accounts.upstreamBilling.syncRateManagedHint'
+                    : 'admin.accounts.billingRateMultiplierHint'
+                )
+              }}
+            </p>
+          </div>
+        </div>
+        <!-- The auto-probe switch governs the billing rate above; it gets a row of
+             its own instead of being squeezed into the rate column. -->
+        <div
+          v-if="account?.type === 'apikey'"
+          class="flex items-center justify-between gap-4 rounded-xl border border-primary-200/70 bg-primary-50/60 px-4 py-3 dark:border-primary-800/40 dark:bg-primary-900/10"
+          data-testid="upstream-billing-auto-probe-row"
+        >
+          <div class="flex min-w-0 items-start gap-3">
+            <span class="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white text-primary-700 shadow-sm ring-1 ring-primary-200/80 dark:bg-dark-700 dark:text-primary-300 dark:ring-primary-800/40">
+              <Icon name="refresh" size="sm" />
+            </span>
+            <div class="min-w-0">
+              <p class="text-sm font-medium text-gray-900 dark:text-gray-100">{{ t('admin.accounts.upstreamBilling.autoProbeAndSync') }}</p>
+              <p class="mt-0.5 text-xs leading-relaxed text-gray-500 dark:text-gray-400">{{ t('admin.accounts.upstreamBilling.autoProbeAndSyncHint') }}</p>
+            </div>
+          </div>
+          <Toggle
+            :model-value="upstreamBillingAutoProbeEnabled"
+            data-testid="upstream-billing-auto-probe"
+            :aria-label="t('admin.accounts.upstreamBilling.autoProbeAndSync')"
+            @update:model-value="handleUpstreamBillingAutoProbeChange"
+          />
         </div>
       </div>
       <div class="border-t border-gray-200 pt-4 dark:border-dark-600">
@@ -2634,6 +2640,7 @@ import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import Select from '@/components/common/Select.vue'
 import Toggle from '@/components/common/Toggle.vue'
 import Icon from '@/components/icons/Icon.vue'
+import { extractApiErrorMessage } from '@/utils/apiError'
 import ProxySelector from '@/components/common/ProxySelector.vue'
 import ProxyAdBanner from '@/components/common/ProxyAdBanner.vue'
 import GroupSelector from '@/components/common/GroupSelector.vue'
@@ -3696,7 +3703,7 @@ const syncAntigravityUpstreamModels = async () => {
       appStore.showInfo(t('admin.accounts.syncUpstreamModelsNoChanges', { count: upstreamModels.length }))
     }
   } catch (error) {
-    const message = error instanceof Error ? error.message : t('admin.accounts.syncUpstreamModelsFailed')
+    const message = extractApiErrorMessage(error, t('admin.accounts.syncUpstreamModelsFailed'))
     appStore.showError(t('admin.accounts.syncUpstreamModelsError', { message }))
   } finally {
     isSyncingAntigravityUpstream.value = false

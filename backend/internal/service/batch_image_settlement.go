@@ -64,7 +64,15 @@ type BatchImageSettlementService struct {
 	Pricing      BatchImagePricingResolver
 	AuthCache    APIKeyAuthCacheInvalidator
 	Config       *config.Config
+	// APIKeyRepo, when set, files the settlement's usage row under the key's
+	// group so the operations panel does not count it as Unassigned.
+	APIKeyRepo APIKeyRepository
 }
+
+// vertexBatchPredictionDiscount is Vertex AI's batch prediction price
+// relative to online requests; account statistics use it to estimate what
+// the upstream charged for a batch.
+const vertexBatchPredictionDiscount = 0.5
 
 type BatchImageSettlementResult struct {
 	BatchID        string
@@ -282,6 +290,22 @@ func (s *BatchImageSettlementService) recordUsageLog(ctx context.Context, job *B
 		ImageSize:             &imageSize,
 		SessionID:             job.SessionID,
 		CreatedAt:             createdAt,
+	}
+	if s.APIKeyRepo != nil {
+		if key, err := s.APIKeyRepo.GetByID(ctx, *job.APIKeyID); err == nil && key != nil && key.GroupID != nil {
+			groupID := *key.GroupID
+			usageLog.GroupID = &groupID
+		}
+	}
+	// TotalCost here is the customer's final price, which already includes
+	// the account multiplier. Account statistics instead price the images at
+	// the catalog's per-image rate with the upstream batch discount, so the
+	// panel's upstream cost does not apply the account multiplier twice.
+	if s.Pricing != nil && job.SuccessCount > 0 && validBillableRequestCount(job.SuccessCount) {
+		if unit, err := s.Pricing.BatchImageUnitPrice(ctx, &BatchImageJob{Provider: job.Provider, Model: job.Model}); err == nil && unit > 0 {
+			statsCost := unit * float64(job.SuccessCount) * vertexBatchPredictionDiscount
+			usageLog.AccountStatsCost = &statsCost
+		}
 	}
 	writeUsageLogBestEffort(ctx, s.UsageLogRepo, usageLog, "service.batch_image_settlement")
 }
