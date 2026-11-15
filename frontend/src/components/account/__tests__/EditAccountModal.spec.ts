@@ -1320,15 +1320,20 @@ describe('EditAccountModal', () => {
     const baseUrl = wrapper.get<HTMLInputElement>('input[placeholder="https://api.example.com/v1"]')
     expect(baseUrl.element.value).toBe('https://8yes.cc/v1')
     expect(baseUrl.attributes('required')).toBeDefined()
-    expect(wrapper.get<HTMLSelectElement>('#account-media-protocol').element.value).toBe(protocol)
+    const protocolSelect = wrapper.getComponent(SelectStub)
+    expect(protocolSelect.props('modelValue')).toBe(protocol)
 
     await baseUrl.setValue('')
     await wrapper.get('form#edit-account-form').trigger('submit.prevent')
     expect(updateAccountMock).not.toHaveBeenCalled()
 
     await baseUrl.setValue('https://relay.example/v1')
-    expect(wrapper.get('#account-media-protocol').findAll('option').map(option => option.attributes('value'))).toEqual(['', 'sora', '8yes'])
-    await wrapper.get('#account-media-protocol').setValue(protocol)
+    expect(protocolSelect.props('options')).toEqual([
+      { value: '', label: 'videoWorkbench.protocolCompatible' },
+      { value: 'sora', label: 'OpenAI Sora' },
+      { value: '8yes', label: '8yes' }
+    ])
+    protocolSelect.vm.$emit('update:modelValue', protocol)
     await wrapper.get('form#edit-account-form').trigger('submit.prevent')
 
     expect(updateAccountMock).toHaveBeenCalledWith(account.id, expect.objectContaining({

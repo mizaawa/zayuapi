@@ -1,6 +1,6 @@
 export default {
   videoWorkbench: {
-    protocol: 'Image and video protocol', protocolCompatible: 'Default compatible protocol',
+    protocol: 'Image and video protocol', protocolSelect: 'Protocol selection', protocolCompatible: 'Default compatible protocol',
     protocolHint: 'Match the provider documentation. The default compatible protocol forwards request fields unchanged. Sora uses seconds/size. For 8yes, the model name determines resolution.',
     title: 'Video Workbench', navLabel: 'Video Generation', workbench: 'Workbench', tasks: 'Tasks',
     guide: 'Tutorial', documentation: 'API Docs', prompt: 'Prompt',

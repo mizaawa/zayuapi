@@ -54,6 +54,8 @@ vi.mock('vue-i18n', async () => {
 })
 
 import CreateAccountModal from '../CreateAccountModal.vue'
+import MediaProtocolSelect from '../MediaProtocolSelect.vue'
+import Select from '@/components/common/Select.vue'
 import ProxySelector from '@/components/common/ProxySelector.vue'
 import GroupSelector from '@/components/common/GroupSelector.vue'
 import QuotaLimitCard from '@/components/account/QuotaLimitCard.vue'
@@ -265,8 +267,13 @@ describe('CreateAccountModal OpenAI long-context billing', () => {
     expect(createAccountMock).not.toHaveBeenCalled()
 
     await wrapper.get('input[placeholder="https://api.example.com/v1"]').setValue(baseUrl)
-    expect(wrapper.get('#account-media-protocol').findAll('option').map(option => option.attributes('value'))).toEqual(['', 'sora', '8yes'])
-    await wrapper.get('#account-media-protocol').setValue(protocol)
+    const protocolSelect = wrapper.getComponent(MediaProtocolSelect).getComponent(Select)
+    expect(protocolSelect.props('options')).toEqual([
+      { value: '', label: 'videoWorkbench.protocolCompatible' },
+      { value: 'sora', label: 'OpenAI Sora' },
+      { value: '8yes', label: '8yes' },
+    ])
+    protocolSelect.vm.$emit('update:modelValue', protocol)
     await wrapper.get('form#create-account-form').trigger('submit.prevent')
     await flushPromises()
 
