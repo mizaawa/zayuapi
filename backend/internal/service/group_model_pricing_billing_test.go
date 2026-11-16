@@ -55,6 +55,49 @@ func TestOpenAIGatewayServiceRecordUsage_GroupModelPricingBillsUnknownModels(t *
 	}
 }
 
+func TestOpenAIGatewayServiceRecordUsage_CustomDeepSeekGroupPriceIsDeducted(t *testing.T) {
+	usageRepo := &openAIRecordUsageLogRepoStub{inserted: true}
+	userRepo := &openAIRecordUsageUserRepoStub{}
+	svc := newOpenAIRecordUsageServiceForTest(usageRepo, userRepo, &openAIRecordUsageSubRepoStub{}, nil)
+	svc.resolver = NewModelPricingResolver(nil, svc.billingService)
+	groupID := int64(711)
+	inputPrice, outputPrice := 4e-6, 10e-6
+	group := &Group{
+		ID:             groupID,
+		Platform:       PlatformComposite,
+		RateMultiplier: 1.5,
+		ModelPricing: []ChannelModelPricing{{
+			Platform:    PlatformCustom,
+			Models:      []string{"deepseek-v4-pro"},
+			BillingMode: BillingModeToken,
+			InputPrice:  &inputPrice,
+			OutputPrice: &outputPrice,
+		}},
+	}
+
+	err := svc.RecordUsage(context.Background(), &OpenAIRecordUsageInput{
+		Result: &OpenAIForwardResult{
+			RequestID:     "custom-deepseek-group-pricing",
+			Model:         "deepseek-v4-pro",
+			UpstreamModel: "deepseek-v4-pro",
+			Usage:         OpenAIUsage{InputTokens: 1200, OutputTokens: 300},
+			Duration:      time.Second,
+		},
+		APIKey:  &APIKey{ID: 712, GroupID: &groupID, Group: group},
+		User:    &User{ID: 713},
+		Account: &Account{ID: 714, Platform: PlatformCustom, Type: AccountTypeAPIKey},
+	})
+
+	require.NoError(t, err)
+	require.NotNil(t, usageRepo.lastLog)
+	require.InDelta(t, 0.0048, usageRepo.lastLog.InputCost, 1e-12)
+	require.InDelta(t, 0.003, usageRepo.lastLog.OutputCost, 1e-12)
+	require.InDelta(t, 0.0078, usageRepo.lastLog.TotalCost, 1e-12)
+	require.InDelta(t, 0.0117, usageRepo.lastLog.ActualCost, 1e-12)
+	require.Equal(t, 1, userRepo.deductCalls)
+	require.InDelta(t, 0.0117, userRepo.lastAmount, 1e-12)
+}
+
 func TestOpenAIGatewayServiceRecordUsage_GroupModelPricingHonorsBillingModelSource(t *testing.T) {
 	for _, tt := range []struct {
 		name               string
