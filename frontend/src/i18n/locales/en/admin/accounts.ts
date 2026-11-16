@@ -114,6 +114,7 @@ export default {
       allStatus: 'All Status',
       allGroups: 'All Groups',
       ungroupedGroup: 'Ungrouped',
+      accountRateAboveGroupRate: 'Warning: this group contains accounts with a rate greater than the group pricing rate',
       oauthType: 'OAuth',
       setupToken: 'Setup Token',
       apiKey: 'API Key',

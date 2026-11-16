@@ -1203,13 +1203,20 @@ const load = async () => {
   await refreshTodayStatsBatch()
 }
 
+const loadGroups = async () => {
+  try {
+    groups.value = await adminAPI.groups.getAll()
+  } catch (error) {
+    console.error('Failed to load groups:', error)
+  }
+}
 const reload = async () => {
   markUpstreamBillingSortRefresh()
   syncAccountListDerivedParams()
   hasPendingListSync.value = false
   resetAutoRefreshCache()
   pendingTodayStatsRefresh.value = false
-  await baseReload()
+  await Promise.all([baseReload(), loadGroups()])
   await refreshTodayStatsBatch()
 }
 
@@ -2312,6 +2319,7 @@ const handleProbeUpstreamBilling = async (account: Account) => {
   try {
     const result = await adminAPI.accounts.probeUpstreamBilling(account.id)
     if (result.snapshot) patchUpstreamBillingSnapshot(account.id, result.snapshot)
+    if (result.snapshot?.synced_rate_multiplier != null) void loadGroups()
   } catch (error) {
     console.error('Failed to probe upstream billing:', error)
     appStore.showError(extractApiErrorMessage(error, t('admin.accounts.upstreamBilling.probeFailed')))
@@ -2321,6 +2329,7 @@ const handleProbeUpstreamBilling = async (account: Account) => {
 }
 const handleAccountUpdated = (updatedAccount: Account) => {
   patchAccountInList(updatedAccount)
+  void loadGroups()
   enterAutoRefreshSilentWindow()
 }
 const formatExportTimestamp = () => {

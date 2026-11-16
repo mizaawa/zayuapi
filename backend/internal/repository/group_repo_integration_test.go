@@ -565,6 +565,60 @@ func (s *GroupRepoSuite) TestUpdateSortOrders_MissingGroupNoPartialUpdate() {
 	s.Require().Equal(beforeSort, after.SortOrder)
 }
 
+func (s *GroupRepoSuite) TestAccountRateAboveGroupRateWarning() {
+	group := &service.Group{
+		Name: "account-rate-warning", Platform: service.PlatformAnthropic,
+		RateMultiplier: 0.8, Status: service.StatusActive, SubscriptionType: service.SubscriptionTypeStandard,
+	}
+	s.Require().NoError(s.repo.Create(s.ctx, group))
+
+	for name, value := range map[string]any{
+		"above": 0.9, "equal": 0.8, "below": 0.7,
+		"negative": -0.5, "deleted": 2.0,
+	} {
+		var accountID int64
+		s.Require().NoError(scanSingleRow(
+			s.ctx, s.tx,
+			`INSERT INTO accounts (name, platform, type, rate_multiplier, deleted_at)
+			 VALUES ($1, $2, $3, $4, CASE WHEN $5 THEN NOW() ELSE NULL END) RETURNING id`,
+			[]any{name, service.PlatformAnthropic, service.AccountTypeOAuth, value, name == "deleted"}, &accountID,
+		))
+		_, err := s.tx.ExecContext(s.ctx,
+			"INSERT INTO account_groups (account_id, group_id, priority, created_at) VALUES ($1, $2, 1, NOW())",
+			accountID, group.ID)
+		s.Require().NoError(err)
+	}
+	var defaultAccountID int64
+	s.Require().NoError(scanSingleRow(
+		s.ctx, s.tx,
+		"INSERT INTO accounts (name, platform, type) VALUES ('default', $1, $2) RETURNING id",
+		[]any{service.PlatformAnthropic, service.AccountTypeOAuth}, &defaultAccountID,
+	))
+	_, err := s.tx.ExecContext(s.ctx,
+		"INSERT INTO account_groups (account_id, group_id, priority, created_at) VALUES ($1, $2, 1, NOW())",
+		defaultAccountID, group.ID)
+	s.Require().NoError(err)
+
+	loaded, err := s.repo.ListActive(s.ctx)
+	s.Require().NoError(err)
+	for _, item := range loaded {
+		if item.ID == group.ID {
+			s.True(item.HasAccountRateAboveGroupRate)
+		}
+	}
+	_, err = s.tx.ExecContext(s.ctx, "UPDATE accounts SET rate_multiplier = 0.8 WHERE name IN ('above', 'deleted')")
+	s.Require().NoError(err)
+	_, err = s.tx.ExecContext(s.ctx, "UPDATE groups SET rate_multiplier = 1.0 WHERE id = $1", group.ID)
+	s.Require().NoError(err)
+	loaded, err = s.repo.ListActive(s.ctx)
+	s.Require().NoError(err)
+	for _, item := range loaded {
+		if item.ID == group.ID {
+			s.False(item.HasAccountRateAboveGroupRate, "equal, default and soft-deleted account rates must not trigger the warning")
+		}
+	}
+}
+
 func (s *GroupRepoSuite) TestListWithFilters_AccountCount() {
 	g1 := &service.Group{
 		Name:             "g1",

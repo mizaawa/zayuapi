@@ -662,6 +662,8 @@ export interface AdminGroup extends Group {
   account_count?: number
   active_account_count?: number
   rate_limited_account_count?: number
+  /** Whether any account in this group has an effective rate greater than the group rate. */
+  has_account_rate_above_group_rate?: boolean
 
   // OpenAI Messages 调度配置（仅 openai 平台使用）
   default_mapped_model?: string

@@ -139,7 +139,10 @@ async function mountWith(items: Array<Record<string, unknown>>) {
         Pagination: true,
         ConfirmDialog: true,
         AccountTableActions: { template: '<div><slot name="beforeCreate" /><slot name="after" /></div>' },
-        AccountTableFilters: { template: '<div></div>' },
+        AccountTableFilters: {
+          props: { groups: Array },
+          template: '<div data-test="filters" :data-groups="groups?.length ?? 0"></div>'
+        },
         AccountBulkActionsBar: true,
         AccountActionMenu: true,
         ImportDataModal: true,
@@ -152,7 +155,7 @@ async function mountWith(items: Array<Record<string, unknown>>) {
         ErrorPassthroughRulesModal: true,
         TLSFingerprintProfilesModal: true,
         CreateAccountModal: true,
-        EditAccountModal: true,
+        EditAccountModal: { name: 'EditAccountModal', template: '<div />' },
         BulkEditAccountModal: true,
         PlatformTypeBadge: true,
         AccountSourceBadge: true,
@@ -238,5 +241,17 @@ describe('admin AccountsView card upstream rate refresh', () => {
     expect(accountRate(wrapper, 2)).toBe('0.25x')
     expect(upstreamRate(wrapper, 2)).toBe('admin.accounts.upstreamBilling.short.notProbed')
     expect(listAccounts).toHaveBeenCalledTimes(1)
+    expect(getAllGroups).toHaveBeenCalledTimes(2)
+  })
+
+  it('refreshes the group warning summary after an account edit', async () => {
+    const wrapper = await mountWith([account(1)])
+    getAllGroups.mockResolvedValueOnce([{ id: 7, has_account_rate_above_group_rate: true }])
+
+    await wrapper.getComponent({ name: 'EditAccountModal' }).vm.$emit('updated', account(1, { rate_multiplier: 1.5 }))
+    await flushPromises()
+
+    expect(getAllGroups).toHaveBeenCalledTimes(2)
+    expect(wrapper.get('[data-test="filters"]').attributes('data-groups')).toBe('1')
   })
 })

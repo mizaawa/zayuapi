@@ -25,7 +25,13 @@
       <template #selected="{ option }">
         <span class="account-group-value">
           <span class="account-group-value-name">{{ option?.label ?? t('common.selectOption') }}</span>
-          <span v-if="option?.rate" class="account-group-rate" data-testid="account-group-selected-rate">{{ option.rate }}</span>
+          <span
+            v-if="option?.rate"
+            class="account-group-rate"
+            :class="{ 'account-group-rate--warning': option.rateWarning }"
+            data-testid="account-group-selected-rate"
+            :title="rateTitle(option)"
+          >{{ option.rate }}</span>
         </span>
       </template>
       <template #option="{ option, selected }">
@@ -37,8 +43,9 @@
           <span
             v-if="option.rate"
             class="account-group-rate"
+            :class="{ 'account-group-rate--warning': option.rateWarning }"
             data-testid="account-group-rate"
-            :title="`${t('admin.groups.columns.rateMultiplier')}: ${option.rate}`"
+            :title="rateTitle(option)"
           >{{ option.rate }}</span>
           <Icon v-if="selected" name="check" size="sm" :stroke-width="2" class="account-group-check" />
         </span>
@@ -72,6 +79,14 @@ const privacyOpts = computed(() => [
 // Group rates use the console's "0.5x" notation; toFixed trims float noise.
 const formatGroupRate = (rate: unknown): string =>
   typeof rate === 'number' && Number.isFinite(rate) && rate >= 0 ? `${Number(rate.toFixed(4))}x` : ''
+interface GroupOption {
+  rate?: string
+  rateWarning?: boolean
+}
+const rateTitle = (option: GroupOption) => [
+  `${t('admin.groups.columns.rateMultiplier')}: ${option.rate}`,
+  option.rateWarning ? t('admin.accounts.accountRateAboveGroupRate') : ''
+].filter(Boolean).join('\n')
 const platformTones: Record<string, string> = {
   anthropic: 'tone-anthropic', openai: 'tone-openai', gemini: 'tone-gemini', grok: 'tone-grok',
   custom: 'tone-custom', composite: 'tone-custom', antigravity: 'tone-antigravity'
@@ -80,7 +95,13 @@ const platformTone = (platform: string) => platformTones[platform] ?? 'tone-cust
 const gOpts = computed(() => [
   { value: '', label: t('admin.accounts.allGroups') },
   { value: 'ungrouped', label: t('admin.accounts.ungroupedGroup') },
-  ...(props.groups || []).map(g => ({ value: String(g.id), label: g.name, platform: g.platform, rate: formatGroupRate(g.rate_multiplier) }))
+  ...(props.groups || []).map(g => ({
+    value: String(g.id),
+    label: g.name,
+    platform: g.platform,
+    rate: formatGroupRate(g.rate_multiplier),
+    rateWarning: g.has_account_rate_above_group_rate === true
+  }))
 ])
 </script>
 
@@ -197,6 +218,12 @@ const gOpts = computed(() => [
   line-height: 1.125rem;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
+}
+
+.account-group-rate--warning {
+  border-color: #fca5a5;
+  background: #fee2e2;
+  color: #b91c1c;
 }
 
 .account-group-check {

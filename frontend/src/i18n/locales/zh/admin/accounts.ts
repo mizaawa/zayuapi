@@ -114,6 +114,7 @@ export default {
       allStatus: '全部状态',
       allGroups: '全部分组',
       ungroupedGroup: '未分配分组',
+      accountRateAboveGroupRate: '警示：该分组内存在账号倍率高于分组定价倍率的账号',
       oauthType: 'OAuth',
       // Schedulable toggle
       schedulable: '参与调度',

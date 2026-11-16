@@ -216,6 +216,7 @@ func (r *groupRepository) GetByID(ctx context.Context, id int64) (*service.Group
 		out.AccountCount = c.Total
 		out.ActiveAccountCount = c.Active
 		out.RateLimitedAccountCount = c.RateLimited
+		out.HasAccountRateAboveGroupRate = c.RateAboveGroupRate
 	}
 	return out, nil
 }
@@ -445,6 +446,7 @@ func (r *groupRepository) ListWithFilters(ctx context.Context, params pagination
 			outGroups[i].AccountCount = c.Total
 			outGroups[i].ActiveAccountCount = c.Active
 			outGroups[i].RateLimitedAccountCount = c.RateLimited
+			outGroups[i].HasAccountRateAboveGroupRate = c.RateAboveGroupRate
 		}
 	}
 
@@ -530,6 +532,7 @@ func (r *groupRepository) listWithAccountCountSort(ctx context.Context, q *dbent
 		g.AccountCount = c.Total
 		g.ActiveAccountCount = c.Active
 		g.RateLimitedAccountCount = c.RateLimited
+		g.HasAccountRateAboveGroupRate = c.RateAboveGroupRate
 		if idx, ok := pageIdx[g.ID]; ok {
 			outGroups[idx] = *g
 		}
@@ -616,6 +619,7 @@ func (r *groupRepository) ListActive(ctx context.Context) ([]service.Group, erro
 			outGroups[i].AccountCount = c.Total
 			outGroups[i].ActiveAccountCount = c.Active
 			outGroups[i].RateLimitedAccountCount = c.RateLimited
+			outGroups[i].HasAccountRateAboveGroupRate = c.RateAboveGroupRate
 		}
 	}
 
@@ -689,6 +693,7 @@ func (r *groupRepository) ListActiveByPlatform(ctx context.Context, platform str
 			outGroups[i].AccountCount = c.Total
 			outGroups[i].ActiveAccountCount = c.Active
 			outGroups[i].RateLimitedAccountCount = c.RateLimited
+			outGroups[i].HasAccountRateAboveGroupRate = c.RateAboveGroupRate
 		}
 	}
 
@@ -879,9 +884,10 @@ func (r *groupRepository) DeleteCascade(ctx context.Context, id int64) ([]int64,
 }
 
 type groupAccountCounts struct {
-	Total       int64
-	Active      int64
-	RateLimited int64
+	Total              int64
+	Active             int64
+	RateLimited        int64
+	RateAboveGroupRate bool
 }
 
 const (
@@ -930,9 +936,15 @@ func (r *groupRepository) loadAccountCounts(ctx context.Context, groupIDs []int6
 		fmt.Sprintf(`SELECT ag.group_id,
 			COUNT(*) FILTER (WHERE a.deleted_at IS NULL) AS total,
 			COUNT(*) FILTER (WHERE %s) AS active,
-			COUNT(*) FILTER (WHERE %s) AS rate_limited
+			COUNT(*) FILTER (WHERE %s) AS rate_limited,
+			BOOL_OR(a.deleted_at IS NULL AND
+				CASE
+					WHEN a.rate_multiplier IS NULL OR a.rate_multiplier < 0 THEN 1.0
+					ELSE a.rate_multiplier
+				END > g.rate_multiplier) AS has_account_rate_above_group_rate
 		FROM account_groups ag
 		JOIN accounts a ON a.id = ag.account_id
+		JOIN groups g ON g.id = ag.group_id
 		WHERE ag.group_id = ANY($1)
 		GROUP BY ag.group_id`, availableSQL, temporarilyLimitedSQL),
 		pq.Array(groupIDs),
@@ -950,7 +962,7 @@ func (r *groupRepository) loadAccountCounts(ctx context.Context, groupIDs []int6
 	for rows.Next() {
 		var groupID int64
 		var c groupAccountCounts
-		if err = rows.Scan(&groupID, &c.Total, &c.Active, &c.RateLimited); err != nil {
+		if err = rows.Scan(&groupID, &c.Total, &c.Active, &c.RateLimited, &c.RateAboveGroupRate); err != nil {
 			return nil, err
 		}
 		counts[groupID] = c

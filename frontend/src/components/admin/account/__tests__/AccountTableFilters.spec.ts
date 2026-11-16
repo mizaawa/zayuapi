@@ -10,8 +10,8 @@ import AccountTableFilters from '../AccountTableFilters.vue'
 import type { AdminGroup } from '@/types'
 
 const groups = [
-  { id: 3, name: 'CodexPro-不降智①', platform: 'openai', rate_multiplier: 0.18 },
-  { id: 5, name: 'Media②', platform: 'custom', rate_multiplier: 1 },
+  { id: 3, name: 'CodexPro-不降智①', platform: 'openai', rate_multiplier: 0.18, has_account_rate_above_group_rate: true },
+  { id: 5, name: 'Media②', platform: 'custom', rate_multiplier: 1, has_account_rate_above_group_rate: false },
   { id: 9, name: 'Gemini-默认通道', platform: 'gemini', rate_multiplier: 0.1 + 0.2 }
 ] as unknown as AdminGroup[]
 
@@ -51,7 +51,11 @@ describe('AccountTableFilters group filter', () => {
     expect(options[1].find('[data-testid="account-group-rate"]').exists()).toBe(false)
     const tag = options[2].get('[data-testid="account-group-rate"]')
     expect(tag.text()).toBe('0.18x')
-    expect(tag.attributes('title')).toBe('admin.groups.columns.rateMultiplier: 0.18x')
+    expect(tag.attributes('title')).toBe('admin.groups.columns.rateMultiplier: 0.18x\nadmin.accounts.accountRateAboveGroupRate')
+    expect(tag.classes()).toContain('account-group-rate--warning')
+    expect(options[3].get('[data-testid="account-group-rate"]').classes()).not.toContain('account-group-rate--warning')
+    expect(options[3].get('[data-testid="account-group-rate"]').attributes('title')).toBe('admin.groups.columns.rateMultiplier: 1x')
+    expect(options[4].get('[data-testid="account-group-rate"]').classes()).not.toContain('account-group-rate--warning')
     expect(options[2].attributes('title')).toBeUndefined()
     expect(options[2].get('.account-group-option').attributes('title')).toBe('CodexPro-不降智①')
   })
@@ -68,6 +72,19 @@ describe('AccountTableFilters group filter', () => {
     const trigger = filters.get('[data-testid="account-group-filter"] button')
     expect(trigger.text()).toContain('Media②')
     expect(trigger.get('[data-testid="account-group-selected-rate"]').text()).toBe('1x')
+  })
+
+  it('keeps the warning on the selected group rate', async () => {
+    const filters = mountFilters()
+    const options = await openGroups(filters)
+    await options[2].trigger('click')
+
+    expect(filters.emitted('update:filters')?.[0]?.[0]).toEqual(expect.objectContaining({ group: '3' }))
+    await filters.setProps({ filters: { platform: '', type: '', status: '', privacy_mode: '', group: '3' } })
+    const warningTrigger = filters.get('[data-testid="account-group-filter"] button')
+    expect(warningTrigger.text()).toContain('CodexPro-不降智①')
+    expect(warningTrigger.get('[data-testid="account-group-selected-rate"]').classes()).toContain('account-group-rate--warning')
+    expect(warningTrigger.get('[data-testid="account-group-selected-rate"]').attributes('title')).toContain('admin.accounts.accountRateAboveGroupRate')
   })
 
   it('reserves a wide menu so names and tags fit beside the viewport edge', async () => {
