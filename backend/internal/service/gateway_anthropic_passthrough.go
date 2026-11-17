@@ -566,7 +566,9 @@ func (s *GatewayService) handleStreamingResponseAnthropicAPIKeyPassthrough(
 			if data, ok := extractAnthropicSSEDataLine(line); ok {
 				trimmed := strings.TrimSpace(data)
 				observer.ObserveAnthropic([]byte(trimmed))
-				if responseModelOverride != "" {
+				if pendingEventName == "error" || gjson.Get(data, "type").String() == "error" {
+					line = line[:len(line)-len(data)] + string(sanitizeUpstreamClientErrorBody([]byte(data), account))
+				} else if responseModelOverride != "" {
 					rewritten := rewriteAnthropicResponseModel([]byte(data), responseModelOverride)
 					line = line[:len(line)-len(data)] + string(rewritten)
 				}

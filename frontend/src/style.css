@@ -1093,8 +1093,8 @@
     padding: 6.3rem 0.75rem 5rem;
     border: 1px solid transparent;
     border-radius: 1.5rem;
-    /* Keep the navigation surface visible while the outline stays removed. */
-    background: color-mix(in srgb, var(--md-sys-color-surface) 92%, transparent);
+    /* Match the navigation backdrop to the main app canvas. */
+    background: var(--md-sys-color-background);
   }
 
   .sidebar-link {

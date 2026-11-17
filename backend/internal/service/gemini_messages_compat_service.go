@@ -783,7 +783,10 @@ func (s *GeminiMessagesCompatService) Forward(ctx context.Context, c *gin.Contex
 	var resp *http.Response
 	signatureRetryStage := 0
 	for attempt := 1; attempt <= geminiMaxRetries; attempt++ {
-		upstreamReq, idHeader, err := buildReq(ctx)
+		// Keep reading the final usage after a streaming client disconnects.
+		upstreamCtx, releaseUpstreamCtx := detachStreamUpstreamContext(ctx, req.Stream)
+		upstreamReq, idHeader, err := buildReq(upstreamCtx)
+		releaseUpstreamCtx()
 		if err != nil {
 			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 				return nil, err
@@ -1838,7 +1841,7 @@ func sanitizeUpstreamErrorMessage(msg string) string {
 	if msg == "" {
 		return msg
 	}
-	return sensitiveQueryParamRegex.ReplaceAllString(msg, `$1***`)
+	return redactUpstreamErrorCredentials(sensitiveQueryParamRegex.ReplaceAllString(msg, `$1***`))
 }
 
 func (s *GeminiMessagesCompatService) writeGeminiMappedError(c *gin.Context, account *Account, upstreamStatus int, upstreamRequestID string, body []byte) error {
@@ -1880,7 +1883,7 @@ func (s *GeminiMessagesCompatService) writeGeminiMappedError(c *gin.Context, acc
 	); matched {
 		c.JSON(status, gin.H{
 			"type":  "error",
-			"error": gin.H{"type": errType, "message": errMsg},
+			"error": gin.H{"type": errType, "message": sanitizeUpstreamClientMessage(errMsg, account)},
 		})
 		if upstreamMsg == "" {
 			upstreamMsg = errMsg
@@ -1996,7 +1999,7 @@ func (s *GeminiMessagesCompatService) writeGeminiMappedError(c *gin.Context, acc
 
 	c.JSON(statusCode, gin.H{
 		"type":  "error",
-		"error": gin.H{"type": errType, "message": errMsg},
+		"error": gin.H{"type": errType, "message": sanitizeUpstreamClientMessage(errMsg, account)},
 	})
 	if upstreamMsg == "" {
 		return fmt.Errorf("upstream error: %d", upstreamStatus)

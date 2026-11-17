@@ -255,6 +255,17 @@ func (h *UserHandler) BindAuthIdentity(c *gin.Context) {
 		return
 	}
 
+	// Adding a login identity can take over an existing administrator just as
+	// creating a new administrator can. Apply the same step-up policy first.
+	target, err := h.adminService.GetUser(c.Request.Context(), userID)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	if target.IsAdmin() && !middleware.EnforceStepUp(c, h.totpService, h.userService, h.settingService) {
+		return
+	}
+
 	input := service.AdminBindAuthIdentityInput{
 		ProviderType:    req.ProviderType,
 		ProviderKey:     req.ProviderKey,
@@ -338,15 +349,20 @@ func (h *UserHandler) Update(c *gin.Context) {
 		return
 	}
 
-	// 把普通用户提升为管理员属权限敏感操作：需最近完成 step-up 2FA 验证。
-	// 目标已是管理员时（前端编辑表单总是携带 role）不触发，避免日常编辑被打断。
-	if req.Role == service.RoleAdmin {
+	// Protect existing administrator login credentials as well as promotions.
+	// Otherwise an unverified session or machine key could take over an admin
+	// by replacing its password/email instead of creating another admin.
+	if req.Role != "" || req.Password != "" || req.Email != "" {
 		target, err := h.adminService.GetUser(c.Request.Context(), userID)
 		if err != nil {
 			response.ErrorFrom(c, err)
 			return
 		}
-		if target.Role != service.RoleAdmin {
+		emailChanged := req.Email != "" && !strings.EqualFold(strings.TrimSpace(req.Email), strings.TrimSpace(target.Email))
+		roleChanged := req.Role != "" && req.Role != target.Role
+		requiresStepUp := (req.Role == service.RoleAdmin && !target.IsAdmin()) ||
+			(target.IsAdmin() && (req.Password != "" || emailChanged || roleChanged))
+		if requiresStepUp {
 			if !middleware.EnforceStepUp(c, h.totpService, h.userService, h.settingService) {
 				return
 			}

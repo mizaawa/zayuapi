@@ -524,7 +524,11 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 					forwardFailedFields = append(forwardFailedFields, zap.Int64p("proxy_id", account.ProxyID))
 				}
 				reqLog.Error("gateway.forward_failed", forwardFailedFields...)
-				return
+				// Gemini can return metered partial output together with a read
+				// error. Keep the charge once that stream reached the client.
+				if !gatewayCompatibilityHasBillablePartialUsage(c, result, err, writerSizeBeforeForward) {
+					return
+				}
 			}
 
 			// RPM 计数递增（Forward 成功后）

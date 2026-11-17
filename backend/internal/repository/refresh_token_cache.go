@@ -70,6 +70,21 @@ func (c *refreshTokenCache) DeleteRefreshToken(ctx context.Context, tokenHash st
 	return c.rdb.Del(ctx, key).Err()
 }
 
+func (c *refreshTokenCache) ConsumeRefreshToken(ctx context.Context, tokenHash string) (*service.RefreshTokenData, error) {
+	val, err := c.rdb.GetDel(ctx, refreshTokenKey(tokenHash)).Result()
+	if err == redis.Nil {
+		return nil, service.ErrRefreshTokenNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	var data service.RefreshTokenData
+	if err := json.Unmarshal([]byte(val), &data); err != nil {
+		return nil, fmt.Errorf("unmarshal refresh token data: %w", err)
+	}
+	return &data, nil
+}
+
 func (c *refreshTokenCache) DeleteUserRefreshTokens(ctx context.Context, userID int64) error {
 	// Get all token hashes for this user
 	tokenHashes, err := c.GetUserTokenHashes(ctx, userID)

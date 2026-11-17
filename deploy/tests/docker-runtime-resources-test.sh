@@ -31,4 +31,14 @@ assert_line deploy/Dockerfile 'COPY --from=backend-builder --chown=sub2api:sub2a
 assert_count .goreleaser.yaml '      - backend/resources' 4
 assert_count .goreleaser.simple.yaml '      - backend/resources' 1
 
+# Frozen installs must receive security patches before pnpm resolves the lockfile.
+for dockerfile in Dockerfile deploy/Dockerfile; do
+  assert_line "$dockerfile" 'COPY frontend/patches/ ./patches/'
+  awk '
+    /^COPY frontend\/patches\/ / { patches = 1 }
+    /pnpm install --frozen-lockfile/ { if (!patches) exit 1; install = 1 }
+    END { if (!install) exit 1 }
+  ' "$dockerfile" || fail "$dockerfile must copy patches before installing dependencies"
+done
+
 printf 'docker runtime resources test passed\n'

@@ -2,11 +2,14 @@ package admin
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
+	"github.com/Wei-Shaw/sub2api/internal/server/middleware"
 	"github.com/Wei-Shaw/sub2api/internal/service"
 
 	"github.com/gin-gonic/gin"
@@ -32,6 +35,7 @@ func setupRoleStepUpRouter(t *testing.T) (*gin.Engine, *stubAdminService) {
 	h := NewUserHandler(adminSvc, nil, nil, nil, nil, nil, nil)
 	router.POST("/api/v1/admin/users", h.Create)
 	router.PUT("/api/v1/admin/users/:id", h.Update)
+	router.POST("/api/v1/admin/users/:id/auth-identities", h.BindAuthIdentity)
 	return router, adminSvc
 }
 
@@ -83,4 +87,81 @@ func TestCreateRegularUserSkipsStepUp(t *testing.T) {
 		"email": "new-user@example.com", "password": "pass123", "role": "user",
 	})
 	require.Equal(t, http.StatusOK, rec.Code)
+}
+
+func TestExistingAdminCredentialChangesRequireStepUp(t *testing.T) {
+	for _, payload := range []map[string]any{
+		{"password": "replacement-password"},
+		{"role": "admin", "password": "replacement-password"},
+		{"email": "new-admin@example.com"},
+		{"role": "user", "password": "replacement-password"},
+		{"role": "user"},
+	} {
+		t.Run(fmt.Sprint(payload), func(t *testing.T) {
+			router, svc := setupRoleStepUpRouter(t)
+			before, err := svc.GetUser(context.Background(), 2)
+			require.NoError(t, err)
+			original := *before
+			rec := doJSON(t, router, http.MethodPut, "/api/v1/admin/users/2", payload)
+			require.Equal(t, http.StatusUnauthorized, rec.Code)
+			after, err := svc.GetUser(context.Background(), 2)
+			require.NoError(t, err)
+			require.Equal(t, original, *after)
+		})
+	}
+}
+
+func TestExistingAdminUnchangedEmailSkipsStepUp(t *testing.T) {
+	router, _ := setupRoleStepUpRouter(t)
+	rec := doJSON(t, router, http.MethodPut, "/api/v1/admin/users/2", map[string]any{
+		"role": "admin", "email": "admin@example.com", "notes": "routine edit",
+	})
+	require.Equal(t, http.StatusOK, rec.Code)
+}
+
+func TestAdminIdentityBindingRequiresStepUp(t *testing.T) {
+	router, svc := setupRoleStepUpRouter(t)
+	rec := doJSON(t, router, http.MethodPost, "/api/v1/admin/users/2/auth-identities", map[string]any{
+		"provider_type": "oidc", "provider_key": "oidc", "provider_subject": "new-subject",
+	})
+	require.Equal(t, http.StatusUnauthorized, rec.Code)
+	require.Zero(t, svc.boundAuthIdentityFor)
+}
+
+func TestRegularUserIdentityBindingSkipsStepUp(t *testing.T) {
+	router, svc := setupRoleStepUpRouter(t)
+	rec := doJSON(t, router, http.MethodPost, "/api/v1/admin/users/1/auth-identities", map[string]any{
+		"provider_type": "oidc", "provider_key": "oidc", "provider_subject": "new-subject",
+	})
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Equal(t, int64(1), svc.boundAuthIdentityFor)
+}
+
+func TestMachineAdminKeyCannotChangeExistingAdminCredentialsWithStepUpEnabled(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	svc := newStubAdminService()
+	svc.users = append(svc.users, service.User{ID: 2, Role: service.RoleAdmin, Email: "admin@example.com"})
+	h := NewUserHandler(svc, nil, nil, nil, nil, nil, nil)
+	router := gin.New()
+	router.Use(func(c *gin.Context) {
+		c.Set(string(middleware.ContextKeyUser), middleware.AuthSubject{UserID: 1})
+		c.Set("auth_method", service.AuditAuthMethodAdminAPIKey)
+		c.Next()
+	})
+	router.PUT("/users/:id", h.Update)
+	router.POST("/users/:id/auth-identities", h.BindAuthIdentity)
+	for _, tc := range []struct {
+		method  string
+		path    string
+		payload map[string]any
+	}{
+		{http.MethodPut, "/users/2", map[string]any{"password": "replacement-password"}},
+		{http.MethodPut, "/users/2", map[string]any{"email": "replacement@example.com"}},
+		{http.MethodPost, "/users/2/auth-identities", map[string]any{"provider_type": "oidc", "provider_key": "oidc", "provider_subject": "replacement"}},
+	} {
+		rec := doJSON(t, router, tc.method, tc.path, tc.payload)
+		require.Equal(t, http.StatusForbidden, rec.Code)
+		require.Contains(t, rec.Body.String(), "STEP_UP_ADMIN_API_KEY_FORBIDDEN")
+	}
+	require.Zero(t, svc.boundAuthIdentityFor)
 }

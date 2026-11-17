@@ -281,7 +281,7 @@ func sanitizeStreamError(err error) string {
 // ExtractUpstreamErrorMessage 从上游响应体中提取错误消息
 // 支持 Claude 风格的错误格式：{"type":"error","error":{"type":"...","message":"..."}}
 func ExtractUpstreamErrorMessage(body []byte) string {
-	return extractUpstreamErrorMessage(body)
+	return sanitizeUpstreamClientMessage(extractUpstreamErrorMessage(body), nil)
 }
 
 func extractUpstreamErrorMessage(body []byte) string {
@@ -452,7 +452,7 @@ func (s *GatewayService) handleErrorResponse(ctx context.Context, resp *http.Res
 			"type": "error",
 			"error": gin.H{
 				"type":    errType,
-				"message": errMsg,
+				"message": sanitizeUpstreamClientMessage(errMsg, account),
 			},
 		})
 
@@ -472,7 +472,7 @@ func (s *GatewayService) handleErrorResponse(ctx context.Context, resp *http.Res
 
 	switch resp.StatusCode {
 	case 400:
-		c.Data(http.StatusBadRequest, "application/json", body)
+		c.Data(http.StatusBadRequest, "application/json", sanitizeUpstreamClientErrorBody(body, account))
 		summary := upstreamMsg
 		if summary == "" {
 			summary = truncateForLog(body, 512)
@@ -512,7 +512,7 @@ func (s *GatewayService) handleErrorResponse(ctx context.Context, resp *http.Res
 		"type": "error",
 		"error": gin.H{
 			"type":    errType,
-			"message": errMsg,
+			"message": sanitizeUpstreamClientMessage(errMsg, account),
 		},
 	})
 
@@ -615,7 +615,7 @@ func (s *GatewayService) handleRetryExhaustedError(ctx context.Context, resp *ht
 			"type": "error",
 			"error": gin.H{
 				"type":    errType,
-				"message": errMsg,
+				"message": sanitizeUpstreamClientMessage(errMsg, account),
 			},
 		})
 
@@ -892,6 +892,10 @@ func (s *GatewayService) handleStreamingResponse(ctx context.Context, resp *http
 		}
 
 		eventType, _ := event["type"].(string)
+		if eventType == "error" {
+			safeData := string(sanitizeUpstreamClientErrorBody([]byte(dataLine), account))
+			return []string{"event: error\ndata: " + safeData + "\n\n"}, safeData, nil, nil
+		}
 		observer.ObserveAnthropic([]byte(dataLine))
 		if eventName == "" {
 			eventName = eventType

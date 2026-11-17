@@ -91,3 +91,56 @@ func TestGeminiForwardNativeRetainsUsageAfterDisconnectOrReadError(t *testing.T)
 		})
 	}
 }
+
+func TestGeminiCompatRetainsUsageAfterDisconnectOrReadError(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	for _, protocol := range []string{"messages", "chat"} {
+		for _, tc := range []struct {
+			name        string
+			disconnect  bool
+			terminalErr error
+		}{
+			{name: "client disconnect drains final usage", disconnect: true, terminalErr: io.EOF},
+			{name: "upstream read error retains usage", terminalErr: io.ErrUnexpectedEOF},
+		} {
+			t.Run(protocol+"/"+tc.name, func(t *testing.T) {
+				ctx, cancel := context.WithCancel(context.Background())
+				defer cancel()
+				upstream := &geminiCompatHTTPUpstreamStub{}
+				reader := &geminiBillingChunkReader{upstream: upstream, terminalErr: tc.terminalErr, chunks: []string{
+					"data: {\"candidates\":[{\"content\":{\"parts\":[{\"text\":\"hello\"}]}}]}\n\n",
+					"data: {\"usageMetadata\":{\"promptTokenCount\":12,\"candidatesTokenCount\":7}}\n\n",
+				}}
+				upstream.response = &http.Response{StatusCode: http.StatusOK, Header: http.Header{"Content-Type": []string{"text/event-stream"}}, Body: reader}
+				svc := &GeminiMessagesCompatService{cfg: &config.Config{}, httpUpstream: upstream}
+				account := &Account{ID: 1, Platform: PlatformGemini, Type: AccountTypeAPIKey, Credentials: map[string]any{"api_key": "test"}}
+				c, _ := gin.CreateTestContext(httptest.NewRecorder())
+				c.Request = httptest.NewRequest(http.MethodPost, "/v1/"+protocol, nil).WithContext(ctx)
+				if tc.disconnect {
+					c.Writer = &geminiBillingDisconnectWriter{ResponseWriter: c.Writer, cancel: cancel}
+				}
+				body := []byte(`{"model":"gemini-2.5-flash","stream":true,"max_tokens":16,"messages":[{"role":"user","content":"hi"}]}`)
+				var result *ForwardResult
+				var err error
+				if protocol == "chat" {
+					result, err = svc.ForwardAsChatCompletions(ctx, c, account, body)
+				} else {
+					result, err = svc.Forward(ctx, c, account, body)
+				}
+				if tc.terminalErr == io.EOF {
+					require.NoError(t, err)
+				} else {
+					require.ErrorIs(t, err, tc.terminalErr)
+				}
+				require.NotNil(t, result)
+				require.Equal(t, 12, result.Usage.InputTokens)
+				require.Equal(t, 7, result.Usage.OutputTokens)
+				if tc.disconnect {
+					require.ErrorIs(t, ctx.Err(), context.Canceled)
+					require.NoError(t, upstream.lastReq.Context().Err())
+					require.Empty(t, reader.chunks, "disconnect must not skip final metered usage")
+				}
+			})
+		}
+	}
+}

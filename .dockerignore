@@ -40,6 +40,10 @@ backend/vendor/
 
 # Local runtime data and generated files
 .codex/
+.pnpm-store/
+.gocache/
+output/
+*.bak
 data/
 backend/data/
 image-workbench/

@@ -612,7 +612,7 @@ func writeOpenAIPassthroughErrorEnvelope(c *gin.Context, downstreamStatus int, u
 	body, _ := json.Marshal(gin.H{
 		"error": gin.H{
 			"type":    "upstream_error",
-			"message": message,
+			"message": sanitizeUpstreamClientMessage(message, nil),
 		},
 	})
 	if writeOpenAICompactSSEBridge(c, downstreamStatus, body) {
@@ -730,7 +730,7 @@ func (s *OpenAIGatewayService) handleErrorResponsePassthrough(
 	// 已保证不切号），其文案对客户端可操作（如触发自动压缩）；在净化信封内保留
 	// 脱敏后的上游消息，而不是抹成通用文案。
 	if isOpenAIContextWindowError(upstreamMsg, body) && upstreamMsg != "" {
-		writeOpenAIPassthroughErrorEnvelope(c, resp.StatusCode, resp.Header, upstreamMsg)
+		writeOpenAIPassthroughErrorEnvelope(c, resp.StatusCode, resp.Header, sanitizeUpstreamClientMessage(upstreamMsg, account))
 	} else {
 		writeSanitizedOpenAIPassthroughError(c, resp.StatusCode, resp.Header)
 	}
@@ -1317,7 +1317,7 @@ func (s *OpenAIGatewayService) handleStreamingResponsePassthrough(
 						c.JSON(status, gin.H{
 							"error": gin.H{
 								"type":    errType,
-								"message": errMsg,
+								"message": sanitizeUpstreamClientMessage(errMsg, account),
 							},
 						})
 						return resultWithUsage(), fmt.Errorf("upstream response failed: passthrough rule matched message=%s", errMsg)
@@ -1346,6 +1346,7 @@ func (s *OpenAIGatewayService) handleStreamingResponsePassthrough(
 				dataBytes,
 				eventType,
 				openAIStreamClientOutputStarted(c, clientOutputStarted),
+				account,
 			); sanitized {
 				dataBytes = sanitizedData
 				trimmedData = strings.TrimSpace(string(sanitizedData))

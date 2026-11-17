@@ -113,21 +113,20 @@ func (c *TotpCache) DeleteLoginSession(ctx context.Context, tempToken string) er
 func (c *TotpCache) IncrementVerifyAttempts(ctx context.Context, userID int64) (int, error) {
 	key := fmt.Sprintf("%s%d", totpAttemptsKeyPrefix, userID)
 
-	// Use pipeline for atomic increment and set TTL
-	pipe := c.rdb.Pipeline()
-	incrCmd := pipe.Incr(ctx, key)
-	pipe.Expire(ctx, key, totpAttemptsTTL)
-
-	if _, err := pipe.Exec(ctx); err != nil {
+	// Reserve and expire atomically. Rejected attempts must not keep extending
+	// the lockout; the fixed window expires even while attempts continue.
+	count, err := c.rdb.Eval(ctx, `
+local count = redis.call('INCR', KEYS[1])
+if redis.call('PTTL', KEYS[1]) < 0 then
+    redis.call('PEXPIRE', KEYS[1], ARGV[1])
+end
+return count
+`, []string{key}, totpAttemptsTTL.Milliseconds()).Int()
+	if err != nil {
 		return 0, fmt.Errorf("increment verify attempts: %w", err)
 	}
 
-	count, err := incrCmd.Result()
-	if err != nil {
-		return 0, fmt.Errorf("get increment result: %w", err)
-	}
-
-	return int(count), nil
+	return count, nil
 }
 
 // GetVerifyAttempts gets the current verify attempt count

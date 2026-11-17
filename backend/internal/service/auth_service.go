@@ -1665,22 +1665,25 @@ func (s *AuthService) RefreshTokenPair(ctx context.Context, refreshToken string)
 
 	tokenHash := hashToken(refreshToken)
 
-	// 获取Token数据
-	data, err := s.refreshTokenCache.GetRefreshToken(ctx, tokenHash)
+	// Atomically consume before issuing a replacement. A separate GET/DELETE
+	// lets concurrent requests reuse one credential, and deleting best-effort
+	// would also leave the old credential valid during a cache failure.
+	data, err := s.refreshTokenCache.ConsumeRefreshToken(ctx, tokenHash)
 	if err != nil {
 		if errors.Is(err, ErrRefreshTokenNotFound) {
 			// Token不存在，可能是已被使用（Token轮转）或已过期
 			logger.LegacyPrintf("service.auth", "[Auth] Refresh token not found, possible reuse attack")
 			return nil, ErrRefreshTokenInvalid
 		}
-		logger.LegacyPrintf("service.auth", "[Auth] Error getting refresh token: %v", err)
+		logger.LegacyPrintf("service.auth", "[Auth] Error consuming refresh token: %v", err)
 		return nil, ErrServiceUnavailable
+	}
+	if data == nil {
+		return nil, ErrRefreshTokenInvalid
 	}
 
 	// 检查Token是否过期
 	if time.Now().After(data.ExpiresAt) {
-		// 删除过期Token
-		_ = s.refreshTokenCache.DeleteRefreshToken(ctx, tokenHash)
 		return nil, ErrRefreshTokenExpired
 	}
 
@@ -1718,12 +1721,6 @@ func (s *AuthService) RefreshTokenPair(ctx context.Context, refreshToken string)
 			logger.LegacyPrintf("service.auth", "[Auth] Session binding mismatch on refresh for user %d, family revoked", data.UserID)
 			return nil, ErrSessionBindingMismatch
 		}
-	}
-
-	// Token轮转：立即使旧Token失效
-	if err := s.refreshTokenCache.DeleteRefreshToken(ctx, tokenHash); err != nil {
-		logger.LegacyPrintf("service.auth", "[Auth] Failed to delete old refresh token: %v", err)
-		// 继续处理，不影响主流程
 	}
 
 	// 生成新的Token对，保持同一个家族ID

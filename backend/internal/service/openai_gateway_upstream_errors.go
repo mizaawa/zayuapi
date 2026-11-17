@@ -346,7 +346,7 @@ func (s *OpenAIGatewayService) handleErrorResponse(
 		if contentType == "" {
 			contentType = "application/json"
 		}
-		c.Data(resp.StatusCode, contentType, body)
+		c.Data(resp.StatusCode, contentType, sanitizeUpstreamClientErrorBody(body, account))
 		if cyberMsg == "" {
 			return nil, fmt.Errorf("openai cyber_policy: %d", resp.StatusCode)
 		}
@@ -429,7 +429,7 @@ func (s *OpenAIGatewayService) handleErrorResponse(
 		c.JSON(status, gin.H{
 			"error": gin.H{
 				"type":    errType,
-				"message": errMsg,
+				"message": sanitizeUpstreamClientMessage(errMsg, account),
 			},
 		})
 		if upstreamMsg == "" {
@@ -527,13 +527,13 @@ func (s *OpenAIGatewayService) handleErrorResponse(
 		errMsg = "Upstream request failed"
 	}
 	if isOpenAIContextWindowError(upstreamMsg, body) && upstreamMsg != "" {
-		errMsg = upstreamMsg
+		errMsg = sanitizeUpstreamClientMessage(upstreamMsg, account)
 	}
 
 	c.JSON(statusCode, gin.H{
 		"error": gin.H{
 			"type":    errType,
-			"message": errMsg,
+			"message": sanitizeUpstreamClientMessage(errMsg, account),
 		},
 	})
 
@@ -581,7 +581,7 @@ func (s *OpenAIGatewayService) handleCompatErrorResponse(
 		if clientMsg == "" {
 			clientMsg = "Request blocked by upstream cyber-security policy"
 		}
-		writeError(c, resp.StatusCode, "invalid_request_error", clientMsg)
+		writeError(c, resp.StatusCode, "invalid_request_error", sanitizeUpstreamClientMessage(clientMsg, account))
 		if cyberMsg == "" {
 			return nil, fmt.Errorf("openai cyber_policy: %d", resp.StatusCode)
 		}
@@ -591,7 +591,7 @@ func (s *OpenAIGatewayService) handleCompatErrorResponse(
 		clientMsg := grokContentPolicyClientMessage(body)
 		setOpsUpstreamError(c, resp.StatusCode, clientMsg, truncateString(string(body), 2048))
 		MarkResponseCommitted(c)
-		writeError(c, http.StatusForbidden, "invalid_request_error", clientMsg)
+		writeError(c, http.StatusForbidden, "invalid_request_error", sanitizeUpstreamClientMessage(clientMsg, account))
 		return nil, fmt.Errorf("grok content policy rejection: %s", clientMsg)
 	}
 
@@ -622,7 +622,7 @@ func (s *OpenAIGatewayService) handleCompatErrorResponse(
 			Kind: "http_error", Message: upstreamMsg, Detail: upstreamDetail,
 		})
 		MarkResponseCommitted(c)
-		writeError(c, status, errType, errMsg)
+		writeError(c, status, errType, sanitizeUpstreamClientMessage(errMsg, account))
 		if upstreamMsg == "" {
 			upstreamMsg = errMsg
 		}
@@ -698,6 +698,6 @@ func (s *OpenAIGatewayService) handleCompatErrorResponse(
 		errType = "api_error"
 	}
 
-	writeError(c, resp.StatusCode, errType, upstreamMsg)
+	writeError(c, resp.StatusCode, errType, sanitizeUpstreamClientMessage(upstreamMsg, account))
 	return nil, fmt.Errorf("upstream error: %d %s", resp.StatusCode, upstreamMsg)
 }
