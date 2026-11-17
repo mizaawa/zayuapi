@@ -100,6 +100,12 @@ func TestGeminiMappedErrorsRedactCustomAccountCredentials(t *testing.T) {
 			c, _ := gin.CreateTestContext(rec)
 			account := &Account{ID: 1, Credentials: map[string]any{"api_key": "legacy-provider-credential"}}
 			body := []byte(`{"error":{"code":400,"status":"INVALID_ARGUMENT","message":"invalid schema for legacy-provider-credential at https://private.example/api; contact owner@example.com"}}`)
+			rule := newNonFailoverPassthroughRule(http.StatusBadRequest, "invalid schema", http.StatusBadRequest, "")
+			rule.Platforms = []string{PlatformGemini}
+			rule.PassthroughBody = true
+			passthrough := &ErrorPassthroughService{}
+			passthrough.setLocalCache([]*model.ErrorPassthroughRule{rule})
+			BindErrorPassthroughService(c, passthrough)
 			svc := &GeminiMessagesCompatService{}
 			var err error
 			if chat {
