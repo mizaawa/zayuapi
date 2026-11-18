@@ -1,38 +1,10 @@
 <template>
-  <div class="space-y-3" data-test="failover-settings">
-    <div class="flex items-center justify-between gap-3">
-      <label :for="`${id}-enabled`" class="input-label mb-0">{{ t('keys.failover.enable') }}</label>
-      <button
-        :id="`${id}-enabled`"
-        type="button"
-        role="switch"
-        :aria-checked="modelValue.failover_enabled"
-        :aria-label="t('keys.failover.enable')"
-        :disabled="disabled"
-        data-test="failover-toggle"
-        :class="[
-          'relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 disabled:cursor-not-allowed disabled:opacity-50',
-          modelValue.failover_enabled ? 'bg-primary-600' : 'bg-gray-200 dark:bg-dark-600'
-        ]"
-        @click="update({ failover_enabled: !modelValue.failover_enabled })"
-      >
-        <span
-          :class="[
-            'pointer-events-none inline-block h-4 w-4 rounded-full bg-white shadow transition-transform',
-            modelValue.failover_enabled ? 'translate-x-4' : 'translate-x-0'
-          ]"
-        />
-      </button>
-    </div>
-
-    <div
-      v-if="modelValue.failover_enabled"
-      class="failover-controls space-y-4 rounded-lg border p-4"
-      data-test="failover-controls"
-    >
-      <p class="failover-hint text-xs leading-5">
-        {{ t('keys.failover.supportedPlatforms') }}
-      </p>
+  <KeyFormSection
+    :id="id" icon="swap" :title="t('keys.failover.enable')" :hint="t('keys.editor.failoverHint')"
+    :enabled="modelValue.failover_enabled" :disabled="disabled" toggle-test="failover-toggle" data-test="failover-settings"
+    @update:enabled="update({ failover_enabled: $event })"
+  >
+    <div class="failover-controls grid gap-3 rounded-lg border p-4" data-test="failover-controls">
       <div>
         <label :for="`${id}-group`" class="input-label">{{ t('keys.failover.group') }}</label>
         <Select
@@ -50,7 +22,7 @@
         >
           <template #selected="{ option }">
             <GroupBadge
-              v-if="option"
+              v-if="option" class="max-w-full"
               :name="(option as GroupOption).label"
               :platform="(option as GroupOption).platform"
               :subscription-type="(option as GroupOption).subscriptionType"
@@ -80,47 +52,32 @@
           </template>
         </Select>
       </div>
-
-      <div>
-        <label :for="`${id}-attempts`" class="input-label">{{ t('keys.failover.maxRetries') }}</label>
-        <input
-          :id="`${id}-attempts`"
-          :value="modelValue.failover_max_retries"
-          :disabled="disabled"
-          type="number"
-          min="1"
-          max="10"
-          step="1"
-          required
-          class="input"
-          data-test="failover-max-retries"
-          @input="update({ failover_max_retries: ($event.target as HTMLInputElement).valueAsNumber })"
-        />
+      <div class="key-paired-fields grid gap-3">
+        <div>
+          <label :for="`${id}-attempts`" class="input-label">{{ t('keys.failover.maxRetries') }}</label>
+          <input :id="`${id}-attempts`" :value="modelValue.failover_max_retries" :disabled="disabled"
+            type="number" min="1" max="10" step="1" required class="input" data-test="failover-max-retries"
+            @input="update({ failover_max_retries: ($event.target as HTMLInputElement).valueAsNumber })" />
+        </div>
+        <div>
+          <label :for="`${id}-cooldown`" class="input-label">{{ t('keys.failover.cooldownSeconds') }}</label>
+          <input :id="`${id}-cooldown`" :value="modelValue.failover_cooldown_seconds" :disabled="disabled"
+            type="number" min="1" max="2147483647" step="1" required class="input" data-test="failover-cooldown"
+            @input="update({ failover_cooldown_seconds: ($event.target as HTMLInputElement).valueAsNumber })" />
+        </div>
       </div>
-
-      <div>
-        <label :for="`${id}-cooldown`" class="input-label">{{ t('keys.failover.cooldownSeconds') }}</label>
-        <input
-          :id="`${id}-cooldown`"
-          :value="modelValue.failover_cooldown_seconds"
-          :disabled="disabled"
-          type="number"
-          min="1"
-          max="2147483647"
-          step="1"
-          required
-          class="input"
-          data-test="failover-cooldown"
-          @input="update({ failover_cooldown_seconds: ($event.target as HTMLInputElement).valueAsNumber })"
-        />
-      </div>
+      <p class="key-editor-note failover-hint text-xs leading-5">
+        <Icon name="infoCircle" size="sm" aria-hidden="true" />{{ t('keys.failover.supportedPlatforms') }}
+      </p>
     </div>
-  </div>
+  </KeyFormSection>
 </template>
 
 <script setup lang="ts">
 import { computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import Icon from '@/components/icons/Icon.vue'
+import KeyFormSection from './KeyFormSection.vue'
 import Select from '@/components/common/Select.vue'
 import GroupBadge from '@/components/common/GroupBadge.vue'
 import GroupOptionItem from '@/components/common/GroupOptionItem.vue'

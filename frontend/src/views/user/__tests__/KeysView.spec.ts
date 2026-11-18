@@ -215,7 +215,7 @@ const ConfirmDialogStub = {
 const BaseDialogStub = {
   name: 'BaseDialog',
   props: ['show', 'title'],
-  template: '<div v-if="show" role="dialog"><h3>{{ title }}</h3><slot /><slot name="footer" /></div>',
+  template: '<div v-if="show" role="dialog"><slot name="heading" title-id="test-dialog-title"><h3>{{ title }}</h3></slot><slot name="navigation" /><slot /><slot name="footer" /></div>',
 }
 
 const EmptyStateStub = {
@@ -226,8 +226,9 @@ const EmptyStateStub = {
 }
 
 const wrappers: VueWrapper[] = []
-const mountView = async () => {
+const mountView = async (attach = false) => {
   const wrapper = mount(KeysView, {
+    attachTo: attach ? document.body : undefined,
     global: {
       stubs: {
         AppLayout: AppLayoutStub,
@@ -695,6 +696,72 @@ describe('user KeysView', () => {
     getAvailableGroups.mockResolvedValue(availableGroups)
   }
 
+  it('keeps edits across tabs and submits one update from any section', async () => {
+    setKey({ ...createApiKey(), group_id: 1, group: group(1) }, [group(1)])
+    const wrapper = await mountView(true)
+    await wrapper.get('[data-test="key-action-edit"]').trigger('click')
+    expect(wrapper.get('#key-tab-general').attributes('aria-selected')).toBe('true')
+    await wrapper.get('#key-form-name').setValue('renamed')
+    await wrapper.get('input[value="inactive"]').setValue()
+    await wrapper.get('#key-tab-general').trigger('keydown', { key: 'ArrowRight' })
+    expect(document.activeElement).toBe(wrapper.get('#key-tab-requests').element)
+    await wrapper.get('#key-ip-enabled').trigger('click')
+    await wrapper.get('#key-ip-allow').setValue('192.0.2.5')
+    await wrapper.get('#key-tab-limits').trigger('click')
+    await wrapper.get('#key-form-quota').setValue('25')
+    await wrapper.get('#key-rate-enabled').trigger('click')
+    await wrapper.get('#key-rate_limit_1d').setValue('5')
+    await wrapper.get('#key-tab-general').trigger('click')
+    expect(wrapper.get('#key-form-name').element).toHaveProperty('value', 'renamed')
+    expect(updateKey).not.toHaveBeenCalled()
+    await wrapper.get('#key-form').trigger('submit')
+    await flushPromises()
+    expect(updateKey).toHaveBeenCalledExactlyOnceWith(1, expect.objectContaining({
+      name: 'renamed', status: 'inactive', group_id: 1, ip_whitelist: ['192.0.2.5'], quota: 25, rate_limit_1d: 5
+    }))
+  })
+
+  it('reveals and focuses invalid fields even when their tab is hidden', async () => {
+    setKey({ ...createApiKey(), group_id: 1, group: group(1) }, [group(1)])
+    const wrapper = await mountView(true)
+    await wrapper.get('[data-test="key-action-edit"]').trigger('click')
+    await wrapper.get('#key-tab-limits').trigger('click')
+    await wrapper.get('#key-form-quota').setValue('-1')
+    await wrapper.get('#key-tab-general').trigger('click')
+    await wrapper.get('#key-form').trigger('submit')
+    await flushPromises()
+    expect(wrapper.get('#key-tab-limits').attributes('aria-selected')).toBe('true')
+    expect(document.activeElement).toBe(wrapper.get('#key-form-quota').element)
+    expect(updateKey).not.toHaveBeenCalled()
+    await wrapper.get('#key-form-quota').setValue('0')
+    await wrapper.get('#key-tab-requests').trigger('click')
+    await wrapper.get('[data-test="system-prompt-toggle"]').trigger('click')
+    await wrapper.get('[data-test="system-prompt-input"]').setValue('   ')
+    await wrapper.get('#key-tab-general').trigger('click')
+    await wrapper.get('#key-form').trigger('submit')
+    await flushPromises()
+    expect(document.activeElement).toBe(wrapper.get('[data-test="system-prompt-input"]').element)
+    expect(showError).toHaveBeenLastCalledWith('keys.customSystemPrompt.required')
+    expect(updateKey).not.toHaveBeenCalled()
+  })
+
+  it('discards canceled edits, reopens on General and keeps creation on one page', async () => {
+    const wrapper = await mountView()
+    await wrapper.get('[data-test="key-action-edit"]').trigger('click')
+    await wrapper.get('#key-form-name').setValue('discard me')
+    await wrapper.get('#key-tab-limits').trigger('click')
+    await getButtonByText(wrapper, 'common.cancel').trigger('click')
+    await wrapper.get('[data-test="key-action-edit"]').trigger('click')
+    expect(wrapper.get('#key-tab-general').attributes('aria-selected')).toBe('true')
+    expect(wrapper.get('#key-form-name').element).toHaveProperty('value', 'test-key')
+    await getButtonByText(wrapper, 'common.cancel').trigger('click')
+    await getButtonByText(wrapper, 'Create API Key').trigger('click')
+    expect(wrapper.find('[role="tablist"]').exists()).toBe(false)
+    expect(wrapper.get('#key-form-quota').isVisible()).toBe(true)
+    expect(wrapper.get('#key-custom-enabled').isVisible()).toBe(true)
+    expect(updateKey).not.toHaveBeenCalled()
+  })
+
   it('caps long group names so a card cannot stretch the page sideways', async () => {
     const longName = '超长分组名称测试高速稳定专线'.repeat(7)
     const key = { ...createApiKey(), group_id: 1, group: group(1, 'openai', { name: longName }) }
@@ -803,6 +870,7 @@ describe('user KeysView', () => {
     expect(wrapper.find('[data-test="system-prompt-settings"]').exists()).toBe(false)
     await getButtonByText(wrapper, 'common.cancel').trigger('click')
     await getButtonByText(wrapper, 'common.edit').trigger('click')
+    await wrapper.get('#key-tab-requests').trigger('click')
 
     const toggle = wrapper.get('[data-test="system-prompt-toggle"]')
     expect(toggle.attributes('aria-checked')).toBe('false')
@@ -818,6 +886,7 @@ describe('user KeysView', () => {
     updateKey.mockImplementation(async (_id, updates) => { key = { ...key, ...updates }; return key })
     const wrapper = await mountView()
     await getButtonByText(wrapper, 'common.edit').trigger('click')
+    await wrapper.get('#key-tab-requests').trigger('click')
     await wrapper.get('[data-test="system-prompt-toggle"]').trigger('click')
     const forceToggle = wrapper.get('[data-test="system-prompt-force-toggle"]')
     expect(forceToggle.attributes('aria-checked')).toBe('false')
@@ -833,6 +902,7 @@ describe('user KeysView', () => {
       custom_system_prompt: '  Keep agent tools available.\nUse concise replies.  '
     }))
     await getButtonByText(wrapper, 'common.edit').trigger('click')
+    await wrapper.get('#key-tab-requests').trigger('click')
     expect(wrapper.get('[data-test="system-prompt-toggle"]').attributes('aria-checked')).toBe('true')
     expect(wrapper.get('[data-test="system-prompt-force-toggle"]').attributes('aria-checked')).toBe('true')
     expect(wrapper.get('[data-test="system-prompt-input"]').element).toHaveProperty('value', key.custom_system_prompt)
@@ -846,6 +916,7 @@ describe('user KeysView', () => {
     setKey(key, [group(1)])
     const wrapper = await mountView()
     await getButtonByText(wrapper, 'common.edit').trigger('click')
+    await wrapper.get('#key-tab-requests').trigger('click')
     await wrapper.get('[data-test="system-prompt-toggle"]').trigger('click')
     expect(wrapper.find('[data-test="system-prompt-controls"]').exists()).toBe(false)
     await wrapper.get('#key-form').trigger('submit')
@@ -862,6 +933,7 @@ describe('user KeysView', () => {
     setKey(key, [group(1)])
     const wrapper = await mountView()
     await getButtonByText(wrapper, 'common.edit').trigger('click')
+    await wrapper.get('#key-tab-requests').trigger('click')
     await wrapper.get('[data-test="system-prompt-toggle"]').trigger('click')
     await wrapper.get('[data-test="system-prompt-input"]').setValue(' \n ')
     await wrapper.get('#key-form').trigger('submit')

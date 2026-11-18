@@ -11,12 +11,12 @@
         @click.self="handleClose"
       >
         <!-- Modal panel -->
-        <div ref="dialogRef" :class="['modal-content', widthClasses]" @click.stop>
+        <div ref="dialogRef" :class="['modal-content', widthClasses, panelClass]" @click.stop>
           <!-- Header -->
           <div class="modal-header gap-3">
-            <h3 :id="dialogId" class="modal-title flex-1">
-              {{ title }}
-            </h3>
+            <slot name="heading" :title-id="dialogId">
+              <h3 :id="dialogId" class="modal-title flex-1">{{ title }}</h3>
+            </slot>
             <button
               v-if="showCloseButton"
               @click="emit('close')"
@@ -26,6 +26,8 @@
               <Icon name="x" size="md" />
             </button>
           </div>
+
+          <slot name="navigation" />
 
           <!-- Body -->
           <div class="modal-body">
@@ -65,6 +67,7 @@ interface Props {
   show: boolean
   title: string
   width?: DialogWidth
+  panelClass?: string
   closeOnEscape?: boolean
   closeOnClickOutside?: boolean
   showCloseButton?: boolean
