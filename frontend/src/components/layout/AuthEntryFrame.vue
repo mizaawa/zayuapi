@@ -150,6 +150,17 @@ const { t } = useI18n()
   .entry-panel { border-radius: 1.375rem; }
   .entry-panel :deep(.auth-input) { font-size: 1rem; }
 }
+/* Give the native 300px verification strip room before falling back to compact.
+   Keep the input, challenge and submit edges aligned; never scale or crop the iframe. */
+@media (min-width: 302px) and (max-width: 35.99rem) {
+  .entry-main:has(.turnstile-wrapper) {
+    --entry-strip-room: 302px; /* Minimum strip width plus both panel borders. */
+    padding-inline: clamp(0px, (100% - var(--entry-strip-room)) / 4, .875rem);
+  }
+  .entry-panel:has(.turnstile-wrapper) {
+    padding-inline: clamp(0px, (100% - var(--entry-strip-room)) / 2, var(--entry-pad));
+  }
+}
 @media (prefers-reduced-motion: reduce) {
   .entry-panel :deep(.btn), .entry-panel :deep(.auth-input) { transition: none; }
 }
