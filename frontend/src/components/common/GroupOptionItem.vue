@@ -12,7 +12,7 @@
           :platform="platform"
           :subscription-type="subscriptionType"
           :show-rate="false"
-          class="groupOptionItemBadge"
+          class="groupOptionItemBadge max-w-full"
         />
         <span
           v-if="blocked"
@@ -157,5 +157,7 @@ const ratePillClass = computed(() => {
 /* Bold the group name inside GroupBadge when used in dropdown option */
 .groupOptionItemBadge :deep(span.truncate) {
   font-weight: 600;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 </style>

@@ -6,16 +6,13 @@
       @click="toggle"
       :disabled="disabled"
       :aria-expanded="isOpen"
-      :aria-haspopup="true"
+      aria-haspopup="listbox"
+      :aria-controls="isOpen ? instanceId : undefined"
+      :aria-invalid="error || undefined"
       :id="id"
       :aria-label="ariaLabel ?? 'Select option'"
       :aria-describedby="ariaDescribedby"
-      :class="[
-        'select-trigger',
-        isOpen && 'select-trigger-open',
-        error && 'select-trigger-error',
-        disabled && 'select-trigger-disabled'
-      ]"
+      class="select-trigger"
       @keydown.down.prevent="onTriggerKeyDown"
       @keydown.up.prevent="onTriggerKeyDown"
     >
@@ -63,6 +60,9 @@
           class="select-dropdown-portal"
           :class="[instanceId]"
           :style="dropdownStyle"
+          :id="instanceId"
+          tabindex="-1"
+          :aria-label="ariaLabel ?? placeholderText"
           role="listbox"
           @click.stop
           @mousedown.stop
@@ -113,7 +113,7 @@
                   v-if="isSelected(option)"
                   name="check"
                   size="sm"
-                  class="text-primary-500"
+                  class="shrink-0 text-[var(--select-focus)]"
                   :stroke-width="2"
                 />
               </slot>
@@ -132,6 +132,8 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
+import { useElementSize } from '@vueuse/core'
+import { usePickerViewport } from '@/composables/usePickerViewport'
 import { useI18n } from 'vue-i18n'
 import Icon from '@/components/icons/Icon.vue'
 
@@ -202,7 +204,8 @@ const triggerRef = ref<HTMLButtonElement | null>(null)
 const searchInputRef = ref<HTMLInputElement | null>(null)
 const dropdownRef = ref<HTMLElement | null>(null)
 const optionsListRef = ref<HTMLElement | null>(null)
-const dropdownPosition = ref<'bottom' | 'top'>('bottom')
+const { height: menuHeight } = useElementSize(dropdownRef, undefined, { box: 'border-box' })
+const { height: viewportHeight, top: viewportTop } = usePickerViewport(isOpen)
 const triggerRect = ref<DOMRect | null>(null)
 const dropdownViewportPadding = 8
 const dropdownMinimumWidth = 200
@@ -226,7 +229,8 @@ const dropdownStyle = computed(() => {
     const width = Math.min(380, Math.max(dropdownViewportPadding * 2, window.innerWidth - dropdownViewportPadding * 2))
     return {
       position: 'fixed',
-      top: '50%',
+      top: window.visualViewport ? `${viewportTop.value + viewportHeight.value / 2}px` : '50%',
+      maxHeight: `${Math.max(0, viewportHeight.value - dropdownViewportPadding * 2)}px`,
       left: '50%',
       width: `${width}px`,
       minWidth: `${width}px`,
@@ -264,10 +268,18 @@ const dropdownStyle = computed(() => {
     }
   }
 
-  if (dropdownPosition.value === 'top') {
-    style.bottom = `${window.innerHeight - rect.top + 4}px`
+  // Measure against the larger side first: a tall list can flip AND scroll on a short screen.
+  const start = viewportTop.value + dropdownViewportPadding
+  const end = viewportTop.value + viewportHeight.value - dropdownViewportPadding
+  const aboveEdge = Math.min(rect.top - 4, end)
+  const belowEdge = Math.max(rect.bottom + 4, start)
+  const above = Math.max(0, aboveEdge - start)
+  const below = Math.max(0, end - belowEdge)
+  style.maxHeight = `${Math.max(above, below)}px`
+  if (above > below && below < menuHeight.value) {
+    style.bottom = `${window.innerHeight - aboveEdge}px`
   } else {
-    style.top = `${rect.bottom + 4}px`
+    style.top = `${belowEdge}px`
   }
 
   return style
@@ -391,24 +403,6 @@ const updateTriggerRect = () => {
   }
 }
 
-const calculateDropdownPosition = () => {
-  if (!containerRef.value) return
-  updateTriggerRect()
-
-  nextTick(() => {
-    if (!dropdownRef.value || !triggerRect.value) return
-    const dropdownHeight = dropdownRef.value.offsetHeight || 240
-    const spaceBelow = window.innerHeight - triggerRect.value.bottom
-    const spaceAbove = triggerRect.value.top
-
-    if (spaceBelow < dropdownHeight && spaceAbove > dropdownHeight) {
-      dropdownPosition.value = 'top'
-    } else {
-      dropdownPosition.value = 'bottom'
-    }
-  })
-}
-
 const toggle = () => {
   if (props.disabled) return
   isOpen.value = !isOpen.value
@@ -418,9 +412,9 @@ watch(() => props.disabled, (disabled) => {
   if (disabled) isOpen.value = false
 })
 
-watch(isOpen, (open) => {
+watch(isOpen, (open, _, onCleanup) => {
   if (open) {
-    calculateDropdownPosition()
+    updateTriggerRect()
     // Reset focused index to current selection or first item
     if (filteredOptions.value.length === 0) {
       focusedIndex.value = -1
@@ -432,17 +426,22 @@ watch(isOpen, (open) => {
         : initialIdx
     }
 
-    if (isSearchable.value) {
-      nextTick(() => searchInputRef.value?.focus())
-    }
-    // Add scroll listener to update position
+    nextTick(() => {
+      // Let touch users browse the options before bringing up a software keyboard.
+      const touch = window.matchMedia?.('(pointer: coarse)').matches
+      const target = isSearchable.value && !touch ? searchInputRef.value : dropdownRef.value
+      target?.focus({ preventScroll: true })
+      if (focusedIndex.value > 0) scrollToFocused()
+    })
     window.addEventListener('scroll', updateTriggerRect, { capture: true, passive: true })
-    window.addEventListener('resize', calculateDropdownPosition)
+    window.addEventListener('resize', updateTriggerRect)
+    onCleanup(() => {
+      window.removeEventListener('scroll', updateTriggerRect, true)
+      window.removeEventListener('resize', updateTriggerRect)
+    })
   } else {
     searchQuery.value = ''
     focusedIndex.value = -1
-    window.removeEventListener('scroll', updateTriggerRect, { capture: true })
-    window.removeEventListener('resize', calculateDropdownPosition)
   }
 })
 
@@ -468,6 +467,7 @@ const onTriggerKeyDown = () => {
 }
 
 const onDropdownKeyDown = (e: KeyboardEvent) => {
+  if (e.isComposing) return
   switch (e.key) {
     case 'ArrowDown':
       e.preventDefault()
@@ -488,11 +488,13 @@ const onDropdownKeyDown = (e: KeyboardEvent) => {
       break
     case 'Escape':
       e.preventDefault()
+      e.stopPropagation()
       isOpen.value = false
       triggerRef.value?.focus()
       break
     case 'Tab':
       isOpen.value = false
+      triggerRef.value?.focus({ preventScroll: true })
       break
   }
 }
@@ -529,45 +531,10 @@ onMounted(() => {
 
 onUnmounted(() => {
   document.removeEventListener('click', handleClickOutside)
-  window.removeEventListener('scroll', updateTriggerRect, { capture: true })
-  window.removeEventListener('resize', calculateDropdownPosition)
 })
 </script>
 
 <style scoped>
-.select-trigger {
-  @apply flex w-full items-center justify-between gap-2;
-  @apply rounded-xl px-4 py-2.5 text-sm;
-  background: var(--md-sys-color-surface-container);
-  border-color: transparent;
-  color: var(--md-sys-color-on-surface);
-  @apply border transition-colors duration-200;
-  @apply focus:border-transparent focus:outline-none focus:ring-2 focus:ring-primary-500/30;
-  @apply hover:border-transparent dark:hover:border-transparent;
-  @apply cursor-pointer;
-}
-
-.select-trigger-open {
-  @apply border-transparent ring-2 ring-primary-500/30;
-}
-
-.select-trigger-error {
-  @apply border-red-500 focus:border-red-500 focus:ring-red-500/30;
-}
-
-.select-trigger-disabled {
-  @apply cursor-not-allowed opacity-60;
-  background: var(--md-sys-color-surface-container-high);
-}
-
-.select-value {
-  @apply flex-1 truncate text-left;
-}
-
-.select-icon {
-  @apply flex-shrink-0 text-gray-400 dark:text-dark-400;
-}
-
 .select-clear {
   @apply flex flex-shrink-0 cursor-pointer items-center justify-center;
   @apply rounded text-gray-400 transition-colors;
@@ -577,79 +544,47 @@ onUnmounted(() => {
 
 <style>
 .select-dropdown-portal {
-  @apply w-max min-w-[200px];
-  background: var(--md-sys-color-surface);
-  @apply rounded-xl;
-  border-color: transparent;
+  @apply flex w-max min-w-[200px] flex-col overflow-hidden rounded-xl;
+  border: 1px solid var(--select-line);
+  background: var(--select-surface);
   color: var(--md-sys-color-on-surface);
-  @apply border;
-  @apply shadow-lg shadow-black/10 dark:shadow-black/30;
-  @apply overflow-hidden;
+  box-shadow: var(--theme-elevation-2);
+  outline: none;
   pointer-events: auto !important;
 }
 
 .select-dropdown-portal .select-search {
-  @apply flex items-center gap-2 px-3 py-2;
-  border-color: transparent;
-  @apply border-b;
-}
-
-.select-dropdown-portal .select-search-input {
-  @apply flex-1 bg-transparent text-sm;
-  @apply text-gray-900 dark:text-gray-100;
-  @apply placeholder:text-gray-400 dark:placeholder:text-dark-400;
-  @apply focus:outline-none;
+  @apply flex shrink-0 items-center gap-2 px-3 py-2;
+  border-bottom: 1px solid var(--select-line);
 }
 
 .select-dropdown-portal .select-options {
-  @apply max-h-80 overflow-y-auto py-1 outline-none;
+  @apply relative min-h-0 max-h-80 overflow-y-auto overscroll-contain p-1;
 }
 
 .select-dropdown-portal .select-option {
-  @apply flex items-center justify-between gap-2;
-  @apply px-4 py-2.5 text-sm;
-  color: var(--md-sys-color-on-surface);
-  @apply cursor-pointer transition-colors duration-150;
-  background: transparent;
-  pointer-events: auto !important;
-}
-
-.select-dropdown-portal .select-option-selected {
-  background: var(--md-sys-color-surface);
-  color: var(--md-sys-color-on-surface);
-}
-
-.select-dropdown-portal .select-option:hover,
-.select-dropdown-portal .select-option-focused {
-  background: var(--md-sys-color-surface-container-high);
+  @apply flex cursor-pointer items-center justify-between gap-2 rounded-lg px-3 py-2 text-sm transition-colors;
 }
 
 .select-dropdown-portal .select-option-disabled {
-  @apply cursor-not-allowed opacity-40;
+  @apply cursor-not-allowed opacity-50;
 }
 
-.select-dropdown-portal .select-option-blocked {
-  @apply text-red-700 dark:text-red-300;
-}
+.select-dropdown-portal .select-option-blocked { color: var(--monitor-down); }
 
 .select-dropdown-portal .select-option-group {
-  @apply cursor-default select-none;
-  background: var(--md-sys-color-surface-container);
-  @apply text-[11px] font-bold uppercase tracking-wider;
-  @apply text-gray-500 dark:text-gray-400;
-}
-
-.select-dropdown-portal .select-option-group:hover {
-  background: var(--md-sys-color-surface-container);
+  @apply cursor-default select-none text-[11px] font-bold uppercase tracking-wider;
+  color: var(--md-sys-color-on-surface-variant);
+  background: var(--select-hover);
 }
 
 .select-dropdown-portal .select-option-label {
-  @apply flex-1 min-w-0 truncate text-left;
+  @apply min-w-0 flex-1 truncate text-left;
 }
 
 .select-dropdown-portal .select-empty {
   @apply px-4 py-8 text-center text-sm;
-  @apply text-gray-500 dark:text-dark-400;
+  color: var(--md-sys-color-on-surface-variant);
 }
 
 .select-dropdown-enter-active,

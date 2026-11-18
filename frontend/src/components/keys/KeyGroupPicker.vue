@@ -1,7 +1,10 @@
 <template>
   <Teleport to="body">
     <Transition name="kgp" :duration="{ enter: 280, leave: 200 }">
-      <div v-if="show" class="kgp-layer" data-test="key-group-picker">
+      <div
+        v-if="show" class="kgp-layer" data-test="key-group-picker"
+        :style="{ top: `${viewportTop}px`, height: `${viewportHeight}px` }"
+      >
         <div class="kgp-backdrop" aria-hidden="true" @click="close"></div>
         <section
           ref="panelRef"
@@ -175,6 +178,7 @@ import { useI18n } from 'vue-i18n'
 import Icon from '@/components/icons/Icon.vue'
 import PlatformIcon from '@/components/common/PlatformIcon.vue'
 import { useAppStore } from '@/stores/app'
+import { usePickerViewport } from '@/composables/usePickerViewport'
 import { isMobileDevice } from '@/utils/device'
 import { setDocumentScrollLock } from '@/utils/documentScrollLock'
 import { formatPeakRateWindow, serverTimezoneLabel } from '@/utils/peak-rate'
@@ -209,6 +213,7 @@ const emit = defineEmits<{
 
 const { t } = useI18n()
 const appStore = useAppStore()
+const { height: viewportHeight, top: viewportTop } = usePickerViewport(() => props.show)
 
 // Past this many groups the panel keeps its full height, so switching
 // platforms or typing does not make it jump around.
@@ -452,6 +457,7 @@ onBeforeUnmount(() => teardown(false))
   position: fixed;
   inset: 0;
   z-index: 100000010;
+  container: key-picker / size;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -471,14 +477,13 @@ onBeforeUnmount(() => teardown(false))
   position: relative;
   display: flex;
   width: min(48rem, 100%);
-  max-height: calc(100vh - 4rem);
-  max-height: calc(100dvh - 4rem);
+  max-height: 100%;
   flex-direction: column;
   overflow: hidden;
   border-radius: 1.75rem;
   outline: none;
   color: var(--md-sys-color-on-surface);
-  background: var(--md-sys-color-surface);
+  background: var(--select-surface);
   box-shadow:
     inset 0 1px 0 rgb(255 255 255 / 0.8),
     0 0 0 1px rgb(215 193 106 / 0.2),
@@ -487,8 +492,7 @@ onBeforeUnmount(() => teardown(false))
 }
 
 .kgp-panel.is-roomy {
-  height: min(46rem, calc(100vh - 4rem));
-  height: min(46rem, calc(100dvh - 4rem));
+  height: min(46rem, 100%);
 }
 
 /* ---------- Header ---------- */
@@ -533,7 +537,7 @@ onBeforeUnmount(() => teardown(false))
 
 .kgp-close:hover {
   color: var(--md-sys-color-on-surface);
-  background: var(--md-sys-color-surface-container);
+  background: var(--select-hover);
 }
 
 /* ---------- Search + platform chips ---------- */
@@ -566,8 +570,8 @@ onBeforeUnmount(() => teardown(false))
   border-radius: 1rem;
   font-size: 0.9375rem;
   color: var(--md-sys-color-on-surface);
-  background: var(--md-sys-color-surface-container);
-  box-shadow: inset 0 1px 2px rgb(63 52 32 / 0.06);
+  background: var(--select-surface);
+  box-shadow: inset 0 0 0 1px var(--select-line);
   transition: background-color 160ms ease, box-shadow 160ms ease;
 }
 
@@ -576,9 +580,8 @@ onBeforeUnmount(() => teardown(false))
 }
 
 .kgp-search-input:focus {
-  outline: none;
-  background: var(--md-sys-color-surface);
-  box-shadow: inset 0 0 0 1.5px rgb(233 184 36 / 0.75), 0 0 0 4px rgb(233 184 36 / 0.14);
+  outline: 2px solid var(--select-focus);
+  outline-offset: 1px;
 }
 
 .kgp-search-clear {
@@ -596,7 +599,7 @@ onBeforeUnmount(() => teardown(false))
 
 .kgp-search-clear:hover {
   color: var(--md-sys-color-on-surface);
-  background: var(--md-sys-color-surface-container-high);
+  background: var(--select-hover);
 }
 
 .kgp-platforms {
@@ -619,7 +622,7 @@ onBeforeUnmount(() => teardown(false))
   font-size: 0.8125rem;
   font-weight: 550;
   color: var(--md-sys-color-on-surface-variant);
-  background: #faf6e8;
+  background: var(--select-hover);
   box-shadow: inset 0 0 0 1px rgb(215 193 106 / 0.32);
   transition: background-color 160ms ease, color 160ms ease, box-shadow 160ms ease, opacity 160ms ease;
 }
@@ -911,13 +914,13 @@ onBeforeUnmount(() => teardown(false))
   border-radius: 999px;
   font-size: 0.8125rem;
   font-weight: 600;
-  color: #7e5600;
-  background: #fff3bd;
+  color: var(--select-focus);
+  background: var(--select-hover);
   transition: background-color 150ms ease;
 }
 
 .kgp-empty-reset:hover {
-  background: #ffe78a;
+  background: var(--select-selected);
 }
 
 /* ---------- Enter / leave ---------- */
@@ -952,19 +955,16 @@ onBeforeUnmount(() => teardown(false))
 @media (max-width: 639.98px) {
   .kgp-layer {
     align-items: flex-end;
-    padding: 0;
+    padding: min(3.5rem, 6dvh) 0 0;
   }
 
   .kgp-panel {
     width: 100%;
-    max-height: calc(100vh - 3.5rem);
-    max-height: calc(100dvh - 3.5rem);
     border-radius: 1.5rem 1.5rem 0 0;
   }
 
   .kgp-panel.is-roomy {
-    height: calc(100vh - 3.5rem);
-    height: calc(100dvh - 3.5rem);
+    height: 100%;
   }
 
   .kgp-header {
@@ -976,11 +976,7 @@ onBeforeUnmount(() => teardown(false))
     padding: 0 1.125rem 0.875rem;
   }
 
-  .kgp-search-input {
-    height: 3rem;
-    /* 16px keeps iOS Safari from zooming into the field on focus. */
-    font-size: 1rem;
-  }
+  .kgp-search-input { height: 3rem; }
 
   .kgp-platforms {
     flex-wrap: nowrap;
@@ -995,10 +991,6 @@ onBeforeUnmount(() => teardown(false))
 
   .kgp-platforms::-webkit-scrollbar {
     display: none;
-  }
-
-  .kgp-chip {
-    height: 2.5rem;
   }
 
   .kgp-list {
@@ -1036,20 +1028,17 @@ onBeforeUnmount(() => teardown(false))
   }
 }
 
+@media (max-width: 639.98px), (pointer: coarse) {
+  /* Keep touch targets and zoom-safe text in landscape as well as portrait. */
+  .kgp-search-input { font-size: 1rem; }
+  .kgp-close, .kgp-search-clear { width: 2.75rem; height: 2.75rem; }
+  .kgp-chip { height: 2.75rem; }
+}
+
 /* Landscape phones and short windows: give the height to the rows. */
 @media (min-width: 640px) and (max-height: 560px) {
   .kgp-layer {
     padding: 0.75rem;
-  }
-
-  .kgp-panel {
-    max-height: calc(100vh - 1.5rem);
-    max-height: calc(100dvh - 1.5rem);
-  }
-
-  .kgp-panel.is-roomy {
-    height: calc(100vh - 1.5rem);
-    height: calc(100dvh - 1.5rem);
   }
 
   .kgp-header {
@@ -1064,6 +1053,11 @@ onBeforeUnmount(() => teardown(false))
   .kgp-tools {
     padding-bottom: 0.625rem;
   }
+}
+
+/* A landscape keyboard can leave less height than the tool rows themselves. */
+@container key-picker (max-height: 280px) {
+  .kgp-panel:has(.kgp-search-input:focus) :is(.kgp-subtitle, .kgp-platforms) { display: none; }
 }
 
 @media (prefers-reduced-motion: reduce) {

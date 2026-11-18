@@ -321,7 +321,6 @@ const submitJump = () => {
 
 .page-size-select :deep(.select-trigger) {
   @apply px-3 py-1.5 text-sm;
-  background: var(--md-sys-color-surface);
 }
 
 /* Phones: previous and next hug the edges with the page picker centred between them. */

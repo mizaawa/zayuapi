@@ -4,11 +4,8 @@
       type="button"
       @click="toggle"
       :disabled="disabled"
-      :class="[
-        'select-trigger',
-        isOpen && 'select-trigger-open',
-        disabled && 'select-trigger-disabled'
-      ]"
+      class="select-trigger"
+      :aria-expanded="isOpen"
     >
       <span class="select-value">
         {{ selectedLabel }}
@@ -72,7 +69,7 @@
             :class="['select-option', modelValue === null && 'select-option-selected']"
           >
             <span class="select-option-label">{{ t('admin.accounts.noProxy') }}</span>
-            <Icon v-if="modelValue === null" name="check" size="sm" class="text-primary-500" />
+            <Icon v-if="modelValue === null" name="check" size="sm" class="text-[var(--select-focus)]" />
           </div>
 
           <!-- Proxy options -->
@@ -326,57 +323,22 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
-.select-trigger {
-  @apply flex w-full items-center justify-between gap-2;
-  @apply rounded-xl px-4 py-2.5 text-sm;
-  @apply bg-white dark:bg-dark-800;
-  @apply border border-gray-200 dark:border-dark-600;
-  @apply text-gray-900 dark:text-gray-100;
-  @apply transition-all duration-200;
-  @apply focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/30;
-  @apply hover:border-gray-300 dark:hover:border-dark-500;
-  @apply cursor-pointer;
-}
-
-.select-trigger-open {
-  @apply border-primary-500 ring-2 ring-primary-500/30;
-}
-
-.select-trigger-disabled {
-  @apply cursor-not-allowed bg-gray-100 opacity-60 dark:bg-dark-900;
-}
-
-.select-value {
-  @apply flex-1 truncate text-left;
-}
-
-.select-icon {
-  @apply flex-shrink-0 text-gray-400 dark:text-dark-400;
-}
-
 .select-dropdown {
   @apply absolute z-[100] mt-2 w-full;
-  @apply bg-white dark:bg-dark-800;
   @apply rounded-xl;
-  @apply border border-gray-200 dark:border-dark-700;
-  @apply shadow-lg shadow-black/10 dark:shadow-black/30;
+  border: 1px solid var(--select-line);
+  background: var(--select-surface);
+  box-shadow: var(--theme-elevation-2);
   @apply overflow-hidden;
 }
 
 .select-header {
   @apply flex items-center gap-2 px-3 py-2;
-  @apply border-b border-gray-100 dark:border-dark-700;
+  border-bottom: 1px solid var(--select-line);
 }
 
 .select-search {
-  @apply flex flex-1 items-center gap-2;
-}
-
-.select-search-input {
-  @apply flex-1 bg-transparent text-sm;
-  @apply text-gray-900 dark:text-gray-100;
-  @apply placeholder:text-gray-400 dark:placeholder:text-dark-400;
-  @apply focus:outline-none;
+  @apply flex min-w-0 flex-1 items-center gap-2;
 }
 
 .batch-test-btn {
@@ -387,20 +349,13 @@ onUnmounted(() => {
 }
 
 .select-options {
-  @apply max-h-60 overflow-y-auto py-1;
+  @apply max-h-60 overflow-y-auto overscroll-contain p-1;
 }
 
 .select-option {
   @apply flex items-center justify-between gap-2;
-  @apply px-4 py-2.5 text-sm;
-  @apply text-gray-700 dark:text-gray-300;
-  @apply cursor-pointer transition-colors duration-150;
-  @apply hover:bg-gray-50 dark:hover:bg-dark-700;
-}
-
-.select-option-selected {
-  @apply bg-primary-50 dark:bg-primary-900/20;
-  @apply text-primary-700 dark:text-primary-300;
+  @apply cursor-pointer rounded-lg px-3 py-2 text-sm transition-colors;
+  color: var(--md-sys-color-on-surface);
 }
 
 .select-option-label {

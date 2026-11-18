@@ -4,7 +4,7 @@
     :enabled="modelValue.failover_enabled" :disabled="disabled" toggle-test="failover-toggle" data-test="failover-settings"
     @update:enabled="update({ failover_enabled: $event })"
   >
-    <div class="failover-controls grid gap-3 rounded-lg border p-4" data-test="failover-controls">
+    <div class="grid min-w-0 grid-cols-1 gap-3" data-test="failover-controls">
       <div>
         <label :for="`${id}-group`" class="input-label">{{ t('keys.failover.group') }}</label>
         <Select
@@ -33,7 +33,7 @@
               :peak-end="(option as GroupOption).peakEnd"
               :peak-rate-multiplier="(option as GroupOption).peakRateMultiplier"
             />
-            <span v-else class="text-gray-400">{{ t('keys.selectGroup') }}</span>
+            <span v-else class="text-[var(--md-sys-color-placeholder)]">{{ t('keys.selectGroup') }}</span>
           </template>
           <template #option="{ option, selected }">
             <GroupOptionItem
@@ -52,7 +52,7 @@
           </template>
         </Select>
       </div>
-      <div class="key-paired-fields grid gap-3">
+      <div class="key-paired-fields grid grid-cols-1 gap-3">
         <div>
           <label :for="`${id}-attempts`" class="input-label">{{ t('keys.failover.maxRetries') }}</label>
           <input :id="`${id}-attempts`" :value="modelValue.failover_max_retries" :disabled="disabled"
@@ -66,7 +66,7 @@
             @input="update({ failover_cooldown_seconds: ($event.target as HTMLInputElement).valueAsNumber })" />
         </div>
       </div>
-      <p class="key-editor-note failover-hint text-xs leading-5">
+      <p class="key-editor-note text-xs leading-5">
         <Icon name="infoCircle" size="sm" aria-hidden="true" />{{ t('keys.failover.supportedPlatforms') }}
       </p>
     </div>
@@ -129,24 +129,3 @@ watch(() => props.primaryGroup?.id, (id, previousId) => {
   }
 })
 </script>
-
-<style scoped>
-.failover-controls {
-  border-color: color-mix(in srgb, var(--md-sys-color-outline) 65%, var(--md-sys-color-surface));
-  background: var(--md-sys-color-surface-container);
-  color: var(--md-sys-color-on-surface);
-}
-
-.failover-hint {
-  color: var(--md-sys-color-on-surface-variant);
-}
-
-.failover-controls .input-label {
-  color: var(--md-sys-color-on-surface);
-}
-
-.failover-controls .input,
-.failover-controls :deep(.select-trigger) {
-  background: var(--md-sys-color-surface);
-}
-</style>

@@ -279,8 +279,7 @@
             <div class="min-w-0 sm:col-span-full">
               <label class="input-label" for="key-form-group">{{ showEditModal ? t('keys.editor.primaryGroup') : t('keys.groupLabel') }}</label>
               <button
-                id="key-form-group" type="button" class="key-group-field"
-                :class="{ 'is-open': groupPickerTarget?.kind === 'form' }"
+                id="key-form-group" type="button" class="select-trigger key-group-field" :disabled="submitting"
                 aria-haspopup="dialog" :aria-expanded="groupPickerTarget?.kind === 'form'"
                 data-tour="key-form-group" @click="openFormGroupPicker"
               >
@@ -300,7 +299,7 @@
                   </template>
                   <span v-else class="key-group-field-placeholder">{{ t('keys.selectGroup') }}</span>
                 </span>
-                <Icon name="chevronDown" size="sm" class="key-group-field-icon" aria-hidden="true" />
+                <Icon name="chevronDown" size="sm" class="select-icon" aria-hidden="true" />
               </button>
             </div>
           </div>
@@ -1819,28 +1818,7 @@ onUnmounted(() => {
 
 /* ---------- Key form: group field that opens the group picker ---------- */
 .key-group-field {
-  display: flex;
-  width: 100%;
-  min-height: 3rem;
-  align-items: center;
-  gap: 0.75rem;
-  padding: 0.5rem 0.875rem 0.5rem 1rem;
-  border-radius: 1rem;
-  text-align: left;
-  background: var(--md-sys-color-surface-container);
-  box-shadow: inset 0 1px 2px rgb(63 52 32 / 0.06);
-  transition: background-color 160ms ease, box-shadow 160ms ease;
-}
-
-.key-group-field:hover {
-  background: color-mix(in srgb, var(--md-sys-color-surface-container) 82%, var(--md-sys-color-surface-container-high));
-}
-
-.key-group-field:focus-visible,
-.key-group-field.is-open {
-  outline: none;
-  background: var(--md-sys-color-surface);
-  box-shadow: inset 0 0 0 1.5px rgb(233 184 36 / 0.75), 0 0 0 4px rgb(233 184 36 / 0.14);
+  min-height: 2.75rem;
 }
 
 .key-group-field-value {
@@ -1855,11 +1833,6 @@ onUnmounted(() => {
 .key-group-field-placeholder {
   font-size: 0.875rem;
   color: var(--md-sys-color-placeholder);
-}
-
-.key-group-field-icon {
-  flex-shrink: 0;
-  color: var(--md-sys-color-on-surface-variant);
 }
 
 @keyframes keys-skeleton-pulse {

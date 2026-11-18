@@ -63,6 +63,7 @@ afterEach(() => {
   unmountWrapper = undefined
   document.body.innerHTML = ''
   setViewportWidth(originalInnerWidth)
+  vi.unstubAllGlobals()
   vi.restoreAllMocks()
 })
 
@@ -149,6 +150,39 @@ describe('Select dropdown viewport constraints', () => {
     expect(dropdown?.style.transform).toBe('translate(-50%, -50%)')
     expect(dropdown?.style.width).toBe('304px')
     expect(document.body.querySelector('.select-centered-backdrop')).not.toBeNull()
+  })
+
+  it('keeps a centered menu inside the visible area as a phone keyboard opens', async () => {
+    const viewport = Object.assign(new EventTarget(), { height: 640, offsetTop: 0 })
+    vi.stubGlobal('visualViewport', viewport)
+    const dropdown = await openSelect(true)
+    expect(dropdown?.style.maxHeight).toBe('624px')
+    viewport.height = 280
+    viewport.offsetTop = 60
+    viewport.dispatchEvent(new Event('resize'))
+    await nextTick()
+    expect(dropdown?.style.maxHeight).toBe('264px')
+    expect(dropdown?.style.top).toBe('200px')
+  })
+
+  it('lets touch users browse a searchable menu without opening a keyboard', async () => {
+    vi.stubGlobal('matchMedia', (query: string) => ({ matches: query === '(pointer: coarse)' }))
+    const wrapper = mount(Select, {
+      attachTo: document.body,
+      props: { modelValue: null, searchable: true, options: [{ value: 1, label: 'One' }] },
+    })
+    unmountWrapper = () => wrapper.unmount()
+    const trigger = wrapper.get('button')
+    await trigger.trigger('click')
+    await nextTick()
+    const menu = document.body.querySelector<HTMLElement>('[role="listbox"]')
+    expect(document.activeElement).toBe(menu)
+    menu?.querySelector('input')?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', isComposing: true, bubbles: true }))
+    expect(wrapper.emitted('update:modelValue')).toBeUndefined()
+    menu?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+    await nextTick()
+    expect(trigger.attributes('aria-expanded')).toBe('false')
+    expect(document.activeElement).toBe(trigger.element)
   })
 
   it('opens an opt-in wide menu leftward from a trigger near the right edge', async () => {

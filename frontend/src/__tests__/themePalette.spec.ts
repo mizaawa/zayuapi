@@ -57,6 +57,16 @@ describe('light-only Monet palette', () => {
     expect(contrastRatio(bodyText, background)).toBeGreaterThanOrEqual(4.5)
   })
 
+  it('keeps dropdown labels, chevrons and focus indicators readable on the light states', () => {
+    const ink = getVariable(root, '--md-sys-color-on-surface-variant')
+    const focus = getVariable(root, '--select-focus')
+    for (const state of ['--select-surface', '--select-hover', '--select-selected']) {
+      const fill = getVariable(root, state)
+      expect(contrastRatio(ink, fill)).toBeGreaterThanOrEqual(4.5)
+      expect(contrastRatio(focus, fill)).toBeGreaterThanOrEqual(3)
+    }
+  })
+
   it('uses readable dark text on the brighter primary yellow', () => {
     const primary = getVariable(root, '--md-sys-color-primary')
     const onPrimary = getVariable(root, '--md-sys-color-on-primary')
