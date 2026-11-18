@@ -22,6 +22,7 @@ FRONTEND_CRITICAL_VITEST := \
 	src/components/keys/__tests__/SystemPromptSettings.spec.ts \
 	src/components/keys/__tests__/UseKeyModal.spec.ts \
 	src/components/keys/__tests__/KeyGroupPicker.spec.ts \
+	src/components/keys/__tests__/KeyFormDialog.spec.ts \
 	src/components/keys/__tests__/KeyCard.spec.ts \
 	src/components/keys/__tests__/keyCards.spec.ts \
 	src/components/keys/__tests__/KeyTokenMix.spec.ts \
@@ -35,6 +36,7 @@ FRONTEND_CRITICAL_VITEST := \
 	src/components/common/__tests__/DataTable.spec.ts \
 	src/utils/__tests__/accountQuota.spec.ts \
 	src/views/admin/__tests__/AccountsView.cards.spec.ts \
+	src/components/admin/account/__tests__/AccountTableFilters.spec.ts \
 	src/views/admin/__tests__/AccountsView.cardRate.spec.ts \
 	src/views/admin/__tests__/AccountsView.cardProbe.spec.ts \
 	src/views/admin/__tests__/GroupsView.fastRate.spec.ts \

@@ -17,10 +17,10 @@ const groups = [
 
 let wrapper: VueWrapper | undefined
 
-function mountFilters(group = '') {
+function mountFilters(group = '', stubTeleport = true) {
   wrapper = mount(AccountTableFilters, {
     props: { searchQuery: '', filters: { platform: '', type: '', status: '', privacy_mode: '', group }, groups },
-    global: { stubs: { teleport: true } },
+    global: { stubs: { teleport: stubTeleport } },
     attachTo: document.body
   })
   return wrapper
@@ -34,6 +34,23 @@ async function openGroups(target: VueWrapper) {
 afterEach(() => {
   wrapper?.unmount()
   wrapper = undefined
+})
+
+describe('AccountTableFilters platform filter', () => {
+  it('themes only the platform trigger and its teleported list without changing selection', async () => {
+    const filters = mountFilters('', false)
+    const trigger = filters.get('button[aria-label="admin.accounts.columns.platform"]')
+    expect(filters.findAll('button.select-warm')).toHaveLength(1)
+    await trigger.trigger('click')
+
+    const menu = document.getElementById(trigger.attributes('aria-controls'))!
+    expect(menu.parentElement).toBe(document.body)
+    expect(menu.classList.contains('select-warm')).toBe(true)
+    const option = Array.from(menu.querySelectorAll<HTMLElement>('[role="option"]')).find(el => el.textContent?.trim() === 'Gemini')!
+    option.click()
+    expect(filters.emitted('update:filters')?.[0]).toEqual([expect.objectContaining({ platform: 'gemini' })])
+    expect(filters.emitted('change')).toHaveLength(1)
+  })
 })
 
 describe('AccountTableFilters group filter', () => {

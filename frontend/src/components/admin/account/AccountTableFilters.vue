@@ -9,7 +9,15 @@
       @update:model-value="$emit('update:searchQuery', $event)"
       @search="$emit('change')"
     />
-    <Select :model-value="filters.platform" class="account-filter" :options="pOpts" @update:model-value="updatePlatform" @change="$emit('change')" />
+    <Select
+      :model-value="filters.platform"
+      class="account-filter"
+      tone="warm"
+      :aria-label="t('admin.accounts.columns.platform')"
+      :options="pOpts"
+      @update:model-value="updatePlatform"
+      @change="$emit('change')"
+    />
     <Select :model-value="filters.type" class="account-filter" :options="tOpts" @update:model-value="updateType" @change="$emit('change')" />
     <Select :model-value="filters.status" class="account-filter" :options="sOpts" @update:model-value="updateStatus" @change="$emit('change')" />
     <Select :model-value="filters.privacy_mode" class="account-filter" :options="privacyOpts" @update:model-value="updatePrivacyMode" @change="$emit('change')" />

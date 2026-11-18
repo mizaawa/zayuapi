@@ -147,7 +147,7 @@ watch(
         const firstFocusable = dialogRef.value.querySelector<HTMLElement>(
           'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
         )
-        firstFocusable?.focus()
+        firstFocusable?.focus({ preventScroll: true })
       }
     } else {
       updateScrollLock(false)

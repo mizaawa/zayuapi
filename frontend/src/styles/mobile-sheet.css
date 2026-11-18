@@ -9,7 +9,7 @@
     align-items: flex-end;
     padding: max(env(safe-area-inset-top, 0px), min(3.75rem, calc(var(--sheet-height, 100dvh) * 0.08))) 0 0;
   }
-  .modal-overlay.mobile-sheet { container: mobile-dialog / size; }
+  .modal-overlay.mobile-sheet { container: mobile-dialog / size; overflow: clip; }
   .mobile-sheet > .modal-content.sheet-panel, .mobile-sheet > .kgp-panel.sheet-panel {
     width: 100%;
     max-width: none;
@@ -41,6 +41,21 @@
   }
   .mobile-sheet .modal-close { min-width: 2.75rem; min-height: 2.75rem; }
   @media (prefers-reduced-motion: no-preference) {
+    .mobile-sheet:is(.modal-enter-active, .kgp-enter-active) { --sheet-motion: 280ms var(--theme-ease-out); }
+    .mobile-sheet:is(.modal-leave-active, .kgp-leave-active) { --sheet-motion: 200ms ease-in; }
+
+    /* Vue waits on the overlay. Fade only its scrim, for as long as the panel slides. */
+    .mobile-sheet:is(.modal-enter-active, .modal-leave-active) {
+      transition: background-color var(--sheet-motion), backdrop-filter var(--sheet-motion);
+    }
+    .mobile-sheet:is(.modal-enter-from, .modal-leave-to) {
+      background-color: transparent;
+      backdrop-filter: blur(0) saturate(1);
+      opacity: 1;
+    }
+    .mobile-sheet:is(.modal-enter-active, .modal-leave-active, .kgp-enter-active, .kgp-leave-active) > .sheet-panel {
+      transition: transform var(--sheet-motion);
+    }
     :is(.modal-enter-from, .modal-leave-to, .kgp-enter-from, .kgp-leave-to).mobile-sheet > .sheet-panel {
       transform: translateY(100%);
       opacity: 1;
