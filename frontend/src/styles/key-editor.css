@@ -208,3 +208,29 @@
   .key-editor-panel .modal-header, .key-editor-panel .modal-footer { padding-block: 0.5rem; }
   .key-editor-tabs { margin-bottom: 0.5rem; }
 }
+
+/* A phone sheet reads as a single settings list, not cards stacked inside another card. */
+@media (max-width: 639.98px), (pointer: coarse) and (max-height: 540px) and (max-width: 960px) {
+  .key-editor-panel.sheet-panel { --ke-pad: clamp(1rem, 4vw, 1.5rem); }
+  .key-editor-panel .modal-header { padding: 0 var(--ke-pad) 0.625rem; background: transparent; }
+  .key-editor-panel :is(.key-editor-eyebrow, .key-editor-mark, .key-form-section-icon, .key-editor-created) { display: none; }
+  .key-editor-title-line { flex-direction: column; align-items: start; gap: 0.125rem; }
+  .key-editor-name { max-width: 100%; padding: 0; border: 0; }
+  .key-editor-panel .modal-close { border: 0; }
+  .key-editor-tabs { margin-bottom: 0; }
+  .key-editor-panel .modal-body { padding: 1rem var(--ke-pad); border: 0; background: var(--ke-paper); }
+  .key-editor-panel .key-form-section { margin: 0; padding: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
+  .key-editor-panel .key-form-section + .key-form-section { margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--ke-line); }
+  .key-editor-panel .key-form-section-head + .key-form-section-body { margin-top: 0.75rem; padding: 0; border: 0; }
+  .key-editor-panel .modal-footer {
+    padding: 0.625rem var(--ke-pad) max(0.625rem, env(safe-area-inset-bottom));
+    border-top: 1px solid var(--ke-line);
+  }
+  .key-editor-panel .modal-footer .btn { min-height: 2.75rem; }
+}
+
+/* Keep room to edit even above a landscape keyboard; Save and Close stay available. */
+@container mobile-dialog (max-height: 320px) {
+  .key-editor-panel:has(.modal-body :is(input, textarea):focus) :is(.key-editor-tabs, .key-editor-name, .sheet-handle) { display: none; }
+  .key-editor-panel .modal-header { padding-block: 0; }
+}

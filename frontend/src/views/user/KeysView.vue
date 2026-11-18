@@ -208,6 +208,7 @@
 
     <BaseDialog
       :show="showFailoverModal"
+      mobile-sheet
       :title="t('keys.failover.group')"
       width="normal"
       @close="closeFailoverModal"
@@ -217,7 +218,7 @@
           v-if="selectedFailoverKey"
           id="dialog-key-failover"
           v-model="failoverSettings"
-          :primary-group="failoverPrimaryGroup"
+          :key-name="selectedFailoverKey.name" :primary-group="failoverPrimaryGroup"
           :groups="groups"
           :user-group-rates="userGroupRates"
           :disabled="savingFailover || releasingFailover"
@@ -278,29 +279,10 @@
             </fieldset>
             <div class="min-w-0 sm:col-span-full">
               <label class="input-label" for="key-form-group">{{ showEditModal ? t('keys.editor.primaryGroup') : t('keys.groupLabel') }}</label>
-              <button
-                id="key-form-group" type="button" class="select-trigger key-group-field" :disabled="submitting"
-                aria-haspopup="dialog" :aria-expanded="groupPickerTarget?.kind === 'form'"
-                data-tour="key-form-group" @click="openFormGroupPicker"
-              >
-                <span class="key-group-field-value">
-                  <template v-if="editPrimaryGroup">
-                    <GroupBadge
-                      class="max-w-full"
-                      :name="editPrimaryGroup.name" :platform="editPrimaryGroup.platform"
-                      :subscription-type="editPrimaryGroup.subscription_type"
-                      :rate-multiplier="editPrimaryGroup.rate_multiplier" :user-rate-multiplier="userGroupRates[editPrimaryGroup.id]"
-                      :peak-rate-enabled="editPrimaryGroup.peak_rate_enabled" :peak-start="editPrimaryGroup.peak_start"
-                      :peak-end="editPrimaryGroup.peak_end" :peak-rate-multiplier="editPrimaryGroup.peak_rate_multiplier"
-                    />
-                    <span v-if="editPrimaryGroup.is_blocked_for_user === true || isBlockedGroupId(editPrimaryGroup.id)"
-                      class="inline-flex shrink-0 items-center rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-semibold text-red-700"
-                    >{{ t('common.groupBlocked') }}</span>
-                  </template>
-                  <span v-else class="key-group-field-placeholder">{{ t('keys.selectGroup') }}</span>
-                </span>
-                <Icon name="chevronDown" size="sm" class="select-icon" aria-hidden="true" />
-              </button>
+              <KeyGroupField id="key-form-group" data-tour="key-form-group" :disabled="submitting"
+                :group="editPrimaryGroup" :user-rate="editPrimaryGroup && userGroupRates[editPrimaryGroup.id]"
+                :blocked="editPrimaryGroup && (editPrimaryGroup.is_blocked_for_user || isBlockedGroupId(editPrimaryGroup.id))"
+                :open="groupPickerTarget?.kind === 'form'" @click="openFormGroupPicker" />
             </div>
           </div>
         </KeyFormSection>
@@ -314,7 +296,7 @@
         </KeyFormSection>
         <FailoverSettings
           v-if="showEditModal && supportsFailover(editPrimaryGroup)" id="edit-key-failover" v-model="failoverSettings"
-          :primary-group="editPrimaryGroup" :groups="groups" :user-group-rates="userGroupRates" :disabled="submitting"
+          :key-name="formData.name" :primary-group="editPrimaryGroup" :groups="groups" :user-group-rates="userGroupRates" :disabled="submitting"
         />
       </template>
 
@@ -547,7 +529,7 @@ import {
   type KeyCardField,
   type KeySort
 } from '@/components/keys/keyCards'
-import GroupBadge from '@/components/common/GroupBadge.vue'
+import KeyGroupField from '@/components/keys/KeyGroupField.vue'
 import type { ApiKey, ApiKeyFailoverSettings, ApiKeySystemPromptSettings, CustomEndpoint, Group, PublicSettings, UpdateApiKeyRequest } from '@/types'
 import type { BatchApiKeyUsageStats } from '@/api/usage'
 import { formatDateTime } from '@/utils/format'
@@ -900,9 +882,10 @@ const groupPickerTitle = computed(() =>
   groupPickerTarget.value?.kind === 'key' ? t('keys.groupPicker.changeTitle') : t('keys.selectGroup')
 )
 
-const groupPickerSubtitle = computed(() =>
-  groupPickerKey.value ? t('keys.groupPicker.forKey', { name: groupPickerKey.value.name }) : ''
-)
+const groupPickerSubtitle = computed(() => {
+  const name = groupPickerTarget.value?.kind === 'form' ? formData.value.name : groupPickerKey.value?.name
+  return name ? t('keys.groupPicker.forKey', { name }) : ''
+})
 
 const openFormGroupPicker = () => {
   groupPickerTarget.value = { kind: 'form' }
@@ -1814,25 +1797,6 @@ onUnmounted(() => {
   margin-bottom: 0.5rem;
   font-size: 0.875rem;
   color: var(--md-sys-color-on-surface-variant);
-}
-
-/* ---------- Key form: group field that opens the group picker ---------- */
-.key-group-field {
-  min-height: 2.75rem;
-}
-
-.key-group-field-value {
-  display: flex;
-  min-width: 0;
-  flex: 1;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.375rem;
-}
-
-.key-group-field-placeholder {
-  font-size: 0.875rem;
-  color: var(--md-sys-color-placeholder);
 }
 
 @keyframes keys-skeleton-pulse {

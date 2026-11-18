@@ -4,14 +4,16 @@
       <div
         v-if="show"
         class="modal-overlay"
-        :style="zIndexStyle"
+        :class="{ 'mobile-sheet': mobileSheet }"
+        :style="[zIndexStyle, mobileSheet && { '--sheet-height': viewportHeight + 'px', '--sheet-top': viewportTop + 'px' }]"
         :aria-labelledby="dialogId"
         role="dialog"
         aria-modal="true"
         @click.self="handleClose"
       >
         <!-- Modal panel -->
-        <div ref="dialogRef" :class="['modal-content', widthClasses, panelClass]" @click.stop>
+        <div ref="dialogRef" :class="['modal-content', widthClasses, panelClass, { 'sheet-panel': mobileSheet }]" @click.stop>
+          <SheetHandle v-if="mobileSheet" @dismiss="emit('close')" />
           <!-- Header -->
           <div class="modal-header gap-3">
             <slot name="heading" :title-id="dialogId">
@@ -52,6 +54,8 @@ const openDialogs = new Set<string>()
 <script setup lang="ts">
 import { computed, watch, onMounted, onUnmounted, ref, nextTick } from 'vue'
 import Icon from '@/components/icons/Icon.vue'
+import SheetHandle from './SheetHandle.vue'
+import { usePickerViewport } from '@/composables/usePickerViewport'
 import { setDocumentScrollLock } from '@/utils/documentScrollLock'
 
 // 生成唯一ID以避免多个对话框时ID冲突
@@ -68,6 +72,7 @@ interface Props {
   title: string
   width?: DialogWidth
   panelClass?: string
+  mobileSheet?: boolean
   closeOnEscape?: boolean
   closeOnClickOutside?: boolean
   showCloseButton?: boolean
@@ -87,6 +92,7 @@ const props = withDefaults(defineProps<Props>(), {
 })
 
 const emit = defineEmits<Emits>()
+const { height: viewportHeight, top: viewportTop } = usePickerViewport(() => props.show && !!props.mobileSheet)
 
 // Custom z-index style (overrides the default z-50 from CSS)
 const zIndexStyle = computed(() => {

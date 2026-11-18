@@ -2,19 +2,20 @@
   <Teleport to="body">
     <Transition name="kgp" :duration="{ enter: 280, leave: 200 }">
       <div
-        v-if="show" class="kgp-layer" data-test="key-group-picker"
-        :style="{ top: `${viewportTop}px`, height: `${viewportHeight}px` }"
+        v-if="show" class="kgp-layer mobile-sheet" data-test="key-group-picker"
+        :style="{ top: `${viewportTop}px`, height: `${viewportHeight}px`, '--sheet-height': `${viewportHeight}px` }"
       >
         <div class="kgp-backdrop" aria-hidden="true" @click="close"></div>
         <section
           ref="panelRef"
-          class="kgp-panel"
+          class="kgp-panel sheet-panel"
           :class="{ 'is-roomy': options.length > ROOMY_OPTION_COUNT }"
           role="dialog"
           aria-modal="true"
           :aria-labelledby="titleId"
           tabindex="-1"
         >
+          <SheetHandle @dismiss="close" />
           <header class="kgp-header">
             <div class="kgp-heading">
               <h2 :id="titleId" class="kgp-title">{{ title || t('keys.selectGroup') }}</h2>
@@ -66,7 +67,7 @@
               </button>
             </div>
 
-            <div class="kgp-platforms" role="group" :aria-label="t('keys.groupPicker.platformFilter')">
+            <div v-if="showPlatforms" class="kgp-platforms" role="group" :aria-label="t('keys.groupPicker.platformFilter')">
               <button
                 v-for="chip in chips"
                 :key="chip.value"
@@ -176,6 +177,7 @@ let pickerCounter = 0
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Icon from '@/components/icons/Icon.vue'
+import SheetHandle from '@/components/common/SheetHandle.vue'
 import PlatformIcon from '@/components/common/PlatformIcon.vue'
 import { useAppStore } from '@/stores/app'
 import { usePickerViewport } from '@/composables/usePickerViewport'
@@ -200,10 +202,12 @@ const props = withDefaults(defineProps<{
   selectedId?: number | null
   title?: string
   subtitle?: string
+  showPlatforms?: boolean
 }>(), {
   selectedId: null,
   title: '',
-  subtitle: ''
+  subtitle: '',
+  showPlatforms: true
 })
 
 const emit = defineEmits<{
@@ -453,7 +457,8 @@ onBeforeUnmount(() => teardown(false))
 </script>
 
 <style scoped>
-.kgp-layer {
+/* Keep desktop geometry below the shared mobile sheet rules, even in a lazy-loaded CSS chunk. */
+:where(.kgp-layer) {
   position: fixed;
   inset: 0;
   z-index: 100000010;
@@ -491,7 +496,7 @@ onBeforeUnmount(() => teardown(false))
     0 0.35rem 1rem rgb(63 52 32 / 0.08);
 }
 
-.kgp-panel.is-roomy {
+.kgp-panel:where(.is-roomy) {
   height: min(46rem, 100%);
 }
 
@@ -953,22 +958,8 @@ onBeforeUnmount(() => teardown(false))
 
 /* ---------- Phones: a bottom sheet with thumb-sized targets ---------- */
 @media (max-width: 639.98px) {
-  .kgp-layer {
-    align-items: flex-end;
-    padding: min(3.5rem, 6dvh) 0 0;
-  }
-
-  .kgp-panel {
-    width: 100%;
-    border-radius: 1.5rem 1.5rem 0 0;
-  }
-
-  .kgp-panel.is-roomy {
-    height: 100%;
-  }
-
   .kgp-header {
-    padding: 1.125rem 1.125rem 0.75rem;
+    padding: 0.125rem 1.125rem 0.75rem;
   }
 
   .kgp-tools {
@@ -1037,7 +1028,7 @@ onBeforeUnmount(() => teardown(false))
 
 /* Landscape phones and short windows: give the height to the rows. */
 @media (min-width: 640px) and (max-height: 560px) {
-  .kgp-layer {
+  :where(.kgp-layer) {
     padding: 0.75rem;
   }
 

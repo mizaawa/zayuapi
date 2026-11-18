@@ -7,50 +7,11 @@
     <div class="grid min-w-0 grid-cols-1 gap-3" data-test="failover-controls">
       <div>
         <label :for="`${id}-group`" class="input-label">{{ t('keys.failover.group') }}</label>
-        <Select
-          :id="`${id}-group`"
-          :model-value="modelValue.failover_group_id"
-          :options="groupOptions"
-          :disabled="disabled"
-          centered
-          :placeholder="t('keys.selectGroup')"
-          :searchable="true"
-          :search-placeholder="t('keys.searchGroup')"
-          :aria-label="t('keys.failover.group')"
-          data-test="failover-group"
-          @update:model-value="update({ failover_group_id: $event as number | null })"
-        >
-          <template #selected="{ option }">
-            <GroupBadge
-              v-if="option" class="max-w-full"
-              :name="(option as GroupOption).label"
-              :platform="(option as GroupOption).platform"
-              :subscription-type="(option as GroupOption).subscriptionType"
-              :rate-multiplier="(option as GroupOption).rate"
-              :user-rate-multiplier="(option as GroupOption).userRate"
-              :peak-rate-enabled="(option as GroupOption).peakRateEnabled"
-              :peak-start="(option as GroupOption).peakStart"
-              :peak-end="(option as GroupOption).peakEnd"
-              :peak-rate-multiplier="(option as GroupOption).peakRateMultiplier"
-            />
-            <span v-else class="text-[var(--md-sys-color-placeholder)]">{{ t('keys.selectGroup') }}</span>
-          </template>
-          <template #option="{ option, selected }">
-            <GroupOptionItem
-              :name="(option as GroupOption).label"
-              :platform="(option as GroupOption).platform"
-              :subscription-type="(option as GroupOption).subscriptionType"
-              :rate-multiplier="(option as GroupOption).rate"
-              :user-rate-multiplier="(option as GroupOption).userRate"
-              :peak-rate-enabled="(option as GroupOption).peakRateEnabled"
-              :peak-start="(option as GroupOption).peakStart"
-              :peak-end="(option as GroupOption).peakEnd"
-              :peak-rate-multiplier="(option as GroupOption).peakRateMultiplier"
-              :description="(option as GroupOption).description"
-              :selected="selected"
-            />
-          </template>
-        </Select>
+        <KeyGroupField :id="`${id}-group`" :disabled="disabled" :open="pickerOpen" :group="selectedGroup"
+          :user-rate="selectedGroup && userGroupRates[selectedGroup.id]" data-test="failover-group" @click="pickerOpen = true" />
+        <KeyGroupPicker :show="pickerOpen" :options="groupOptions" :selected-id="modelValue.failover_group_id"
+          :title="t('keys.failover.group')" :subtitle="keyName ? t('keys.groupPicker.forKey', { name: keyName }) : ''"
+          :show-platforms="false" @select="pickGroup" @close="pickerOpen = false" />
       </div>
       <div class="key-paired-fields grid grid-cols-1 gap-3">
         <div>
@@ -74,17 +35,18 @@
 </template>
 
 <script setup lang="ts">
-import { computed, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Icon from '@/components/icons/Icon.vue'
 import KeyFormSection from './KeyFormSection.vue'
-import Select from '@/components/common/Select.vue'
-import GroupBadge from '@/components/common/GroupBadge.vue'
-import GroupOptionItem from '@/components/common/GroupOptionItem.vue'
+import KeyGroupField from './KeyGroupField.vue'
+import KeyGroupPicker from './KeyGroupPicker.vue'
+import type { KeyGroupOption } from './keyGroupFilters'
 import type { ApiKeyFailoverSettings, Group } from '@/types'
 
 const props = withDefaults(defineProps<{
   id: string
+  keyName?: string
   modelValue: ApiKeyFailoverSettings
   primaryGroup?: Group
   groups: Group[]
@@ -97,13 +59,15 @@ const emit = defineEmits<{
 }>()
 const { t } = useI18n()
 
+const pickerOpen = ref(false)
 const eligibleGroups = computed(() => props.groups.filter((group) =>
   props.primaryGroup?.platform !== 'custom' && props.primaryGroup?.platform !== 'composite' &&
   props.primaryGroup && group.platform === props.primaryGroup.platform &&
   group.id !== props.primaryGroup.id && group.status === 'active' && !group.is_blocked_for_user
 ))
 
-const groupOptions = computed(() => eligibleGroups.value.map((group) => ({
+const selectedGroup = computed(() => eligibleGroups.value.find(group => group.id === props.modelValue.failover_group_id))
+const groupOptions = computed<KeyGroupOption[]>(() => eligibleGroups.value.map((group) => ({
   value: group.id,
   label: group.name,
   description: group.description,
@@ -116,7 +80,14 @@ const groupOptions = computed(() => eligibleGroups.value.map((group) => ({
   peakEnd: group.peak_end,
   peakRateMultiplier: group.peak_rate_multiplier
 })))
-type GroupOption = typeof groupOptions.value[number]
+function pickGroup(option: KeyGroupOption) {
+  pickerOpen.value = false
+  if (!props.disabled) update({ failover_group_id: option.value })
+}
+
+watch(() => props.disabled || !props.modelValue.failover_enabled, locked => {
+  if (locked) pickerOpen.value = false
+})
 
 const update = (changes: Partial<ApiKeyFailoverSettings>) => {
   emit('update:modelValue', { ...props.modelValue, ...changes })

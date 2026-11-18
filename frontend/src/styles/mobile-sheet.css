@@ -1,0 +1,49 @@
+.sheet-handle { display: none; }
+
+/* A narrow window or a landscape phone. Other dialogs and tablet/desktop layouts stay untouched. */
+@media (max-width: 639.98px), (pointer: coarse) and (max-height: 540px) and (max-width: 960px) {
+  .modal-overlay.mobile-sheet, .kgp-layer.mobile-sheet {
+    top: var(--sheet-top, 0px);
+    bottom: auto;
+    height: var(--sheet-height, 100dvh);
+    align-items: flex-end;
+    padding: max(env(safe-area-inset-top, 0px), min(3.75rem, calc(var(--sheet-height, 100dvh) * 0.08))) 0 0;
+  }
+  .modal-overlay.mobile-sheet { container: mobile-dialog / size; }
+  .mobile-sheet > .modal-content.sheet-panel, .mobile-sheet > .kgp-panel.sheet-panel {
+    width: 100%;
+    max-width: none;
+    height: auto;
+    max-height: 100%;
+    margin: 0;
+    border: 0;
+    border-radius: 1.5rem 1.5rem 0 0;
+    translate: 0 var(--sheet-pull, 0px);
+  }
+  .sheet-handle {
+    display: grid;
+    flex: none;
+    place-items: center;
+    height: 1.375rem;
+    cursor: grab;
+    touch-action: none;
+  }
+  .sheet-handle::after {
+    content: '';
+    width: 2.25rem;
+    height: 0.25rem;
+    border-radius: 1rem;
+    background: var(--select-line);
+  }
+  .mobile-sheet .modal-footer {
+    padding-bottom: max(0.75rem, env(safe-area-inset-bottom, 0px));
+    border-radius: 0;
+  }
+  .mobile-sheet .modal-close { min-width: 2.75rem; min-height: 2.75rem; }
+  @media (prefers-reduced-motion: no-preference) {
+    :is(.modal-enter-from, .modal-leave-to, .kgp-enter-from, .kgp-leave-to).mobile-sheet > .sheet-panel {
+      transform: translateY(100%);
+      opacity: 1;
+    }
+  }
+}

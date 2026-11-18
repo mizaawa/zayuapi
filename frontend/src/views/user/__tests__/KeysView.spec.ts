@@ -269,6 +269,13 @@ const openFieldMenu = async (wrapper: VueWrapper) => {
   return wrapper.get('[data-test="keys-field-menu"]')
 }
 
+const openFallbackPicker = async (wrapper: VueWrapper) => {
+  await wrapper.get('[data-test="failover-group"]').trigger('click')
+  return wrapper.get('[data-test="key-group-picker"]')
+}
+const optionIds = (picker: ReturnType<VueWrapper['get']>) =>
+  picker.findAll('[role="option"]').map(row => row.attributes('data-test'))
+
 const pickFormGroup = async (wrapper: VueWrapper, groupId: number) => {
   await wrapper.get('[data-tour="key-form-group"]').trigger('click')
   await wrapper.get(`[data-test="key-group-option-${groupId}"]`).trigger('click')
@@ -975,8 +982,11 @@ describe('user KeysView', () => {
     expect(wrapper.get('[data-test="failover-status-1"]').classes()).toContain('dark:text-dark-400')
     await wrapper.get('[data-test="failover-status-1"]').trigger('click')
     await wrapper.get('[data-test="failover-toggle"]').trigger('click')
-    const selector = wrapper.findAllComponents({ name: 'Select' }).find((select) => select.attributes('data-test') === 'failover-group')!
-    expect(selector.props('options').map((option: { value: number }) => option.value)).toEqual([2, 3])
+    const picker = await openFallbackPicker(wrapper)
+    expect(optionIds(picker)).toEqual(['key-group-option-2', 'key-group-option-3'])
+    expect(picker.find('[data-test="key-group-platform-all"]').exists()).toBe(false)
+    await picker.get('[data-test="key-group-picker-close"]').trigger('click')
+    expect(updateKey).not.toHaveBeenCalled()
     expect(wrapper.get('[data-test="failover-max-retries"]').element).toHaveProperty('value', '3')
     expect(wrapper.get('[data-test="failover-cooldown"]').element).toHaveProperty('value', '300')
   })
@@ -992,11 +1002,11 @@ describe('user KeysView', () => {
     expect((wrapper.get('[data-test="failover-status-1"]').element as HTMLButtonElement).disabled).toBe(false)
     await wrapper.get('[data-test="failover-status-1"]').trigger('click')
     await wrapper.get('[data-test="failover-toggle"]').trigger('click')
-    const selector = wrapper.findAllComponents({ name: 'Select' }).find((select) => select.attributes('data-test') === 'failover-group')!
-    expect(selector.props('options').map((option: { value: number }) => option.value)).toEqual([2, 3])
-    expect(selector.props('options').every((option: { platform: string }) => option.platform === platform)).toBe(true)
-    selector.vm.$emit('update:modelValue', 2)
-    await nextTick()
+    const picker = await openFallbackPicker(wrapper)
+    expect(optionIds(picker)).toEqual(['key-group-option-2', 'key-group-option-3'])
+    await picker.get('[data-test="key-group-option-2"]').trigger('click')
+    expect(wrapper.find('[data-test="key-group-picker"]').exists()).toBe(false)
+    expect(updateKey).not.toHaveBeenCalled()
     await wrapper.get('#failover-form').trigger('submit')
     await flushPromises()
     expect(updateKey).toHaveBeenLastCalledWith(1, {
@@ -1012,9 +1022,8 @@ describe('user KeysView', () => {
     const wrapper = await mountView()
     await wrapper.get('[data-test="failover-status-1"]').trigger('click')
     await wrapper.get('[data-test="failover-toggle"]').trigger('click')
-    const selector = wrapper.findAllComponents({ name: 'Select' }).find((select) => select.attributes('data-test') === 'failover-group')!
-    selector.vm.$emit('update:modelValue', 2)
-    await nextTick()
+    const picker = await openFallbackPicker(wrapper)
+    await picker.get('[data-test="key-group-option-2"]').trigger('click')
     await wrapper.get('[data-test="failover-max-retries"]').setValue('4')
     await wrapper.get('[data-test="failover-cooldown"]').setValue('600')
     await wrapper.get('#failover-form').trigger('submit')
@@ -1053,12 +1062,13 @@ describe('user KeysView', () => {
     await pickFormGroup(wrapper, 3)
     expect(wrapper.get('[data-test="failover-toggle"]').attributes('aria-checked')).toBe('false')
     await wrapper.get('[data-test="failover-toggle"]').trigger('click')
-    const failoverSelector = wrapper.findAllComponents({ name: 'Select' }).find((select) => select.attributes('data-test') === 'failover-group')!
-    expect(failoverSelector.props('modelValue')).toBe(null)
-    expect(failoverSelector.props('options')).toEqual([])
+    expect(wrapper.get('[data-test="failover-group"]').text()).toContain('keys.selectGroup')
+    const picker = await openFallbackPicker(wrapper)
+    expect(optionIds(picker)).toEqual([])
+    await picker.get('[data-test="key-group-picker-close"]').trigger('click')
 
     await pickFormGroup(wrapper, 2)
-    expect(failoverSelector.props('options').map((option: { value: number }) => option.value)).toEqual([1])
+    expect(optionIds(await openFallbackPicker(wrapper))).toEqual(['key-group-option-1'])
   })
 
   it('refreshes active failover state without overwriting an unsaved dialog draft', async () => {

@@ -4,6 +4,7 @@
     :title="editingKey ? t('keys.editKey') : t('keys.createKey')"
     :width="editingKey ? 'wide' : 'normal'"
     :panel-class="editingKey ? 'key-editor-panel' : undefined"
+    :mobile-sheet="!!editingKey"
     @close="emit('close')"
   >
     <template v-if="editingKey" #heading="{ titleId }">
