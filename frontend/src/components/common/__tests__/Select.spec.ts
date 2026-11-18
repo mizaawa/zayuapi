@@ -102,16 +102,17 @@ describe('Select dropdown viewport constraints', () => {
     expect(dropdown?.style.maxWidth).toBe('996px')
   })
 
-  it('shrinks the minimum width to fit near the right viewport edge', async () => {
+  it('opens a right-column phone filter leftward without squeezing the menu', async () => {
     setViewportWidth(320)
     mockTriggerRect(220, 80)
 
     const dropdown = await openSelect()
 
     expect(dropdown).not.toBeNull()
-    expect(dropdown?.style.left).toBe('220px')
-    expect(dropdown?.style.minWidth).toBe('92px')
-    expect(dropdown?.style.maxWidth).toBe('92px')
+    expect(dropdown?.style.left).toBe('')
+    expect(dropdown?.style.right).toBe('20px')
+    expect(dropdown?.style.minWidth).toBe('200px')
+    expect(dropdown?.style.maxWidth).toBe('292px')
   })
 
   it('clamps a trigger left of the viewport to the safe padding', async () => {
@@ -126,16 +127,27 @@ describe('Select dropdown viewport constraints', () => {
     expect(dropdown?.style.maxWidth).toBe('304px')
   })
 
-  it('clamps an offscreen-right trigger position to the viewport boundary', async () => {
+  it('keeps the menu usable when the trigger scrolls past the right edge', async () => {
     setViewportWidth(320)
     mockTriggerRect(400, 80)
 
     const dropdown = await openSelect()
 
     expect(dropdown).not.toBeNull()
-    expect(dropdown?.style.left).toBe('312px')
-    expect(dropdown?.style.minWidth).toBe('0px')
-    expect(dropdown?.style.maxWidth).toBe('0px')
+    expect(dropdown?.style.right).toBe('8px')
+    expect(dropdown?.style.minWidth).toBe('200px')
+    expect(dropdown?.style.maxWidth).toBe('304px')
+  })
+
+  it('uses the padded viewport when a wide menu cannot fit on either side', async () => {
+    setViewportWidth(320)
+    mockTriggerRect(130, 60)
+
+    const dropdown = await openSelect(false, 360)
+
+    expect(dropdown?.style.right).toBe('8px')
+    expect(dropdown?.style.minWidth).toBe('304px')
+    expect(dropdown?.style.maxWidth).toBe('304px')
   })
 
   it('centers the opt-in group picker within the viewport', async () => {

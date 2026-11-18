@@ -168,11 +168,7 @@ interface Props {
   ariaLabel?: string
   ariaDescribedby?: string
   centered?: boolean
-  /**
-   * Opt-in preferred menu width in px. When the space right of the trigger is
-   * narrower, the menu opens leftward, anchored to the trigger's right edge,
-   * instead of shrinking at the viewport edge.
-   */
+  /** Preferred minimum menu width in pixels, capped to the padded viewport. */
   dropdownMinWidth?: number
 }
 
@@ -241,31 +237,24 @@ const dropdownStyle = computed(() => {
   }
 
   const viewportRight = Math.max(dropdownViewportPadding, window.innerWidth - dropdownViewportPadding)
-  const left = Math.min(
-    Math.max(dropdownViewportPadding, rect.left),
-    viewportRight
+  const left = Math.max(dropdownViewportPadding, rect.left)
+  const minWidth = Math.min(
+    Math.max(dropdownMinimumWidth, rect.width, props.dropdownMinWidth ?? 0),
+    viewportRight - dropdownViewportPadding
   )
-  const availableWidth = Math.max(0, viewportRight - left)
-  const preferredMinWidth = Math.max(dropdownMinimumWidth, rect.width, props.dropdownMinWidth ?? 0)
-  let style: Record<string, string>
-  if (props.dropdownMinWidth && availableWidth < preferredMinWidth) {
-    const anchorRight = Math.min(Math.max(dropdownViewportPadding, rect.right), viewportRight)
-    const maxWidth = Math.max(0, anchorRight - dropdownViewportPadding)
-    style = {
-      position: 'fixed',
-      right: `${window.innerWidth - anchorRight}px`,
-      minWidth: `${Math.min(preferredMinWidth, maxWidth)}px`,
-      maxWidth: `${maxWidth}px`,
-      zIndex: '100000020'
-    }
+  const style: Record<string, string> = {
+    position: 'fixed',
+    minWidth: `${minWidth}px`,
+    zIndex: '100000020'
+  }
+  if (left + minWidth <= viewportRight) {
+    style.left = `${left}px`
+    style.maxWidth = `${viewportRight - left}px`
   } else {
-    style = {
-      position: 'fixed',
-      left: `${left}px`,
-      minWidth: `${Math.min(preferredMinWidth, availableWidth)}px`,
-      maxWidth: `${availableWidth}px`,
-      zIndex: '100000020'
-    }
+    // Open leftward; shift off the trigger edge only if neither alignment fits.
+    const right = Math.min(viewportRight, Math.max(rect.right, dropdownViewportPadding + minWidth))
+    style.right = `${window.innerWidth - right}px`
+    style.maxWidth = `${right - dropdownViewportPadding}px`
   }
 
   // Measure against the larger side first: a tall list can flip AND scroll on a short screen.
@@ -579,7 +568,7 @@ onUnmounted(() => {
 }
 
 .select-dropdown-portal .select-option-label {
-  @apply min-w-0 flex-1 truncate text-left;
+  @apply min-w-0 flex-1 break-words text-left md:truncate;
 }
 
 .select-dropdown-portal .select-empty {
