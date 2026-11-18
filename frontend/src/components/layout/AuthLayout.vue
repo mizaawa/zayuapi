@@ -1,5 +1,15 @@
 <template>
-  <div class="relative flex min-h-screen items-center justify-center overflow-hidden p-4">
+  <AuthEntryFrame
+    v-if="entry"
+    :entry="entry"
+    :site-name="siteName"
+    :site-logo="siteLogo"
+    :registration-open="appStore.cachedPublicSettings?.registration_enabled === true && !appStore.backendModeEnabled"
+    :docs-url="sanitizeUrl(appStore.docUrl || '')"
+  >
+    <slot />
+  </AuthEntryFrame>
+  <div v-else class="relative flex min-h-screen items-center justify-center overflow-hidden p-4">
     <!-- Background -->
     <div
       class="absolute inset-0 bg-gradient-to-br from-gray-50 via-primary-50/30 to-gray-100 dark:from-dark-950 dark:via-dark-900 dark:to-dark-950"
@@ -66,6 +76,9 @@
 import { computed, onMounted } from 'vue'
 import { useAppStore } from '@/stores'
 import { sanitizeUrl } from '@/utils/url'
+import AuthEntryFrame from './AuthEntryFrame.vue'
+
+defineProps<{ entry?: 'login' | 'register' }>()
 
 const appStore = useAppStore()
 

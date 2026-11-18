@@ -1,22 +1,13 @@
 <template>
-  <AuthLayout>
+  <AuthLayout entry="register">
     <div class="space-y-6">
-      <!-- Title -->
-      <div class="text-center">
-        <h2 class="text-2xl font-bold text-gray-900 dark:text-white">
-          {{ t('auth.createAccount') }}
-        </h2>
-        <p class="mt-2 text-sm text-gray-500 dark:text-dark-400">
-          {{ t('auth.signUpToStart', { siteName }) }}
-        </p>
-      </div>
 
       <aside
         v-if="registrationAnnouncement"
         role="note"
         aria-labelledby="registration-announcement-title"
         data-testid="registration-announcement"
-        class="registration-announcement relative flex items-start gap-3 rounded-2xl py-3 pl-7 pr-4"
+        class="registration-announcement relative flex items-start gap-3 rounded-2xl px-4 py-3"
       >
         <Icon name="bell" size="md" class="mt-0.5 shrink-0 text-primary-700" aria-hidden="true" />
         <div class="min-w-0 flex-1">
@@ -43,7 +34,12 @@
       </div>
 
       <!-- Registration Form -->
-      <form v-else @submit.prevent="handleRegister" class="space-y-5">
+      <form
+        v-else
+        class="entry-form"
+        :class="{ 'entry-form--paired': promoCodeEnabled && (invitationCodeEnabled || affiliateEnabled) }"
+        @submit.prevent="handleRegister"
+      >
         <!-- Email Input -->
         <div>
           <label for="email" class="input-label">
@@ -58,14 +54,20 @@
               v-model="formData.email"
               type="email"
               required
-              autofocus
+              name="email"
               autocomplete="email"
+              :aria-invalid="Boolean(errors.email)"
+              :aria-describedby="errors.email ? 'email-error' : allowedEmailDomains ? 'email-policy' : undefined"
               :disabled="registrationActionDisabled"
               class="input auth-input pl-11"
               :class="{ 'input-error': errors.email }"
               :placeholder="t('auth.emailPlaceholder')"
             />
           </div>
+          <p v-if="allowedEmailDomains && !errors.email" id="email-policy" class="input-hint">
+            {{ t('auth.entry.allowedDomains', { suffixes: allowedEmailDomains }) }}
+          </p>
+          <p v-if="errors.email" id="email-error" class="input-error-text">{{ errors.email }}</p>
         </div>
 
         <!-- Password Input -->
@@ -79,6 +81,9 @@
             </div>
             <input
               id="password"
+              name="password"
+              :aria-invalid="Boolean(errors.password)"
+              :aria-describedby="errors.password ? 'password-hint password-error' : 'password-hint'"
               v-model="formData.password"
               :type="showPassword ? 'text' : 'password'"
               required
@@ -92,19 +97,22 @@
               type="button"
               :disabled="registrationActionDisabled"
               @click="showPassword = !showPassword"
-              class="absolute inset-y-0 right-0 flex items-center pr-3.5 text-gray-400 transition-colors hover:text-gray-600 dark:hover:text-dark-300"
+              class="entry-reveal"
+              :aria-label="t(showPassword ? 'auth.entry.concealPassword' : 'auth.entry.revealPassword')"
+              aria-controls="password"
             >
               <Icon v-if="showPassword" name="eyeOff" size="md" />
               <Icon v-else name="eye" size="md" />
             </button>
           </div>
-          <p class="input-hint">
+          <p id="password-hint" class="input-hint">
             {{ t('auth.passwordHint') }}
           </p>
+          <p v-if="errors.password" id="password-error" class="input-error-text">{{ errors.password }}</p>
         </div>
 
         <!-- Invitation Code Input (Required when enabled) -->
-        <div v-if="invitationCodeEnabled">
+        <div v-if="invitationCodeEnabled" class="entry-code">
           <label for="invitation_code" class="input-label">
             {{ t('auth.invitationCodeLabel') }}
           </label>
@@ -114,6 +122,8 @@
             </div>
             <input
               id="invitation_code"
+              aria-required="true"
+              :aria-invalid="invitationValidation.invalid || Boolean(errors.invitation_code)"
               v-model="formData.invitation_code"
               type="text"
               :disabled="registrationActionDisabled"
@@ -151,7 +161,7 @@
         </div>
 
         <!-- Affiliate Invitation Code Input (Optional) -->
-        <div v-else-if="affiliateEnabled" data-testid="affiliate-invitation-field">
+        <div v-else-if="affiliateEnabled" class="entry-code" data-testid="affiliate-invitation-field">
           <label for="affiliate_code" class="input-label">
             {{ t('auth.invitationCodeLabel') }}
             <span class="ml-1 text-xs font-normal text-gray-400 dark:text-dark-500">({{ t('common.optional') }})</span>
@@ -172,7 +182,7 @@
         </div>
 
         <!-- Promo Code Input (Optional) -->
-        <div v-if="promoCodeEnabled">
+        <div v-if="promoCodeEnabled" class="entry-code">
           <label for="promo_code" class="input-label">
             {{ t('auth.promoCodeLabel') }}
             <span class="ml-1 text-xs font-normal text-gray-400 dark:text-dark-500">({{ t('common.optional') }})</span>
@@ -183,6 +193,7 @@
             </div>
             <input
               id="promo_code"
+              :aria-invalid="promoValidation.invalid"
               v-model="formData.promo_code"
               type="text"
               :disabled="registrationActionDisabled"
@@ -254,11 +265,11 @@
         <button
           type="submit"
           :disabled="registrationActionDisabled || (turnstileEnabled && !turnstileToken)"
-          class="btn btn-primary w-full"
+          class="btn btn-primary entry-submit"
         >
           <svg
             v-if="isLoading"
-            class="-ml-1 mr-2 h-4 w-4 animate-spin text-white"
+            class="h-4 w-4 animate-spin"
             fill="none"
             viewBox="0 0 24 24"
           >
@@ -276,73 +287,55 @@
               d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
             ></path>
           </svg>
-          <Icon v-else name="userPlus" size="md" class="mr-2" />
           {{
             isLoading
               ? t('auth.processing')
               : emailVerifyEnabled
-                ? t('auth.continue')
+                ? t('auth.entry.verifyEmail')
                 : t('auth.createAccount')
           }}
         </button>
-
       </form>
 
       <div v-if="showOAuthLogin" class="space-y-3 pt-1">
-        <div class="flex items-center gap-3">
-          <div class="h-px flex-1 bg-gray-200 dark:bg-dark-700"></div>
-          <span class="text-xs text-gray-500 dark:text-dark-400">
-            {{ t('auth.oauthOrContinue') }}
-          </span>
-          <div class="h-px flex-1 bg-gray-200 dark:bg-dark-700"></div>
+        <p class="entry-divider">{{ t('auth.entry.alternatives') }}</p>
+
+        <div class="entry-providers">
+          <EmailOAuthButtons
+            :class="{ 'entry-provider-pair': githubOAuthEnabled && googleOAuthEnabled }"
+            :disabled="registrationActionDisabled"
+            :aff-code="formData.aff_code"
+            :github-enabled="githubOAuthEnabled"
+            :google-enabled="googleOAuthEnabled"
+            :show-divider="false"
+            @start="handleOAuthStart"
+          />
+
+          <LinuxDoOAuthSection
+            v-if="linuxdoOAuthEnabled"
+            :disabled="registrationActionDisabled"
+            :aff-code="formData.aff_code"
+            :show-divider="false"
+            @start="handleOAuthStart"
+          />
+          <WechatOAuthSection
+            v-if="wechatOAuthEnabled"
+            :disabled="registrationActionDisabled"
+            :aff-code="formData.aff_code"
+            :show-divider="false"
+            @start="handleOAuthStart"
+          />
+          <OidcOAuthSection
+            v-if="oidcOAuthEnabled"
+            :disabled="registrationActionDisabled"
+            :provider-name="oidcOAuthProviderName"
+            :aff-code="formData.aff_code"
+            :show-divider="false"
+            @start="handleOAuthStart"
+          />
         </div>
-
-        <EmailOAuthButtons
-          :disabled="registrationActionDisabled"
-          :aff-code="formData.aff_code"
-          :github-enabled="githubOAuthEnabled"
-          :google-enabled="googleOAuthEnabled"
-          :show-divider="false"
-          @start="handleOAuthStart"
-        />
-
-        <LinuxDoOAuthSection
-          v-if="linuxdoOAuthEnabled"
-          :disabled="registrationActionDisabled"
-          :aff-code="formData.aff_code"
-          :show-divider="false"
-          @start="handleOAuthStart"
-        />
-        <WechatOAuthSection
-          v-if="wechatOAuthEnabled"
-          :disabled="registrationActionDisabled"
-          :aff-code="formData.aff_code"
-          :show-divider="false"
-          @start="handleOAuthStart"
-        />
-        <OidcOAuthSection
-          v-if="oidcOAuthEnabled"
-          :disabled="registrationActionDisabled"
-          :provider-name="oidcOAuthProviderName"
-          :aff-code="formData.aff_code"
-          :show-divider="false"
-          @start="handleOAuthStart"
-        />
       </div>
     </div>
-
-    <!-- Footer -->
-    <template #footer>
-      <p class="text-gray-500 dark:text-dark-400">
-        {{ t('auth.alreadyHaveAccount') }}
-        <router-link
-          to="/login"
-          class="font-medium text-primary-600 transition-colors hover:text-primary-500 dark:text-primary-400 dark:hover:text-primary-300"
-        >
-          {{ t('auth.signIn') }}
-        </router-link>
-      </p>
-    </template>
   </AuthLayout>
 </template>
 
@@ -427,6 +420,10 @@ const oidcOAuthProviderName = ref<string>('OIDC')
 const githubOAuthEnabled = ref<boolean>(false)
 const googleOAuthEnabled = ref<boolean>(false)
 const registrationEmailSuffixWhitelist = ref<string[]>([])
+const allowedEmailDomains = computed(() => formatRegistrationEmailSuffixWhitelistForMessage(
+  registrationEmailSuffixWhitelist.value,
+  { separator: locale.value === 'zh' ? '、' : ', ', more: (count) => t('auth.emailSuffixAllowedMore', { count }) }
+))
 const loginAgreementEnabled = ref<boolean>(false)
 const loginAgreementMode = ref<'modal' | 'checkbox' | string>('modal')
 const loginAgreementUpdatedAt = ref<string>('')
@@ -883,19 +880,9 @@ function validateEmail(email: string): boolean {
 }
 
 function buildEmailSuffixNotAllowedMessage(): string {
-  const normalizedWhitelist = normalizeRegistrationEmailSuffixWhitelist(
-    registrationEmailSuffixWhitelist.value
-  )
-  if (normalizedWhitelist.length === 0) {
-    return t('auth.emailSuffixNotAllowed')
-  }
-  const separator = String(locale.value || '').toLowerCase().startsWith('zh') ? '、' : ', '
-  return t('auth.emailSuffixNotAllowedWithAllowed', {
-    suffixes: formatRegistrationEmailSuffixWhitelistForMessage(normalizedWhitelist, {
-      separator,
-      more: (count) => t('auth.emailSuffixAllowedMore', { count })
-    })
-  })
+  return allowedEmailDomains.value
+    ? t('auth.emailSuffixNotAllowedWithAllowed', { suffixes: allowedEmailDomains.value })
+    : t('auth.emailSuffixNotAllowed')
 }
 
 function validateForm(): boolean {
@@ -1077,21 +1064,9 @@ async function handleRegister(): Promise<void> {
 
 <style scoped>
 .registration-announcement {
-  border: 1px solid color-mix(in srgb, var(--md-sys-color-primary) 32%, var(--md-sys-color-outline));
-  background: color-mix(in srgb, var(--md-sys-color-surface) 70%, transparent);
+  border: 1px solid var(--entry-line);
+  background: var(--md-sys-color-background);
   color: var(--md-sys-color-on-surface-variant);
-}
-
-.registration-announcement::before {
-  content: '';
-  position: absolute;
-  top: 12px;
-  bottom: 12px;
-  left: 12px;
-  width: 3px;
-  border-radius: 9999px;
-  background: var(--md-sys-color-primary);
-  pointer-events: none;
 }
 
 .fade-enter-active,

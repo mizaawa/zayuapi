@@ -43,6 +43,8 @@ vi.mock('vue-i18n', () => ({
 vi.mock('@/stores', () => ({
   useAuthStore: () => ({ register: vi.fn() }),
   useAppStore: () => ({
+    siteName: 'Sub2API',
+    fetchPublicSettings: vi.fn(),
     showError: vi.fn(),
     showSuccess: vi.fn(),
     showWarning: vi.fn()
@@ -61,7 +63,7 @@ function mountRegister() {
   return mount(RegisterView, {
     global: {
       stubs: {
-        AuthLayout: { template: '<div><slot /><slot name="footer" /></div>' },
+        LocaleSwitcher: true,
         Icon: true,
         TurnstileWidget: { template: '<div data-testid="turnstile-widget" />' },
         LoginAgreementPrompt: true,
@@ -111,6 +113,33 @@ describe('RegisterView invitation layout', () => {
   })
 })
 
+describe('RegisterView field guidance', () => {
+  it('describes the email policy and the next step only when configured', async () => {
+    getPublicSettingsMock.mockResolvedValueOnce({
+      ...publicSettings, email_verify_enabled: true, registration_email_suffix_whitelist: ['example.test']
+    })
+    const wrapper = mountRegister()
+    await flushPromises()
+    expect(wrapper.get('#email').attributes('aria-describedby')).toBe('email-policy')
+    expect(wrapper.get('#email-policy').text()).toContain('auth.entry.allowedDomains')
+    expect(wrapper.get('button[type=submit]').text()).toBe('auth.entry.verifyEmail')
+  })
+
+  it('labels the password reveal button in both states and keeps the password hint associated', async () => {
+    getPublicSettingsMock.mockResolvedValueOnce(publicSettings)
+    const wrapper = mountRegister()
+    await flushPromises()
+    const reveal = wrapper.get('button[aria-controls="password"]')
+    expect(wrapper.find('#email-policy').exists()).toBe(false)
+    expect(wrapper.get('button[type=submit]').text()).toBe('auth.createAccount')
+    expect(wrapper.get('#password').attributes('aria-describedby')).toBe('password-hint')
+    expect(reveal.attributes('aria-label')).toBe('auth.entry.revealPassword')
+    await reveal.trigger('click')
+    expect(reveal.attributes('aria-label')).toBe('auth.entry.concealPassword')
+    expect(wrapper.get('#password').attributes('type')).toBe('text')
+  })
+})
+
 describe('RegisterView registration announcement', () => {
   beforeEach(() => {
     getPublicSettingsMock.mockReset()
@@ -132,7 +161,7 @@ describe('RegisterView registration announcement', () => {
     expect(announcement.get('p.mt-1').text()).toBe(content)
     expect(announcement.find('img').exists()).toBe(false)
     expect(
-      wrapper.get('h2').element.compareDocumentPosition(announcement.element) &
+      wrapper.get('h1').element.compareDocumentPosition(announcement.element) &
         Node.DOCUMENT_POSITION_FOLLOWING
     ).toBeTruthy()
     expect(

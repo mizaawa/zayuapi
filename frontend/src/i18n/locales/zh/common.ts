@@ -213,6 +213,15 @@ export default {
 
   // Auth
   auth: {
+    retryVerification: '重新验证',
+    entry: {
+      home: '返回首页',
+      verifyEmail: '验证邮箱',
+      allowedDomains: '可用邮箱域名：{suffixes}',
+      revealPassword: '显示密码',
+      concealPassword: '隐藏密码',
+      alternatives: '或'
+    },
     welcomeBack: '欢迎回来',
     signInToAccount: '登录您的账户以继续',
     signIn: '登录',
@@ -256,6 +265,7 @@ export default {
     turnstileFailed: '验证失败，请重试',
     captchaVerified: '验证已完成',
     captchaLoading: '正在加载验证码…',
+    turnstileRetryHint: '如果验证码未显示，请检查网络和浏览器是否允许访问 challenges.cloudflare.com，然后重试。',
     captchaClickToVerify: '点击完成人机验证',
     captchaVerifying: '验证中…',
     completeVerification: '请完成验证',

@@ -213,6 +213,15 @@ export default {
 
   // Auth
   auth: {
+    retryVerification: 'Retry verification',
+    entry: {
+      home: 'Back to home',
+      verifyEmail: 'Verify email',
+      allowedDomains: 'Allowed email domains: {suffixes}',
+      revealPassword: 'Show password',
+      concealPassword: 'Hide password',
+      alternatives: 'or'
+    },
     welcomeBack: 'Welcome Back',
     signInToAccount: 'Sign in to your account to continue',
     signIn: 'Sign In',
@@ -257,6 +266,7 @@ export default {
     turnstileFailed: 'Verification failed, please try again',
     captchaVerified: 'Verification completed',
     captchaLoading: 'Loading verification…',
+    turnstileRetryHint: 'If verification does not appear, check that your network and browser allow challenges.cloudflare.com, then retry.',
     captchaClickToVerify: 'Click to complete verification',
     captchaVerifying: 'Verifying…',
     completeVerification: 'Please complete the verification',
