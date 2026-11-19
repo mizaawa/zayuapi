@@ -175,7 +175,7 @@ describe('GroupsView Fast billing multiplier', () => {
     const toggle = wrapper.get('[data-testid="edit-fast-rate-toggle"]')
     expect(toggle.attributes('role')).toBe('switch')
     expect(toggle.attributes('aria-checked')).toBe('false')
-    expect(toggle.classes()).toContain('bg-gray-300')
+    expect(toggle.classes()).toContain('switch-off')
     expect(wrapper.find('[data-testid="edit-fast-rate-multiplier"]').exists()).toBe(false)
 
     // The visible label is wired to the switch, so clicking the text works too.
@@ -186,7 +186,7 @@ describe('GroupsView Fast billing multiplier', () => {
     expect(toggle.attributes('aria-checked')).toBe('false')
     await toggle.trigger('click')
     expect(toggle.attributes('aria-checked')).toBe('true')
-    expect(toggle.classes()).toContain('bg-primary-500')
+    expect(toggle.classes()).toContain('switch-on')
     expect(wrapper.get('[data-testid="edit-fast-rate"]').classes()).toContain('border-primary-300')
     await wrapper.get('[data-testid="edit-fast-rate-multiplier"]').setValue('3')
 

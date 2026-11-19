@@ -46,10 +46,8 @@
                     :aria-checked="config.isSelected"
                     :aria-label="config.isSelected ? t('admin.users.deselectExclusiveGroup') : t('admin.users.selectExclusiveGroup')"
                     :data-test="`exclusive-group-checkbox-${config.groupId}`"
-                    class="flex h-6 w-6 cursor-pointer items-center justify-center rounded-md text-white shadow-sm ring-1 ring-inset transition-colors focus:outline-none focus:ring-2 focus:ring-primary-400 focus:ring-offset-1 dark:focus:ring-offset-dark-800"
-                    :class="config.isSelected
-                      ? 'bg-primary-500 ring-primary-600 dark:bg-primary-500 dark:ring-primary-300'
-                      : 'bg-gray-100 ring-gray-400 hover:bg-primary-50 hover:ring-primary-400 dark:bg-dark-700 dark:ring-dark-400 dark:hover:bg-dark-600 dark:hover:ring-primary-400'"
+                    class="flex h-6 w-6 cursor-pointer items-center justify-center rounded-md ring-1 ring-inset ring-[var(--control-focus)] transition-colors"
+                    :class="config.isSelected ? 'control-selected' : 'control-quiet'"
                     @click.stop="toggleExclusiveGroup(config.groupId)"
                   >
                     <svg v-if="config.isSelected" class="h-full w-full" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3">

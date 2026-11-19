@@ -77,9 +77,8 @@ describe('UserAllowedGroupsModal', () => {
     expect(checkbox.attributes('role')).toBe('checkbox')
     expect(checkbox.attributes('aria-checked')).toBe('false')
     expect(checkbox.classes()).toContain('ring-1')
-    expect(checkbox.classes()).toContain('ring-gray-400')
-    expect(checkbox.classes()).toContain('bg-gray-100')
-    expect(checkbox.classes()).not.toContain('bg-primary-500')
+    expect(checkbox.classes()).toContain('ring-[var(--control-focus)]')
+    expect(checkbox.classes()).toContain('control-quiet')
   })
 
   it('toggles the visible checkbox and saves the selected group', async () => {
@@ -88,8 +87,7 @@ describe('UserAllowedGroupsModal', () => {
 
     await checkbox.trigger('click')
     expect(checkbox.attributes('aria-checked')).toBe('true')
-    expect(checkbox.classes()).toContain('bg-primary-500')
-    expect(checkbox.classes()).toContain('ring-primary-600')
+    expect(checkbox.classes()).toContain('control-selected')
 
     await wrapper.get('button.btn-primary').trigger('click')
     await flushPromises()

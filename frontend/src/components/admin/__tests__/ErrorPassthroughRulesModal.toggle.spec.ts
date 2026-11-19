@@ -41,7 +41,7 @@ describe('error passthrough enabled state', () => {
     for (const finish of finishes) {
       finish(rule(!enabled))
       await flushPromises()
-      expect(toggle.classes().includes('bg-primary-600')).toBe(!enabled)
+      expect(toggle.attributes('aria-checked')).toBe(String(!enabled))
     }
   })
 
@@ -51,10 +51,12 @@ describe('error passthrough enabled state', () => {
     const toggle = wrapper.get('tbody button.relative')
     await toggle.trigger('click')
     await flushPromises()
-    expect(toggle.classes()).not.toContain('bg-primary-600')
+    expect(toggle.classes()).toContain('switch-off')
+    expect(toggle.attributes('aria-checked')).toBe('false')
     await toggle.trigger('click')
     await flushPromises()
-    expect(toggle.classes()).toContain('bg-primary-600')
+    expect(toggle.classes()).toContain('switch-on')
+    expect(toggle.attributes('aria-checked')).toBe('true')
     expect(mocks.toggleEnabled.mock.calls).toEqual([[7, false], [7, true]])
   })
 
@@ -65,7 +67,7 @@ describe('error passthrough enabled state', () => {
     const toggle = wrapper.get('tbody button.relative')
     await toggle.trigger('click')
     await flushPromises()
-    expect(toggle.classes()).toContain('bg-primary-600')
+    expect(toggle.attributes('aria-checked')).toBe('true')
     expect(mocks.showError).toHaveBeenCalledWith('admin.errorPassthrough.failedToToggle')
   })
 })
