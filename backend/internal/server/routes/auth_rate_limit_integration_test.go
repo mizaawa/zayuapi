@@ -13,6 +13,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Wei-Shaw/sub2api/internal/testutil"
 	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
 	tcredis "github.com/testcontainers/testcontainers-go/modules/redis"
@@ -46,6 +47,9 @@ func TestAuthRegisterRateLimitThresholdHitReturns429(t *testing.T) {
 
 func startAuthRouteRedis(t *testing.T, ctx context.Context) *redis.Client {
 	t.Helper()
+	if client := testutil.ExternalRedis(t, ctx, "rate_limit:auth-register:198.51.100.10"); client != nil {
+		return client
+	}
 	ensureAuthRouteDockerAvailable(t)
 
 	redisContainer, err := tcredis.Run(ctx, authRouteRedisImageTag)

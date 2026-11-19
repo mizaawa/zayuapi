@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Wei-Shaw/sub2api/internal/testutil"
 	"github.com/gin-gonic/gin"
 	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
@@ -25,7 +26,7 @@ func TestRateLimiterSetsTTLAndDoesNotRefresh(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	ctx := context.Background()
-	rdb := startRedis(t, ctx)
+	rdb := startRedis(t, ctx, "rate_limit:ttl-test:127.0.0.1")
 	limiter := NewRateLimiter(rdb)
 
 	router := gin.New()
@@ -57,7 +58,7 @@ func TestRateLimiterFixesMissingTTL(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	ctx := context.Background()
-	rdb := startRedis(t, ctx)
+	rdb := startRedis(t, ctx, "rate_limit:ttl-missing:127.0.0.1")
 	limiter := NewRateLimiter(rdb)
 
 	router := gin.New()
@@ -89,8 +90,11 @@ func performRequest(router *gin.Engine) *httptest.ResponseRecorder {
 	return recorder
 }
 
-func startRedis(t *testing.T, ctx context.Context) *redis.Client {
+func startRedis(t *testing.T, ctx context.Context, key string) *redis.Client {
 	t.Helper()
+	if client := testutil.ExternalRedis(t, ctx, key); client != nil {
+		return client
+	}
 	ensureDockerAvailable(t)
 
 	redisContainer, err := tcredis.Run(ctx, redisImageTag)
