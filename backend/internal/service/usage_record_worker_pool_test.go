@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -241,26 +242,40 @@ func TestUsageRecordWorkerPool_AutoScaleDownRequiresLowRunningUtilization(t *tes
 		AutoScaleDownPercent:  50,
 		AutoScaleUpStep:       1,
 		AutoScaleDownStep:     1,
-		AutoScaleInterval:     20 * time.Millisecond,
+		AutoScaleInterval:     time.Hour, // Tick explicitly once each workload state is established.
 		AutoScaleCooldown:     20 * time.Millisecond,
 	})
 	t.Cleanup(pool.Stop)
 
 	block := make(chan struct{})
+	release := sync.OnceFunc(func() { close(block) })
+	t.Cleanup(release)
+	started := make(chan struct{}, 2)
 	for i := 0; i < 2; i++ {
 		require.Equal(t, UsageRecordSubmitModeEnqueued, pool.Submit(func(ctx context.Context) {
+			started <- struct{}{}
 			<-block
 		}))
 	}
 
 	// 虽然 waiting=0，但 running 利用率为 100%，不应缩容。
-	time.Sleep(200 * time.Millisecond)
+	for range 2 {
+		select {
+		case <-started:
+		case <-time.After(5 * time.Second):
+			t.Fatal("both workers must start before testing downscaling")
+		}
+	}
+	require.Equal(t, int64(2), pool.Stats().RunningWorkers)
+	pool.autoScaleTick()
 	require.Equal(t, 2, pool.Stats().MaxConcurrency)
 
-	close(block)
+	release()
 	require.Eventually(t, func() bool {
-		return pool.Stats().MaxConcurrency == 1
-	}, 2*time.Second, 20*time.Millisecond)
+		return pool.Stats().RunningWorkers == 0
+	}, 5*time.Second, 10*time.Millisecond)
+	pool.autoScaleTick()
+	require.Equal(t, 1, pool.Stats().MaxConcurrency)
 }
 
 func TestUsageRecordWorkerPool_SubmitNilReceiverAndNilTask(t *testing.T) {

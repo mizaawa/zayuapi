@@ -9,6 +9,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
@@ -569,6 +570,10 @@ func TestTokenRefreshService_ProviderConcurrencyGateIsSharedAcrossBackgroundAndC
 }
 
 func TestTokenRefreshService_SaturatedProviderPreservesConcurrencyAndActualQPSStartSpacing(t *testing.T) {
+	synctest.Test(t, checkSaturatedProviderStartSpacing)
+}
+
+func checkSaturatedProviderStartSpacing(t *testing.T) {
 	const (
 		providerConcurrency = 2
 		providerQPS         = 20
@@ -631,35 +636,14 @@ func TestTokenRefreshService_SaturatedProviderPreservesConcurrencyAndActualQPSSt
 	require.Len(t, starts, attemptCount)
 	configuredSpacing := time.Second / time.Duration(providerQPS)
 
-	// The floor is a tenth of the configured spacing, not spacing minus a few
-	// milliseconds. Each start timestamp is taken after the rate gate releases
-	// the goroutine, so scheduler delay can compress one observed gap without
-	// the gate having done anything wrong: this assertion failed on a loaded
-	// machine at 13ms and again at 37ms against a 40ms floor, both times with
-	// the gate pacing correctly.
-	//
-	// A tenth still separates the two cases by a wide margin. Measured with
-	// providerQPS=20 (50ms spacing), 8 attempts, providerConcurrency=2:
-	//
-	//	gate at 50ms  -> minimum observed gap 49.97ms
-	//	gate at 0     -> minimum observed gap 22µs
-	//
-	// So an unpaced gate lands three orders of magnitude below the 5ms floor
-	// and is still caught, while jitter on a busy machine has room to move.
-	//
-	// Do not swap this for an assertion on the total span of the starts: the
-	// span is dominated by how long each attempt takes under
-	// providerConcurrency, not by the gate. Same measurement — 471ms paced
-	// against 241ms unpaced — so a span check passes with the gate disabled and
-	// tests nothing.
-	minimumObservedSpacing := configuredSpacing / 10
+	// Virtual time lets us check every pair of starts at the actual configured spacing.
 	actualMinimumSpacing := starts[1].Sub(starts[0])
 	for i := 1; i < len(starts); i++ {
 		spacing := starts[i].Sub(starts[i-1])
 		if spacing < actualMinimumSpacing {
 			actualMinimumSpacing = spacing
 		}
-		require.GreaterOrEqualf(t, spacing, minimumObservedSpacing,
+		require.GreaterOrEqualf(t, spacing, configuredSpacing,
 			"upstream starts %d and %d violated configured QPS spacing", i-1, i)
 	}
 	t.Logf("max_active=%d configured_concurrency=%d minimum_start_spacing=%s configured_spacing=%s",
