@@ -8,6 +8,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
@@ -996,6 +997,10 @@ func TestOpenAIWSConnPool_AcquireRejectsWhenEffectiveMaxConnsIsZero(t *testing.T
 }
 
 func TestOpenAIWSConnLease_ReadMessageWithContextTimeout_PerRead(t *testing.T) {
+	synctest.Test(t, checkPerReadDeadline)
+}
+
+func checkPerReadDeadline(t *testing.T) {
 	conn := newOpenAIWSConn("timeout", 1, &openAIWSBlockingConn{readDelay: 80 * time.Millisecond}, nil)
 	lease := &openAIWSConnLease{conn: conn}
 
