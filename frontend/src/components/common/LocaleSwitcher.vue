@@ -3,7 +3,8 @@
     <button
       @click="toggleDropdown"
       :disabled="switching"
-      class="flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-dark-700"
+      class="menu-trigger flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-sm font-medium transition-colors"
+      :aria-expanded="isOpen"
       :title="currentLocale?.name"
     >
       <span class="text-base">{{ currentLocale?.flag }}</span>
@@ -11,7 +12,7 @@
       <Icon
         name="chevronDown"
         size="xs"
-        class="text-gray-400 transition-transform duration-200"
+        class="select-icon transition-transform duration-200"
         :class="{ 'rotate-180': isOpen }"
       />
     </button>
@@ -19,22 +20,19 @@
     <transition name="dropdown">
       <div
         v-if="isOpen"
-        class="absolute right-0 z-50 mt-1 w-32 overflow-hidden rounded-lg border border-gray-200 bg-white shadow-lg dark:border-dark-700 dark:bg-dark-800"
+        class="menu-surface absolute right-0 z-50 mt-1 w-32 overflow-hidden rounded-lg border shadow-lg"
       >
         <button
           v-for="locale in availableLocales"
           :key="locale.code"
           :disabled="switching"
           @click="selectLocale(locale.code)"
-          class="flex w-full items-center gap-2 px-3 py-2 text-sm text-gray-700 transition-colors hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-dark-700"
-          :class="{
-            'bg-primary-50 text-primary-600 dark:bg-primary-900/20 dark:text-primary-400':
-              locale.code === currentLocaleCode
-          }"
+          class="menu-option flex w-full items-center gap-2 px-3 py-2 text-sm transition-colors"
+          :aria-pressed="locale.code === currentLocaleCode"
         >
           <span class="text-base">{{ locale.flag }}</span>
           <span>{{ locale.name }}</span>
-          <Icon v-if="locale.code === currentLocaleCode" name="check" size="sm" class="ml-auto text-primary-500" />
+          <Icon v-if="locale.code === currentLocaleCode" name="check" size="sm" class="select-icon ml-auto" />
         </button>
       </div>
     </transition>

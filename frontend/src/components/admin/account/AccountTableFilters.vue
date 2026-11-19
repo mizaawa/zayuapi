@@ -12,7 +12,6 @@
     <Select
       :model-value="filters.platform"
       class="account-filter"
-      tone="warm"
       :aria-label="t('admin.accounts.columns.platform')"
       :options="pOpts"
       @update:model-value="updatePlatform"
@@ -236,7 +235,7 @@ const gOpts = computed(() => [
 
 .account-group-check {
   flex-shrink: 0;
-  color: #976800;
+  color: var(--select-focus);
 }
 
 .tone-anthropic {

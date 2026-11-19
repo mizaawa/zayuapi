@@ -265,15 +265,6 @@ onBeforeUnmount(restoreBodyOverflow)
   width: 8px;
 }
 
-.announcement-body::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.announcement-body::-webkit-scrollbar-thumb {
-  border-radius: 4px;
-  background: rgb(215 193 106 / 0.6);
-}
-
 .announcement-foot {
   display: flex;
   flex-wrap: wrap;

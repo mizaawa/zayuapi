@@ -140,9 +140,9 @@
   min-width: 0;
   min-height: 4rem;
   padding: 0.75rem 1rem;
-  border: 1px solid rgb(233 184 36 / 0.42);
+  border: 1px solid var(--select-line);
   border-radius: 1.25rem;
-  background: var(--md-sys-color-surface);
+  background: var(--select-surface);
   color: var(--md-sys-color-on-surface);
   text-align: left;
   box-shadow: var(--theme-highlight), 0 1px 2px rgb(63 52 32 / 0.05);
@@ -153,19 +153,18 @@
 }
 
 .provider-picker-trigger:hover:not(:disabled) {
-  border-color: rgb(233 184 36 / 0.75);
+  background: var(--select-hover);
 }
 
 .provider-picker-trigger:focus-visible,
 .provider-picker-trigger.is-open {
-  outline: none;
-  border-color: var(--md-sys-color-primary);
-  box-shadow: var(--theme-highlight), 0 0 0 4px rgb(233 184 36 / 0.18);
+  outline: 2px solid var(--select-focus);
+  outline-offset: 1px;
 }
 
 .provider-picker-trigger:disabled {
   cursor: not-allowed;
-  background: color-mix(in srgb, var(--md-sys-color-surface-container) 40%, var(--md-sys-color-surface));
+  background: var(--select-hover);
 }
 
 .provider-picker-trigger:disabled:not(.is-loading) .provider-picker-copy,
@@ -219,7 +218,7 @@
 
 .provider-picker-chevron {
   flex-shrink: 0;
-  color: #976800;
+  color: var(--select-focus);
   transition: transform 220ms var(--theme-ease-out);
 }
 
@@ -247,9 +246,9 @@
   overflow-y: auto;
   overscroll-behavior: contain;
   padding: 0.5rem;
-  border: 1px solid rgb(215 193 106 / 0.5);
+  border: 1px solid var(--select-line);
   border-radius: 1.25rem;
-  background: var(--md-sys-color-surface);
+  background: var(--select-surface);
   color: var(--md-sys-color-on-surface);
   box-shadow: var(--theme-highlight), var(--theme-elevation-3);
 }
@@ -292,11 +291,12 @@
 }
 
 .provider-picker-option.is-active {
-  background: color-mix(in srgb, var(--md-sys-color-surface-container) 55%, var(--md-sys-color-surface));
+  background: var(--select-hover);
+  box-shadow: inset 0 0 0 1px var(--select-focus);
 }
 
 .provider-picker-option.is-selected {
-  background: var(--md-sys-color-surface-container);
+  background: var(--select-selected);
 }
 
 .provider-picker-option.is-unavailable {
@@ -323,7 +323,7 @@
 
 .provider-picker-check {
   flex-shrink: 0;
-  color: #976800;
+  color: var(--select-focus);
 }
 
 .provider-picker-badge {

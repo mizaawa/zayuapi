@@ -36,19 +36,21 @@ afterEach(() => {
   wrapper = undefined
 })
 
-describe('AccountTableFilters platform filter', () => {
-  it('themes only the platform trigger and its teleported list without changing selection', async () => {
+describe('AccountTableFilters shared selectors', () => {
+  it.each([
+    ['admin.accounts.allPlatforms', 'Gemini', 'platform', 'gemini'],
+    ['admin.accounts.allTypes', 'AWS Bedrock', 'type', 'bedrock'],
+  ])('%s opens the shared teleported list and updates its filter', async (label, choice, key, value) => {
     const filters = mountFilters('', false)
-    const trigger = filters.get('button[aria-label="admin.accounts.columns.platform"]')
-    expect(filters.findAll('button.select-warm')).toHaveLength(1)
+    const trigger = filters.findAll('.select-trigger').find(button => button.text() === label)!
     await trigger.trigger('click')
 
     const menu = document.getElementById(trigger.attributes('aria-controls'))!
     expect(menu.parentElement).toBe(document.body)
-    expect(menu.classList.contains('select-warm')).toBe(true)
-    const option = Array.from(menu.querySelectorAll<HTMLElement>('[role="option"]')).find(el => el.textContent?.trim() === 'Gemini')!
+    expect(menu.classList.contains('select-dropdown-portal')).toBe(true)
+    const option = Array.from(menu.querySelectorAll<HTMLElement>('[role="option"]')).find(el => el.textContent?.trim() === choice)!
     option.click()
-    expect(filters.emitted('update:filters')?.[0]).toEqual([expect.objectContaining({ platform: 'gemini' })])
+    expect(filters.emitted('update:filters')?.[0]).toEqual([expect.objectContaining({ [key]: value })])
     expect(filters.emitted('change')).toHaveLength(1)
   })
 })

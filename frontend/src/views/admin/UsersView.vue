@@ -140,7 +140,8 @@
               <div class="relative" ref="filterDropdownRef">
                 <button
                   @click="showFilterDropdown = !showFilterDropdown"
-                  class="btn btn-secondary px-2 md:px-3"
+                  :aria-expanded="showFilterDropdown"
+                  class="btn menu-trigger px-2 md:px-3"
                   :title="t('admin.users.filterSettings')"
                 >
                   <Icon name="filter" size="sm" class="md:mr-1.5" />
@@ -149,14 +150,15 @@
                 <!-- Dropdown menu -->
                 <div
                   v-if="showFilterDropdown"
-                  class="absolute right-0 top-full z-50 mt-1 w-48 rounded-lg border border-gray-200 bg-white py-1 shadow-lg dark:border-dark-600 dark:bg-dark-800"
+                  class="menu-surface absolute right-0 top-full z-50 mt-1 w-48 rounded-lg border py-1 shadow-lg"
                 >
                   <!-- Built-in filters -->
                   <button
                     v-for="filter in builtInFilters"
                     :key="filter.key"
                     @click="toggleBuiltInFilter(filter.key)"
-                    class="flex w-full items-center justify-between px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-dark-700"
+                    :aria-pressed="visibleFilters.has(filter.key)"
+                    class="menu-option flex w-full items-center justify-between px-4 py-2 text-left text-sm"
                   >
                     <span>{{ filter.name }}</span>
                     <Icon
@@ -177,7 +179,8 @@
                     v-for="attr in filterableAttributes"
                     :key="attr.id"
                     @click="toggleAttributeFilter(attr)"
-                    class="flex w-full items-center justify-between px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-dark-700"
+                    :aria-pressed="visibleFilters.has(`attr_${attr.id}`)"
+                    class="menu-option flex w-full items-center justify-between px-4 py-2 text-left text-sm"
                   >
                     <span>{{ attr.name }}</span>
                     <Icon
@@ -194,7 +197,8 @@
               <div class="relative" ref="columnDropdownRef">
                 <button
                   @click="showColumnDropdown = !showColumnDropdown"
-                  class="btn btn-secondary px-2 md:px-3"
+                  :aria-expanded="showColumnDropdown"
+                  class="btn menu-trigger px-2 md:px-3"
                   :title="t('admin.users.columnSettings')"
                 >
                   <svg class="h-4 w-4 md:mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5">
@@ -205,19 +209,15 @@
                 <!-- Dropdown menu -->
                 <div
                   v-if="showColumnDropdown"
-                  class="absolute right-0 top-full z-50 mt-1 max-h-80 w-48 overflow-y-auto rounded-lg border border-gray-200 bg-white py-1 shadow-lg dark:border-dark-600 dark:bg-dark-800"
+                  class="menu-surface absolute right-0 top-full z-50 mt-1 max-h-80 w-48 overflow-y-auto rounded-lg border py-1 shadow-lg"
                 >
                   <button
                     v-for="col in toggleableColumns"
                     :key="col.key"
                     :disabled="isForcedVisibleColumn(col.key)"
                     @click="toggleColumn(col.key)"
-                    :class="[
-                      'flex w-full items-center justify-between px-4 py-2 text-left text-sm',
-                      isForcedVisibleColumn(col.key)
-                        ? 'cursor-not-allowed text-gray-400 dark:text-gray-500'
-                        : 'text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-dark-700'
-                    ]"
+                    class="menu-option flex w-full items-center justify-between px-4 py-2 text-left text-sm disabled:cursor-not-allowed disabled:opacity-60"
+                    :aria-pressed="isColumnVisible(col.key)"
                     :title="isForcedVisibleColumn(col.key) ? t('admin.users.columnAlwaysVisible') : ''"
                   >
                     <span>{{ col.label }}</span>
@@ -355,7 +355,7 @@
                 <!-- 点击展开分组操作菜单 -->
                 <div
                   v-if="expandedGroupUserId === row.id"
-                  class="absolute left-0 top-full z-50 mt-1.5 min-w-[160px] overflow-hidden rounded-lg border border-gray-200 bg-white py-1 text-xs shadow-xl dark:border-dark-600 dark:bg-dark-700"
+                  class="menu-surface absolute left-0 top-full z-50 mt-1.5 min-w-[160px] overflow-hidden rounded-lg border py-1 text-xs shadow-xl"
                 >
                   <div class="border-b border-gray-100 px-3 py-1.5 text-[10px] font-medium uppercase tracking-wider text-gray-400 dark:border-dark-600 dark:text-dark-400">
                     {{ t('admin.users.clickToReplace') }}
@@ -363,7 +363,7 @@
                   <div
                     v-for="g in getUserGroups(row).exclusive"
                     :key="g.id"
-                    class="flex cursor-pointer items-center gap-2 px-3 py-2 text-gray-700 transition-colors hover:bg-primary-50 hover:text-primary-600 dark:text-dark-200 dark:hover:bg-primary-900/30 dark:hover:text-primary-400"
+                    class="menu-option flex cursor-pointer items-center gap-2 px-3 py-2 transition-colors"
                     @click.stop="openGroupReplace(row, g)"
                   >
                     <Icon name="swap" size="xs" class="h-3.5 w-3.5 flex-shrink-0 opacity-50" />
@@ -502,16 +502,14 @@
                 <!-- 弹出菜单：今日 / 近30天，点击进行三态循环切换。 -->
                 <div
                   v-if="openUsageSortMenu === usageKey"
-                  class="absolute right-0 top-full z-50 mt-1 min-w-[120px] rounded-lg border border-gray-200 bg-white py-1 shadow-lg dark:border-dark-600 dark:bg-dark-800"
+                  class="menu-surface absolute right-0 top-full z-50 mt-1 min-w-[120px] rounded-lg border py-1 shadow-lg"
                 >
                   <button
                     v-for="metric in (['today', 'total'] as const)"
                     :key="metric"
                     type="button"
-                    class="flex w-full items-center justify-between gap-3 px-3 py-1.5 text-left text-xs normal-case tracking-normal hover:bg-gray-100 dark:hover:bg-dark-700"
-                    :class="isUsageSortActive(usageKey, metric)
-                      ? 'font-medium text-primary-600 dark:text-primary-400'
-                      : 'text-gray-700 dark:text-gray-300'"
+                    class="menu-option flex w-full items-center justify-between gap-3 px-3 py-1.5 text-left text-xs normal-case tracking-normal"
+                    :aria-pressed="isUsageSortActive(usageKey, metric)"
                     :data-test="`usage-sort-${usageKey}-${metric}`"
                     @click.stop="toggleUsageSort(usageKey, metric)"
                   >
@@ -629,8 +627,8 @@
               <!-- More Actions Menu Trigger -->
               <button
                 @click="openActionMenu(row, $event)"
-                class="action-menu-trigger flex flex-col items-center gap-0.5 rounded-lg p-1.5 text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-900 dark:hover:bg-dark-700 dark:hover:text-white"
-                :class="{ 'bg-gray-100 text-gray-900 dark:bg-dark-700 dark:text-white': activeMenuId === row.id }"
+                class="action-menu-trigger menu-trigger flex flex-col items-center gap-0.5 rounded-lg p-1.5 transition-colors"
+                :aria-expanded="activeMenuId === row.id"
               >
                 <Icon name="more" size="sm" />
                 <span class="text-xs">{{ t('common.more') }}</span>
@@ -666,7 +664,7 @@
     <Teleport to="body">
       <div
         v-if="activeMenuId !== null && menuPosition"
-        class="action-menu-content fixed z-[9999] w-48 overflow-hidden rounded-xl bg-white shadow-lg ring-1 ring-black/5 dark:bg-dark-800 dark:ring-white/10"
+        class="menu-surface action-menu-content fixed z-[9999] w-48 overflow-hidden rounded-xl shadow-lg ring-1 ring-black/5 dark:ring-white/10"
         :style="{ top: menuPosition.top + 'px', left: menuPosition.left + 'px' }"
       >
         <div class="py-1">
@@ -675,7 +673,7 @@
               <!-- View API Keys -->
               <button
                 @click="handleViewApiKeys(user); closeActionMenu()"
-                class="flex w-full items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-dark-700"
+                class="menu-option flex w-full items-center gap-2 px-4 py-2 text-sm"
               >
                 <Icon name="key" size="sm" class="text-gray-400" :stroke-width="2" />
                 {{ t('admin.users.apiKeys') }}
@@ -684,7 +682,7 @@
               <!-- Allowed Groups -->
               <button
                 @click="handleAllowedGroups(user); closeActionMenu()"
-                class="flex w-full items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-dark-700"
+                class="menu-option flex w-full items-center gap-2 px-4 py-2 text-sm"
               >
                 <Icon name="users" size="sm" class="text-gray-400" :stroke-width="2" />
                 {{ t('admin.users.groups') }}
@@ -695,7 +693,7 @@
               <!-- Deposit -->
               <button
                 @click="handleDeposit(user); closeActionMenu()"
-                class="flex w-full items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-dark-700"
+                class="menu-option flex w-full items-center gap-2 px-4 py-2 text-sm"
               >
                 <Icon name="plus" size="sm" class="text-emerald-500" :stroke-width="2" />
                 {{ t('admin.users.deposit') }}
@@ -704,7 +702,7 @@
               <!-- Withdraw -->
               <button
                 @click="handleWithdraw(user); closeActionMenu()"
-                class="flex w-full items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-dark-700"
+                class="menu-option flex w-full items-center gap-2 px-4 py-2 text-sm"
               >
                 <svg class="h-4 w-4 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 12H4" />
@@ -715,7 +713,7 @@
               <!-- Platform Quotas -->
               <button
                 @click="handlePlatformQuota(user); closeActionMenu()"
-                class="flex w-full items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-dark-700"
+                class="menu-option flex w-full items-center gap-2 px-4 py-2 text-sm"
               >
                 <Icon name="chartBar" size="sm" class="text-gray-400" :stroke-width="2" />
                 {{ t('admin.users.platformQuota.menuItem') }}
@@ -724,7 +722,7 @@
               <!-- Balance History -->
               <button
                 @click="handleBalanceHistory(user); closeActionMenu()"
-                class="flex w-full items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-dark-700"
+                class="menu-option flex w-full items-center gap-2 px-4 py-2 text-sm"
               >
                 <Icon name="dollar" size="sm" class="text-gray-400" :stroke-width="2" />
                 {{ t('admin.users.balanceHistory') }}
@@ -736,7 +734,7 @@
               <button
                 v-if="user.role !== 'admin'"
                 @click="handleDelete(user); closeActionMenu()"
-                class="flex w-full items-center gap-2 px-4 py-2 text-sm text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/20"
+                class="menu-option flex w-full items-center gap-2 px-4 py-2 text-sm text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/20"
               >
                 <Icon name="trash" size="sm" :stroke-width="2" />
                 {{ t('common.delete') }}

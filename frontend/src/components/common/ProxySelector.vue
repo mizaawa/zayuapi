@@ -150,7 +150,7 @@
               v-if="modelValue === proxy.id"
               name="check"
               size="sm"
-              class="flex-shrink-0 text-primary-500"
+              class="select-icon"
             />
           </div>
 

@@ -13,7 +13,6 @@
       :aria-label="ariaLabel ?? 'Select option'"
       :aria-describedby="ariaDescribedby"
       class="select-trigger"
-      :class="{ 'select-warm': tone === 'warm' }"
       @keydown.down.prevent="onTriggerKeyDown"
       @keydown.up.prevent="onTriggerKeyDown"
     >
@@ -59,7 +58,7 @@
           v-if="isOpen"
           ref="dropdownRef"
           class="select-dropdown-portal"
-          :class="[instanceId, { 'select-warm': tone === 'warm' }]"
+          :class="instanceId"
           :style="dropdownStyle"
           :id="instanceId"
           tabindex="-1"
@@ -168,7 +167,6 @@ interface Props {
   id?: string
   ariaLabel?: string
   ariaDescribedby?: string
-  tone?: 'default' | 'warm'
   centered?: boolean
   /** Preferred minimum menu width in pixels, capped to the padded viewport. */
   dropdownMinWidth?: number
@@ -534,18 +532,6 @@ onUnmounted(() => {
 </style>
 
 <style>
-.select-warm {
-  --select-surface: var(--md-sys-color-surface-container);
-  --select-line: var(--md-sys-color-outline);
-  --select-hover: var(--md-sys-color-surface-container-high);
-  --select-selected: var(--md-sys-color-primary);
-  --select-focus: theme('colors.primary.800');
-}
-
-.select-warm .select-icon { color: var(--select-focus); }
-.select-warm .select-options { scrollbar-color: var(--select-focus) var(--select-surface); }
-.select-warm .select-options::-webkit-scrollbar-thumb { background-color: var(--select-focus); }
-
 .select-dropdown-portal {
   @apply flex w-max min-w-[200px] flex-col overflow-hidden rounded-xl;
   border: 1px solid var(--select-line);

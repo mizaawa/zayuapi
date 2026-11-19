@@ -544,7 +544,7 @@
                     <input
                       v-model="ruleAccountSearchKeyword[`${section.platform}-${ruleIndex}`]"
                       type="text"
-                      class="input text-sm"
+                      class="input menu-trigger text-sm"
                       :placeholder="t('admin.channels.form.searchAccountPlaceholder')"
                       @input="onRuleAccountSearchInput(section.platform, ruleIndex)"
                       @focus="onRuleAccountSearchFocus(section.platform, ruleIndex)"
@@ -552,14 +552,14 @@
                     <!-- Search results dropdown -->
                     <div
                       v-if="showRuleAccountDropdown[`${section.platform}-${ruleIndex}`] && (ruleAccountSearchResults[`${section.platform}-${ruleIndex}`]?.length ?? 0) > 0"
-                      class="absolute z-50 mt-1 max-h-48 w-full overflow-auto rounded-lg border bg-white shadow-lg dark:border-dark-600 dark:bg-dark-800"
+                      class="menu-surface absolute z-50 mt-1 max-h-48 w-full overflow-auto rounded-lg border shadow-lg"
                     >
                       <button
                         v-for="account in ruleAccountSearchResults[`${section.platform}-${ruleIndex}`]"
                         :key="account.id"
                         type="button"
                         @click="selectRuleAccount(rule, account, section.platform, ruleIndex)"
-                        class="w-full px-3 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-dark-700"
+                        class="menu-option w-full px-3 py-2 text-left text-sm"
                         :class="{ 'opacity-50': rule.account_ids.includes(account.id) }"
                         :disabled="rule.account_ids.includes(account.id)"
                       >
@@ -1769,29 +1769,6 @@ onUnmounted(() => {
 
 .channel-tabs::-webkit-scrollbar {
   height: 8px;
-}
-
-.channel-tabs::-webkit-scrollbar-track {
-  @apply bg-gray-100 dark:bg-dark-800;
-}
-
-.channel-tabs::-webkit-scrollbar-thumb {
-  @apply rounded-full bg-gray-400 dark:bg-dark-500;
-}
-
-.channel-tabs::-webkit-scrollbar-thumb:hover {
-  @apply bg-gray-500 dark:bg-dark-400;
-}
-
-@supports (-moz-appearance: none) {
-  .channel-tabs {
-    scrollbar-width: thin;
-    scrollbar-color: theme('colors.gray.400') theme('colors.gray.100');
-  }
-
-  .dark .channel-tabs {
-    scrollbar-color: theme('colors.dark.500') theme('colors.dark.800');
-  }
 }
 
 .channel-tab {

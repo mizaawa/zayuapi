@@ -16,12 +16,15 @@
     --md-sys-color-on-primary: #3f3420;
     --md-sys-color-secondary: #477b54;
     --md-sys-color-placeholder: #716443;
-    /* Dropdowns sit on paper; reserve gold for the selected row and focus ring. */
-    --select-surface: #fffefa;
-    --select-line: #ded8c8;
-    --select-hover: #faf7ef;
-    --select-selected: #fff3d4;
-    --select-focus: #896a2c;
+    /* Defined on the root so native controls and body-level portals agree. */
+    --md-sys-color-on-primary-container: #65460b;
+    --select-surface: var(--md-sys-color-surface-container);
+    --select-line: var(--md-sys-color-outline);
+    --select-hover: var(--md-sys-color-surface-container-high);
+    --select-selected: var(--md-sys-color-primary);
+    --select-focus: var(--md-sys-color-on-primary-container);
+    --scroll-thumb: theme('colors.primary.600');
+    --scroll-track: var(--select-surface);
     --theme-garden: #79b37b;
     --theme-scrim: rgb(53 44 28 / 0.5);
     --theme-highlight: inset 0 1px 0 rgb(255 255 255 / 0.72);
@@ -123,45 +126,18 @@
     outline-offset: 2px;
   }
 
-  /* 自定义滚动条 - 仅针对 Firefox，避免 Chrome 取消 webkit 的全局定制 */
-  @supports (-moz-appearance:none) {
-    * {
-      scrollbar-width: thin;
-      scrollbar-color: transparent transparent;
+  @media (forced-colors: none) {
+    :root { scrollbar-color: var(--scroll-thumb) var(--scroll-track); }
+
+    /* WebKit fallback; also used by scroll areas with a custom track width. */
+    ::-webkit-scrollbar { @apply h-2 w-2; }
+    ::-webkit-scrollbar-track { background-color: var(--scroll-track); }
+    ::-webkit-scrollbar-thumb {
+      @apply rounded-full;
+      border: 1px solid transparent;
+      background: var(--scroll-thumb) padding-box;
     }
-
-    *:hover,
-    *:focus-within {
-      scrollbar-color: rgb(155 140 98 / 0.45) transparent;
-    }
-
-    .dark *:hover,
-    .dark *:focus-within {
-      scrollbar-color: rgba(75, 85, 99, 0.5) transparent;
-    }
-  }
-
-  ::-webkit-scrollbar {
-    @apply h-2 w-2;
-  }
-
-  ::-webkit-scrollbar-track {
-    @apply bg-transparent;
-  }
-
-  ::-webkit-scrollbar-thumb {
-    @apply rounded-full bg-transparent;
-    border: 1px solid transparent;
-    background-clip: padding-box;
-    transition: background-color 0.2s ease;
-  }
-
-  *:hover::-webkit-scrollbar-thumb {
-    @apply bg-gray-300/50 dark:bg-dark-600/50;
-  }
-
-  *:hover::-webkit-scrollbar-thumb:hover {
-    @apply bg-gray-400 dark:bg-dark-500;
+    ::-webkit-scrollbar-thumb:hover { background-color: var(--select-focus); }
   }
 
   /* 选中文本样式 */
@@ -294,7 +270,7 @@
     box-shadow: inset 0 1px 2px rgb(63 52 32 / 0.06);
   }
 
-  .input:where(:not(select)):hover:not(:disabled):not(:focus) {
+  .input:where(:not(select, .menu-trigger)):hover:not(:disabled):not(:focus) {
     background: color-mix(in srgb, var(--md-sys-color-surface-container) 82%, var(--md-sys-color-surface-container-high));
   }
 
@@ -525,7 +501,6 @@
   }
 
   .ops-popover {
-    background: var(--md-sys-color-surface);
     border-radius: 1rem;
     box-shadow: var(--theme-highlight), var(--theme-elevation-3);
   }
@@ -840,8 +815,8 @@
     @apply flex w-full min-w-0 cursor-pointer items-center justify-between gap-2 rounded-xl px-4 py-2.5 text-left text-sm transition-colors;
   }
 
-  .select-trigger,
-  select.input {
+  .select-trigger, .menu-trigger,
+  select, select.input {
     border: 1px solid var(--select-line);
     background-color: var(--select-surface);
     color: var(--md-sys-color-on-surface);
@@ -849,15 +824,15 @@
   }
 
   @media (hover: hover) {
-    .select-trigger:hover:where(:not(:disabled, [aria-expanded='true'])),
-    select.input:hover:not(:disabled):not(:focus) {
+    :is(.select-trigger, .menu-trigger):hover:where(:not(:disabled, [aria-expanded='true'])),
+    select:hover:not(:disabled):not(:focus) {
       background-color: var(--select-hover);
     }
   }
 
-  .select-trigger:focus-visible,
-  .select-trigger[aria-expanded='true'],
-  select.input:focus {
+  :is(.select-trigger, .menu-trigger):focus-visible,
+  :is(.select-trigger, .menu-trigger)[aria-expanded='true'],
+  select:focus, select.input:focus, input.menu-trigger:focus {
     background-color: var(--select-surface);
     outline: 2px solid var(--select-focus);
     outline-offset: 1px;
@@ -870,15 +845,19 @@
     outline-color: var(--monitor-down);
   }
 
-  .select-trigger:disabled,
-  select.input:disabled {
+  :is(.select-trigger, .menu-trigger):disabled,
+  select:disabled, select.input:disabled {
     cursor: not-allowed;
     color: var(--md-sys-color-on-surface-variant);
     background-color: var(--select-hover);
     opacity: 0.65;
   }
 
-  .select-icon { flex: none; color: var(--md-sys-color-on-surface-variant); }
+  select option { background: var(--select-surface); color: var(--md-sys-color-on-surface); }
+  select option:checked { background: var(--select-selected); color: var(--md-sys-color-on-primary); }
+  select option:disabled { color: GrayText; }
+
+  .select-icon { flex: none; color: var(--select-focus); }
 
   .select-value { @apply min-w-0 flex-1 truncate text-left; }
   .select-search-input {
@@ -890,7 +869,10 @@
     .select-option:hover:where(:not([aria-disabled='true'])) { background: var(--select-hover); }
   }
   .select-option-focused { background: var(--select-hover); }
-  .select-option-selected, .select-option-selected:hover { background: var(--select-selected); }
+  .select-option-selected, .select-option-selected:hover {
+    background: var(--select-selected);
+    color: var(--md-sys-color-on-primary);
+  }
   .select-dropdown-portal:focus-visible .select-option-focused,
   .select-dropdown-portal:has(.select-search-input:focus-visible) .select-option-focused {
     box-shadow: inset 0 0 0 1px var(--select-focus);
@@ -903,11 +885,16 @@
 
   .dropdown {
     @apply absolute z-50;
-    background: var(--select-surface);
     @apply rounded-3xl border border-transparent shadow-card-hover;
     @apply py-1;
     @apply origin-top-right animate-scale-in;
     box-shadow: var(--theme-highlight), var(--theme-elevation-3);
+  }
+
+  .dropdown, .menu-surface {
+    background-color: var(--select-surface);
+    border-color: var(--select-line);
+    color: var(--md-sys-color-on-surface);
   }
 
   .dropdown-item {
@@ -919,9 +906,15 @@
     border-radius: 0.875rem;
   }
 
-  .dropdown-item:hover, .dropdown-item:focus-visible {
+  :is(.dropdown-item, .menu-option):is(:hover, :focus-visible):where(:not(:disabled, [aria-disabled='true'])) {
     background: var(--select-hover);
   }
+
+  .menu-option:is([aria-pressed='true'], [aria-checked='true']) {
+    background: var(--select-selected);
+    color: var(--md-sys-color-on-primary);
+  }
+  .menu-option:focus-visible { outline: 2px solid var(--select-focus); outline-offset: -2px; }
 
   /* ============ 模态框 ============ */
   .modal-overlay {

@@ -24,7 +24,8 @@
                     showAutoRefreshDropdown = !showAutoRefreshDropdown;
                     showAccountToolsDropdown = false
                   "
-                  class="btn btn-secondary px-2 md:px-3 max-sm:h-11 max-sm:w-11 max-sm:shrink-0 max-sm:p-0"
+                  class="btn menu-trigger px-2 md:px-3 max-sm:h-11 max-sm:w-11 max-sm:shrink-0 max-sm:p-0"
+                  :aria-expanded="showAutoRefreshDropdown"
                   :title="t('admin.accounts.autoRefresh')"
                 >
                   <Icon name="refresh" size="sm" :class="[autoRefreshEnabled ? 'animate-spin' : '']" />
@@ -39,12 +40,13 @@
                 <!-- On phones the button sits near the left edge: open the menu rightward. -->
                 <div
                   v-if="showAutoRefreshDropdown"
-                  class="absolute right-0 z-50 mt-2 w-56 origin-top-right rounded-lg border border-gray-200 bg-white shadow-lg dark:border-dark-700 dark:bg-dark-800 max-sm:left-0 max-sm:right-auto max-sm:origin-top-left"
+                  class="menu-surface absolute right-0 z-50 mt-2 w-56 origin-top-right rounded-lg border shadow-lg max-sm:left-0 max-sm:right-auto max-sm:origin-top-left"
                 >
                   <div class="p-2">
                     <button
                       @click="setAutoRefreshEnabled(!autoRefreshEnabled)"
-                      class="flex w-full items-center justify-between rounded-md px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-dark-700"
+                      :aria-pressed="autoRefreshEnabled"
+                      class="menu-option flex w-full items-center justify-between rounded-md px-3 py-2 text-sm"
                     >
                       <span>{{ t('admin.accounts.enableAutoRefresh') }}</span>
                       <Icon v-if="autoRefreshEnabled" name="check" size="sm" class="text-primary-500" />
@@ -54,7 +56,8 @@
                       v-for="sec in autoRefreshIntervals"
                       :key="sec"
                       @click="setAutoRefreshInterval(sec)"
-                      class="flex w-full items-center justify-between rounded-md px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-dark-700"
+                      :aria-pressed="autoRefreshIntervalSeconds === sec"
+                      class="menu-option flex w-full items-center justify-between rounded-md px-3 py-2 text-sm"
                     >
                       <span>{{ autoRefreshIntervalLabel(sec) }}</span>
                       <Icon v-if="autoRefreshIntervalSeconds === sec" name="check" size="sm" class="text-primary-500" />
@@ -68,7 +71,7 @@
                 <button
                   ref="accountToolsTriggerRef"
                   @click="toggleAccountToolsDropdown"
-                  class="btn btn-secondary px-2 md:px-3 max-sm:h-11 max-sm:w-11 max-sm:shrink-0 max-sm:p-0"
+                  class="btn menu-trigger px-2 md:px-3 max-sm:h-11 max-sm:w-11 max-sm:shrink-0 max-sm:p-0"
                   :title="t('admin.accounts.moreActions')"
                   :aria-expanded="showAccountToolsDropdown"
                 >
@@ -79,7 +82,7 @@
                 <Teleport to="body">
                   <div
                     v-if="showAccountToolsDropdown"
-                    class="fixed z-[9999] origin-top-right overflow-hidden rounded-lg border border-gray-200 bg-white shadow-xl dark:border-dark-700 dark:bg-dark-800"
+                    class="menu-surface fixed z-[9999] origin-top-right overflow-hidden rounded-lg border shadow-xl"
                     :style="accountToolsDropdownStyle"
                     @click.stop
                   >
@@ -89,13 +92,13 @@
                           {{ t('admin.accounts.dataActions') }}
                         </div>
                       </div>
-                      <button class="account-tools-menu-item" @click="openImportData">
+                      <button class="menu-option account-tools-menu-item" @click="openImportData">
                         <span class="account-tools-menu-icon bg-emerald-50 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-300">
                           <Icon name="upload" size="sm" />
                         </span>
                         <span class="flex-1 text-left">{{ t('admin.accounts.dataImport') }}</span>
                       </button>
-                      <button class="account-tools-menu-item" @click="openExportDataDialogFromMenu">
+                      <button class="menu-option account-tools-menu-item" @click="openExportDataDialogFromMenu">
                         <span class="account-tools-menu-icon bg-violet-50 text-violet-600 dark:bg-violet-900/30 dark:text-violet-300">
                           <Icon name="download" size="sm" />
                         </span>
@@ -116,13 +119,13 @@
                           {{ t('admin.accounts.toolActions') }}
                         </div>
                       </div>
-                      <button class="account-tools-menu-item" @click="openErrorPassthrough">
+                      <button class="menu-option account-tools-menu-item" @click="openErrorPassthrough">
                         <span class="account-tools-menu-icon bg-amber-50 text-amber-600 dark:bg-amber-900/30 dark:text-amber-300">
                           <Icon name="shield" size="sm" />
                         </span>
                         <span class="flex-1 text-left">{{ t('admin.errorPassthrough.title') }}</span>
                       </button>
-                      <button class="account-tools-menu-item" @click="openTLSFingerprintProfiles">
+                      <button class="menu-option account-tools-menu-item" @click="openTLSFingerprintProfiles">
                         <span class="account-tools-menu-icon bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-200">
                           <Icon name="lock" size="sm" />
                         </span>
@@ -143,7 +146,8 @@
                           v-for="col in toggleableColumns"
                           :key="col.key"
                           @click="toggleColumn(col.key)"
-                          class="flex w-full items-center justify-between rounded-md px-3 py-2 text-sm text-gray-700 transition-colors hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-dark-700"
+                          :aria-pressed="isColumnVisible(col.key)"
+                          class="menu-option flex w-full items-center justify-between rounded-md px-3 py-2 text-sm transition-colors"
                         >
                           <span class="truncate">{{ col.label }}</span>
                           <Icon v-if="isColumnVisible(col.key)" name="check" size="sm" class="text-primary-500" />
@@ -433,7 +437,7 @@
                 <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" /></svg>
                 <span class="text-xs">{{ t('common.delete') }}</span>
               </button>
-              <button @click="openMenu(row, $event)" class="flex flex-col items-center gap-0.5 rounded-lg p-1.5 text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-900 dark:hover:bg-dark-700 dark:hover:text-white">
+              <button @click="openMenu(row, $event)" :aria-expanded="menu.show && menu.acc?.id === row.id" class="menu-trigger flex flex-col items-center gap-0.5 rounded-lg p-1.5 transition-colors">
                 <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M6.75 12a.75.75 0 11-1.5 0 .75.75 0 011.5 0zM12.75 12a.75.75 0 11-1.5 0 .75.75 0 011.5 0zM18.75 12a.75.75 0 11-1.5 0 .75.75 0 011.5 0z" /></svg>
                 <span class="text-xs">{{ t('common.more') }}</span>
               </button>
@@ -626,7 +630,7 @@
                     <Icon name="trash" size="sm" />
                     <span>{{ t('common.delete') }}</span>
                   </button>
-                  <button type="button" class="account-card-action" @click="openMenu(row, $event)">
+                  <button type="button" class="account-card-action menu-trigger" :aria-expanded="menu.show && menu.acc?.id === row.id" @click="openMenu(row, $event)">
                     <Icon name="more" size="sm" />
                     <span>{{ t('common.more') }}</span>
                   </button>
@@ -2629,7 +2633,7 @@ onUnmounted(() => {
 
 <style scoped>
 .account-tools-menu-item {
-  @apply flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm text-gray-700 transition-colors hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-dark-700;
+  @apply flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors;
 }
 
 .account-tools-menu-icon {
@@ -3023,7 +3027,7 @@ onUnmounted(() => {
   transition: background-color 150ms ease, color 150ms ease;
 }
 
-.account-card-action:hover {
+.account-card-action:not(.menu-trigger):hover {
   background: #fff3bd;
   color: #7e5600;
 }

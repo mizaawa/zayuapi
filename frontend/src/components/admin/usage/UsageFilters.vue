@@ -41,7 +41,7 @@
         <input
           v-model="userKeyword"
           type="text"
-          class="input pr-8"
+          class="input menu-trigger pr-8"
           :placeholder="t('admin.usage.searchUserPlaceholder')"
           @input="debounceUserSearch"
           @focus="showUserDropdown = true"
@@ -57,14 +57,14 @@
         </button>
         <div
           v-if="showUserDropdown && (userResults.length > 0 || userKeyword)"
-          class="usage-filter-menu absolute z-50 mt-1 max-h-60 w-full overflow-auto"
+          class="menu-surface usage-filter-menu absolute z-50 mt-1 max-h-60 w-full overflow-auto"
         >
           <button
             v-for="u in userResults"
             :key="u.id"
             type="button"
             @click="selectUser(u)"
-            class="usage-filter-option"
+            class="menu-option usage-filter-option"
           >
             <span class="min-w-0 break-all">{{ u.email }}<span v-if="u.deleted" class="ml-1 text-xs text-gray-400">（{{ t('admin.usage.userDeletedBadge') }}）</span></span>
             <span class="ml-2 shrink-0 text-xs text-gray-400">#{{ u.id }}</span>
@@ -78,7 +78,7 @@
         <input
           v-model="apiKeyKeyword"
           type="text"
-          class="input pr-8"
+          class="input menu-trigger pr-8"
           :placeholder="t('admin.usage.searchApiKeyPlaceholder')"
           @input="debounceApiKeySearch"
           @focus="onApiKeyFocus"
@@ -94,14 +94,14 @@
         </button>
         <div
           v-if="showApiKeyDropdown && apiKeyResults.length > 0"
-          class="usage-filter-menu absolute z-50 mt-1 max-h-60 w-full overflow-auto"
+          class="menu-surface usage-filter-menu absolute z-50 mt-1 max-h-60 w-full overflow-auto"
         >
           <button
             v-for="k in apiKeyResults"
             :key="k.id"
             type="button"
             @click="selectApiKey(k)"
-            class="usage-filter-option"
+            class="menu-option usage-filter-option"
           >
             <span class="truncate">{{ k.name || `#${k.id}` }}</span>
             <span class="ml-2 shrink-0 text-xs text-gray-400">#{{ k.id }}</span>
@@ -121,7 +121,7 @@
         <input
           v-model="accountKeyword"
           type="text"
-          class="input pr-8"
+          class="input menu-trigger pr-8"
           :placeholder="t('admin.usage.searchAccountPlaceholder')"
           @input="debounceAccountSearch"
           @focus="showAccountDropdown = true"
@@ -137,14 +137,14 @@
         </button>
         <div
           v-if="showAccountDropdown && (accountResults.length > 0 || accountKeyword)"
-          class="usage-filter-menu absolute z-50 mt-1 max-h-60 w-full overflow-auto"
+          class="menu-surface usage-filter-menu absolute z-50 mt-1 max-h-60 w-full overflow-auto"
         >
           <button
             v-for="a in accountResults"
             :key="a.id"
             type="button"
             @click="selectAccount(a)"
-            class="usage-filter-option"
+            class="menu-option usage-filter-option"
           >
             <span class="truncate">{{ a.name }}</span>
             <span class="ml-2 shrink-0 text-xs text-gray-400">#{{ a.id }}</span>
@@ -643,7 +643,6 @@ defineExpose({ getUserSearchRevision, setUserKeyword })
 .usage-filter-menu {
   padding: 0.375rem 0;
   border-radius: 1rem;
-  background: var(--md-sys-color-surface);
   box-shadow: var(--theme-highlight), var(--theme-elevation-3);
 }
 
@@ -658,10 +657,6 @@ defineExpose({ getUserSearchRevision, setUserKeyword })
   font-size: 0.8125rem;
   text-align: left;
   color: var(--md-sys-color-on-surface);
-}
-
-.usage-filter-option:hover {
-  background: color-mix(in srgb, var(--md-sys-color-primary) 14%, var(--md-sys-color-surface));
 }
 
 @media (min-width: 768px) {

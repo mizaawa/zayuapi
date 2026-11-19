@@ -4,7 +4,7 @@
     <div class="relative mb-3">
       <div
         @click="toggleDropdown"
-        class="cursor-pointer rounded-lg border border-gray-300 bg-white px-3 py-2 dark:border-dark-500 dark:bg-dark-700"
+        class="menu-trigger cursor-pointer rounded-lg px-3 py-2"
       >
         <div class="grid grid-cols-2 gap-1.5">
           <span
@@ -35,9 +35,9 @@
       <!-- Dropdown List -->
       <div
         v-if="showDropdown"
-        class="absolute left-0 right-0 top-full z-50 mt-1 rounded-lg border border-gray-200 bg-white shadow-lg dark:border-dark-600 dark:bg-dark-700"
+        class="menu-surface absolute left-0 right-0 top-full z-50 mt-1 rounded-lg border shadow-lg"
       >
-        <div class="sticky top-0 border-b border-gray-200 bg-white p-2 dark:border-dark-600 dark:bg-dark-700">
+        <div class="menu-surface sticky top-0 border-b p-2">
           <input
             v-model="searchQuery"
             type="text"
@@ -51,12 +51,13 @@
             v-for="model in filteredModels"
             :key="model.value"
             data-testid="model-option"
-            class="group flex items-center hover:bg-gray-100 dark:hover:bg-dark-600"
+            class="menu-option group flex items-center"
           >
             <button
               type="button"
               data-testid="select-model"
-              class="flex min-w-0 flex-1 items-center gap-2 px-3 py-2 text-left text-sm"
+              :aria-pressed="modelValue.includes(model.value)"
+              class="menu-option flex min-w-0 flex-1 items-center gap-2 px-3 py-2 text-left text-sm"
               @click="toggleModel(model.value)"
             >
               <span
@@ -72,12 +73,12 @@
                 </svg>
               </span>
               <ModelIcon :model="model.value" size="18px" />
-              <span class="truncate text-gray-900 dark:text-white">{{ model.value }}</span>
+              <span class="truncate text-gray-900">{{ model.value }}</span>
             </button>
             <button
               type="button"
               data-testid="copy-model-id"
-              class="mr-2 rounded p-1.5 text-gray-400 opacity-70 transition-colors hover:bg-gray-200 hover:text-primary-600 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 group-hover:opacity-100 dark:text-gray-500 dark:hover:bg-dark-500 dark:hover:text-primary-400"
+              class="menu-option mr-2 rounded p-1.5 text-gray-400 opacity-70 transition-colors hover:text-primary-600 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 group-hover:opacity-100 dark:text-gray-500 dark:hover:text-primary-400"
               :title="`${t('common.copy')} ${model.value}`"
               :aria-label="`${t('common.copy')} ${model.value}`"
               @click="copyModelId(model.value)"

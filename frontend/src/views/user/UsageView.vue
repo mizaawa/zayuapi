@@ -110,7 +110,8 @@
                   <button
                     type="button"
                     @click="showColumnDropdown = !showColumnDropdown"
-                    class="btn btn-secondary usage-records-button"
+                    :aria-expanded="showColumnDropdown"
+                    class="btn menu-trigger usage-records-button"
                     :title="t('admin.users.columnSettings')"
                   >
                     <Icon name="grid" size="sm" />
@@ -118,14 +119,15 @@
                   </button>
                   <div
                     v-if="showColumnDropdown"
-                    class="usage-column-menu absolute inset-x-0 top-full z-50 mt-1.5 max-h-80 overflow-y-auto py-1.5 md:left-auto md:right-0 md:w-52"
+                    class="menu-surface usage-column-menu absolute inset-x-0 top-full z-50 mt-1.5 max-h-80 overflow-y-auto py-1.5 md:left-auto md:right-0 md:w-52"
                   >
                     <button
                       v-for="col in currentToggleableColumns"
                       :key="col.key"
                       type="button"
                       @click="toggleCurrentColumn(col.key)"
-                      class="usage-column-option"
+                      :aria-pressed="isCurrentColumnVisible(col.key)"
+                      class="menu-option usage-column-option"
                     >
                       <span>{{ col.label }}</span>
                       <Icon v-if="isCurrentColumnVisible(col.key)" name="check" size="sm" class="text-primary-600" />
@@ -1243,7 +1245,6 @@ watch(endpointDistributionSource, () => {
 
 .usage-column-menu {
   border-radius: 1rem;
-  background: var(--md-sys-color-surface);
   box-shadow: var(--theme-highlight), var(--theme-elevation-3);
 }
 
@@ -1258,10 +1259,6 @@ watch(endpointDistributionSource, () => {
   font-size: 0.8125rem;
   text-align: left;
   color: var(--md-sys-color-on-surface);
-}
-
-.usage-column-option:hover {
-  background: color-mix(in srgb, var(--md-sys-color-primary) 14%, var(--md-sys-color-surface));
 }
 
 /* The error list brings its own card; inside the shared panel it should read as part of it. */

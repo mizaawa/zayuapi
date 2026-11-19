@@ -3,7 +3,8 @@
     <button
       type="button"
       @click="toggle"
-      :class="['date-picker-trigger', isOpen && 'date-picker-trigger-open']"
+      class="date-picker-trigger menu-trigger"
+      :aria-expanded="isOpen"
     >
       <span class="date-picker-icon">
         <Icon name="calendar" size="sm" />
@@ -21,14 +22,15 @@
     </button>
 
     <Transition name="date-picker-dropdown">
-      <div v-if="isOpen" class="date-picker-dropdown">
+      <div v-if="isOpen" class="date-picker-dropdown menu-surface">
         <!-- Quick presets -->
         <div class="date-picker-presets">
           <button
             v-for="preset in presets"
             :key="preset.value"
             @click="selectPreset(preset)"
-            :class="['date-picker-preset', isPresetActive(preset) && 'date-picker-preset-active']"
+            class="date-picker-preset menu-option"
+            :aria-pressed="isPresetActive(preset)"
           >
             {{ t(preset.labelKey) }}
           </button>
@@ -324,26 +326,12 @@ onUnmounted(() => {
 .date-picker-trigger {
   @apply flex items-center gap-2;
   @apply rounded-xl px-3 py-2 text-sm;
-  border: 1px solid transparent;
-  background: var(--md-sys-color-surface-container);
-  color: var(--md-sys-color-on-surface);
   @apply transition-all duration-200;
-  @apply focus:outline-none;
   @apply cursor-pointer;
 }
 
-.date-picker-trigger:hover {
-  border-color: transparent;
-  background: var(--md-sys-color-surface-container-high);
-}
-
-.date-picker-trigger-open {
-  border-color: transparent;
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--md-sys-color-primary) 20%, transparent);
-}
-
 .date-picker-icon {
-  color: var(--md-sys-color-primary);
+  color: var(--select-focus);
 }
 
 .date-picker-value {
@@ -351,15 +339,13 @@ onUnmounted(() => {
 }
 
 .date-picker-chevron {
-  color: var(--md-sys-color-on-surface-variant);
+  color: var(--select-focus);
 }
 
 .date-picker-dropdown {
   @apply absolute left-0 z-[100] mt-2;
   @apply rounded-2xl;
-  border: 1px solid transparent;
-  background: var(--md-sys-color-surface);
-  color: var(--md-sys-color-on-surface);
+  border: 1px solid var(--select-line);
   box-shadow: 0 1rem 2.5rem rgb(45 37 31 / 0.16);
   @apply overflow-hidden;
   @apply min-w-[320px];
@@ -375,20 +361,9 @@ onUnmounted(() => {
   @apply transition-colors duration-150;
 }
 
-.date-picker-preset:hover {
-  background: var(--md-sys-color-surface-container-high);
-  color: var(--md-sys-color-on-surface);
-}
-
-.date-picker-preset-active {
-  background: var(--md-sys-color-primary);
+.date-picker-preset[aria-pressed='true'] {
   color: var(--md-sys-color-on-primary);
   font-weight: 700;
-}
-
-.date-picker-preset-active:hover {
-  background: var(--md-sys-color-primary);
-  color: var(--md-sys-color-on-primary);
 }
 
 .date-picker-divider {

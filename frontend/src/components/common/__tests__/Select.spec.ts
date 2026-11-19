@@ -67,6 +67,33 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
+it('exposes distinct selected, disabled and keyboard-focused options in the default portal', async () => {
+  const wrapper = mount(Select, {
+    attachTo: document.body,
+    props: { modelValue: 1, options: [
+      { value: 1, label: 'One' }, { value: 2, label: 'Two', disabled: true }, { value: 3, label: 'Three' },
+    ] },
+  })
+  unmountWrapper = () => wrapper.unmount()
+  const trigger = wrapper.get('button')
+  await trigger.trigger('keydown.down')
+  const menu = document.getElementById(trigger.attributes('aria-controls'))!
+  expect(menu.parentElement).toBe(document.body)
+  const key = async (key: string) => {
+    menu.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true }))
+    await nextTick()
+  }
+  await key('ArrowDown')
+  expect(menu.querySelector('[aria-selected="true"]')?.textContent?.trim()).toBe('One')
+  expect(menu.querySelector('[aria-disabled="true"]')?.textContent?.trim()).toBe('Two')
+  expect(menu.querySelector('.select-option-focused')?.textContent?.trim()).toBe('Three')
+  await key('Enter')
+  expect(wrapper.emitted('update:modelValue')).toEqual([[3]])
+  expect(document.activeElement).toBe(trigger.element)
+  await wrapper.setProps({ disabled: true })
+  expect(trigger.element.disabled).toBe(true)
+})
+
 describe('Select dropdown viewport constraints', () => {
   it('emits a blocked event without selecting a blocked option', async () => {
     const wrapper = mount(Select, {

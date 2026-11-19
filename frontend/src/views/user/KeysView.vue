@@ -37,7 +37,7 @@
               <button
                 type="button"
                 @click="showFieldMenu = !showFieldMenu"
-                class="btn btn-secondary keys-toolbar-button"
+                class="btn menu-trigger keys-toolbar-button"
                 :title="t('keys.cardFields')"
                 aria-haspopup="true"
                 :aria-expanded="showFieldMenu"
@@ -48,7 +48,7 @@
               </button>
               <div
                 v-if="showFieldMenu"
-                class="keys-field-menu absolute left-0 top-full z-50 mt-1.5 max-h-96 w-52 overflow-y-auto py-1.5 lg:left-auto lg:right-0"
+                class="menu-surface keys-field-menu absolute left-0 top-full z-50 mt-1.5 max-h-96 w-52 overflow-y-auto py-1.5 lg:left-auto lg:right-0"
                 role="menu"
                 data-test="keys-field-menu"
               >
@@ -58,7 +58,7 @@
                   type="button"
                   role="menuitemcheckbox"
                   :aria-checked="!hiddenFields.has(field.key)"
-                  class="keys-field-option"
+                  class="menu-option keys-field-option"
                   :data-test="`keys-field-${field.key}`"
                   @click="toggleField(field.key)"
                 >
@@ -1699,7 +1699,6 @@ onUnmounted(() => {
 
 .keys-field-menu {
   border-radius: 1rem;
-  background: var(--md-sys-color-surface);
   box-shadow: var(--theme-highlight), var(--theme-elevation-3);
 }
 
@@ -1714,10 +1713,6 @@ onUnmounted(() => {
   font-size: 0.8125rem;
   text-align: left;
   color: var(--md-sys-color-on-surface);
-}
-
-.keys-field-option:hover {
-  background: color-mix(in srgb, var(--md-sys-color-primary) 14%, var(--md-sys-color-surface));
 }
 
 /* ---------- Card grid ---------- */

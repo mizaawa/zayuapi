@@ -23,7 +23,8 @@
               <button
                 :ref="(el) => setGroupButtonRef(key.id, el)"
                 @click="openGroupSelector(key)"
-                class="-mx-1 -my-0.5 flex cursor-pointer items-center gap-1 rounded-md px-1 py-0.5 transition-colors hover:bg-gray-100 dark:hover:bg-dark-700"
+                class="menu-trigger -mx-1 -my-0.5 flex cursor-pointer items-center gap-1 rounded-md px-1 py-0.5 transition-colors"
+                :aria-expanded="groupSelectorKeyId === key.id"
                 :disabled="updatingKeyIds.has(key.id)"
               >
                 <GroupBadge
@@ -54,19 +55,15 @@
     <div
       v-if="groupSelectorKeyId !== null && dropdownPosition"
       ref="dropdownRef"
-      class="animate-in fade-in slide-in-from-top-2 fixed z-[100000020] w-64 md:w-[520px] overflow-hidden rounded-xl bg-white shadow-lg ring-1 ring-black/5 duration-200 dark:bg-dark-800 dark:ring-white/10"
+      class="menu-surface animate-in fade-in slide-in-from-top-2 fixed z-[100000020] w-64 md:w-[520px] overflow-hidden rounded-xl shadow-lg ring-1 ring-black/5 duration-200 dark:ring-white/10"
       :style="{ top: dropdownPosition.top + 'px', left: dropdownPosition.left + 'px' }"
     >
       <div class="max-h-64 overflow-y-auto p-1.5">
         <!-- Unbind option -->
         <button
           @click="changeGroup(selectedKeyForGroup!, null)"
-          :class="[
-            'flex w-full items-center rounded-lg px-3 py-2 text-sm transition-colors',
-            !selectedKeyForGroup?.group_id
-              ? 'bg-primary-50 dark:bg-primary-900/20'
-              : 'hover:bg-gray-100 dark:hover:bg-dark-700'
-          ]"
+          class="menu-option flex w-full items-center rounded-lg px-3 py-2 text-sm transition-colors"
+          :aria-pressed="!selectedKeyForGroup?.group_id"
         >
           <span class="text-gray-500 italic">{{ t('admin.users.none') }}</span>
           <svg
@@ -80,12 +77,8 @@
           v-for="group in allGroups"
           :key="group.id"
           @click="changeGroup(selectedKeyForGroup!, group.id)"
-          :class="[
-            'flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm transition-colors',
-            selectedKeyForGroup?.group_id === group.id
-              ? 'bg-primary-50 dark:bg-primary-900/20'
-              : 'hover:bg-gray-100 dark:hover:bg-dark-700'
-          ]"
+          class="menu-option flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm transition-colors"
+          :aria-pressed="selectedKeyForGroup?.group_id === group.id"
         >
           <GroupOptionItem
             :name="group.name"

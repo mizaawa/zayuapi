@@ -20,7 +20,7 @@
                 v-model="filterUserKeyword"
                 type="text"
                 :placeholder="t('admin.users.searchUsers')"
-                class="input pl-10 pr-8"
+                class="input menu-trigger pl-10 pr-8"
                 @input="debounceSearchFilterUsers"
                 @focus="showFilterUserDropdown = true"
               />
@@ -37,7 +37,7 @@
               <!-- User Dropdown -->
               <div
                 v-if="showFilterUserDropdown && (filterUserResults.length > 0 || filterUserKeyword)"
-                class="absolute z-50 mt-1 max-h-60 w-full overflow-auto rounded-lg border border-gray-200 bg-white shadow-lg dark:border-dark-700 dark:bg-dark-800"
+                class="menu-surface absolute z-50 mt-1 max-h-60 w-full overflow-auto rounded-lg border shadow-lg"
               >
                 <div
                   v-if="filterUserLoading"
@@ -56,9 +56,9 @@
                   :key="user.id"
                   type="button"
                   @click="selectFilterUser(user)"
-                  class="w-full px-4 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-dark-700"
+                  class="menu-option w-full px-4 py-2 text-left text-sm"
                 >
-                  <span class="font-medium text-gray-900 dark:text-white">{{ user.email }}</span>
+                  <span class="font-medium text-gray-900">{{ user.email }}</span>
                   <span class="ml-2 text-gray-500 dark:text-gray-400">#{{ user.id }}</span>
                 </button>
               </div>
@@ -105,7 +105,8 @@
             <div class="relative" ref="columnDropdownRef">
               <button
                 @click="showColumnDropdown = !showColumnDropdown"
-                class="btn btn-secondary px-2 md:px-3"
+                class="btn menu-trigger px-2 md:px-3"
+                :aria-expanded="showColumnDropdown"
                 :title="t('admin.users.columnSettings')"
               >
                 <svg class="h-4 w-4 md:mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5">
@@ -116,7 +117,7 @@
               <!-- Dropdown menu -->
               <div
                 v-if="showColumnDropdown"
-                class="absolute right-0 z-50 mt-2 w-48 origin-top-right rounded-lg border border-gray-200 bg-white shadow-lg dark:border-dark-700 dark:bg-dark-800"
+                class="menu-surface absolute right-0 z-50 mt-2 w-48 origin-top-right rounded-lg border shadow-lg"
               >
                 <div class="p-2">
                   <!-- User column mode selection -->
@@ -126,14 +127,16 @@
                     </div>
                     <button
                       @click="setUserColumnMode('email')"
-                      class="flex w-full items-center justify-between rounded-md px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-dark-700"
+                      :aria-pressed="userColumnMode === 'email'"
+                      class="menu-option flex w-full items-center justify-between rounded-md px-3 py-2 text-sm"
                     >
                       <span>{{ t('admin.users.columns.email') }}</span>
                       <Icon v-if="userColumnMode === 'email'" name="check" size="sm" class="text-primary-500" />
                     </button>
                     <button
                       @click="setUserColumnMode('username')"
-                      class="flex w-full items-center justify-between rounded-md px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-dark-700"
+                      :aria-pressed="userColumnMode === 'username'"
+                      class="menu-option flex w-full items-center justify-between rounded-md px-3 py-2 text-sm"
                     >
                       <span>{{ t('admin.users.columns.username') }}</span>
                       <Icon v-if="userColumnMode === 'username'" name="check" size="sm" class="text-primary-500" />
@@ -144,7 +147,8 @@
                     v-for="col in toggleableColumns"
                     :key="col.key"
                     @click="toggleColumn(col.key)"
-                    class="flex w-full items-center justify-between rounded-md px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-dark-700"
+                    :aria-pressed="isColumnVisible(col.key)"
+                    class="menu-option flex w-full items-center justify-between rounded-md px-3 py-2 text-sm"
                   >
                     <span>{{ col.label }}</span>
                     <Icon v-if="isColumnVisible(col.key)" name="check" size="sm" class="text-primary-500" />
@@ -462,7 +466,7 @@
             <input
               v-model="userSearchKeyword"
               type="text"
-              class="input pr-8"
+              class="input menu-trigger pr-8"
               :placeholder="t('admin.usage.searchUserPlaceholder')"
               @input="debounceSearchUsers"
               @focus="showUserDropdown = true"
@@ -478,7 +482,7 @@
             <!-- User Dropdown -->
             <div
               v-if="showUserDropdown && (userSearchResults.length > 0 || userSearchKeyword)"
-              class="absolute z-50 mt-1 max-h-60 w-full overflow-auto rounded-lg border border-gray-200 bg-white shadow-lg dark:border-dark-700 dark:bg-dark-800"
+              class="menu-surface absolute z-50 mt-1 max-h-60 w-full overflow-auto rounded-lg border shadow-lg"
             >
               <div
                 v-if="userSearchLoading"
@@ -497,9 +501,9 @@
                 :key="user.id"
                 type="button"
                 @click="selectUser(user)"
-                class="w-full px-4 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-dark-700"
+                class="menu-option w-full px-4 py-2 text-left text-sm"
               >
-                <span class="font-medium text-gray-900 dark:text-white">{{ user.email }}</span>
+                <span class="font-medium text-gray-900">{{ user.email }}</span>
                 <span class="ml-2 text-gray-500 dark:text-gray-400">#{{ user.id }}</span>
               </button>
             </div>

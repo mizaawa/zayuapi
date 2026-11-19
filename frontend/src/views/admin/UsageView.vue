@@ -77,7 +77,8 @@
                 <button
                   type="button"
                   @click="showColumnDropdown = !showColumnDropdown"
-                  class="btn btn-secondary admin-records-columns"
+                  :aria-expanded="showColumnDropdown"
+                  class="btn menu-trigger admin-records-columns"
                   :title="t('admin.users.columnSettings')"
                 >
                   <Icon name="grid" size="sm" />
@@ -85,14 +86,15 @@
                 </button>
                 <div
                   v-if="showColumnDropdown"
-                  class="admin-column-menu absolute inset-x-0 top-full z-50 mt-1.5 max-h-80 overflow-y-auto py-1.5 md:left-auto md:right-0 md:w-52"
+                  class="menu-surface admin-column-menu absolute inset-x-0 top-full z-50 mt-1.5 max-h-80 overflow-y-auto py-1.5 md:left-auto md:right-0 md:w-52"
                 >
                   <button
                     v-for="col in currentToggleableColumns"
                     :key="col.key"
                     type="button"
                     @click="toggleCurrentColumn(col.key)"
-                    class="admin-column-option"
+                    :aria-pressed="isCurrentColumnVisible(col.key)"
+                    class="menu-option admin-column-option"
                   >
                     <span>{{ col.label }}</span>
                     <Icon
@@ -994,7 +996,6 @@ defineExpose({ requestedModelStats, refreshData })
 
 .admin-column-menu {
   border-radius: 1rem;
-  background: var(--md-sys-color-surface);
   box-shadow: var(--theme-highlight), var(--theme-elevation-3);
 }
 
@@ -1009,10 +1010,6 @@ defineExpose({ requestedModelStats, refreshData })
   font-size: 0.8125rem;
   text-align: left;
   color: var(--md-sys-color-on-surface);
-}
-
-.admin-column-option:hover {
-  background: color-mix(in srgb, var(--md-sys-color-primary) 14%, var(--md-sys-color-surface));
 }
 
 .admin-records-body {

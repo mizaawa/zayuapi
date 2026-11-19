@@ -57,14 +57,16 @@ describe('light-only Monet palette', () => {
     expect(contrastRatio(bodyText, background)).toBeGreaterThanOrEqual(4.5)
   })
 
-  it('keeps dropdown labels, chevrons and focus indicators readable on the light states', () => {
-    const ink = getVariable(root, '--md-sys-color-on-surface-variant')
-    const focus = getVariable(root, '--select-focus')
-    for (const state of ['--select-surface', '--select-hover', '--select-selected']) {
-      const fill = getVariable(root, state)
-      expect(contrastRatio(ink, fill)).toBeGreaterThanOrEqual(4.5)
-      expect(contrastRatio(focus, fill)).toBeGreaterThanOrEqual(3)
-    }
+  it.each([
+    ['surface', 'surface-container', 'on-surface-variant'],
+    ['hover', 'surface-container-high', 'on-surface-variant'],
+    ['selected', 'primary', 'on-primary'],
+  ])('uses the global warm %s color for dropdowns and keeps it readable', (state, surface, ink) => {
+    expect(root).toContain(`--select-${state}: var(--md-sys-color-${surface})`)
+    expect(root).toContain('--select-focus: var(--md-sys-color-on-primary-container)')
+    const fill = getVariable(root, `--md-sys-color-${surface}`)
+    expect(contrastRatio(getVariable(root, `--md-sys-color-${ink}`), fill)).toBeGreaterThanOrEqual(4.5)
+    expect(contrastRatio(getVariable(root, '--md-sys-color-on-primary-container'), fill)).toBeGreaterThanOrEqual(3)
   })
 
   it('uses readable dark text on the brighter primary yellow', () => {

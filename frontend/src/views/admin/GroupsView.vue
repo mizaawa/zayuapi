@@ -2134,7 +2134,7 @@
                           accountSearchKeyword[getCreateRuleSearchKey(rule)]
                         "
                         type="text"
-                        class="input text-sm"
+                        class="input menu-trigger text-sm"
                         :placeholder="
                           t(
                             'admin.groups.modelRouting.searchAccountPlaceholder',
@@ -2150,7 +2150,7 @@
                           accountSearchResults[getCreateRuleSearchKey(rule)]
                             ?.length > 0
                         "
-                        class="absolute z-50 mt-1 max-h-48 w-full overflow-auto rounded-lg border bg-white shadow-lg dark:border-dark-600 dark:bg-dark-800"
+                        class="menu-surface absolute z-50 mt-1 max-h-48 w-full overflow-auto rounded-lg border shadow-lg"
                       >
                         <button
                           v-for="account in accountSearchResults[
@@ -2159,7 +2159,7 @@
                           :key="account.id"
                           type="button"
                           @click="selectAccount(rule, account)"
-                          class="w-full px-3 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-dark-700"
+                          class="menu-option w-full px-3 py-2 text-left text-sm"
                           :class="{
                             'opacity-50': rule.accounts.some(
                               (a) => a.id === account.id,
@@ -3857,7 +3857,7 @@
                           accountSearchKeyword[getEditRuleSearchKey(rule)]
                         "
                         type="text"
-                        class="input text-sm"
+                        class="input menu-trigger text-sm"
                         :placeholder="
                           t(
                             'admin.groups.modelRouting.searchAccountPlaceholder',
@@ -3873,7 +3873,7 @@
                           accountSearchResults[getEditRuleSearchKey(rule)]
                             ?.length > 0
                         "
-                        class="absolute z-50 mt-1 max-h-48 w-full overflow-auto rounded-lg border bg-white shadow-lg dark:border-dark-600 dark:bg-dark-800"
+                        class="menu-surface absolute z-50 mt-1 max-h-48 w-full overflow-auto rounded-lg border shadow-lg"
                       >
                         <button
                           v-for="account in accountSearchResults[
@@ -3882,7 +3882,7 @@
                           :key="account.id"
                           type="button"
                           @click="selectAccount(rule, account, true)"
-                          class="w-full px-3 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-dark-700"
+                          class="menu-option w-full px-3 py-2 text-left text-sm"
                           :class="{
                             'opacity-50': rule.accounts.some(
                               (a) => a.id === account.id,

@@ -115,15 +115,20 @@ onUpdated(measure)
 .sort-scroll-track {
   touch-action: none;
   cursor: pointer;
-  background: var(--md-sys-color-surface-container);
+  background: var(--scroll-track);
 }
 .sort-scroll-track:focus-visible {
-  outline: 2px solid var(--md-sys-color-primary);
+  outline: 2px solid var(--select-focus);
   outline-offset: 2px;
 }
 .sort-scroll-thumb {
   cursor: grab;
-  background: var(--md-sys-color-primary);
+  background: var(--scroll-thumb);
+}
+.sort-scroll-track:hover .sort-scroll-thumb,
+.sort-scroll-track.is-dragging .sort-scroll-thumb { background: var(--select-focus); }
+@media (forced-colors: active) {
+  .sort-scroll-thumb { border: 2px solid ButtonText; }
 }
 .sort-scroll-track.is-dragging,
 .sort-scroll-track.is-dragging .sort-scroll-thumb { cursor: grabbing; }

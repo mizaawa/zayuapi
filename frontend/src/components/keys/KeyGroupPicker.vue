@@ -684,7 +684,6 @@ onBeforeUnmount(() => teardown(false))
   overscroll-behavior: contain;
   padding: 0.375rem 0.875rem 1rem;
   border-top: 1px solid rgb(215 193 106 / 0.3);
-  scrollbar-color: rgb(215 193 106 / 0.75) transparent;
   scrollbar-width: thin;
 }
 
@@ -832,23 +831,22 @@ onBeforeUnmount(() => teardown(false))
 }
 
 @media (hover: hover) {
-  .kgp-option:hover {
-    background: color-mix(in srgb, var(--kgp-accent) 7%, var(--md-sys-color-surface));
+  .kgp-option:hover:not(.is-blocked, .is-selected) {
+    background: var(--select-hover);
   }
 }
 
 .kgp-list.is-keyboard .kgp-option.is-active {
-  background: color-mix(in srgb, var(--kgp-accent) 8%, var(--md-sys-color-surface));
-  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--kgp-accent) 55%, transparent);
+  outline: 2px solid var(--select-focus);
+  outline-offset: -2px;
 }
 
 .kgp-option:active:not(.is-blocked) {
-  background: color-mix(in srgb, var(--kgp-accent) 13%, var(--md-sys-color-surface));
+  background: var(--select-hover);
 }
 
 .kgp-option.is-selected {
-  background: color-mix(in srgb, var(--kgp-accent) 11%, var(--md-sys-color-surface));
-  box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--kgp-accent) 50%, transparent);
+  background: var(--select-selected);
 }
 
 .kgp-option.is-selected .kgp-check {

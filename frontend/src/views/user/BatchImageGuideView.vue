@@ -204,8 +204,8 @@
               <div v-if="canRetry(row) || canDeleteRecord(row)">
                 <button
                   type="button"
-                  class="batch-row-action flex flex-col items-center gap-0.5 rounded-lg p-1.5 text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/30 dark:hover:bg-dark-700 dark:hover:text-white"
-                  :class="{ 'bg-gray-100 text-gray-900 dark:bg-dark-700 dark:text-white': openMoreJobId === row.id }"
+                  class="menu-trigger batch-row-action flex flex-col items-center gap-0.5 rounded-lg p-1.5 transition-colors"
+                  :aria-expanded="openMoreJobId === row.id"
                   :title="t('batchImage.actions.moreActions')"
                   @click.stop="toggleMoreMenu(row, $event)"
                 >
@@ -281,7 +281,7 @@
     <Teleport to="body">
       <div
         v-if="openMoreJobId"
-        class="fixed z-[9999] w-44 overflow-hidden rounded-xl bg-white py-1 text-sm shadow-lg ring-1 ring-black/5 dark:bg-dark-800 dark:ring-white/10"
+        class="menu-surface fixed z-[9999] w-44 overflow-hidden rounded-xl py-1 text-sm shadow-lg ring-1 ring-black/5 dark:ring-white/10"
         :style="moreMenuStyle"
         @click.stop
       >
@@ -290,7 +290,7 @@
             <button
               v-if="canRetry(job)"
               type="button"
-              class="flex w-full items-center gap-2 px-3 py-2 text-left text-gray-700 transition-colors hover:bg-amber-50 hover:text-amber-700 disabled:opacity-60 dark:text-gray-200 dark:hover:bg-amber-900/20 dark:hover:text-amber-300"
+              class="menu-option flex w-full items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-amber-50 hover:text-amber-700 disabled:opacity-60 dark:hover:bg-amber-900/20 dark:hover:text-amber-300"
               :disabled="retryingBatchId === job.id"
               @click="retryFailedJob(job)"
             >
@@ -300,7 +300,7 @@
             <button
               v-if="canDeleteRecord(job)"
               type="button"
-              class="flex w-full items-center gap-2 px-3 py-2 text-left text-red-600 transition-colors hover:bg-red-50 disabled:opacity-60 dark:text-red-400 dark:hover:bg-red-900/20"
+              class="menu-option flex w-full items-center gap-2 px-3 py-2 text-left text-red-600 transition-colors hover:bg-red-50 disabled:opacity-60 dark:text-red-400 dark:hover:bg-red-900/20"
               :disabled="deletingBatchId === job.id"
               @click="deleteJob(job)"
             >

@@ -3,7 +3,7 @@
     <button
       ref="triggerRef"
       type="button"
-      class="page-picker-trigger"
+      class="page-picker-trigger menu-trigger"
       :class="{ 'is-open': open }"
       :disabled="disabled || pageCount < 1"
       aria-haspopup="listbox"
@@ -24,7 +24,7 @@
         <div
           v-if="open"
           ref="panelRef"
-          class="page-picker-panel"
+          class="page-picker-panel menu-surface"
           :style="panelStyle"
           data-testid="page-picker-panel"
         >
@@ -311,8 +311,6 @@ onBeforeUnmount(() => {
   gap: 0.375rem;
   padding: 0 0.75rem 0 0.875rem;
   border-radius: 0.75rem;
-  background: var(--md-sys-color-primary);
-  color: var(--md-sys-color-on-primary);
   font-size: 0.875rem;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
@@ -320,18 +318,9 @@ onBeforeUnmount(() => {
   transition: background-color 160ms ease, box-shadow 160ms ease;
 }
 
-.page-picker-trigger:focus-visible {
-  outline: none;
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--md-sys-color-primary) 40%, transparent);
-}
-
-.page-picker-trigger:disabled {
-  cursor: not-allowed;
-  opacity: 0.5;
-}
-
 .page-picker-caret {
   flex: none;
+  color: var(--select-focus);
   transition: transform 160ms ease;
 }
 
@@ -346,12 +335,6 @@ onBeforeUnmount(() => {
   }
 }
 
-@media (hover: hover) {
-  .page-picker-trigger:hover:not(:disabled) {
-    background: color-mix(in srgb, var(--md-sys-color-primary) 86%, var(--md-sys-color-on-primary));
-  }
-}
-
 .page-picker-panel {
   position: fixed;
   z-index: 100000020;
@@ -359,8 +342,6 @@ onBeforeUnmount(() => {
   flex-direction: column;
   padding: 6px;
   border-radius: 1rem;
-  background: var(--md-sys-color-surface);
-  color: var(--md-sys-color-on-surface);
   box-shadow: var(--theme-highlight), 0 0 0 1px rgb(215 193 106 / 0.45), var(--theme-elevation-3);
 }
 
@@ -389,7 +370,7 @@ onBeforeUnmount(() => {
 }
 
 .page-picker-list:focus-visible {
-  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--md-sys-color-primary) 55%, transparent);
+  box-shadow: inset 0 0 0 2px var(--select-focus);
 }
 
 .page-picker-track {
@@ -424,11 +405,11 @@ onBeforeUnmount(() => {
 }
 
 .page-picker-option.is-active .page-picker-option-body {
-  background: var(--md-sys-color-surface-container);
+  background: var(--select-hover);
 }
 
 .page-picker-option.is-current .page-picker-option-body {
-  background: var(--md-sys-color-primary);
+  background: var(--select-selected);
   color: var(--md-sys-color-on-primary);
   font-weight: 600;
 }
