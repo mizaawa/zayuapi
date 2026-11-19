@@ -111,6 +111,8 @@ func providerPublicError(err error) string {
 		return errProviderTurnstile.Error()
 	case errors.Is(err, errProviderTwoFactor):
 		return errProviderTwoFactor.Error()
+	case errors.Is(err, errProviderRefreshNeedsSave), errors.Is(err, errProviderSessionBound), errors.Is(err, errProviderSessionRevoked), errors.Is(err, errProviderRefreshInvalid), errors.Is(err, errProviderRefreshExpired):
+		return err.Error()
 	case errors.As(err, &scope):
 		permission := "a required permission"
 		if scope.scope != "" {
@@ -297,6 +299,9 @@ func (r *providerRemote) request(ctx context.Context, method, path string, body 
 	defer func() { _ = res.Body.Close() }()
 	var envelope map[string]any
 	if err := json.NewDecoder(io.LimitReader(res.Body, 1<<20)).Decode(&envelope); err != nil {
+		if authErr := sub2APISessionError(path, res.StatusCode, nil); authErr != nil {
+			return nil, authErr
+		}
 		if res.StatusCode == http.StatusUnauthorized || res.StatusCode == http.StatusForbidden {
 			return nil, errProviderAuthentication
 		}
@@ -304,6 +309,9 @@ func (r *providerRemote) request(ctx context.Context, method, path string, body 
 			return nil, &providerRemoteError{operation: path, status: res.StatusCode}
 		}
 		return nil, errProviderResponse
+	}
+	if authErr := sub2APISessionError(path, res.StatusCode, envelope); authErr != nil {
+		return nil, authErr
 	}
 	message, _ := envelope["message"].(string)
 	if envelope["reason"] == "TURNSTILE_VERIFICATION_FAILED" || envelope["code"] == "TURNSTILE_VERIFICATION_FAILED" || strings.Contains(strings.ToLower(message), "turnstile") {
@@ -367,7 +375,8 @@ func divide(value *float64, factor float64) *float64 {
 
 // providerProbe is what one balance probe learned about a provider account.
 type providerProbe struct {
-	metrics providerMetrics
+	metrics           providerMetrics
+	advertisedGateway *string
 	// secret is a renewed Sub2API token pair; empty when the login is unchanged.
 	secret string
 	// userID is the account ID that New API reports in /api/user/self.
@@ -379,7 +388,11 @@ func probeProvider(ctx context.Context, provider providerRecord, secret string) 
 	if err != nil {
 		return providerProbe{}, err
 	}
-	return probeProviderAccount(ctx, provider, secret, client)
+	probe, err := probeProviderAccount(ctx, provider, secret, client)
+	if err == nil && provider.SiteType == "sub2api" && provider.GatewayURL == "" {
+		probe.advertisedGateway = sub2APIPublishedGateway(ctx, client, provider.BaseURL)
+	}
+	return probe, err
 }
 
 func probeProviderWithClient(ctx context.Context, provider providerRecord, secret string, client *http.Client) (providerMetrics, error) {
@@ -391,88 +404,13 @@ func probeProviderAccount(ctx context.Context, provider providerRecord, secret s
 	r := providerRemote{client: client, base: provider.BaseURL}
 	switch provider.SiteType {
 	case "sub2api":
-		var credential providerToken
-		var rotatedSecret string
-		if provider.AuthMode == "password" {
-			login, err := r.request(ctx, http.MethodPost, "/api/v1/auth/login", map[string]string{"email": provider.Account, "password": secret})
-			if err != nil {
-				return providerProbe{}, err
-			}
-			r.token, _ = login["access_token"].(string)
-			if r.token == "" {
-				if required, _ := login["requires_2fa"].(bool); required {
-					return providerProbe{}, errProviderTwoFactor
-				}
-				return providerProbe{}, errProviderResponse
-			}
-		} else {
-			token, err := decodeProviderToken(secret)
-			if err != nil {
-				return providerProbe{}, err
-			}
-			credential = token
-			r.token = token.AccessToken
-			r.tokenType = token.TokenType
-		}
-		renew := func() error {
-			if credential.RefreshToken == "" {
-				return errProviderAuthentication
-			}
-			fresh, err := r.request(ctx, http.MethodPost, "/api/v1/auth/refresh", map[string]string{"refresh_token": credential.RefreshToken})
-			if err != nil {
-				return err
-			}
-			access, _ := fresh["access_token"].(string)
-			if access == "" {
-				return errProviderResponse
-			}
-			refresh, _ := fresh["refresh_token"].(string)
-			if refresh == "" {
-				refresh = credential.RefreshToken
-			}
-			freshType, _ := fresh["token_type"].(string)
-			if freshType == "" {
-				freshType = credential.TokenType
-			}
-			rotatedSecret, err = encodeProviderToken(access, refresh, freshType)
-			if err != nil {
-				return err
-			}
-			credential.AccessToken, credential.RefreshToken = access, refresh
-			r.token = access
-			r.tokenType = freshType
-			return nil
-		}
-		if provider.AuthMode != "password" && r.token == "" {
-			if err := renew(); err != nil {
-				return providerProbe{}, err
-			}
-		}
-		profile, err := r.request(ctx, http.MethodGet, "/api/v1/user/profile", nil)
-		if errors.Is(err, errProviderAuthentication) && credential.RefreshToken != "" {
-			if err = renew(); err == nil {
-				profile, err = r.request(ctx, http.MethodGet, "/api/v1/user/profile", nil)
-			}
-		}
-		if err != nil {
+		session := providerSession{record: provider, secret: secret, remote: r}
+		if err := session.authenticate(ctx); err != nil {
 			return providerProbe{}, err
 		}
-		stats, err := r.request(ctx, http.MethodGet, "/api/v1/usage/dashboard/stats", nil)
-		if errors.Is(err, errProviderAuthentication) && credential.RefreshToken != "" {
-			if err = renew(); err == nil {
-				stats, err = r.request(ctx, http.MethodGet, "/api/v1/usage/dashboard/stats", nil)
-			}
-		}
-		if err != nil {
-			return providerProbe{}, err
-		}
-		return providerProbe{metrics: providerMetrics{
-			Balance:       field(profile, "balance"),
-			TodaySpend:    field(stats, "today_actual_cost", "today_cost"),
-			TotalRecharge: field(profile, "total_recharged"),
-			TotalSpend:    field(stats, "total_actual_cost", "total_cost"),
-			Currency:      "USD",
-		}, secret: rotatedSecret}, nil
+		metrics, err := session.sub2APIMetrics(ctx)
+		// A consumed RT cannot be recovered even if profile/stats fails afterwards.
+		return providerProbe{metrics: metrics, secret: session.rotated}, err
 	case "newapi":
 		// The probe signs in exactly as the key operations do.
 		if err := newAPISignIn(ctx, &r, provider, secret); err != nil {

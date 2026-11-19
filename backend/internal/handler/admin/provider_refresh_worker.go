@@ -18,6 +18,7 @@ type providerAlertMailer interface {
 const providerRefreshConcurrency = 8
 
 type providerProbeResult struct {
+	release  func()
 	original providerRecord
 	updated  providerRecord
 	err      error
@@ -81,16 +82,29 @@ func (h *AccountHandler) refreshProviderBalances(ctx context.Context, settings *
 				return
 			}
 			defer func() { <-permits }()
-			updated := original
 			probeCtx, cancel := context.WithTimeout(ctx, 45*time.Second)
+			defer cancel()
+			var release func()
+			if original.usesSub2APIToken() {
+				var err error
+				release, err = lockProviderSession(probeCtx, original.ID)
+				if err != nil {
+					return
+				}
+				original, err = h.currentProviderSession(probeCtx, original)
+				if err != nil {
+					release()
+					return
+				}
+			}
+			updated := original
 			probeErr := probe(probeCtx, &updated, "")
-			cancel()
 			if probeErr != nil {
 				// A remote failure does not invalidate the last known balance or
 				// start a new alert episode.
 				markProviderDisconnected(&updated, probeErr)
 			}
-			results <- providerProbeResult{original: original, updated: updated, err: probeErr}
+			results <- providerProbeResult{release: release, original: original, updated: updated, err: probeErr}
 		}(original)
 	}
 	go func() {
@@ -98,59 +112,72 @@ func (h *AccountHandler) refreshProviderBalances(ctx context.Context, settings *
 		close(results)
 	}()
 	for result := range results {
-		if ctx.Err() != nil {
-			return
+		// Do not release a session gate until its rotated RT is durable. Drain
+		// results even on shutdown; do not hold a gate during email delivery.
+		alert := h.commitProviderBalance(ctx, settings, result)
+		if result.release != nil {
+			result.release()
 		}
-		var pendingAlert *providerRecord
-		providerWriteMu.Lock()
-		var current []providerRecord
-		if err := h.providerSettings.LoadProviderRecords(ctx, &current); err != nil {
-			providerWriteMu.Unlock()
-			slog.Warn("reload provider before automatic refresh", "error", err)
-			continue
-		}
-		for i := range current {
-			if current[i].ID != result.original.ID {
-				continue
-			}
-			if !sameProviderIdentity(current[i], result.original) {
-				break // An admin edited this identity while the remote request ran.
-			}
-			if result.err == nil {
-				current[i].Metrics = result.updated.Metrics
-				current[i].SecretEncrypted = result.updated.SecretEncrypted
-				current[i].UpdatedAt = result.updated.UpdatedAt
-			}
-			current[i].Status = result.updated.Status
-			current[i].LastError = result.updated.LastError
-			current[i].ErrorKind = result.updated.ErrorKind
-			if result.err == nil {
-				// Persist the observed balance and badge before attempting email.
-				// SMTP can be slow; it must not hold the provider write lock.
-				updateProviderLowBalanceAlert(ctx, &current[i], settings, nil)
-				if current[i].LowBalanceAlert && !current[i].AlertSent {
-					alert := current[i]
-					pendingAlert = &alert
-				}
-			}
-			if err := h.providerSettings.SaveProviderRecords(ctx, current); err != nil {
-				slog.Warn("save automatically refreshed provider", "error", err)
-				pendingAlert = nil
-			}
-			break
-		}
-		providerWriteMu.Unlock()
-		if pendingAlert != nil {
-			h.sendProviderLowBalanceAlert(ctx, pendingAlert, mailer)
+		if alert != nil && ctx.Err() == nil {
+			h.sendProviderLowBalanceAlert(ctx, alert, mailer)
 		}
 	}
+}
+
+func (h *AccountHandler) commitProviderBalance(ctx context.Context, settings *service.SystemSettings, result providerProbeResult) *providerRecord {
+	if ctx.Err() != nil && result.original.SecretEncrypted == result.updated.SecretEncrypted {
+		return nil
+	}
+	ctx, cancel := providerCommitContext(ctx)
+	defer cancel()
+	var pendingAlert *providerRecord
+	providerWriteMu.Lock()
+	var current []providerRecord
+	if err := h.providerSettings.LoadProviderRecords(ctx, &current); err != nil {
+		providerWriteMu.Unlock()
+		slog.Warn("reload provider before automatic refresh", "error", err)
+		return nil
+	}
+	for i := range current {
+		if current[i].ID != result.original.ID {
+			continue
+		}
+		if !sameProviderIdentity(current[i], result.original) {
+			break // An admin edited this identity while the remote request ran.
+		}
+		current[i].SecretEncrypted = result.updated.SecretEncrypted // RT rotation survives a later probe failure.
+		if result.err == nil {
+			current[i].Metrics = result.updated.Metrics
+			current[i].AdvertisedGatewayURL = result.updated.AdvertisedGatewayURL
+			current[i].UpdatedAt = result.updated.UpdatedAt
+		}
+		current[i].Status = result.updated.Status
+		current[i].LastError = result.updated.LastError
+		current[i].ErrorKind = result.updated.ErrorKind
+		if result.err == nil {
+			// Persist the observed balance and badge before attempting email.
+			// SMTP can be slow; it must not hold the provider write lock.
+			updateProviderLowBalanceAlert(ctx, &current[i], settings, nil)
+			if current[i].LowBalanceAlert && !current[i].AlertSent {
+				alert := current[i]
+				pendingAlert = &alert
+			}
+		}
+		if err := h.providerSettings.SaveProviderRecords(ctx, current); err != nil {
+			slog.Warn("save automatically refreshed provider", "error", err)
+			pendingAlert = nil
+		}
+		break
+	}
+	providerWriteMu.Unlock()
+	return pendingAlert
 }
 
 // sameProviderIdentity reports whether a record still points at the same
 // upstream account and credential as the snapshot that was probed.
 func sameProviderIdentity(a, b providerRecord) bool {
 	return a.SecretEncrypted == b.SecretEncrypted && a.BaseURL == b.BaseURL && a.Account == b.Account &&
-		a.SiteType == b.SiteType && a.AuthMode == b.AuthMode && a.UserID == b.UserID
+		a.GatewayURL == b.GatewayURL && a.SiteType == b.SiteType && a.AuthMode == b.AuthMode && a.UserID == b.UserID
 }
 
 func (h *AccountHandler) sendProviderLowBalanceAlert(ctx context.Context, alert *providerRecord, mailer providerAlertMailer) {

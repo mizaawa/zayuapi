@@ -32,6 +32,17 @@ type providerSession struct {
 // withProviderSession signs in to a provider, runs one operation and keeps a
 // renewed dashboard token afterwards.
 func (h *AccountHandler) withProviderSession(ctx context.Context, record providerRecord, run func(*providerSession) error) error {
+	if record.usesSub2APIToken() {
+		release, err := lockProviderSession(ctx, record.ID)
+		if err != nil {
+			return err
+		}
+		defer release()
+		record, err = h.currentProviderSession(ctx, record)
+		if err != nil {
+			return err
+		}
+	}
 	if h.providerEncryptor == nil || record.SecretEncrypted == "" {
 		return errProviderStoredLogin
 	}
@@ -108,7 +119,7 @@ func (s *providerSession) authenticate(ctx context.Context) error {
 		if password {
 			return s.sub2apiLogin(ctx)
 		}
-		token, err := decodeProviderToken(s.secret)
+		token, err := decodeSub2APIToken(s.secret)
 		if err != nil {
 			return errProviderStoredLogin
 		}
@@ -147,7 +158,7 @@ func (s *providerSession) sub2apiLogin(ctx context.Context) error {
 }
 
 func (s *providerSession) canRenew() bool {
-	return s.record.SiteType == "sub2api" && (s.record.AuthMode == "password" || s.credential.RefreshToken != "")
+	return s.rotated == "" && s.record.SiteType == "sub2api" && (s.record.AuthMode == "password" || s.credential.RefreshToken != "")
 }
 
 func (s *providerSession) renew(ctx context.Context) error {
@@ -233,6 +244,9 @@ func (r *providerRemote) requestData(ctx context.Context, method, path string, b
 	decoder.UseNumber()
 	var envelope map[string]any
 	if err := decoder.Decode(&envelope); err != nil || envelope == nil {
+		if strings.HasPrefix(path, "/api/v1/") && res.StatusCode == http.StatusForbidden {
+			return nil, nil, &providerRemoteError{operation: operation, status: res.StatusCode}
+		}
 		switch {
 		case res.StatusCode == http.StatusUnauthorized || res.StatusCode == http.StatusForbidden:
 			return nil, nil, errProviderAuthentication
@@ -241,6 +255,9 @@ func (r *providerRemote) requestData(ctx context.Context, method, path string, b
 		default:
 			return nil, nil, errProviderResponse
 		}
+	}
+	if err := sub2APISessionError(path, res.StatusCode, envelope); err != nil {
+		return nil, nil, err
 	}
 	message := providerMessage(envelope)
 	if envelope["reason"] == "TURNSTILE_VERIFICATION_FAILED" || envelope["code"] == "TURNSTILE_VERIFICATION_FAILED" || strings.Contains(strings.ToLower(message), "turnstile") {
@@ -251,7 +268,7 @@ func (r *providerRemote) requestData(ctx context.Context, method, path string, b
 	}
 	// A 403 with a message is an application refusal (for example a group
 	// the user may not bind), not a failed login.
-	if res.StatusCode == http.StatusUnauthorized || (res.StatusCode == http.StatusForbidden && message == "") {
+	if res.StatusCode == http.StatusUnauthorized || (res.StatusCode == http.StatusForbidden && message == "" && !strings.HasPrefix(path, "/api/v1/")) {
 		return nil, nil, errProviderAuthentication
 	}
 	failed := res.StatusCode < 200 || res.StatusCode >= 300

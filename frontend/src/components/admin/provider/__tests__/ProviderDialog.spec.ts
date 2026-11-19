@@ -35,6 +35,26 @@ describe('ProviderDialog login forms', () => {
     wrapper.unmount()
   })
 
+  it('uses an advertised model gateway only after it is selected, keeping the dashboard mount', async () => {
+    const panel = 'https://vendor.example.com/panel'
+    const gateway = 'https://models.example.com/relay/v1'
+    mocks.probe.mockResolvedValueOnce({ status: 'connected', advertised_gateway_url: gateway })
+    const wrapper = mountDialog()
+    await wrapper.get('input[type="url"][required]').setValue(panel)
+    await wrapper.get('.provider-probe-bar button').trigger('click')
+    await flushPromises()
+    const input = wrapper.get<HTMLInputElement>('[data-testid="provider-gateway-url"]')
+    expect(input.element.value).toBe('')
+    const useGateway = wrapper.get('button.underline')
+    expect(useGateway.text()).toBe('admin.upstream.gatewayUse')
+    await useGateway.trigger('click')
+    expect(input.element.value).toBe(gateway)
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+    expect(mocks.create).toHaveBeenCalledWith(expect.objectContaining({ base_url: panel, gateway_url: gateway }))
+    wrapper.unmount()
+  })
+
   it('sends the balance warning suppression choice when adding a provider', async () => {
     const wrapper = mountDialog()
     await wrapper.get('[data-testid="provider-suppress-low-balance-alert"]').setValue(true)
@@ -58,7 +78,7 @@ describe('ProviderDialog login forms', () => {
     wrapper.unmount()
   })
 
-  it('accepts a Refresh Token without an Access Token', async () => {
+  it('saves and verifies a lone Refresh Token without consuming it in a preview', async () => {
     const wrapper = mountDialog()
     await wrapper.get('input[name="provider-auth"][value="token"]').setValue()
     const access = wrapper.get('input[placeholder="admin.upstream.accessTokenPlaceholder"]')
@@ -66,6 +86,11 @@ describe('ProviderDialog login forms', () => {
     expect(access.attributes('required')).toBeDefined()
     await refresh.setValue('refresh-only')
     expect(access.attributes('required')).toBeUndefined()
+    const probe = wrapper.get('.provider-probe-bar button')
+    expect(probe.attributes('disabled')).toBeDefined()
+    await probe.trigger('click')
+    expect(mocks.probe).not.toHaveBeenCalled()
+    expect(wrapper.get('button[type="submit"]').text()).toBe('admin.upstream.saveAndVerify')
     await wrapper.get('form').trigger('submit')
     await flushPromises()
     expect(mocks.create).toHaveBeenCalledWith(expect.objectContaining({ access_token: '', refresh_token: 'refresh-only' }))

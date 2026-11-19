@@ -30,6 +30,8 @@ type providerRecord struct {
 	Name                    string          `json:"name"`
 	SiteType                string          `json:"site_type"`
 	BaseURL                 string          `json:"base_url"`
+	GatewayURL              string          `json:"gateway_url,omitempty"`
+	AdvertisedGatewayURL    string          `json:"advertised_gateway_url,omitempty"`
 	AuthMode                string          `json:"auth_mode"`
 	Account                 string          `json:"account,omitempty"`
 	UserID                  string          `json:"user_id,omitempty"`
@@ -51,6 +53,8 @@ type providerView struct {
 	Name                    string          `json:"name"`
 	SiteType                string          `json:"site_type"`
 	BaseURL                 string          `json:"base_url"`
+	GatewayURL              string          `json:"gateway_url,omitempty"`
+	AdvertisedGatewayURL    string          `json:"advertised_gateway_url,omitempty"`
 	AuthMode                string          `json:"auth_mode"`
 	Account                 string          `json:"account,omitempty"`
 	UserID                  string          `json:"user_id,omitempty"`
@@ -69,7 +73,7 @@ func (r providerRecord) view() providerView {
 	if mode == "api_key" {
 		mode = "token"
 	}
-	return providerView{r.ID, r.Name, r.SiteType, r.BaseURL, mode, r.Account,
+	return providerView{r.ID, r.Name, r.SiteType, r.BaseURL, r.GatewayURL, r.AdvertisedGatewayURL, mode, r.Account,
 		r.UserID, r.ExchangeRate, r.Notes, r.Status, r.Metrics, r.UpdatedAt, r.LastError,
 		r.SuppressLowBalanceAlert, r.LowBalanceAlert}
 }
@@ -79,6 +83,7 @@ type providerInput struct {
 	Name                    string  `json:"name"`
 	SiteType                string  `json:"site_type"`
 	BaseURL                 string  `json:"base_url"`
+	GatewayURL              *string `json:"gateway_url"`
 	AuthMode                string  `json:"auth_mode"`
 	Account                 string  `json:"account"`
 	Password                string  `json:"password"`
@@ -112,7 +117,7 @@ func validateProviderInput(input *providerInput, previous *providerRecord) (prov
 	if input == nil {
 		return providerRecord{}, "", errors.New("missing provider")
 	}
-	base, err := normalizeProviderURL(input.BaseURL)
+	base, err := normalizeDashboardURL(input.BaseURL, input.SiteType)
 	if err != nil {
 		return providerRecord{}, "", err
 	}
@@ -160,6 +165,19 @@ func validateProviderInput(input *providerInput, previous *providerRecord) (prov
 	record := providerRecord{Name: name, SiteType: input.SiteType, BaseURL: base,
 		AuthMode: input.AuthMode, Account: strings.TrimSpace(input.Account), ExchangeRate: rate,
 		UserID: userID, Notes: strings.TrimSpace(input.Notes), SuppressLowBalanceAlert: input.SuppressLowBalanceAlert}
+	if input.SiteType == "sub2api" {
+		if input.GatewayURL != nil && strings.TrimSpace(*input.GatewayURL) != "" {
+			record.GatewayURL, err = normalizeGatewayURL(*input.GatewayURL)
+			if err != nil {
+				return providerRecord{}, "", errors.New("invalid Sub2API model gateway: " + err.Error())
+			}
+		} else if input.GatewayURL == nil && previous != nil && previous.SiteType == record.SiteType && previous.BaseURL == base {
+			record.GatewayURL = previous.GatewayURL // Older API clients omit this field.
+		}
+		if previous != nil && previous.SiteType == record.SiteType && previous.BaseURL == base {
+			record.AdvertisedGatewayURL = previous.AdvertisedGatewayURL
+		}
+	}
 	secret := input.Password
 	if input.AuthMode == "token" {
 		if input.SiteType == "sub2api" {
@@ -232,27 +250,21 @@ func (h *AccountHandler) probeRecordContext(ctx context.Context, record *provide
 		}
 	}
 	probe, err := probeProvider(ctx, *record, secret)
+	if probe.secret != "" { // Preserve a rotated credential independently of metric success.
+		if protectErr := h.protectProviderCredential(record, probe.secret); protectErr != nil {
+			return protectErr
+		}
+	}
 	if err != nil {
 		return err
-	}
-	effectiveSecret := probe.secret
-	if effectiveSecret == "" {
-		effectiveSecret = secret
-	}
-	if effectiveSecret != "" {
-		if h.providerEncryptor == nil {
-			return errors.New("provider encryption unavailable")
-		}
-		ciphertext, err := h.providerEncryptor.Encrypt(effectiveSecret)
-		if err != nil {
-			return errors.New("could not protect provider login")
-		}
-		record.SecretEncrypted = ciphertext
 	}
 	if record.SiteType == "newapi" && record.AuthMode == "token" && record.UserID == "" {
 		// Shown in the form; a personal access token never sends it. A
 		// configured ID is kept even when the site reports another or none.
 		record.UserID = probe.userID
+	}
+	if probe.advertisedGateway != nil {
+		record.AdvertisedGatewayURL = *probe.advertisedGateway
 	}
 	record.Metrics = probe.metrics
 	record.Status = "connected"
@@ -281,7 +293,7 @@ func providerFailureKind(err error) string {
 	case errors.As(err, &scope):
 		return "scope"
 	case errors.Is(err, errProviderAuthentication), errors.Is(err, errProviderStoredLogin),
-		errors.Is(err, errProviderTwoFactor), errors.Is(err, errProviderTurnstile):
+		errors.Is(err, errProviderTwoFactor), errors.Is(err, errProviderTurnstile), errors.Is(err, errProviderRefreshInvalid), errors.Is(err, errProviderRefreshExpired), errors.Is(err, errProviderSessionBound), errors.Is(err, errProviderSessionRevoked):
 		return "auth"
 	default:
 		return ""
@@ -396,7 +408,11 @@ func (h *AccountHandler) ProbeProvider(c *gin.Context) {
 		response.BadRequest(c, err.Error())
 		return
 	}
-	if err := h.probeRecord(c, &record, secret); err != nil {
+	if err := h.previewProvider(c.Request.Context(), &record, secret); err != nil {
+		if errors.Is(err, errProviderRefreshNeedsSave) {
+			response.ErrorWithDetails(c, http.StatusConflict, providerPublicError(err), "PROVIDER_REFRESH_NEEDS_SAVE", nil)
+			return
+		}
 		response.Error(c, http.StatusBadGateway, providerPublicError(err))
 		return
 	}
@@ -430,10 +446,13 @@ func (h *AccountHandler) CreateProvider(c *gin.Context) {
 	}
 	providerWriteMu.Lock()
 	defer providerWriteMu.Unlock()
-	records, err := h.providerRecords(c)
+	commitCtx, cancel := providerCommitContext(c.Request.Context())
+	defer cancel()
+	var records []providerRecord
+	err = h.providerSettings.LoadProviderRecords(commitCtx, &records)
 	if err == nil {
 		records = append([]providerRecord{record}, records...)
-		err = h.providerSettings.SaveProviderRecords(c.Request.Context(), records)
+		err = h.providerSettings.SaveProviderRecords(commitCtx, records)
 	}
 	if err != nil {
 		response.Error(c, http.StatusInternalServerError, "Could not save provider")
@@ -448,6 +467,12 @@ func (h *AccountHandler) UpdateProvider(c *gin.Context) {
 		response.BadRequest(c, "Invalid provider")
 		return
 	}
+	release, lockErr := lockProviderSession(c.Request.Context(), c.Param("id"))
+	if lockErr != nil {
+		response.Error(c, http.StatusServiceUnavailable, "Provider operation canceled")
+		return
+	}
+	defer release()
 	providerWriteMu.Lock()
 	defer providerWriteMu.Unlock()
 	records, err := h.providerRecords(c)
@@ -474,7 +499,9 @@ func (h *AccountHandler) UpdateProvider(c *gin.Context) {
 			h.updateCachedProviderWarning(c.Request.Context(), &record)
 		}
 		records[index] = record
-		if err := h.providerSettings.SaveProviderRecords(c.Request.Context(), records); err != nil {
+		commitCtx, cancel := providerCommitContext(c.Request.Context())
+		defer cancel()
+		if err := h.providerSettings.SaveProviderRecords(commitCtx, records); err != nil {
 			response.Error(c, http.StatusInternalServerError, "Could not save provider")
 			return
 		}
@@ -485,6 +512,12 @@ func (h *AccountHandler) UpdateProvider(c *gin.Context) {
 }
 
 func (h *AccountHandler) RefreshProvider(c *gin.Context) {
+	release, lockErr := lockProviderSession(c.Request.Context(), c.Param("id"))
+	if lockErr != nil {
+		response.Error(c, http.StatusServiceUnavailable, "Provider operation canceled")
+		return
+	}
+	defer release()
 	providerWriteMu.Lock()
 	defer providerWriteMu.Unlock()
 	records, err := h.providerRecords(c)
@@ -502,7 +535,9 @@ func (h *AccountHandler) RefreshProvider(c *gin.Context) {
 		} else {
 			h.updateCachedProviderWarning(c.Request.Context(), &records[index])
 		}
-		if err := h.providerSettings.SaveProviderRecords(c.Request.Context(), records); err != nil {
+		commitCtx, cancel := providerCommitContext(c.Request.Context())
+		defer cancel()
+		if err := h.providerSettings.SaveProviderRecords(commitCtx, records); err != nil {
 			response.Error(c, http.StatusInternalServerError, "Could not save provider")
 			return
 		}

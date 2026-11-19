@@ -54,7 +54,7 @@
         </a>
 
         <!-- Language Switcher -->
-        <LocaleSwitcher />
+        <LocaleSwitcher class="header-plain-menu" />
 
         <!-- Subscription Progress (for users with active subscriptions) -->
         <SubscriptionProgressMini v-if="user" />
@@ -116,7 +116,7 @@
         </div>
 
         <!-- User Dropdown -->
-        <div v-if="user" class="relative" ref="dropdownRef">
+        <div v-if="user" class="header-plain-menu relative" ref="dropdownRef">
           <button
             @click="toggleDropdown"
             class="menu-trigger flex items-center gap-2 rounded-xl p-1.5 transition-colors"
@@ -464,6 +464,15 @@ onBeforeUnmount(() => {
   border: 1px solid transparent;
   border-radius: 1rem;
   background: transparent;
+}
+
+.header-plain-menu > :deep(.menu-trigger) {
+  border: 0;
+  background: transparent;
+}
+
+.header-plain-menu > :deep(.menu-trigger[aria-expanded='true']:not(:focus-visible)) {
+  outline: none;
 }
 
 :global(.dark) .app-header {

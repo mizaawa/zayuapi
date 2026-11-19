@@ -27,8 +27,20 @@
       <label class="block">
         <span class="input-label">{{ t('admin.upstream.siteUrl') }}</span>
         <input v-model.trim="form.base_url" class="input provider-input font-mono" type="url" required placeholder="https://api.zayuapi.com" />
-        <span class="input-hint block">{{ t('admin.upstream.siteUrlHint') }}</span>
+        <span class="input-hint block">{{ t(form.site_type === 'sub2api' ? 'admin.upstream.sub2SiteUrlHint' : 'admin.upstream.siteUrlHint') }}</span>
       </label>
+
+      <div v-if="form.site_type === 'sub2api'" class="space-y-1">
+        <label class="block">
+          <span class="input-label">{{ t('admin.upstream.gatewayUrl') }}</span>
+          <input v-model.trim="form.gateway_url" data-testid="provider-gateway-url" class="input provider-input font-mono" type="url" placeholder="https://gateway.example.com/relay/v1" />
+          <span class="input-hint block">{{ t('admin.upstream.gatewayUrlHint') }}</span>
+        </label>
+        <p v-if="advertisedGateway && advertisedFor === siteLink && advertisedGateway !== form.gateway_url" class="input-hint break-all">
+          {{ t('admin.upstream.gatewayAdvertised') }} <code>{{ advertisedGateway }}</code>
+          <button type="button" class="ml-1 underline" @click="form.gateway_url = advertisedGateway">{{ t('admin.upstream.gatewayUse') }}</button>
+        </p>
+      </div>
 
       <fieldset>
         <legend class="input-label">{{ t('admin.upstream.loginMode') }}</legend>
@@ -93,12 +105,12 @@
       </div>
 
       <div class="provider-probe-bar">
-        <button type="button" class="btn btn-secondary inline-flex items-center gap-2" :disabled="probing || saving" @click="testConnection"><Icon name="shield" size="sm" />{{ probing ? t('admin.upstream.probing') : t('admin.upstream.probe') }}</button>
-        <span class="text-[11px] text-gray-500 dark:text-gray-400">{{ t('admin.upstream.probeHint') }}</span>
+        <button type="button" class="btn btn-secondary inline-flex items-center gap-2" :disabled="probing || saving || refreshOnly" @click="testConnection"><Icon name="shield" size="sm" />{{ probing ? t('admin.upstream.probing') : t('admin.upstream.probe') }}</button>
+        <span class="text-[11px] text-gray-500 dark:text-gray-400">{{ t(refreshOnly ? 'admin.upstream.rtSaveHint' : 'admin.upstream.probeHint') }}</span>
       </div>
       <p v-if="probeMessage" role="status" class="rounded-xl px-3 py-2.5 text-xs leading-relaxed" :class="probeOk ? 'bg-emerald-50 text-emerald-800' : 'bg-red-50 text-red-700'">{{ probeMessage }}</p>
     </form>
-    <template #footer><div class="flex w-full justify-end gap-2"><button type="button" class="btn btn-secondary" @click="emit('close')">{{ t('common.cancel') }}</button><button type="submit" form="provider-form" class="btn btn-primary" :disabled="saving || probing">{{ saving ? t('admin.upstream.savingProvider') : provider ? t('common.save') : t('admin.upstream.loginAndAdd') }}</button></div></template>
+    <template #footer><div class="flex w-full justify-end gap-2"><button type="button" class="btn btn-secondary" @click="emit('close')">{{ t('common.cancel') }}</button><button type="submit" form="provider-form" class="btn btn-primary" :disabled="saving || probing">{{ saving ? t('admin.upstream.savingProvider') : refreshOnly ? t('admin.upstream.saveAndVerify') : provider ? t('common.save') : t('admin.upstream.loginAndAdd') }}</button></div></template>
   </BaseDialog>
 </template>
 
@@ -122,23 +134,29 @@ const modes = computed(() => [
   { value: 'password', label: t('admin.upstream.passwordLogin') },
   { value: 'token', label: form.site_type === 'newapi' ? t('admin.upstream.newapiKey') : t('admin.upstream.sub2apiKey') }
 ] as const)
-const form = reactive<ProviderInput>({ name: '', site_type: 'sub2api', base_url: '', auth_mode: 'password', account: '', password: '', access_token: '', refresh_token: '', token_type: 'Bearer', user_id: '', system_access_token: '', exchange_rate: 1, notes: '', suppress_low_balance_alert: false })
+const form = reactive<ProviderInput>({ name: '', site_type: 'sub2api', base_url: '', gateway_url: '', auth_mode: 'password', account: '', password: '', access_token: '', refresh_token: '', token_type: 'Bearer', user_id: '', system_access_token: '', exchange_rate: 1, notes: '', suppress_low_balance_alert: false })
 const visible = reactive({ password: false, access: false, refresh: false, system: false })
 const siteLink = computed(() => {
   try {
     const url = new URL(form.base_url)
-    return url.protocol === 'https:' && !url.username && !url.password ? url.origin : ''
+    if (url.protocol !== 'https:' || url.username || url.password || url.search || url.hash) return ''
+    if (form.site_type !== 'sub2api') return url.origin
+    return url.origin + url.pathname.replace(/\/+$/, '').replace(/\/api\/v1$/, '')
   } catch { return '' }
 })
+const advertisedGateway = ref('')
+const advertisedFor = ref('')
 const probing = ref(false)
 const saving = ref(false)
 const probeMessage = ref('')
 const probeOk = ref(false)
-const secretRequired = computed(() => !props.provider || props.provider.site_type !== form.site_type || props.provider.auth_mode !== form.auth_mode || props.provider.base_url.replace(/\/$/, '') !== form.base_url.replace(/\/$/, '') || (form.auth_mode === 'password' && props.provider.account !== form.account) || (form.site_type === 'newapi' && form.auth_mode === 'token' && (props.provider.user_id ?? '') !== form.user_id))
+const secretRequired = computed(() => !props.provider || props.provider.site_type !== form.site_type || props.provider.auth_mode !== form.auth_mode || props.provider.base_url.replace(/\/$/, '') !== (form.site_type === 'sub2api' ? siteLink.value : form.base_url.replace(/\/$/, '')) || (form.auth_mode === 'password' && props.provider.account !== form.account) || (form.site_type === 'newapi' && form.auth_mode === 'token' && (props.provider.user_id ?? '') !== form.user_id))
 // New API scopes needed to read the balance, usage and keys and to import a key.
 const newapiScopes = ['profile:read', 'usage:read', 'api_key:read', 'api_key:reveal']
 // A personal access token (nap_…) identifies its account; only a legacy system
 // access token is sent with the user ID. A kept token keeps its saved ID.
+const refreshOnly = computed(() => form.site_type === 'sub2api' && form.auth_mode === 'token' &&
+  (!!form.refresh_token && !form.access_token || !!form.access_token?.startsWith('rt_')))
 const userIdRequired = computed(() => {
   const token = form.system_access_token?.trim() ?? ''
   return token !== '' && !token.startsWith('nap_')
@@ -146,13 +164,16 @@ const userIdRequired = computed(() => {
 watch(() => [props.show, props.provider] as const, ([show]) => {
   if (!show) return
   const provider = props.provider
-  Object.assign(form, { name: provider?.name ?? '', site_type: provider?.site_type ?? 'sub2api', base_url: provider?.base_url ?? '', auth_mode: provider?.auth_mode ?? 'password', account: provider?.account ?? '', password: '', access_token: '', refresh_token: '', token_type: provider?.token_type ?? 'Bearer', user_id: provider?.user_id ?? '', system_access_token: '', exchange_rate: provider?.exchange_rate ?? 1, notes: provider?.notes ?? '', suppress_low_balance_alert: provider?.suppress_low_balance_alert ?? false })
+  Object.assign(form, { name: provider?.name ?? '', site_type: provider?.site_type ?? 'sub2api', base_url: provider?.base_url ?? '', gateway_url: provider?.gateway_url ?? '', auth_mode: provider?.auth_mode ?? 'password', account: provider?.account ?? '', password: '', access_token: '', refresh_token: '', token_type: provider?.token_type ?? 'Bearer', user_id: provider?.user_id ?? '', system_access_token: '', exchange_rate: provider?.exchange_rate ?? 1, notes: provider?.notes ?? '', suppress_low_balance_alert: provider?.suppress_low_balance_alert ?? false })
+  advertisedGateway.value = provider?.advertised_gateway_url ?? ''
+  advertisedFor.value = siteLink.value
   Object.assign(visible, { password: false, access: false, refresh: false, system: false })
   probeMessage.value = ''
   probeOk.value = false
 }, { immediate: true })
 function payload(): ProviderInput {
   return { id: props.provider?.id, name: form.name.trim(), site_type: form.site_type, base_url: form.base_url.trim(), auth_mode: form.auth_mode,
+    gateway_url: form.site_type === 'sub2api' ? form.gateway_url?.trim() || '' : undefined,
     account: form.auth_mode === 'password' ? form.account?.trim() : undefined,
     password: form.auth_mode === 'password' ? form.password : undefined,
     access_token: form.site_type === 'sub2api' && form.auth_mode === 'token' ? form.access_token?.trim() : undefined,
@@ -165,6 +186,7 @@ function payload(): ProviderInput {
 function failureReason(error: unknown, fallback: string): string {
   if (typeof error === 'object' && error !== null) {
     const err = error as { message?: unknown; reason?: unknown; response?: { data?: { message?: unknown; reason?: unknown } } }
+    if ((err.response?.data?.reason ?? err.reason) === 'PROVIDER_REFRESH_NEEDS_SAVE') return t('admin.upstream.rtSaveHint')
     const reason = err.response?.data?.message ?? err.response?.data?.reason ?? err.message ?? err.reason
     if (typeof reason === 'string' && reason.trim()) return reason.trim().slice(0, 350)
   }
@@ -174,7 +196,10 @@ async function testConnection() {
   probing.value = true
   probeMessage.value = ''
   try {
+    const panel = siteLink.value
     const result = await probeProvider(payload())
+    advertisedFor.value = panel
+    advertisedGateway.value = result.advertised_gateway_url ?? ''
     probeOk.value = result.status === 'connected'
     probeMessage.value = probeOk.value ? t('admin.upstream.probeSuccess') : result.last_error || t('admin.upstream.probeFailed')
     if (probeOk.value) appStore.showSuccess(probeMessage.value)

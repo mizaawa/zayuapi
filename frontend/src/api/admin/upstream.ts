@@ -8,6 +8,8 @@ export interface ProviderInput {
   name: string
   site_type: ProviderKind
   base_url: string
+  /** Explicit Sub2API model endpoint, independent of dashboard authentication. */
+  gateway_url?: string
   auth_mode: ProviderAuthMode
   account?: string
   password?: string
@@ -39,6 +41,8 @@ export interface Provider {
   name: string
   site_type: ProviderKind
   base_url: string
+  gateway_url?: string
+  advertised_gateway_url?: string
   auth_mode: ProviderAuthMode
   account?: string
   user_id?: string

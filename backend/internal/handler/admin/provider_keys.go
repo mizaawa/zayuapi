@@ -168,7 +168,7 @@ func (h *AccountHandler) ListProviderKeys(c *gin.Context) {
 	}
 	c.Header("Cache-Control", "private, no-store")
 	response.Success(c, gin.H{
-		"provider_id": record.ID, "site_type": record.SiteType, "endpoint": record.BaseURL,
+		"provider_id": record.ID, "site_type": record.SiteType, "endpoint": record.modelGateway(),
 		"keys": keys, "synced_at": time.Now().UTC(),
 	})
 }
@@ -300,7 +300,7 @@ func (h *AccountHandler) resolveProviderSelection(ctx context.Context, providerI
 	if err != nil {
 		return nil, providerKeyError(err)
 	}
-	return &providerResolvedKey{record: record, key: key, baseURL: providerAccountBaseURL(record.BaseURL, platform)}, nil
+	return &providerResolvedKey{record: record, key: key, baseURL: providerAccountBaseURL(record.modelGateway(), platform)}, nil
 }
 
 // binding is the non-secret provenance kept in account.extra.
@@ -395,6 +395,14 @@ func providerKeyError(err error) error {
 			denied = denied.WithMetadata(map[string]string{"scope": scope.scope})
 		}
 		return denied
+	case errors.Is(err, errProviderRefreshInvalid):
+		return infraerrors.New(http.StatusBadGateway, "PROVIDER_REFRESH_INVALID", providerPublicError(err))
+	case errors.Is(err, errProviderRefreshExpired):
+		return infraerrors.New(http.StatusBadGateway, "PROVIDER_REFRESH_EXPIRED", providerPublicError(err))
+	case errors.Is(err, errProviderSessionBound):
+		return infraerrors.New(http.StatusBadGateway, "PROVIDER_SESSION_BOUND", providerPublicError(err))
+	case errors.Is(err, errProviderSessionRevoked):
+		return infraerrors.New(http.StatusBadGateway, "PROVIDER_SESSION_REVOKED", providerPublicError(err))
 	case errors.Is(err, errProviderTokenExpired):
 		return infraerrors.New(http.StatusBadGateway, "PROVIDER_TOKEN_EXPIRED", providerPublicError(err))
 	case errors.Is(err, errProviderTokenRetired):
