@@ -2946,6 +2946,10 @@ func TestOpenAIResponsesWebSocket_FirstOutputTimeoutWithoutDownstreamReusesClien
 func runOpenAIResponsesWebSocketUsageLogCase(t *testing.T, tc openAIResponsesWSUsageLogCase) openAIResponsesWSUsageLogResult {
 	t.Helper()
 	gin.SetMode(gin.TestMode)
+	if tc.apiKeyService == nil {
+		tc.apiKeyService = newWSGroupPricingAPIKeyService(newWSGroupPricingAPIKeyRepoStub(1))
+		tc.apiKeyCredential = wsGroupPricingKey
+	}
 
 	turnCount := 1
 	if strings.TrimSpace(tc.secondPayload) != "" {
@@ -3101,17 +3105,9 @@ func runOpenAIResponsesWebSocketUsageLogCase(t *testing.T, tc openAIResponsesWSU
 		concurrencyHelper:   NewConcurrencyHelper(service.NewConcurrencyService(cache), SSEPingFormatNone, time.Second),
 	}
 
-	apiKey := &service.APIKey{
-		ID:      1801,
-		GroupID: &groupID,
-		User:    &service.User{ID: 1701, Status: service.StatusActive},
-	}
-	if tc.apiKeyService != nil {
-		h.apiKeyService = tc.apiKeyService
-		authKey, err := tc.apiKeyService.GetByKey(context.Background(), tc.apiKeyCredential)
-		require.NoError(t, err)
-		apiKey = authKey
-	}
+	h.apiKeyService = tc.apiKeyService
+	apiKey, err := tc.apiKeyService.GetByKey(context.Background(), tc.apiKeyCredential)
+	require.NoError(t, err)
 
 	router := gin.New()
 	router.Use(func(c *gin.Context) {

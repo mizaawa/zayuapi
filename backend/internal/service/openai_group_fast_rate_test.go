@@ -22,6 +22,7 @@ func TestOpenAIGroupFastRateRecordUsage(t *testing.T) {
 		name, model, requested, observed string
 		enabled, useResolver             bool
 		fastRate                         float64
+		force                            string
 		wantTier                         string
 		wantCustomerFactor               float64
 		wantLogRate                      float64
@@ -31,6 +32,8 @@ func TestOpenAIGroupFastRateRecordUsage(t *testing.T) {
 		{name: "fast with resolver and explicit priority prices", model: "gpt-5.1-codex", requested: "priority", enabled: true, useResolver: true, fastRate: 2.5, wantTier: "priority", wantCustomerFactor: 3.125, wantLogRate: 3.125},
 		{name: "fast switch disabled", model: "gpt-5.4", requested: "priority", fastRate: 3, wantTier: "priority", wantCustomerFactor: 2.5, wantLogRate: 1.25},
 		{name: "upstream downgrade", model: "gpt-5.4", requested: "fast", observed: "default", enabled: true, fastRate: 3, wantTier: "default", wantCustomerFactor: 1.25, wantLogRate: 1.25},
+		{name: "automatic UltraFast to Fast downgrade", model: "gpt-5.4", requested: "ultrafast", observed: "fast", enabled: true, fastRate: 3, wantTier: "priority", wantCustomerFactor: 3.75, wantLogRate: 3.75},
+		{name: "forced UltraFast retains contracted rate", model: "gpt-5.4", force: "ultrafast", requested: "ultrafast", observed: "default", enabled: true, useResolver: true, wantTier: "ultrafast", wantCustomerFactor: 8.125, wantLogRate: 8.125},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			usageRepo := &openAIRecordUsageLogRepoStub{inserted: true}
@@ -41,7 +44,7 @@ func TestOpenAIGroupFastRateRecordUsage(t *testing.T) {
 			}
 			groupID := int64(45)
 			group := &Group{ID: groupID, Platform: PlatformOpenAI, Status: StatusActive, Hydrated: true,
-				RateMultiplier: 1.25, FastRateEnabled: tc.enabled, FastRateMultiplier: tc.fastRate}
+				RateMultiplier: 1.25, FastRateEnabled: tc.enabled, FastRateMultiplier: tc.fastRate, UltraFastRateMultiplier: 6.5, ForcedFastMode: tc.force}
 			account := &Account{ID: 3, Platform: PlatformOpenAI, Type: AccountTypeAPIKey}
 			err := svc.RecordUsage(context.Background(), &OpenAIRecordUsageInput{
 				Result: &OpenAIForwardResult{
@@ -55,10 +58,14 @@ func TestOpenAIGroupFastRateRecordUsage(t *testing.T) {
 			require.NotNil(t, usageRepo.lastLog)
 			base, err := svc.billingService.CalculateCost(tc.model, tokens, 1)
 			require.NoError(t, err)
-			upstream, err := svc.billingService.CalculateCostWithServiceTier(tc.model, tokens, 1, tc.wantTier)
+			upstreamTier := tc.wantTier
+			if tc.force != "" {
+				upstreamTier = tc.observed
+			}
+			upstream, err := svc.billingService.CalculateCostWithServiceTier(tc.model, tokens, 1, upstreamTier)
 			require.NoError(t, err)
 			wantLogTotal := upstream.TotalCost
-			if tc.enabled && tc.wantTier == "priority" {
+			if tc.enabled && isOpenAISpeedTier(tc.wantTier) {
 				wantLogTotal = base.TotalCost
 				require.NotNil(t, usageRepo.lastLog.AccountStatsCost)
 				require.InDelta(t, upstream.TotalCost, *usageRepo.lastLog.AccountStatsCost, 1e-10)
@@ -71,6 +78,11 @@ func TestOpenAIGroupFastRateRecordUsage(t *testing.T) {
 			require.InDelta(t, wantActual, usageRepo.lastLog.ActualCost, 1e-10)
 			require.InDelta(t, wantActual, userRepo.lastAmount, 1e-10)
 			require.InDelta(t, tc.wantLogRate, usageRepo.lastLog.RateMultiplier, 1e-10)
+			if tc.enabled && isOpenAISpeedTier(tc.wantTier) {
+				require.InDelta(t, tc.wantLogRate/1.25, *usageRepo.lastLog.ServiceTierMultiplier, 1e-10)
+			} else {
+				require.Nil(t, usageRepo.lastLog.ServiceTierMultiplier)
+			}
 			require.InDelta(t, usageRepo.lastLog.TotalCost*usageRepo.lastLog.RateMultiplier,
 				usageRepo.lastLog.ActualCost, 1e-10)
 			require.Equal(t, optionalTrimmedStringPtr(tc.wantTier), usageRepo.lastLog.ServiceTier)
@@ -131,7 +143,7 @@ func TestOpenAIGroupFastRateAuthSnapshot(t *testing.T) {
 	snapshot := keyService.snapshotFromAPIKey(context.Background(), &APIKey{
 		ID: 2, UserID: 1, User: &User{ID: 1}, GroupID: &groupID,
 		Group: &Group{ID: groupID, Platform: PlatformOpenAI, Status: StatusActive,
-			FastRateEnabled: true, FastRateMultiplier: 3.5},
+			FastRateEnabled: true, FastRateMultiplier: 3.5, UltraFastRateMultiplier: 7.5, ForcedFastMode: "ultrafast"},
 	})
 	require.NotNil(t, snapshot)
 	data, err := json.Marshal(snapshot)
@@ -142,6 +154,8 @@ func TestOpenAIGroupFastRateAuthSnapshot(t *testing.T) {
 	require.NotNil(t, restored.Group)
 	require.True(t, restored.Group.FastRateEnabled)
 	require.Equal(t, 3.5, restored.Group.FastRateMultiplier)
+	require.Equal(t, 7.5, restored.Group.UltraFastRateMultiplier)
+	require.Equal(t, "ultrafast", restored.Group.ForcedFastMode)
 }
 
 func TestOpenAIGroupFastRateMediaTokenSnapshot(t *testing.T) {

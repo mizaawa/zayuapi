@@ -25,17 +25,21 @@ func TestOpenAICompatBillingUsesOutboundServiceTier(t *testing.T) {
 		action     string
 		billed     string
 		multiplier float64
+		forceMode  string
 	}{
 		{name: "filtered priority", requested: "priority", action: BetaPolicyActionFilter, multiplier: 1},
 		{name: "filtered flex", requested: "flex", action: BetaPolicyActionFilter, multiplier: 1},
 		{name: "forced priority", requested: "flex", action: OpenAIFastPolicyActionForcePriority, billed: "priority", multiplier: 2},
 		{name: "priority passthrough", requested: "priority", action: BetaPolicyActionPass, billed: "priority", multiplier: 2},
 		{name: "flex passthrough", requested: "flex", action: BetaPolicyActionPass, billed: "flex", multiplier: 0.5},
+		{name: "ultrafast passthrough", requested: "ultrafast", action: BetaPolicyActionPass, billed: "ultrafast", multiplier: 6},
+		{name: "group mandates Fast", requested: "ultrafast", forceMode: "fast", action: BetaPolicyActionPass, billed: "priority", multiplier: 2.75},
+		{name: "group mandates UltraFast", requested: "default", forceMode: "ultrafast", action: BetaPolicyActionPass, billed: "ultrafast", multiplier: 6.5},
 	}
 	for _, protocol := range []string{"chat", "responses-shaped chat", "messages", "raw chat", "responses via raw chat", "messages via raw chat"} {
 		for _, stream := range []bool{false, true} {
 			for _, policy := range policies {
-				if protocol == "messages" && policy.requested != "priority" {
+				if protocol == "messages" && policy.requested != "priority" && policy.forceMode == "" {
 					continue
 				}
 				t.Run(fmt.Sprintf("%s/stream=%t/%s", protocol, stream, policy.name), func(t *testing.T) {
@@ -51,7 +55,7 @@ func TestOpenAICompatBillingUsesOutboundServiceTier(t *testing.T) {
 					svc.settingService = policyService.settingService
 					svc.cfg.Default.RateMultiplier = 1
 					expectedTier, expectedMultiplier := policy.billed, policy.multiplier
-					if protocol == "messages via raw chat" {
+					if protocol == "messages via raw chat" && policy.forceMode == "" {
 						expectedTier, expectedMultiplier = "", 1
 					}
 					account := &Account{
@@ -60,6 +64,11 @@ func TestOpenAICompatBillingUsesOutboundServiceTier(t *testing.T) {
 					}
 					user := &User{ID: 1}
 					apiKey := &APIKey{ID: 2, UserID: user.ID, User: user}
+					if policy.forceMode != "" {
+						apiKey.Group = &Group{ID: 7, Platform: PlatformOpenAI, Status: StatusActive, Hydrated: true, RateMultiplier: 1,
+							FastRateEnabled: true, FastRateMultiplier: 2.75, UltraFastRateMultiplier: 6.5, ForcedFastMode: policy.forceMode}
+						apiKey.GroupID = &apiKey.Group.ID
+					}
 					body := fmt.Sprintf(`{"model":"gpt-5.4","service_tier":%q,"messages":[{"role":"user","content":"hello"}],"stream":%t}`, policy.requested, stream)
 					switch protocol {
 					case "responses-shaped chat", "responses via raw chat":
@@ -135,6 +144,11 @@ func TestOpenAICompatBillingUsesOutboundServiceTier(t *testing.T) {
 					require.InDelta(t, expectedCost, usageRepo.lastLog.ActualCost, 1e-10)
 					require.InDelta(t, expectedCost, userRepo.lastAmount, 1e-10)
 					require.Equal(t, 1, userRepo.deductCalls)
+					if policy.forceMode != "" {
+						require.Equal(t, &expectedMultiplier, usageRepo.lastLog.ServiceTierMultiplier)
+					} else {
+						require.Nil(t, usageRepo.lastLog.ServiceTierMultiplier)
+					}
 				})
 			}
 		}

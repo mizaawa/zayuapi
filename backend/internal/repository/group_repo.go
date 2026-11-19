@@ -115,6 +115,12 @@ func createGroupRecord(ctx context.Context, client *dbent.Client, groupIn *servi
 	if groupIn.DuplicateOperationID != "" {
 		builder = builder.SetDuplicateOperationID(groupIn.DuplicateOperationID)
 	}
+	if groupIn.UltraFastRateMultiplier != 0 {
+		builder.SetUltrafastRateMultiplier(groupIn.UltraFastRateMultiplier)
+	}
+	if groupIn.ForcedFastMode != "" {
+		builder.SetForcedFastMode(groupIn.ForcedFastMode)
+	}
 
 	// 设置模型路由配置
 	if groupIn.ModelRouting != nil {
@@ -288,6 +294,12 @@ func (r *groupRepository) Update(ctx context.Context, groupIn *service.Group) er
 		builder = builder.SetModelPricing(groupIn.ModelPricing)
 	} else {
 		builder = builder.ClearModelPricing()
+	}
+	if groupIn.UltraFastRateMultiplier != 0 {
+		builder.SetUltrafastRateMultiplier(groupIn.UltraFastRateMultiplier)
+	}
+	if groupIn.ForcedFastMode != "" {
+		builder.SetForcedFastMode(groupIn.ForcedFastMode)
 	}
 
 	// 显式处理可空字段：nil 需要 clear，非 nil 需要 set。

@@ -219,11 +219,25 @@ type OpenAIWSIngressHooks struct {
 	MaxReasoningEffort      string
 	ReasoningEffortMappings []ReasoningEffortMapping
 	BeforeTurn              func(turn int) error
+	BillingGroupForTurn     func(turn int) (*Group, error)
 	BeforeRequest           func(turn int, payload []byte, originalModel string) error
 	// MapRequestModel resolves the current turn's client model to the model
 	// that must be written into the upstream response.create frame.
 	MapRequestModel func(turn int, originalModel string) (string, error)
 	AfterTurn       func(turn int, result *OpenAIForwardResult, turnErr error)
+}
+
+func (h *OpenAIWSIngressHooks) speedContext(ctx context.Context, turn int) (context.Context, error) {
+	if h != nil && h.BillingGroupForTurn != nil {
+		group, err := h.BillingGroupForTurn(turn)
+		if err != nil {
+			return nil, err
+		}
+		if group != nil {
+			return context.WithValue(ctx, gatewayTokenRequestBillingGroupCtxKey{}, group), nil
+		}
+	}
+	return ctx, nil
 }
 
 func (s *OpenAIGatewayService) getOpenAIWSConnPool() *openAIWSConnPool {

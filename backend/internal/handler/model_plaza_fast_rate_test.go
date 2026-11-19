@@ -12,6 +12,7 @@ func TestModelPlazaGroupExposesOpenAIFastRate(t *testing.T) {
 	group := &service.PlazaGroup{
 		ID: 12, Platform: service.PlatformOpenAI,
 		RateMultiplier: 1.25, FastRateEnabled: true, FastRateMultiplier: 3,
+		UltraFastRateMultiplier: 6.25, ForcedFastMode: "ultrafast",
 	}
 	payload, err := json.Marshal(toModelPlazaGroupDTO(group, nil))
 	require.NoError(t, err)
@@ -19,5 +20,7 @@ func TestModelPlazaGroupExposesOpenAIFastRate(t *testing.T) {
 	require.NoError(t, json.Unmarshal(payload, &decoded))
 	require.Equal(t, true, decoded["fast_rate_enabled"])
 	require.Equal(t, 3.0, decoded["fast_rate_multiplier"])
+	require.Equal(t, 6.25, decoded["ultrafast_rate_multiplier"])
+	require.Equal(t, "ultrafast", decoded["forced_fast_mode"])
 	require.Equal(t, 1.25, decoded["rate_multiplier"])
 }

@@ -95,6 +95,16 @@ func FastRateMultiplier(v float64) predicate.Group {
 	return predicate.Group(sql.FieldEQ(FieldFastRateMultiplier, v))
 }
 
+// UltrafastRateMultiplier applies equality check predicate on the "ultrafast_rate_multiplier" field. It's identical to UltrafastRateMultiplierEQ.
+func UltrafastRateMultiplier(v float64) predicate.Group {
+	return predicate.Group(sql.FieldEQ(FieldUltrafastRateMultiplier, v))
+}
+
+// ForcedFastMode applies equality check predicate on the "forced_fast_mode" field. It's identical to ForcedFastModeEQ.
+func ForcedFastMode(v string) predicate.Group {
+	return predicate.Group(sql.FieldEQ(FieldForcedFastMode, v))
+}
+
 // PeakRateEnabled applies equality check predicate on the "peak_rate_enabled" field. It's identical to PeakRateEnabledEQ.
 func PeakRateEnabled(v bool) predicate.Group {
 	return predicate.Group(sql.FieldEQ(FieldPeakRateEnabled, v))
@@ -693,6 +703,111 @@ func FastRateMultiplierLT(v float64) predicate.Group {
 // FastRateMultiplierLTE applies the LTE predicate on the "fast_rate_multiplier" field.
 func FastRateMultiplierLTE(v float64) predicate.Group {
 	return predicate.Group(sql.FieldLTE(FieldFastRateMultiplier, v))
+}
+
+// UltrafastRateMultiplierEQ applies the EQ predicate on the "ultrafast_rate_multiplier" field.
+func UltrafastRateMultiplierEQ(v float64) predicate.Group {
+	return predicate.Group(sql.FieldEQ(FieldUltrafastRateMultiplier, v))
+}
+
+// UltrafastRateMultiplierNEQ applies the NEQ predicate on the "ultrafast_rate_multiplier" field.
+func UltrafastRateMultiplierNEQ(v float64) predicate.Group {
+	return predicate.Group(sql.FieldNEQ(FieldUltrafastRateMultiplier, v))
+}
+
+// UltrafastRateMultiplierIn applies the In predicate on the "ultrafast_rate_multiplier" field.
+func UltrafastRateMultiplierIn(vs ...float64) predicate.Group {
+	return predicate.Group(sql.FieldIn(FieldUltrafastRateMultiplier, vs...))
+}
+
+// UltrafastRateMultiplierNotIn applies the NotIn predicate on the "ultrafast_rate_multiplier" field.
+func UltrafastRateMultiplierNotIn(vs ...float64) predicate.Group {
+	return predicate.Group(sql.FieldNotIn(FieldUltrafastRateMultiplier, vs...))
+}
+
+// UltrafastRateMultiplierGT applies the GT predicate on the "ultrafast_rate_multiplier" field.
+func UltrafastRateMultiplierGT(v float64) predicate.Group {
+	return predicate.Group(sql.FieldGT(FieldUltrafastRateMultiplier, v))
+}
+
+// UltrafastRateMultiplierGTE applies the GTE predicate on the "ultrafast_rate_multiplier" field.
+func UltrafastRateMultiplierGTE(v float64) predicate.Group {
+	return predicate.Group(sql.FieldGTE(FieldUltrafastRateMultiplier, v))
+}
+
+// UltrafastRateMultiplierLT applies the LT predicate on the "ultrafast_rate_multiplier" field.
+func UltrafastRateMultiplierLT(v float64) predicate.Group {
+	return predicate.Group(sql.FieldLT(FieldUltrafastRateMultiplier, v))
+}
+
+// UltrafastRateMultiplierLTE applies the LTE predicate on the "ultrafast_rate_multiplier" field.
+func UltrafastRateMultiplierLTE(v float64) predicate.Group {
+	return predicate.Group(sql.FieldLTE(FieldUltrafastRateMultiplier, v))
+}
+
+// ForcedFastModeEQ applies the EQ predicate on the "forced_fast_mode" field.
+func ForcedFastModeEQ(v string) predicate.Group {
+	return predicate.Group(sql.FieldEQ(FieldForcedFastMode, v))
+}
+
+// ForcedFastModeNEQ applies the NEQ predicate on the "forced_fast_mode" field.
+func ForcedFastModeNEQ(v string) predicate.Group {
+	return predicate.Group(sql.FieldNEQ(FieldForcedFastMode, v))
+}
+
+// ForcedFastModeIn applies the In predicate on the "forced_fast_mode" field.
+func ForcedFastModeIn(vs ...string) predicate.Group {
+	return predicate.Group(sql.FieldIn(FieldForcedFastMode, vs...))
+}
+
+// ForcedFastModeNotIn applies the NotIn predicate on the "forced_fast_mode" field.
+func ForcedFastModeNotIn(vs ...string) predicate.Group {
+	return predicate.Group(sql.FieldNotIn(FieldForcedFastMode, vs...))
+}
+
+// ForcedFastModeGT applies the GT predicate on the "forced_fast_mode" field.
+func ForcedFastModeGT(v string) predicate.Group {
+	return predicate.Group(sql.FieldGT(FieldForcedFastMode, v))
+}
+
+// ForcedFastModeGTE applies the GTE predicate on the "forced_fast_mode" field.
+func ForcedFastModeGTE(v string) predicate.Group {
+	return predicate.Group(sql.FieldGTE(FieldForcedFastMode, v))
+}
+
+// ForcedFastModeLT applies the LT predicate on the "forced_fast_mode" field.
+func ForcedFastModeLT(v string) predicate.Group {
+	return predicate.Group(sql.FieldLT(FieldForcedFastMode, v))
+}
+
+// ForcedFastModeLTE applies the LTE predicate on the "forced_fast_mode" field.
+func ForcedFastModeLTE(v string) predicate.Group {
+	return predicate.Group(sql.FieldLTE(FieldForcedFastMode, v))
+}
+
+// ForcedFastModeContains applies the Contains predicate on the "forced_fast_mode" field.
+func ForcedFastModeContains(v string) predicate.Group {
+	return predicate.Group(sql.FieldContains(FieldForcedFastMode, v))
+}
+
+// ForcedFastModeHasPrefix applies the HasPrefix predicate on the "forced_fast_mode" field.
+func ForcedFastModeHasPrefix(v string) predicate.Group {
+	return predicate.Group(sql.FieldHasPrefix(FieldForcedFastMode, v))
+}
+
+// ForcedFastModeHasSuffix applies the HasSuffix predicate on the "forced_fast_mode" field.
+func ForcedFastModeHasSuffix(v string) predicate.Group {
+	return predicate.Group(sql.FieldHasSuffix(FieldForcedFastMode, v))
+}
+
+// ForcedFastModeEqualFold applies the EqualFold predicate on the "forced_fast_mode" field.
+func ForcedFastModeEqualFold(v string) predicate.Group {
+	return predicate.Group(sql.FieldEqualFold(FieldForcedFastMode, v))
+}
+
+// ForcedFastModeContainsFold applies the ContainsFold predicate on the "forced_fast_mode" field.
+func ForcedFastModeContainsFold(v string) predicate.Group {
+	return predicate.Group(sql.FieldContainsFold(FieldForcedFastMode, v))
 }
 
 // PeakRateEnabledEQ applies the EQ predicate on the "peak_rate_enabled" field.

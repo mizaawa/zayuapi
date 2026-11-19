@@ -35,6 +35,10 @@ type Group struct {
 	FastRateEnabled bool `json:"fast_rate_enabled,omitempty"`
 	// OpenAI Fast 相对普通请求的用户计费倍率
 	FastRateMultiplier float64 `json:"fast_rate_multiplier,omitempty"`
+	// UltrafastRateMultiplier holds the value of the "ultrafast_rate_multiplier" field.
+	UltrafastRateMultiplier float64 `json:"ultrafast_rate_multiplier,omitempty"`
+	// ForcedFastMode holds the value of the "forced_fast_mode" field.
+	ForcedFastMode string `json:"forced_fast_mode,omitempty"`
 	// 是否启用高峰时段倍率
 	PeakRateEnabled bool `json:"peak_rate_enabled,omitempty"`
 	// 高峰开始时间 HH:MM（含），如 14:00；空表示未配置；不支持跨天
@@ -264,11 +268,11 @@ func (*Group) scanValues(columns []string) ([]any, error) {
 			values[i] = new([]byte)
 		case group.FieldFastRateEnabled, group.FieldPeakRateEnabled, group.FieldIsExclusive, group.FieldAllowImageGeneration, group.FieldVideoWorkbenchEnabled, group.FieldImageWorkbenchEnabled, group.FieldAllowBatchImageGeneration, group.FieldImageRateIndependent, group.FieldVideoRateIndependent, group.FieldClaudeCodeOnly, group.FieldModelRoutingEnabled, group.FieldMcpXMLInject, group.FieldAllowMessagesDispatch, group.FieldAllowLive, group.FieldRequireOauthOnly, group.FieldRequirePrivacySet, group.FieldProfitControlEnabled, group.FieldCyberAutoChargeEnabled:
 			values[i] = new(sql.NullBool)
-		case group.FieldRateMultiplier, group.FieldFastRateMultiplier, group.FieldPeakRateMultiplier, group.FieldDailyLimitUsd, group.FieldWeeklyLimitUsd, group.FieldMonthlyLimitUsd, group.FieldImageRateMultiplier, group.FieldImagePrice1k, group.FieldImagePrice2k, group.FieldImagePrice4k, group.FieldBatchImageDiscountMultiplier, group.FieldBatchImageHoldMultiplier, group.FieldVideoRateMultiplier, group.FieldVideoPrice480p, group.FieldVideoPrice720p, group.FieldVideoPrice1080p, group.FieldWebSearchPricePerCall, group.FieldProfitMinMargin, group.FieldProfitSafetyBuffer, group.FieldCyberAutoChargeAmount:
+		case group.FieldRateMultiplier, group.FieldFastRateMultiplier, group.FieldUltrafastRateMultiplier, group.FieldPeakRateMultiplier, group.FieldDailyLimitUsd, group.FieldWeeklyLimitUsd, group.FieldMonthlyLimitUsd, group.FieldImageRateMultiplier, group.FieldImagePrice1k, group.FieldImagePrice2k, group.FieldImagePrice4k, group.FieldBatchImageDiscountMultiplier, group.FieldBatchImageHoldMultiplier, group.FieldVideoRateMultiplier, group.FieldVideoPrice480p, group.FieldVideoPrice720p, group.FieldVideoPrice1080p, group.FieldWebSearchPricePerCall, group.FieldProfitMinMargin, group.FieldProfitSafetyBuffer, group.FieldCyberAutoChargeAmount:
 			values[i] = new(sql.NullFloat64)
 		case group.FieldID, group.FieldDefaultValidityDays, group.FieldFallbackGroupID, group.FieldFallbackGroupIDOnInvalidRequest, group.FieldSortOrder, group.FieldRpmLimit:
 			values[i] = new(sql.NullInt64)
-		case group.FieldName, group.FieldDescription, group.FieldPeakStart, group.FieldPeakEnd, group.FieldStatus, group.FieldDuplicateOperationID, group.FieldPlatform, group.FieldSubscriptionType, group.FieldDefaultMappedModel, group.FieldMaxReasoningEffort:
+		case group.FieldName, group.FieldDescription, group.FieldForcedFastMode, group.FieldPeakStart, group.FieldPeakEnd, group.FieldStatus, group.FieldDuplicateOperationID, group.FieldPlatform, group.FieldSubscriptionType, group.FieldDefaultMappedModel, group.FieldMaxReasoningEffort:
 			values[i] = new(sql.NullString)
 		case group.FieldCreatedAt, group.FieldUpdatedAt, group.FieldDeletedAt:
 			values[i] = new(sql.NullTime)
@@ -342,6 +346,18 @@ func (_m *Group) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field fast_rate_multiplier", values[i])
 			} else if value.Valid {
 				_m.FastRateMultiplier = value.Float64
+			}
+		case group.FieldUltrafastRateMultiplier:
+			if value, ok := values[i].(*sql.NullFloat64); !ok {
+				return fmt.Errorf("unexpected type %T for field ultrafast_rate_multiplier", values[i])
+			} else if value.Valid {
+				_m.UltrafastRateMultiplier = value.Float64
+			}
+		case group.FieldForcedFastMode:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field forced_fast_mode", values[i])
+			} else if value.Valid {
+				_m.ForcedFastMode = value.String
 			}
 		case group.FieldPeakRateEnabled:
 			if value, ok := values[i].(*sql.NullBool); !ok {
@@ -800,6 +816,12 @@ func (_m *Group) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("fast_rate_multiplier=")
 	builder.WriteString(fmt.Sprintf("%v", _m.FastRateMultiplier))
+	builder.WriteString(", ")
+	builder.WriteString("ultrafast_rate_multiplier=")
+	builder.WriteString(fmt.Sprintf("%v", _m.UltrafastRateMultiplier))
+	builder.WriteString(", ")
+	builder.WriteString("forced_fast_mode=")
+	builder.WriteString(_m.ForcedFastMode)
 	builder.WriteString(", ")
 	builder.WriteString("peak_rate_enabled=")
 	builder.WriteString(fmt.Sprintf("%v", _m.PeakRateEnabled))

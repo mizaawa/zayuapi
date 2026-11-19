@@ -240,6 +240,11 @@ func (s *OpenAIGatewayService) RecordUsage(ctx context.Context, input *OpenAIRec
 		}
 	}
 	billedServiceTier := resolveOpenAIBillingServiceTier(billingAccount, result.ServiceTier, result.UpstreamServiceTier)
+	upstreamBilledTier := billedServiceTier
+	if forced := forcedOpenAIServiceTier(apiKey.Group); forced != "" && result.ServiceTier != nil && normalizedOpenAIServiceTierValue(*result.ServiceTier) == forced {
+		// A group mandate prices the successful outbound turn, not a client hint or an upstream echo.
+		billedServiceTier = &forced
+	}
 	serviceTier := ""
 	if billedServiceTier != nil {
 		serviceTier = *billedServiceTier
@@ -253,14 +258,7 @@ func (s *OpenAIGatewayService) RecordUsage(ctx context.Context, input *OpenAIRec
 	if imageReservation != nil && !isVideoUsageResult(result) {
 		pricingSnapshot := *imageReservation.ImagePricing
 		pricing := &pricingSnapshot
-		if result.UpstreamServiceTier != nil {
-			// The reservation freezes prices, but an authoritative upstream tier
-			// downgrade must still remove a Fast charge at settlement.
-			pricing.ServiceTier = serviceTier
-			if serviceTier != "priority" {
-				pricing.FastRateMultiplier = 0
-			}
-		}
+		pricing.settleServiceTier(serviceTier)
 		fastRateMultiplier = pricing.FastRateMultiplier
 		multiplier, imageMultiplier = pricing.TokenMultiplier, pricing.ImageMultiplier
 		cost, err = pricing.calculate(s.billingService, result, tokens)
@@ -408,6 +406,7 @@ func (s *OpenAIGatewayService) RecordUsage(ctx context.Context, input *OpenAIRec
 		(cost.BillingMode == "" && !isVideoUsage && result.ImageCount == 0))
 	if isTokenBilling && fastRateMultiplier > 0 {
 		multiplier *= fastRateMultiplier
+		usageLog.ServiceTierMultiplier = &fastRateMultiplier
 	}
 	if isVideoUsage && (cost == nil || cost.BillingMode != string(BillingModeToken)) {
 		usageLog.RateMultiplier = videoMultiplier
@@ -477,6 +476,9 @@ func (s *OpenAIGatewayService) RecordUsage(ctx context.Context, input *OpenAIRec
 		longContextBilling: !billingAccount.IsOpenAI() || longContextBillingEnabled,
 		fallbackModels:     []string{billingModel, strings.TrimSpace(result.BillingModel)},
 		webSearchCalls:     result.WebSearchCalls,
+	}
+	if upstreamBilledTier != nil {
+		statsOpts.serviceTier = *upstreamBilledTier
 	}
 	if result.ImageCount > 0 && result.Usage.hostedImageToolTokens {
 		// The hosted image_generation tool reported its own tokens next to

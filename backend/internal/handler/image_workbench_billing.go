@@ -86,6 +86,11 @@ func (b *imageWorkbenchFailureBilling) attempt(account *service.Account) error {
 	}
 	quoteInput := b.input
 	quoteResult := *b.input.Result
+	if account.IsOpenAIOAuth() && b.input.APIKey != nil {
+		if tier := b.input.APIKey.Group.ForcedOpenAIServiceTier(); tier != "" {
+			quoteResult.ServiceTier = &tier
+		}
+	}
 	// Token-priced image models reserve a conservative output budget; actual
 	// provider usage replaces it on success. Per-image prices ignore tokens.
 	quoteResult.Usage.InputTokens = 32000

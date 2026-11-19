@@ -19,6 +19,8 @@ func TestAdminGroupFastRateDefaultsAndUpdates(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, group.FastRateEnabled)
 	require.Equal(t, 2.0, group.FastRateMultiplier)
+	require.Equal(t, 6.0, group.UltraFastRateMultiplier)
+	require.Equal(t, "off", group.ForcedFastMode)
 
 	repo.getByID = group
 	enabled, factor := true, 3.5
@@ -38,6 +40,12 @@ func TestAdminGroupFastRateDefaultsAndUpdates(t *testing.T) {
 }
 
 func TestAdminGroupFastRateRejectsInvalidMultiplier(t *testing.T) {
+	for _, factor := range []float64{0, 0.09, 101, math.NaN(), math.Inf(1)} {
+		_, _, err := groupSpeedConfig(PlatformOpenAI, factor, "ultrafast")
+		require.ErrorContains(t, err, "ultrafast_rate_multiplier")
+	}
+	_, _, err := groupSpeedConfig(PlatformOpenAI, 6, "unknown")
+	require.ErrorContains(t, err, "forced_fast_mode")
 	for _, factor := range []float64{0, -1, 100.01, math.NaN(), math.Inf(1)} {
 		t.Run("invalid", func(t *testing.T) {
 			repo := &groupRepoStubForAdmin{}

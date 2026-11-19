@@ -708,11 +708,8 @@
               ]" />
             </button>
           </div>
-          <div v-if="createForm.fast_rate_enabled" class="mt-4 border-t border-primary-200/70 pt-4 dark:border-primary-800/40">
-            <label class="input-label">{{ t("admin.groups.fastRate.multiplier") }}</label>
-            <input v-model.number="createForm.fast_rate_multiplier" type="number" min="0.1" max="100" step="0.0001" required class="input" data-testid="create-fast-rate-multiplier" />
-            <p class="input-hint">{{ t("admin.groups.fastRate.hint") }}</p>
-          </div>
+          <GroupSpeedRateFields v-if="createForm.fast_rate_enabled" prefix="create"
+            v-model:fast="createForm.fast_rate_multiplier" v-model:ultra="createForm.ultrafast_rate_multiplier" />
         </div>
         <div>
           <label class="input-label">{{ t("admin.groups.form.rpmLimit") }}</label>
@@ -1413,6 +1410,8 @@
             <p class="input-hint">{{ t("admin.groups.cyberAutoCharge.amountHint") }}</p>
           </div>
         </div>
+
+        <GroupForcedSpeedField v-if="createForm.platform === 'openai'" v-model="createForm.forced_fast_mode" />
 
         <!-- 支持的模型系列（仅 antigravity 平台） -->
         <div v-if="createForm.platform === 'antigravity'" class="border-t pt-4">
@@ -2425,11 +2424,8 @@
               ]" />
             </button>
           </div>
-          <div v-if="editForm.fast_rate_enabled" class="mt-4 border-t border-primary-200/70 pt-4 dark:border-primary-800/40">
-            <label class="input-label">{{ t("admin.groups.fastRate.multiplier") }}</label>
-            <input v-model.number="editForm.fast_rate_multiplier" type="number" min="0.1" max="100" step="0.0001" required class="input" data-testid="edit-fast-rate-multiplier" />
-            <p class="input-hint">{{ t("admin.groups.fastRate.hint") }}</p>
-          </div>
+          <GroupSpeedRateFields v-if="editForm.fast_rate_enabled" prefix="edit"
+            v-model:fast="editForm.fast_rate_multiplier" v-model:ultra="editForm.ultrafast_rate_multiplier" />
         </div>
         <div>
           <label class="input-label">{{ t("admin.groups.form.rpmLimit") }}</label>
@@ -3132,6 +3128,8 @@
             <p class="input-hint">{{ t("admin.groups.cyberAutoCharge.amountHint") }}</p>
           </div>
         </div>
+
+        <GroupForcedSpeedField v-if="editForm.platform === 'openai'" v-model="editForm.forced_fast_mode" />
 
         <!-- 支持的模型系列（仅 antigravity 平台） -->
         <div v-if="editForm.platform === 'antigravity'" class="border-t pt-4">
@@ -4479,6 +4477,7 @@ import type {
   CompositeRouteEndpoint,
   CompositeRouteMatchType,
   GroupPlatform,
+  ForcedFastMode,
   SubscriptionType,
 } from "@/types";
 import type { Column } from "@/components/common/types";
@@ -4490,6 +4489,8 @@ import BaseDialog from "@/components/common/BaseDialog.vue";
 import ConfirmDialog from "@/components/common/ConfirmDialog.vue";
 import EmptyState from "@/components/common/EmptyState.vue";
 import Select from "@/components/common/Select.vue";
+import GroupSpeedRateFields from "@/components/admin/group/GroupSpeedRateFields.vue";
+import GroupForcedSpeedField from "@/components/admin/group/GroupForcedSpeedField.vue";
 import PlatformIcon from "@/components/common/PlatformIcon.vue";
 import Icon from "@/components/icons/Icon.vue";
 import GroupRateMultipliersModal from "@/components/admin/group/GroupRateMultipliersModal.vue";
@@ -5080,7 +5081,9 @@ const createForm = reactive({
   platform: "anthropic" as GroupPlatform,
   rate_multiplier: 1.0,
   fast_rate_enabled: false,
-  fast_rate_multiplier: 2.0,
+  fast_rate_multiplier: 2 as number | "",
+  ultrafast_rate_multiplier: 6 as number | "",
+  forced_fast_mode: "off" as ForcedFastMode,
   is_exclusive: false,
   subscription_type: "standard" as SubscriptionType,
   daily_limit_usd: null as number | null,
@@ -5440,7 +5443,9 @@ const editForm = reactive({
   platform: "anthropic" as GroupPlatform,
   rate_multiplier: 1.0,
   fast_rate_enabled: false,
-  fast_rate_multiplier: 2.0,
+  fast_rate_multiplier: 2 as number | "",
+  ultrafast_rate_multiplier: 6 as number | "",
+  forced_fast_mode: "off" as ForcedFastMode,
   is_exclusive: false,
   status: "active" as "active" | "inactive",
   subscription_type: "standard" as SubscriptionType,
@@ -5965,6 +5970,8 @@ const closeCreateModal = () => {
   createForm.rate_multiplier = 1.0;
   createForm.fast_rate_enabled = false;
   createForm.fast_rate_multiplier = 2.0;
+  createForm.ultrafast_rate_multiplier = 6;
+  createForm.forced_fast_mode = "off";
   createForm.is_exclusive = false;
   createForm.subscription_type = "standard";
   createForm.daily_limit_usd = null;
@@ -6064,21 +6071,22 @@ const validateCyberAutoChargeForm = (form: CyberAutoChargeFormState): boolean =>
   return true;
 };
 
-const normalizedFastRateMultiplier = (value: unknown): number => {
+const normalizedFastRateMultiplier = (value: unknown, fallback = 2): number => {
   const multiplier = Number(value);
   return Number.isFinite(multiplier) && multiplier >= 0.1 && multiplier <= 100
     ? multiplier
-    : 2;
+    : fallback;
 };
 
 const validateFastRateForm = (form: {
   platform: GroupPlatform;
   fast_rate_enabled: boolean;
-  fast_rate_multiplier: number;
+  fast_rate_multiplier: number | "";
+  ultrafast_rate_multiplier: number | "";
 }): boolean => {
   if (form.platform !== "openai" || !form.fast_rate_enabled) return true;
-  const multiplier = Number(form.fast_rate_multiplier);
-  if (Number.isFinite(multiplier) && multiplier >= 0.1 && multiplier <= 100) return true;
+  if ([form.fast_rate_multiplier, form.ultrafast_rate_multiplier].every(value =>
+    typeof value === "number" && Number.isFinite(value) && value >= 0.1 && value <= 100)) return true;
   appStore.showError(t("admin.groups.fastRate.invalid"));
   return false;
 };
@@ -6103,6 +6111,8 @@ const handleCreateGroup = async () => {
     // 构建请求数据，包含模型路由配置
     const requestData = {
       ...createForm,
+      fast_rate_multiplier: normalizedFastRateMultiplier(createForm.fast_rate_multiplier),
+      ultrafast_rate_multiplier: normalizedFastRateMultiplier(createForm.ultrafast_rate_multiplier, 6),
       model_pricing: groupPricingToAPI(
         createForm.model_pricing,
         createForm.platform,
@@ -6182,7 +6192,7 @@ const handleCreateGroup = async () => {
       createForm.peak_rate_multiplier,
     );
     requestData.fast_rate_enabled = createForm.platform === "openai" && createForm.fast_rate_enabled;
-    requestData.fast_rate_multiplier = normalizedFastRateMultiplier(createForm.fast_rate_multiplier);
+    requestData.forced_fast_mode = createForm.platform === "openai" ? createForm.forced_fast_mode : "off";
     await adminAPI.groups.create(requestData);
     appStore.showSuccess(t("admin.groups.groupCreated"));
     closeCreateModal();
@@ -6210,6 +6220,8 @@ const handleEdit = async (group: AdminGroup) => {
   editForm.rate_multiplier = group.rate_multiplier;
   editForm.fast_rate_enabled = group.fast_rate_enabled ?? false;
   editForm.fast_rate_multiplier = group.fast_rate_multiplier ?? 2.0;
+  editForm.ultrafast_rate_multiplier = group.ultrafast_rate_multiplier ?? 6;
+  editForm.forced_fast_mode = group.forced_fast_mode ?? "off";
   editForm.is_exclusive = group.is_exclusive;
   editForm.status = group.status;
   editForm.subscription_type = group.subscription_type || "standard";
@@ -6302,6 +6314,8 @@ const closeEditModal = () => {
   editForm.peak_rate_multiplier = 1.0;
   editForm.fast_rate_enabled = false;
   editForm.fast_rate_multiplier = 2.0;
+  editForm.ultrafast_rate_multiplier = 6;
+  editForm.forced_fast_mode = "off";
   editForm.profit_control_enabled = false;
   editForm.profit_min_margin_percent = 0;
   editForm.profit_safety_buffer_percent = 0;
@@ -6342,6 +6356,8 @@ const handleUpdateGroup = async () => {
     // 转换 fallback_group_id: null -> 0 (后端使用 0 表示清除)
     const payload = {
       ...editForm,
+      fast_rate_multiplier: normalizedFastRateMultiplier(editForm.fast_rate_multiplier),
+      ultrafast_rate_multiplier: normalizedFastRateMultiplier(editForm.ultrafast_rate_multiplier, 6),
       model_pricing: groupPricingToAPI(
         editForm.model_pricing,
         editForm.platform,
@@ -6429,7 +6445,7 @@ const handleUpdateGroup = async () => {
       editForm.peak_rate_multiplier,
     );
     payload.fast_rate_enabled = editForm.platform === "openai" && editForm.fast_rate_enabled;
-    payload.fast_rate_multiplier = normalizedFastRateMultiplier(editForm.fast_rate_multiplier);
+    payload.forced_fast_mode = editForm.platform === "openai" ? editForm.forced_fast_mode : "off";
     await adminAPI.groups.update(editingGroup.value.id, payload);
     appStore.showSuccess(t("admin.groups.groupUpdated"));
     closeEditModal();

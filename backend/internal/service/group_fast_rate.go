@@ -6,7 +6,47 @@ import (
 	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
 )
 
-const DefaultOpenAIFastRateMultiplier = 2.0
+const (
+	DefaultOpenAIFastRateMultiplier      = 2.0
+	DefaultOpenAIUltraFastRateMultiplier = 6.0
+	OpenAIFastTierUltraFast              = "ultrafast"
+)
+
+func groupSpeedConfig(platform string, ultra float64, mode string) (float64, string, error) {
+	if mode == "" || platform != PlatformOpenAI {
+		mode = "off"
+	}
+	if platform != PlatformOpenAI {
+		ultra = DefaultOpenAIUltraFastRateMultiplier
+	}
+	if !(ultra >= 0.1 && ultra <= 100) {
+		return 0, "", infraerrors.BadRequest("INVALID_OPENAI_FAST_RATE", "ultrafast_rate_multiplier must be between 0.1 and 100")
+	}
+	switch mode {
+	case "off", "fast", OpenAIFastTierUltraFast:
+		return ultra, mode, nil
+	default:
+		return 0, "", infraerrors.BadRequest("INVALID_OPENAI_FAST_MODE", "forced_fast_mode must be off, fast or ultrafast")
+	}
+}
+
+func forcedOpenAIServiceTier(group *Group) string {
+	if group != nil && group.Platform == PlatformOpenAI {
+		switch group.ForcedFastMode {
+		case "fast":
+			return OpenAIFastTierPriority
+		case OpenAIFastTierUltraFast:
+			return OpenAIFastTierUltraFast
+		}
+	}
+	return ""
+}
+
+func (g *Group) ForcedOpenAIServiceTier() string { return forcedOpenAIServiceTier(g) }
+
+func isOpenAISpeedTier(tier string) bool {
+	return tier == OpenAIFastTierPriority || tier == OpenAIFastTierUltraFast
+}
 
 // NormalizeOpenAIFastRateConfig keeps this pricing rule specific to OpenAI groups.
 func NormalizeOpenAIFastRateConfig(platform string, enabled bool, multiplier float64) (bool, float64) {
@@ -29,10 +69,18 @@ func ValidateOpenAIFastRateConfig(platform string, enabled bool, multiplier floa
 }
 
 func openAIFastRateMultiplier(group *Group, serviceTier string) float64 {
-	if group == nil || group.Platform != PlatformOpenAI || !group.FastRateEnabled ||
-		normalizeBillingServiceTier(serviceTier) != "priority" ||
-		ValidateOpenAIFastRateConfig(group.Platform, true, group.FastRateMultiplier) != nil {
+	if group == nil || group.Platform != PlatformOpenAI || !group.FastRateEnabled {
 		return 0
 	}
-	return group.FastRateMultiplier
+	switch normalizeBillingServiceTier(serviceTier) {
+	case OpenAIFastTierPriority:
+		if group.FastRateMultiplier >= 0.1 && group.FastRateMultiplier <= 100 {
+			return group.FastRateMultiplier
+		}
+	case OpenAIFastTierUltraFast:
+		if group.UltraFastRateMultiplier >= 0.1 && group.UltraFastRateMultiplier <= 100 {
+			return group.UltraFastRateMultiplier
+		}
+	}
+	return 0
 }

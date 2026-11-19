@@ -1822,6 +1822,15 @@ func (s *OpenAIGatewayService) forwardOpenAIImagesOAuth(
 	if err != nil {
 		return nil, err
 	}
+	responsesBody, err = s.applyOpenAIFastPolicyToBody(openAIHTTPSpeedContext(ctx, c), account, gjson.GetBytes(responsesBody, "model").String(), responsesBody)
+	if err != nil {
+		var blocked *OpenAIFastBlockedError
+		if errors.As(err, &blocked) {
+			writeOpenAIFastPolicyBlockedResponse(c, blocked)
+		}
+		return nil, err
+	}
+	serviceTier := extractOpenAIServiceTierFromBody(responsesBody)
 	upstreamReq, err := s.buildUpstreamRequest(upstreamCtx, c, account, responsesBody, token, true, parsed.StickySessionSeed(), false)
 	if err != nil {
 		return nil, err
@@ -1907,14 +1916,15 @@ func (s *OpenAIGatewayService) forwardOpenAIImagesOAuth(
 					UpstreamModel:                 requestModel,
 					UpstreamResponseModel:         observedUpstreamResponseModel(c),
 					UpstreamResponseModelConflict: observedUpstreamResponseModelConflict(c),
-					Stream:                        parsed.Stream,
-					ResponseHeaders:               resp.Header.Clone(),
-					Duration:                      time.Since(startTime),
-					FirstTokenMs:                  firstTokenMs,
-					ImageCount:                    imageCount,
-					ImageSize:                     parsed.SizeTier,
-					ImageInputSize:                parsed.Size,
-					ImageOutputSizes:              imageOutputSizes,
+					ServiceTier:                   serviceTier, UpstreamServiceTier: observedUpstreamServiceTier(c),
+					Stream:           parsed.Stream,
+					ResponseHeaders:  resp.Header.Clone(),
+					Duration:         time.Since(startTime),
+					FirstTokenMs:     firstTokenMs,
+					ImageCount:       imageCount,
+					ImageSize:        parsed.SizeTier,
+					ImageInputSize:   parsed.Size,
+					ImageOutputSizes: imageOutputSizes,
 				}, err
 			}
 			return imageFailureUsageResult(usage, requestModel, requestModel), s.handleOpenAIImagesOAuthResponseError(
@@ -1953,14 +1963,15 @@ func (s *OpenAIGatewayService) forwardOpenAIImagesOAuth(
 		UpstreamModel:                 requestModel,
 		UpstreamResponseModel:         observedUpstreamResponseModel(c),
 		UpstreamResponseModelConflict: observedUpstreamResponseModelConflict(c),
-		Stream:                        parsed.Stream,
-		ResponseHeaders:               resp.Header.Clone(),
-		Duration:                      time.Since(startTime),
-		FirstTokenMs:                  firstTokenMs,
-		ImageCount:                    imageCount,
-		ImageSize:                     parsed.SizeTier,
-		ImageInputSize:                parsed.Size,
-		ImageOutputSizes:              imageOutputSizes,
+		ServiceTier:                   serviceTier, UpstreamServiceTier: observedUpstreamServiceTier(c),
+		Stream:           parsed.Stream,
+		ResponseHeaders:  resp.Header.Clone(),
+		Duration:         time.Since(startTime),
+		FirstTokenMs:     firstTokenMs,
+		ImageCount:       imageCount,
+		ImageSize:        parsed.SizeTier,
+		ImageInputSize:   parsed.Size,
+		ImageOutputSizes: imageOutputSizes,
 	}, nil
 }
 

@@ -389,6 +389,14 @@ func (s *adminServiceImpl) CreateGroup(ctx context.Context, input *CreateGroupIn
 		fastRateMultiplier = *input.FastRateMultiplier
 	}
 	fastRateEnabled, fastRateMultiplier := NormalizeOpenAIFastRateConfig(platform, input.FastRateEnabled, fastRateMultiplier)
+	ultra := DefaultOpenAIUltraFastRateMultiplier
+	if input.UltraFastRateMultiplier != nil {
+		ultra = *input.UltraFastRateMultiplier
+	}
+	ultra, mode, speedErr := groupSpeedConfig(platform, ultra, input.ForcedFastMode)
+	if speedErr != nil {
+		return nil, speedErr
+	}
 	if err := ValidateOpenAIFastRateConfig(platform, fastRateEnabled, fastRateMultiplier); err != nil {
 		return nil, err
 	}
@@ -483,6 +491,8 @@ func (s *adminServiceImpl) CreateGroup(ctx context.Context, input *CreateGroupIn
 		RateMultiplier:                  input.RateMultiplier,
 		FastRateEnabled:                 fastRateEnabled,
 		FastRateMultiplier:              fastRateMultiplier,
+		UltraFastRateMultiplier:         ultra,
+		ForcedFastMode:                  mode,
 		ModelPricing:                    modelPricing,
 		IsExclusive:                     input.IsExclusive,
 		Status:                          StatusActive,
@@ -762,6 +772,21 @@ func (s *adminServiceImpl) UpdateGroup(ctx context.Context, id int64, input *Upd
 		group.FastRateMultiplier = DefaultOpenAIFastRateMultiplier
 	}
 	group.FastRateEnabled, group.FastRateMultiplier = NormalizeOpenAIFastRateConfig(group.Platform, group.FastRateEnabled, group.FastRateMultiplier)
+	ultra, mode := group.UltraFastRateMultiplier, group.ForcedFastMode
+	if ultra == 0 {
+		ultra = DefaultOpenAIUltraFastRateMultiplier
+	}
+	if input.UltraFastRateMultiplier != nil {
+		ultra = *input.UltraFastRateMultiplier
+	}
+	if input.ForcedFastMode != nil {
+		mode = *input.ForcedFastMode
+	}
+	ultra, mode, speedErr := groupSpeedConfig(group.Platform, ultra, mode)
+	if speedErr != nil {
+		return nil, speedErr
+	}
+	group.UltraFastRateMultiplier, group.ForcedFastMode = ultra, mode
 	if err := ValidateOpenAIFastRateConfig(group.Platform, group.FastRateEnabled, group.FastRateMultiplier); err != nil {
 		return nil, err
 	}

@@ -262,7 +262,7 @@ func catalogTokenStatsCost(billingService *BillingService, model string, tokens 
 // breakdown instead.
 func catalogAbove200kStatsCost(billingService *BillingService, model string, tokens UsageTokens, opts accountStatsPricingOptions) *float64 {
 	if billingService == nil || billingService.pricingService == nil ||
-		normalizeBillingServiceTier(opts.serviceTier) == "priority" {
+		isOpenAISpeedTier(normalizeBillingServiceTier(opts.serviceTier)) {
 		return nil
 	}
 	contextTokens, ok := sumNonNegativeInts(tokens.InputTokens, tokens.CacheCreationTokens, tokens.CacheReadTokens)

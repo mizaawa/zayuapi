@@ -30,19 +30,21 @@ type PlazaModel struct {
 // 关联渠道的支持模型（普通分组按分组平台隔离；持久化为 Composite 的 Custom 分组仅
 // 展示 Custom 平台定价）。
 type PlazaGroup struct {
-	ID                 int64
-	Name               string
-	Description        string
-	Platform           string
-	SubscriptionType   string
-	RateMultiplier     float64
-	FastRateEnabled    bool
-	FastRateMultiplier float64
-	PeakRateEnabled    bool
-	PeakStart          string
-	PeakEnd            string
-	PeakRateMultiplier float64
-	IsExclusive        bool
+	ID                      int64
+	Name                    string
+	Description             string
+	Platform                string
+	SubscriptionType        string
+	RateMultiplier          float64
+	FastRateEnabled         bool
+	FastRateMultiplier      float64
+	UltraFastRateMultiplier float64
+	ForcedFastMode          string
+	PeakRateEnabled         bool
+	PeakStart               string
+	PeakEnd                 string
+	PeakRateMultiplier      float64
+	IsExclusive             bool
 	// SortOrder 是管理员在分组管理里拖拽设定的展示顺序，广场按它排列分组。
 	SortOrder int
 	// 图片按次实付倍率：ImageRateIndependent 为 true 时，图片计费模型的实付
@@ -96,25 +98,27 @@ func (s *ChannelService) ListPlazaGroups(ctx context.Context) ([]PlazaGroup, err
 	for i := range groups {
 		g := &groups[i]
 		byGroup[g.ID] = &PlazaGroup{
-			ID:                   g.ID,
-			Name:                 g.Name,
-			Description:          g.Description,
-			Platform:             g.Platform,
-			SubscriptionType:     g.SubscriptionType,
-			RateMultiplier:       g.RateMultiplier,
-			FastRateEnabled:      g.FastRateEnabled,
-			FastRateMultiplier:   g.FastRateMultiplier,
-			PeakRateEnabled:      g.PeakRateEnabled,
-			PeakStart:            g.PeakStart,
-			PeakEnd:              g.PeakEnd,
-			PeakRateMultiplier:   g.PeakRateMultiplier,
-			IsExclusive:          g.IsExclusive,
-			SortOrder:            g.SortOrder,
-			ImageRateIndependent: g.ImageRateIndependent,
-			ImageRateMultiplier:  g.ImageRateMultiplier,
-			VideoRateIndependent: g.VideoRateIndependent,
-			VideoRateMultiplier:  g.VideoRateMultiplier,
-			ModelsListConfig:     g.ModelsListConfig,
+			ID:                      g.ID,
+			Name:                    g.Name,
+			Description:             g.Description,
+			Platform:                g.Platform,
+			SubscriptionType:        g.SubscriptionType,
+			RateMultiplier:          g.RateMultiplier,
+			FastRateEnabled:         g.FastRateEnabled,
+			FastRateMultiplier:      g.FastRateMultiplier,
+			UltraFastRateMultiplier: g.UltraFastRateMultiplier,
+			ForcedFastMode:          g.ForcedFastMode,
+			PeakRateEnabled:         g.PeakRateEnabled,
+			PeakStart:               g.PeakStart,
+			PeakEnd:                 g.PeakEnd,
+			PeakRateMultiplier:      g.PeakRateMultiplier,
+			IsExclusive:             g.IsExclusive,
+			SortOrder:               g.SortOrder,
+			ImageRateIndependent:    g.ImageRateIndependent,
+			ImageRateMultiplier:     g.ImageRateMultiplier,
+			VideoRateIndependent:    g.VideoRateIndependent,
+			VideoRateMultiplier:     g.VideoRateMultiplier,
+			ModelsListConfig:        g.ModelsListConfig,
 		}
 		groupEnt[g.ID] = g
 		order = append(order, g.ID)

@@ -1072,10 +1072,13 @@ export default {
       groupDeletedSuccess: 'Group deleted successfully',
       rateMultiplierHint: 'Cost multiplier for this group (e.g., 1.5 = 150% of base cost)',
       fastRate: {
-        enable: 'Enable separate Fast billing multiplier',
+        enable: 'Enable separate Fast/UltraFast billing multipliers',
         multiplier: 'Fast billing multiplier',
-        hint: 'Applies only when an OpenAI request is finally billed as Fast (service_tier=priority). Token cost = standard model price × group/user rate × this multiplier. Filtered or downgraded requests keep existing billing. Range: 0.1–100; default: 2.',
-        invalid: 'Fast billing multiplier must be between 0.1 and 100'
+        ultraMultiplier: 'UltraFast billing multiplier',
+        hint: 'Token cost = standard model price × group or user rate × speed multiplier. Peak rates still apply. Defaults: Fast 2, UltraFast 6.',
+        invalid: 'Both speed multipliers are required and must be between 0.1 and 100.',
+        force: 'Force Fast mode', off: 'Off',
+        forceHint: 'For tier-capable requests, send and bill the selected speed regardless of client settings. Off keeps normal tier and downgrade billing.'
       },
       exclusiveHint: 'Exclusive group, manually assign to specific users',
       exclusiveTooltip: {

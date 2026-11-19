@@ -134,6 +134,34 @@ func (_c *GroupCreate) SetNillableFastRateMultiplier(v *float64) *GroupCreate {
 	return _c
 }
 
+// SetUltrafastRateMultiplier sets the "ultrafast_rate_multiplier" field.
+func (_c *GroupCreate) SetUltrafastRateMultiplier(v float64) *GroupCreate {
+	_c.mutation.SetUltrafastRateMultiplier(v)
+	return _c
+}
+
+// SetNillableUltrafastRateMultiplier sets the "ultrafast_rate_multiplier" field if the given value is not nil.
+func (_c *GroupCreate) SetNillableUltrafastRateMultiplier(v *float64) *GroupCreate {
+	if v != nil {
+		_c.SetUltrafastRateMultiplier(*v)
+	}
+	return _c
+}
+
+// SetForcedFastMode sets the "forced_fast_mode" field.
+func (_c *GroupCreate) SetForcedFastMode(v string) *GroupCreate {
+	_c.mutation.SetForcedFastMode(v)
+	return _c
+}
+
+// SetNillableForcedFastMode sets the "forced_fast_mode" field if the given value is not nil.
+func (_c *GroupCreate) SetNillableForcedFastMode(v *string) *GroupCreate {
+	if v != nil {
+		_c.SetForcedFastMode(*v)
+	}
+	return _c
+}
+
 // SetPeakRateEnabled sets the "peak_rate_enabled" field.
 func (_c *GroupCreate) SetPeakRateEnabled(v bool) *GroupCreate {
 	_c.mutation.SetPeakRateEnabled(v)
@@ -1026,6 +1054,14 @@ func (_c *GroupCreate) defaults() error {
 		v := group.DefaultFastRateMultiplier
 		_c.mutation.SetFastRateMultiplier(v)
 	}
+	if _, ok := _c.mutation.UltrafastRateMultiplier(); !ok {
+		v := group.DefaultUltrafastRateMultiplier
+		_c.mutation.SetUltrafastRateMultiplier(v)
+	}
+	if _, ok := _c.mutation.ForcedFastMode(); !ok {
+		v := group.DefaultForcedFastMode
+		_c.mutation.SetForcedFastMode(v)
+	}
 	if _, ok := _c.mutation.PeakRateEnabled(); !ok {
 		v := group.DefaultPeakRateEnabled
 		_c.mutation.SetPeakRateEnabled(v)
@@ -1209,6 +1245,17 @@ func (_c *GroupCreate) check() error {
 	}
 	if _, ok := _c.mutation.FastRateMultiplier(); !ok {
 		return &ValidationError{Name: "fast_rate_multiplier", err: errors.New(`ent: missing required field "Group.fast_rate_multiplier"`)}
+	}
+	if _, ok := _c.mutation.UltrafastRateMultiplier(); !ok {
+		return &ValidationError{Name: "ultrafast_rate_multiplier", err: errors.New(`ent: missing required field "Group.ultrafast_rate_multiplier"`)}
+	}
+	if _, ok := _c.mutation.ForcedFastMode(); !ok {
+		return &ValidationError{Name: "forced_fast_mode", err: errors.New(`ent: missing required field "Group.forced_fast_mode"`)}
+	}
+	if v, ok := _c.mutation.ForcedFastMode(); ok {
+		if err := group.ForcedFastModeValidator(v); err != nil {
+			return &ValidationError{Name: "forced_fast_mode", err: fmt.Errorf(`ent: validator failed for field "Group.forced_fast_mode": %w`, err)}
+		}
 	}
 	if _, ok := _c.mutation.PeakRateEnabled(); !ok {
 		return &ValidationError{Name: "peak_rate_enabled", err: errors.New(`ent: missing required field "Group.peak_rate_enabled"`)}
@@ -1425,6 +1472,14 @@ func (_c *GroupCreate) createSpec() (*Group, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.FastRateMultiplier(); ok {
 		_spec.SetField(group.FieldFastRateMultiplier, field.TypeFloat64, value)
 		_node.FastRateMultiplier = value
+	}
+	if value, ok := _c.mutation.UltrafastRateMultiplier(); ok {
+		_spec.SetField(group.FieldUltrafastRateMultiplier, field.TypeFloat64, value)
+		_node.UltrafastRateMultiplier = value
+	}
+	if value, ok := _c.mutation.ForcedFastMode(); ok {
+		_spec.SetField(group.FieldForcedFastMode, field.TypeString, value)
+		_node.ForcedFastMode = value
 	}
 	if value, ok := _c.mutation.PeakRateEnabled(); ok {
 		_spec.SetField(group.FieldPeakRateEnabled, field.TypeBool, value)
@@ -1919,6 +1974,36 @@ func (u *GroupUpsert) UpdateFastRateMultiplier() *GroupUpsert {
 // AddFastRateMultiplier adds v to the "fast_rate_multiplier" field.
 func (u *GroupUpsert) AddFastRateMultiplier(v float64) *GroupUpsert {
 	u.Add(group.FieldFastRateMultiplier, v)
+	return u
+}
+
+// SetUltrafastRateMultiplier sets the "ultrafast_rate_multiplier" field.
+func (u *GroupUpsert) SetUltrafastRateMultiplier(v float64) *GroupUpsert {
+	u.Set(group.FieldUltrafastRateMultiplier, v)
+	return u
+}
+
+// UpdateUltrafastRateMultiplier sets the "ultrafast_rate_multiplier" field to the value that was provided on create.
+func (u *GroupUpsert) UpdateUltrafastRateMultiplier() *GroupUpsert {
+	u.SetExcluded(group.FieldUltrafastRateMultiplier)
+	return u
+}
+
+// AddUltrafastRateMultiplier adds v to the "ultrafast_rate_multiplier" field.
+func (u *GroupUpsert) AddUltrafastRateMultiplier(v float64) *GroupUpsert {
+	u.Add(group.FieldUltrafastRateMultiplier, v)
+	return u
+}
+
+// SetForcedFastMode sets the "forced_fast_mode" field.
+func (u *GroupUpsert) SetForcedFastMode(v string) *GroupUpsert {
+	u.Set(group.FieldForcedFastMode, v)
+	return u
+}
+
+// UpdateForcedFastMode sets the "forced_fast_mode" field to the value that was provided on create.
+func (u *GroupUpsert) UpdateForcedFastMode() *GroupUpsert {
+	u.SetExcluded(group.FieldForcedFastMode)
 	return u
 }
 
@@ -2951,6 +3036,41 @@ func (u *GroupUpsertOne) AddFastRateMultiplier(v float64) *GroupUpsertOne {
 func (u *GroupUpsertOne) UpdateFastRateMultiplier() *GroupUpsertOne {
 	return u.Update(func(s *GroupUpsert) {
 		s.UpdateFastRateMultiplier()
+	})
+}
+
+// SetUltrafastRateMultiplier sets the "ultrafast_rate_multiplier" field.
+func (u *GroupUpsertOne) SetUltrafastRateMultiplier(v float64) *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.SetUltrafastRateMultiplier(v)
+	})
+}
+
+// AddUltrafastRateMultiplier adds v to the "ultrafast_rate_multiplier" field.
+func (u *GroupUpsertOne) AddUltrafastRateMultiplier(v float64) *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.AddUltrafastRateMultiplier(v)
+	})
+}
+
+// UpdateUltrafastRateMultiplier sets the "ultrafast_rate_multiplier" field to the value that was provided on create.
+func (u *GroupUpsertOne) UpdateUltrafastRateMultiplier() *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.UpdateUltrafastRateMultiplier()
+	})
+}
+
+// SetForcedFastMode sets the "forced_fast_mode" field.
+func (u *GroupUpsertOne) SetForcedFastMode(v string) *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.SetForcedFastMode(v)
+	})
+}
+
+// UpdateForcedFastMode sets the "forced_fast_mode" field to the value that was provided on create.
+func (u *GroupUpsertOne) UpdateForcedFastMode() *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.UpdateForcedFastMode()
 	})
 }
 
@@ -4292,6 +4412,41 @@ func (u *GroupUpsertBulk) AddFastRateMultiplier(v float64) *GroupUpsertBulk {
 func (u *GroupUpsertBulk) UpdateFastRateMultiplier() *GroupUpsertBulk {
 	return u.Update(func(s *GroupUpsert) {
 		s.UpdateFastRateMultiplier()
+	})
+}
+
+// SetUltrafastRateMultiplier sets the "ultrafast_rate_multiplier" field.
+func (u *GroupUpsertBulk) SetUltrafastRateMultiplier(v float64) *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.SetUltrafastRateMultiplier(v)
+	})
+}
+
+// AddUltrafastRateMultiplier adds v to the "ultrafast_rate_multiplier" field.
+func (u *GroupUpsertBulk) AddUltrafastRateMultiplier(v float64) *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.AddUltrafastRateMultiplier(v)
+	})
+}
+
+// UpdateUltrafastRateMultiplier sets the "ultrafast_rate_multiplier" field to the value that was provided on create.
+func (u *GroupUpsertBulk) UpdateUltrafastRateMultiplier() *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.UpdateUltrafastRateMultiplier()
+	})
+}
+
+// SetForcedFastMode sets the "forced_fast_mode" field.
+func (u *GroupUpsertBulk) SetForcedFastMode(v string) *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.SetForcedFastMode(v)
+	})
+}
+
+// UpdateForcedFastMode sets the "forced_fast_mode" field to the value that was provided on create.
+func (u *GroupUpsertBulk) UpdateForcedFastMode() *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.UpdateForcedFastMode()
 	})
 }
 

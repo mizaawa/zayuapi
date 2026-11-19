@@ -570,7 +570,7 @@ func (s *OpenAIGatewayService) forwardGrokChatCompletionsViaResponses(
 		return nil, fmt.Errorf("apply grok responses bridge function-tool cache route: %w", err)
 	}
 
-	updatedBody, policyErr := s.applyOpenAIFastPolicyToBody(ctx, account, upstreamModel, responsesBody)
+	updatedBody, policyErr := s.applyOpenAIFastPolicyToBody(openAIHTTPSpeedContext(ctx, c), account, upstreamModel, responsesBody)
 	if policyErr != nil {
 		var blocked *OpenAIFastBlockedError
 		if errors.As(policyErr, &blocked) {
@@ -643,6 +643,7 @@ func (s *OpenAIGatewayService) forwardGrokChatCompletionsViaResponses(
 	}
 	if result != nil {
 		result.UpstreamEndpoint = grokChatResponsesEndpoint
+		result.ServiceTier = extractOpenAIServiceTierFromBody(responsesBody)
 		result.ResponseHeaders = resp.Header.Clone()
 		if result.RequestID == "" {
 			result.RequestID = firstNonEmpty(resp.Header.Get("x-request-id"), resp.Header.Get("xai-request-id"))

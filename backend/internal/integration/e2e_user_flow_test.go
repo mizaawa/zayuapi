@@ -33,7 +33,7 @@ func TestUserRegistrationAndLogin(t *testing.T) {
 		}
 		body, _ := json.Marshal(payload)
 
-		resp, err := doRequest(t, "POST", "/api/auth/register", body, "")
+		resp, err := doRequest(t, "POST", "/api/v1/auth/register", body, "")
 		if err != nil {
 			t.Skipf("注册接口不可用，跳过用户流程测试: %v", err)
 			return
@@ -64,7 +64,7 @@ func TestUserRegistrationAndLogin(t *testing.T) {
 		}
 		body, _ := json.Marshal(payload)
 
-		resp, err := doRequest(t, "POST", "/api/auth/login", body, "")
+		resp, err := doRequest(t, "POST", "/api/v1/auth/login", body, "")
 		if err != nil {
 			t.Fatalf("登录请求失败: %v", err)
 		}
@@ -92,13 +92,13 @@ func TestUserRegistrationAndLogin(t *testing.T) {
 		}
 
 		if accessToken == "" {
-			t.Skipf("未获取到 access_token，响应: %s", string(respBody))
+			t.Fatal("成功的登录响应缺少 access_token")
 			return
 		}
 
 		// 验证 token 不为空且格式基本正确
 		if len(accessToken) < 10 {
-			t.Fatalf("access_token 格式异常: %s", accessToken)
+			t.Fatal("access_token 格式异常")
 		}
 
 		t.Logf("✅ 登录成功，获取 JWT（长度: %d）", len(accessToken))
@@ -111,7 +111,7 @@ func TestUserRegistrationAndLogin(t *testing.T) {
 
 	// 步骤 3: 使用 JWT 获取当前用户信息
 	t.Run("获取当前用户信息", func(t *testing.T) {
-		resp, err := doRequest(t, "GET", "/api/user/me", nil, accessToken)
+		resp, err := doRequest(t, "GET", "/api/v1/auth/me", nil, accessToken)
 		if err != nil {
 			t.Fatalf("请求失败: %v", err)
 		}
@@ -144,7 +144,7 @@ func TestAPIKeyLifecycle(t *testing.T) {
 		}
 		body, _ := json.Marshal(payload)
 
-		resp, err := doRequest(t, "POST", "/api/keys", body, accessToken)
+		resp, err := doRequest(t, "POST", "/api/v1/keys", body, accessToken)
 		if err != nil {
 			t.Fatalf("创建 API Key 请求失败: %v", err)
 		}
@@ -172,7 +172,7 @@ func TestAPIKeyLifecycle(t *testing.T) {
 		}
 
 		if apiKey == "" {
-			t.Skipf("未获取到 API Key，响应: %s", string(respBody))
+			t.Fatal("成功的创建响应缺少 API Key")
 			return
 		}
 
@@ -215,7 +215,7 @@ func TestAPIKeyLifecycle(t *testing.T) {
 
 	// 步骤 3: 查询用量记录
 	t.Run("查询用量记录", func(t *testing.T) {
-		resp, err := doRequest(t, "GET", "/api/usage/dashboard", nil, accessToken)
+		resp, err := doRequest(t, "GET", "/api/v1/usage/dashboard/stats", nil, accessToken)
 		if err != nil {
 			t.Fatalf("用量查询请求失败: %v", err)
 		}
@@ -279,7 +279,7 @@ func loginTestUser(t *testing.T) string {
 	}
 	body, _ := json.Marshal(payload)
 
-	resp, err := doRequest(t, "POST", "/api/auth/login", body, "")
+	resp, err := doRequest(t, "POST", "/api/v1/auth/login", body, "")
 	if err != nil {
 		return ""
 	}

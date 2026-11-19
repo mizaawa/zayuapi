@@ -117,6 +117,7 @@ describe('PlazaGroupSection', () => {
   it('shows the Fast rate only for enabled OpenAI groups', () => {
     const enabled = mountSection({ fast_rate_enabled: true, fast_rate_multiplier: 2.5 } as Partial<ModelPlazaGroup>)
     expect(enabled.get('.plaza-badge-fast').text()).toContain('Fast ×2.5')
+    expect(enabled.text()).toContain('UltraFast ×6')
     expect(enabled.get('.plaza-fast-note').text()).toContain('Fast billed at 2.5x')
 
     expect(mountSection({ fast_rate_enabled: false } as Partial<ModelPlazaGroup>).find('.plaza-badge-fast').exists()).toBe(false)

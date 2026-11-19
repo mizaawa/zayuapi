@@ -25,6 +25,7 @@ func TestUsageLog_SessionIDPersistence(t *testing.T) {
 	account := mustCreateAccount(t, client, &service.Account{Name: "acc-session-" + uuid.NewString()})
 
 	sessionID := "sess-" + uuid.NewString()
+	speed, factor := "ultrafast", 6.25
 
 	withSession := &service.UsageLog{
 		UserID:       user.ID,
@@ -37,7 +38,8 @@ func TestUsageLog_SessionIDPersistence(t *testing.T) {
 		TotalCost:    1.0,
 		ActualCost:   1.0,
 		SessionID:    &sessionID,
-		CreatedAt:    time.Now().UTC(),
+		ServiceTier:  &speed, ServiceTierMultiplier: &factor,
+		CreatedAt: time.Now().UTC(),
 	}
 	_, err := repo.Create(ctx, withSession)
 	require.NoError(t, err)
@@ -63,9 +65,12 @@ func TestUsageLog_SessionIDPersistence(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, got.SessionID)
 	require.Equal(t, sessionID, *got.SessionID)
+	require.Equal(t, &speed, got.ServiceTier)
+	require.Equal(t, &factor, got.ServiceTierMultiplier)
 
 	// Omission: absent session id reads back as nil (NULL), not empty string.
 	gotNone, err := repo.GetByID(ctx, withoutSession.ID)
 	require.NoError(t, err)
 	require.Nil(t, gotNone.SessionID)
+	require.Nil(t, gotNone.ServiceTierMultiplier)
 }

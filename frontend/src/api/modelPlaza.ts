@@ -1,3 +1,4 @@
+import type { ForcedFastMode } from '@/types'
 /**
  * Model Plaza API（公开端点，可匿名访问）
  * 以分组为中心的模型价目：分组信息 + 实付计算基价 + 渠道配置原价。
@@ -39,6 +40,8 @@ export interface ModelPlazaGroup {
   /** OpenAI Fast token billing: standard model price × group/personal rate × this factor. */
   fast_rate_enabled?: boolean
   fast_rate_multiplier?: number
+  ultrafast_rate_multiplier?: number
+  forced_fast_mode?: ForcedFastMode
   /** 登录且管理员为该用户配了专属倍率时返回；生效倍率 = user_rate ?? rate_multiplier。 */
   user_rate_multiplier?: number
   peak_rate_enabled: boolean

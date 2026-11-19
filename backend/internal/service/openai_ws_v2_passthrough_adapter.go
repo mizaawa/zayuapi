@@ -748,7 +748,11 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 		firstClientMessage = s.ReplaceModelInBody(firstClientMessage, capturedSessionModel)
 	}
 	usageMeta := newOpenAIWSPassthroughUsageMeta(initialRequestModel, firstClientMessage)
-	updatedFirst, blocked, policyErr := s.applyOpenAIFastPolicyToWSResponseCreate(ctx, account, capturedSessionModel, firstClientMessage)
+	firstSpeedCtx, err := hooks.speedContext(ctx, 1)
+	if err != nil {
+		return err
+	}
+	updatedFirst, blocked, policyErr := s.applyOpenAIFastPolicyToWSResponseCreate(firstSpeedCtx, account, capturedSessionModel, firstClientMessage)
 	if policyErr != nil {
 		return fmt.Errorf("apply openai fast policy on first ws frame: %w", policyErr)
 	}
@@ -956,7 +960,7 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 		// 加锁/原子化。
 		filter: func(msgType coderws.MessageType, payload []byte) (out []byte, blocked *OpenAIFastBlockedError, filterErr error) {
 			if msgType != coderws.MessageText {
-				return payload, nil, nil
+				return nil, nil, NewOpenAIWSClientCloseError(coderws.StatusUnsupportedData, "Responses events must be JSON text frames", nil)
 			}
 			eventType := strings.TrimSpace(gjson.GetBytes(payload, "type").String())
 			isResponseCreate := eventType == "response.create"
@@ -1044,7 +1048,19 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 			if isResponseCreate && model != "" && model != strings.TrimSpace(gjson.GetBytes(payload, "model").String()) {
 				payload = s.ReplaceModelInBody(payload, model)
 			}
-			out, blocked, policyErr := s.applyOpenAIFastPolicyToWSResponseCreate(ctx, account, model, payload)
+			speedCtx := ctx
+			if eventType != "response.cancel" {
+				policyTurn := 0
+				if isResponseCreate {
+					policyTurn = turnNo
+				}
+				var authErr error
+				speedCtx, authErr = hooks.speedContext(ctx, policyTurn)
+				if authErr != nil {
+					return nil, nil, authErr
+				}
+			}
+			out, blocked, policyErr := s.applyOpenAIFastPolicyToWSResponseCreate(speedCtx, account, model, payload)
 			if policyErr == nil && blocked == nil && isResponseCreate {
 				out, policyErr = applyAPIKeySystemPrompt(c, out, apiKeySystemPromptResponses)
 			}

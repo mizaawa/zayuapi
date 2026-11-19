@@ -153,6 +153,41 @@ func (_u *GroupUpdate) AddFastRateMultiplier(v float64) *GroupUpdate {
 	return _u
 }
 
+// SetUltrafastRateMultiplier sets the "ultrafast_rate_multiplier" field.
+func (_u *GroupUpdate) SetUltrafastRateMultiplier(v float64) *GroupUpdate {
+	_u.mutation.ResetUltrafastRateMultiplier()
+	_u.mutation.SetUltrafastRateMultiplier(v)
+	return _u
+}
+
+// SetNillableUltrafastRateMultiplier sets the "ultrafast_rate_multiplier" field if the given value is not nil.
+func (_u *GroupUpdate) SetNillableUltrafastRateMultiplier(v *float64) *GroupUpdate {
+	if v != nil {
+		_u.SetUltrafastRateMultiplier(*v)
+	}
+	return _u
+}
+
+// AddUltrafastRateMultiplier adds value to the "ultrafast_rate_multiplier" field.
+func (_u *GroupUpdate) AddUltrafastRateMultiplier(v float64) *GroupUpdate {
+	_u.mutation.AddUltrafastRateMultiplier(v)
+	return _u
+}
+
+// SetForcedFastMode sets the "forced_fast_mode" field.
+func (_u *GroupUpdate) SetForcedFastMode(v string) *GroupUpdate {
+	_u.mutation.SetForcedFastMode(v)
+	return _u
+}
+
+// SetNillableForcedFastMode sets the "forced_fast_mode" field if the given value is not nil.
+func (_u *GroupUpdate) SetNillableForcedFastMode(v *string) *GroupUpdate {
+	if v != nil {
+		_u.SetForcedFastMode(*v)
+	}
+	return _u
+}
+
 // SetPeakRateEnabled sets the "peak_rate_enabled" field.
 func (_u *GroupUpdate) SetPeakRateEnabled(v bool) *GroupUpdate {
 	_u.mutation.SetPeakRateEnabled(v)
@@ -1432,6 +1467,11 @@ func (_u *GroupUpdate) check() error {
 			return &ValidationError{Name: "name", err: fmt.Errorf(`ent: validator failed for field "Group.name": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.ForcedFastMode(); ok {
+		if err := group.ForcedFastModeValidator(v); err != nil {
+			return &ValidationError{Name: "forced_fast_mode", err: fmt.Errorf(`ent: validator failed for field "Group.forced_fast_mode": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.PeakStart(); ok {
 		if err := group.PeakStartValidator(v); err != nil {
 			return &ValidationError{Name: "peak_start", err: fmt.Errorf(`ent: validator failed for field "Group.peak_start": %w`, err)}
@@ -1514,6 +1554,15 @@ func (_u *GroupUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if value, ok := _u.mutation.AddedFastRateMultiplier(); ok {
 		_spec.AddField(group.FieldFastRateMultiplier, field.TypeFloat64, value)
+	}
+	if value, ok := _u.mutation.UltrafastRateMultiplier(); ok {
+		_spec.SetField(group.FieldUltrafastRateMultiplier, field.TypeFloat64, value)
+	}
+	if value, ok := _u.mutation.AddedUltrafastRateMultiplier(); ok {
+		_spec.AddField(group.FieldUltrafastRateMultiplier, field.TypeFloat64, value)
+	}
+	if value, ok := _u.mutation.ForcedFastMode(); ok {
+		_spec.SetField(group.FieldForcedFastMode, field.TypeString, value)
 	}
 	if value, ok := _u.mutation.PeakRateEnabled(); ok {
 		_spec.SetField(group.FieldPeakRateEnabled, field.TypeBool, value)
@@ -2275,6 +2324,41 @@ func (_u *GroupUpdateOne) SetNillableFastRateMultiplier(v *float64) *GroupUpdate
 // AddFastRateMultiplier adds value to the "fast_rate_multiplier" field.
 func (_u *GroupUpdateOne) AddFastRateMultiplier(v float64) *GroupUpdateOne {
 	_u.mutation.AddFastRateMultiplier(v)
+	return _u
+}
+
+// SetUltrafastRateMultiplier sets the "ultrafast_rate_multiplier" field.
+func (_u *GroupUpdateOne) SetUltrafastRateMultiplier(v float64) *GroupUpdateOne {
+	_u.mutation.ResetUltrafastRateMultiplier()
+	_u.mutation.SetUltrafastRateMultiplier(v)
+	return _u
+}
+
+// SetNillableUltrafastRateMultiplier sets the "ultrafast_rate_multiplier" field if the given value is not nil.
+func (_u *GroupUpdateOne) SetNillableUltrafastRateMultiplier(v *float64) *GroupUpdateOne {
+	if v != nil {
+		_u.SetUltrafastRateMultiplier(*v)
+	}
+	return _u
+}
+
+// AddUltrafastRateMultiplier adds value to the "ultrafast_rate_multiplier" field.
+func (_u *GroupUpdateOne) AddUltrafastRateMultiplier(v float64) *GroupUpdateOne {
+	_u.mutation.AddUltrafastRateMultiplier(v)
+	return _u
+}
+
+// SetForcedFastMode sets the "forced_fast_mode" field.
+func (_u *GroupUpdateOne) SetForcedFastMode(v string) *GroupUpdateOne {
+	_u.mutation.SetForcedFastMode(v)
+	return _u
+}
+
+// SetNillableForcedFastMode sets the "forced_fast_mode" field if the given value is not nil.
+func (_u *GroupUpdateOne) SetNillableForcedFastMode(v *string) *GroupUpdateOne {
+	if v != nil {
+		_u.SetForcedFastMode(*v)
+	}
 	return _u
 }
 
@@ -3570,6 +3654,11 @@ func (_u *GroupUpdateOne) check() error {
 			return &ValidationError{Name: "name", err: fmt.Errorf(`ent: validator failed for field "Group.name": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.ForcedFastMode(); ok {
+		if err := group.ForcedFastModeValidator(v); err != nil {
+			return &ValidationError{Name: "forced_fast_mode", err: fmt.Errorf(`ent: validator failed for field "Group.forced_fast_mode": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.PeakStart(); ok {
 		if err := group.PeakStartValidator(v); err != nil {
 			return &ValidationError{Name: "peak_start", err: fmt.Errorf(`ent: validator failed for field "Group.peak_start": %w`, err)}
@@ -3669,6 +3758,15 @@ func (_u *GroupUpdateOne) sqlSave(ctx context.Context) (_node *Group, err error)
 	}
 	if value, ok := _u.mutation.AddedFastRateMultiplier(); ok {
 		_spec.AddField(group.FieldFastRateMultiplier, field.TypeFloat64, value)
+	}
+	if value, ok := _u.mutation.UltrafastRateMultiplier(); ok {
+		_spec.SetField(group.FieldUltrafastRateMultiplier, field.TypeFloat64, value)
+	}
+	if value, ok := _u.mutation.AddedUltrafastRateMultiplier(); ok {
+		_spec.AddField(group.FieldUltrafastRateMultiplier, field.TypeFloat64, value)
+	}
+	if value, ok := _u.mutation.ForcedFastMode(); ok {
+		_spec.SetField(group.FieldForcedFastMode, field.TypeString, value)
 	}
 	if value, ok := _u.mutation.PeakRateEnabled(); ok {
 		_spec.SetField(group.FieldPeakRateEnabled, field.TypeBool, value)

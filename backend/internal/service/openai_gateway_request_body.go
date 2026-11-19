@@ -846,12 +846,9 @@ func normalizeOpenAIServiceTier(raw string) *string {
 	if value == "fast" {
 		value = "priority"
 	}
-	// 放过 OpenAI 官方文档定义的所有合法 tier 值：priority/flex/auto/default/scale。
-	// 对 Codex 客户端零影响（Codex 只发 priority 或 flex，见 codex-rs/core/src/client.rs），
-	// 但能让直连 OpenAI SDK 的用户透传 auto/default/scale 以便抓包/调试。
-	// 真未知值仍返回 nil，由 normalizeResponsesBodyServiceTier 从 body 中删除。
+	// Fast and priority share pricing; UltraFast is a distinct wire tier.
 	switch value {
-	case "priority", "flex", "auto", "default", "scale":
+	case "priority", OpenAIFastTierUltraFast, "flex", "auto", "default", "scale":
 		return &value
 	default:
 		return nil
@@ -1010,18 +1007,28 @@ func openAIFastPolicySettingsFromContext(ctx context.Context) *OpenAIFastPolicyS
 // 入口没有这一前置步骤，pass 路径下若不在此处归一化，"fast" 就会被原样
 // 透传到 OpenAI 上游导致 400/拒绝。把归一化收敛到本函数，所有入口行为一致。
 func (s *OpenAIGatewayService) applyOpenAIFastPolicyToBody(ctx context.Context, account *Account, model string, body []byte) ([]byte, error) {
-	if len(body) == 0 {
-		return body, nil
+	forced := forcedOpenAITierFromContext(ctx)
+	if forced != "" && account != nil && account.Platform != PlatformOpenAI && account.Platform != PlatformCustom {
+		return nil, &OpenAIFastBlockedError{Message: "upstream protocol does not support the group's required OpenAI service tier"}
+	}
+	if forced != "" && (!gjson.ValidBytes(body) || !gjson.ParseBytes(body).IsObject()) {
+		return nil, &OpenAIFastBlockedError{Message: "expected a JSON request object"}
+	}
+	if ambiguousOpenAISpeedEnvelope(body, false) {
+		return nil, &OpenAIFastBlockedError{Message: "ambiguous service_tier field"}
 	}
 	rawTier := gjson.GetBytes(body, "service_tier").String()
-	if rawTier == "" {
-		return body, nil
-	}
 	normTier := normalizedOpenAIServiceTierValue(rawTier)
+	if forced != "" {
+		normTier = forced
+	}
 	if normTier == "" {
 		return body, nil
 	}
 	action, errMsg := s.evaluateOpenAIFastPolicy(ctx, account, model, normTier)
+	if forced != "" && (action == BetaPolicyActionFilter || (action == OpenAIFastPolicyActionForcePriority && forced != OpenAIFastTierPriority)) {
+		return nil, &OpenAIFastBlockedError{Message: "forced service tier conflicts with the upstream account policy"}
+	}
 	switch action {
 	case BetaPolicyActionBlock:
 		msg := errMsg
@@ -1052,6 +1059,45 @@ func (s *OpenAIGatewayService) applyOpenAIFastPolicyToBody(ctx context.Context, 
 		}
 		return updated, nil
 	}
+}
+
+// Only the authenticated billing group may mandate an outbound tier. A
+// composite routing context must never borrow a member's retail policy.
+func forcedOpenAITierFromContext(ctx context.Context) string {
+	if ctx == nil {
+		return ""
+	}
+	group, _ := ctx.Value(gatewayTokenRequestBillingGroupCtxKey{}).(*Group)
+	if group == nil {
+		group, _ = ctx.Value(ctxkey.Group).(*Group)
+	}
+	return forcedOpenAIServiceTier(group)
+}
+
+func openAIHTTPSpeedContext(ctx context.Context, c *gin.Context) context.Context {
+	if c != nil {
+		if group := apiKeyGroup(getAPIKeyFromContext(c)); group != nil {
+			return context.WithValue(ctx, gatewayTokenRequestBillingGroupCtxKey{}, group)
+		}
+	}
+	return ctx
+}
+
+// Raw forwarding and typed JSON decoders must agree on the envelope. Reject
+// noncanonical or repeated policy keys, without decoding user content to any.
+func ambiguousOpenAISpeedEnvelope(body []byte, ws bool) bool {
+	var tierSeen, typeSeen, ambiguous bool
+	gjson.ParseBytes(body).ForEach(func(key, _ gjson.Result) bool {
+		name := key.String()
+		switch {
+		case strings.EqualFold(name, "service_tier"):
+			ambiguous, tierSeen = tierSeen || name != "service_tier", true
+		case ws && strings.EqualFold(name, "type"):
+			ambiguous, typeSeen = typeSeen || name != "type", true
+		}
+		return !ambiguous
+	})
+	return ambiguous
 }
 
 // writeOpenAIFastPolicyBlockedResponse writes a 403 JSON response for a
@@ -1088,10 +1134,8 @@ func writeOpenAIFastPolicyBlockedResponse(c *gin.Context, err *OpenAIFastBlocked
 //   - block: returns (frame, *OpenAIFastBlockedError)
 //
 // Only frames whose "type" field strictly equals "response.create" are
-// inspected/mutated. Any other frame type — including the empty string —
-// passes through untouched. The OpenAI Realtime client-event spec requires
-// "type" to be set, so an empty type is treated as a malformed frame we do
-// not police; the upstream is the source of truth for rejecting it.
+// rewritten. A forced group permits only response.create and response.cancel;
+// unforced groups keep the upstream's usual handling of other event types.
 //
 // service_tier lives at the top level of response.create — same as the
 // Responses HTTP body shape (see openai_gateway_chat_completions.go:304 +
@@ -1108,11 +1152,14 @@ func (s *OpenAIGatewayService) applyOpenAIFastPolicyToWSResponseCreate(
 	model string,
 	frame []byte,
 ) ([]byte, *OpenAIFastBlockedError, error) {
-	if len(frame) == 0 {
+	if !gjson.ValidBytes(frame) {
+		if forcedOpenAITierFromContext(ctx) != "" {
+			return nil, &OpenAIFastBlockedError{Message: "invalid Responses frame"}, nil
+		}
 		return frame, nil, nil
 	}
-	if !gjson.ValidBytes(frame) {
-		return frame, nil, nil
+	if ambiguousOpenAISpeedEnvelope(frame, true) {
+		return nil, &OpenAIFastBlockedError{Message: "ambiguous Responses frame"}, nil
 	}
 	frameType := strings.TrimSpace(gjson.GetBytes(frame, "type").String())
 	// Strict match: only response.create is policy-checked. Empty / other
@@ -1122,46 +1169,17 @@ func (s *OpenAIGatewayService) applyOpenAIFastPolicyToWSResponseCreate(
 	// every client event, so an empty type is malformed input — let the
 	// upstream reject it rather than guessing at our layer.
 	if frameType != "response.create" {
+		if forcedOpenAITierFromContext(ctx) != "" && frameType != "response.cancel" {
+			return nil, &OpenAIFastBlockedError{Message: "unsupported event for a group with a forced service tier"}, nil
+		}
 		return frame, nil, nil
 	}
-	rawTier := gjson.GetBytes(frame, "service_tier").String()
-	if rawTier == "" {
-		return frame, nil, nil
+	updated, err := s.applyOpenAIFastPolicyToBody(ctx, account, model, frame)
+	var blocked *OpenAIFastBlockedError
+	if errors.As(err, &blocked) {
+		return frame, blocked, nil
 	}
-	normTier := normalizedOpenAIServiceTierValue(rawTier)
-	if normTier == "" {
-		return frame, nil, nil
-	}
-	action, errMsg := s.evaluateOpenAIFastPolicy(ctx, account, model, normTier)
-	switch action {
-	case BetaPolicyActionBlock:
-		msg := errMsg
-		if msg == "" {
-			msg = fmt.Sprintf("openai service_tier=%s is not allowed for model %s", normTier, model)
-		}
-		return frame, &OpenAIFastBlockedError{Message: msg}, nil
-	case BetaPolicyActionFilter:
-		trimmed, err := sjson.DeleteBytes(frame, "service_tier")
-		if err != nil {
-			return frame, nil, fmt.Errorf("strip service_tier from ws frame: %w", err)
-		}
-		return trimmed, nil, nil
-	case OpenAIFastPolicyActionForcePriority:
-		updated, err := sjson.SetBytes(frame, "service_tier", OpenAIFastTierPriority)
-		if err != nil {
-			return frame, nil, fmt.Errorf("force service_tier priority in ws frame: %w", err)
-		}
-		return updated, nil, nil
-	default:
-		if normTier == rawTier {
-			return frame, nil, nil
-		}
-		updated, err := sjson.SetBytes(frame, "service_tier", normTier)
-		if err != nil {
-			return frame, nil, fmt.Errorf("normalize service_tier in ws frame: %w", err)
-		}
-		return updated, nil, nil
-	}
+	return updated, nil, err
 }
 
 // newOpenAIFastPolicyWSEventID returns a Realtime-style event_id for a

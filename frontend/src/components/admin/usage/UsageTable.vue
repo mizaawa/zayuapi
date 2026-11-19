@@ -80,6 +80,7 @@
                 </div>
               </div>
               <div v-else class="usage-model-name break-all">{{ row.model }}</div>
+              <UsageSpeedBadge :tier="row.service_tier" :multiplier="row.service_tier_multiplier" />
               <div
                 v-if="row.upstream_model_mismatch === true && row.upstream_response_model"
                 class="break-all pl-3 text-[11px]"
@@ -353,6 +354,7 @@
               </span>
               <div class="usage-card-heading">
                 <p class="usage-card-title" :title="row.model">{{ row.model || '-' }}</p>
+                <UsageSpeedBadge :tier="row.service_tier" :multiplier="row.service_tier_multiplier" />
                 <p class="usage-card-meta" :title="formatDateTime(row.created_at)">
                   <span class="font-semibold text-gray-600">{{ formatClock(row.created_at) }}</span>
                   <span>{{ formatDay(row.created_at) }}</span>
@@ -765,6 +767,7 @@ function billingTokenPrice(row: { display_cny?: boolean }, usd: number, tokens: 
 }
 import { formatCacheHitRate, getCacheHitRate, getCacheHitRateClass } from '@/utils/cacheHitRate'
 import { getUsageServiceTierLabel } from '@/utils/usageServiceTier'
+import UsageSpeedBadge from './UsageSpeedBadge.vue'
 import { resolveUsageRequestType } from '@/utils/usageRequestType'
 import { getEndToEndOutputSpeed, getOutputSpeedUnavailableReason } from '@/utils/outputSpeed'
 import { platformAccentColor } from '@/utils/platformColors'

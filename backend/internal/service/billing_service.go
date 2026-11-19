@@ -134,6 +134,8 @@ func usePriorityServiceTierPricing(serviceTier string, pricing *ModelPricing) bo
 
 func serviceTierCostMultiplier(serviceTier string) float64 {
 	switch normalizeBillingServiceTier(serviceTier) {
+	case OpenAIFastTierUltraFast:
+		return DefaultOpenAIUltraFastRateMultiplier
 	case "priority":
 		return 2.0
 	case "flex":
@@ -1073,7 +1075,7 @@ func (s *BillingService) CalculateCostUnified(input CostInput) (*CostBreakdown, 
 			nil,
 			applyLongContextBilling,
 		)
-		if err != nil || input.FastRateMultiplier <= 0 || normalizeBillingServiceTier(input.ServiceTier) != "priority" {
+		if err != nil || input.FastRateMultiplier <= 0 || !isOpenAISpeedTier(normalizeBillingServiceTier(input.ServiceTier)) {
 			return cost, err
 		}
 		customerCost, err := s.calculateCostInternalWithPolicy(
@@ -1150,7 +1152,7 @@ func (s *BillingService) calculateTokenCost(resolved *ResolvedPricing, input Cos
 	}
 
 	cost := s.computeTokenBreakdown(pricing, input.Tokens, input.RateMultiplier, input.ServiceTier, applyLongCtx)
-	if input.FastRateMultiplier > 0 && normalizeBillingServiceTier(input.ServiceTier) == "priority" {
+	if input.FastRateMultiplier > 0 && isOpenAISpeedTier(normalizeBillingServiceTier(input.ServiceTier)) {
 		// Priority prices and the global 2x tier fallback remain upstream cost.
 		// The group's Fast rule replaces that tier uplift only for customer billing.
 		customerCost := s.computeTokenBreakdown(pricing, input.Tokens,

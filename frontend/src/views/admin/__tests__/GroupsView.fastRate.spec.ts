@@ -189,6 +189,13 @@ describe('GroupsView Fast billing multiplier', () => {
     expect(toggle.classes()).toContain('switch-on')
     expect(wrapper.get('[data-testid="edit-fast-rate"]').classes()).toContain('border-primary-300')
     await wrapper.get('[data-testid="edit-fast-rate-multiplier"]').setValue('3')
+    const ultra = wrapper.get<HTMLInputElement>('[data-testid="edit-ultrafast-rate-multiplier"]')
+    expect(ultra.element.value).toBe('6')
+    await ultra.setValue('')
+    await wrapper.get('form#edit-group-form').trigger('submit.prevent')
+    expect(updateGroup).not.toHaveBeenCalled()
+    await ultra.setValue('6.25')
+    await wrapper.get('[data-testid="forced-fast-mode"]').setValue('ultrafast')
 
     await wrapper.get('form#edit-group-form').trigger('submit.prevent')
     await flushPromises()
@@ -196,7 +203,7 @@ describe('GroupsView Fast billing multiplier', () => {
     expect(updateGroup).toHaveBeenCalledTimes(1)
     expect(updateGroup).toHaveBeenCalledWith(42, expect.objectContaining({
       fast_rate_enabled: true,
-      fast_rate_multiplier: 3
+      fast_rate_multiplier: 3, ultrafast_rate_multiplier: 6.25, forced_fast_mode: 'ultrafast'
     }))
     wrapper.unmount()
   })

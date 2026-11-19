@@ -786,7 +786,9 @@ export default {
       expandPricing: '查看价格明细',
       collapsePricing: '收起价格明细',
       peakNote: '高峰时段 {window} 计费倍率 ×{multiplier}',
-      fastRateNote: 'Fast（最终 priority）token 请求：普通模型价 × 当前倍率 ×{multiplier}；策略过滤或上游降级后沿用原计费，高峰倍率照常叠加'
+      fastRateNote: 'Fast：普通模型 token 价 × 当前倍率 × {multiplier}，高峰倍率另计。',
+      ultraRateNote: 'UltraFast：普通模型 token 价 × 当前倍率 × {multiplier}，高峰倍率另计。',
+      forcedSpeedNote: '本组强制使用 {speed}：成功请求按此档位计费。'
     },
     table: {
       model: '模型',

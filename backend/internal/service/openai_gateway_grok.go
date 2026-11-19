@@ -41,6 +41,11 @@ func (s *OpenAIGatewayService) forwardGrokResponses(
 	reqStream bool,
 	startTime time.Time,
 ) (*OpenAIForwardResult, error) {
+	if forcedOpenAITierFromContext(openAIHTTPSpeedContext(ctx, c)) != "" {
+		blocked := &OpenAIFastBlockedError{Message: "Grok does not support the group's required OpenAI service tier"}
+		writeOpenAIFastPolicyBlockedResponse(c, blocked)
+		return nil, blocked
+	}
 	if account.Type != AccountTypeOAuth && account.Type != AccountTypeAPIKey {
 		return nil, fmt.Errorf("grok account type %s is not supported by Responses forwarding", account.Type)
 	}

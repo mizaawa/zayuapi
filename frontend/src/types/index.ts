@@ -561,6 +561,8 @@ export interface PaginationConfig {
 
 // ==================== API Key & Group Types ====================
 
+export type ForcedFastMode = 'off' | 'fast' | 'ultrafast'
+
 export type GroupPlatform = 'anthropic' | 'openai' | 'gemini' | 'antigravity' | 'grok' | 'custom' | 'composite'
 
 export type SubscriptionType = 'standard' | 'subscription'
@@ -622,6 +624,8 @@ export interface Group {
   /** OpenAI Fast 用户计费：启用时实付使用普通模型价 × 原倍率 × 此倍率。 */
   fast_rate_enabled?: boolean
   fast_rate_multiplier?: number
+  ultrafast_rate_multiplier?: number
+  forced_fast_mode?: ForcedFastMode
   // Claude Code 客户端限制
   claude_code_only: boolean
   fallback_group_id: number | null
@@ -833,6 +837,8 @@ export interface CreateGroupRequest {
   rate_multiplier?: number
   fast_rate_enabled?: boolean
   fast_rate_multiplier?: number
+  ultrafast_rate_multiplier?: number
+  forced_fast_mode?: ForcedFastMode
   is_exclusive?: boolean
   subscription_type?: SubscriptionType
   daily_limit_usd?: number | null
@@ -894,6 +900,8 @@ export interface UpdateGroupRequest {
   rate_multiplier?: number
   fast_rate_enabled?: boolean
   fast_rate_multiplier?: number
+  ultrafast_rate_multiplier?: number
+  forced_fast_mode?: ForcedFastMode
   is_exclusive?: boolean
   status?: 'active' | 'inactive'
   subscription_type?: SubscriptionType
@@ -1682,6 +1690,7 @@ export interface UsageLog {
   request_id: string
   model: string
   service_tier?: string | null
+  service_tier_multiplier?: number | null
   reasoning_effort?: string | null
   inbound_endpoint?: string | null
   upstream_endpoint?: string | null

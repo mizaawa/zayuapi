@@ -15,6 +15,8 @@ type MediaImagePricing struct {
 	ImageMultiplier           float64                  `json:"image_multiplier"`
 	ServiceTier               string                   `json:"service_tier,omitempty"`
 	FastRateMultiplier        float64                  `json:"fast_rate_multiplier,omitempty"`
+	PriorityRate              float64                  `json:"priority_rate,omitempty"`
+	UltraFastRate             float64                  `json:"ultrafast_rate,omitempty"`
 	LongContextBillingEnabled bool                     `json:"long_context_billing_enabled"`
 	Resolved                  *ResolvedPricing         `json:"resolved,omitempty"`
 	ChannelPricing            *ChannelModelPricing     `json:"channel_pricing,omitempty"`
@@ -25,6 +27,8 @@ func (s *OpenAIGatewayService) captureMediaImagePricing(ctx context.Context, api
 	model := firstUsageBillingModel(models)
 	pricing := &MediaImagePricing{Model: model, TokenMultiplier: tokenMultiplier, ImageMultiplier: imageMultiplier, ServiceTier: serviceTier, FastRateMultiplier: openAIFastRateMultiplier(apiKey.Group, serviceTier), LongContextBillingEnabled: longContext}
 	resolved := s.resolveOpenAIChannelPricing(ctx, model, apiKey)
+	pricing.PriorityRate = openAIFastRateMultiplier(apiKey.Group, OpenAIFastTierPriority)
+	pricing.UltraFastRate = openAIFastRateMultiplier(apiKey.Group, OpenAIFastTierUltraFast)
 	if resolved != nil && resolved.Mode == BillingModeToken {
 		pricing.Resolved, pricing.ChannelPricing = resolved, resolved.channelPricing
 	} else {
@@ -53,6 +57,21 @@ func (s *OpenAIGatewayService) captureMediaImagePricing(ctx context.Context, api
 		return nil, err
 	}
 	return &detached, nil
+}
+
+func (p *MediaImagePricing) settleServiceTier(tier string) {
+	if tier == p.ServiceTier {
+		return
+	} // Also preserves reservations made before the new fields existed.
+	p.ServiceTier = tier
+	switch tier {
+	case OpenAIFastTierPriority:
+		p.FastRateMultiplier = p.PriorityRate
+	case OpenAIFastTierUltraFast:
+		p.FastRateMultiplier = p.UltraFastRate
+	default:
+		p.FastRateMultiplier = 0
+	}
 }
 
 func (p *MediaImagePricing) calculate(s *BillingService, result *OpenAIForwardResult, tokens UsageTokens) (*CostBreakdown, error) {

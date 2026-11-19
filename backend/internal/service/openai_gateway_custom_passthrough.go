@@ -77,6 +77,23 @@ func (s *OpenAIGatewayService) forwardCustomTransparent(
 			forwardBody = updated
 		}
 	}
+	speedCtx := openAIHTTPSpeedContext(ctx, c)
+	if forcedOpenAITierFromContext(speedCtx) != "" {
+		if endpoint == customMessagesEndpoint {
+			blocked := &OpenAIFastBlockedError{Message: "native Messages passthrough does not support a forced OpenAI service tier"}
+			writeAnthropicError(c, http.StatusForbidden, "forbidden_error", blocked.Message)
+			return nil, blocked
+		}
+		updated, policyErr := s.applyOpenAIFastPolicyToBody(speedCtx, account, upstreamModel, forwardBody)
+		if policyErr != nil {
+			var blocked *OpenAIFastBlockedError
+			if errors.As(policyErr, &blocked) {
+				writeOpenAIFastPolicyBlockedResponse(c, blocked)
+			}
+			return nil, policyErr
+		}
+		forwardBody = updated
+	}
 	serviceTier := extractOpenAIServiceTierFromBody(forwardBody)
 	reasoningEffort := extractOpenAIReasoningEffortFromBody(forwardBody, model)
 

@@ -781,7 +781,9 @@ export default {
       expandPricing: 'View pricing details',
       collapsePricing: 'Hide pricing details',
       peakNote: 'Peak hours {window}: billing rate ×{multiplier}',
-      fastRateNote: 'Fast (final priority) token requests: standard model price × your rate ×{multiplier}; filtered or downgraded requests keep existing billing, and peak rates still apply'
+      fastRateNote: 'Fast: standard token price × your rate × {multiplier}. Peak rates still apply.',
+      ultraRateNote: 'UltraFast: standard token price × your rate × {multiplier}. Peak rates still apply.',
+      forcedSpeedNote: 'This group requires {speed}. Successful tier-capable requests are billed at that speed.'
     },
     table: {
       model: 'Model',

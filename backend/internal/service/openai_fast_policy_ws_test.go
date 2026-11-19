@@ -23,6 +23,22 @@ import (
 
 // --- Helper-level (unit) tests for applyOpenAIFastPolicyToWSResponseCreate ---
 
+func TestGroupSpeedPolicyUsesCurrentWebSocketTurn(t *testing.T) {
+	svc := &OpenAIGatewayService{}
+	modes := []string{"fast", "ultrafast", "off"}
+	hooks := &OpenAIWSIngressHooks{BillingGroupForTurn: func(turn int) (*Group, error) {
+		return &Group{ID: 1, Hydrated: true, Status: StatusActive, Platform: PlatformOpenAI, ForcedFastMode: modes[turn-1]}, nil
+	}}
+	for i, want := range []string{"priority", "ultrafast", ""} {
+		ctx, err := hooks.speedContext(context.Background(), i+1)
+		require.NoError(t, err)
+		out, blocked, err := svc.applyOpenAIFastPolicyToWSResponseCreate(ctx, nil, "gpt-6.2-sol", []byte(`{"type":"response.create","input":"hello"}`))
+		require.NoError(t, err)
+		require.Nil(t, blocked)
+		require.Equal(t, want, gjson.GetBytes(out, "service_tier").String())
+	}
+}
+
 func TestWSResponseCreate_DefaultPassesPriorityAndNormalizesFast(t *testing.T) {
 	svc := newOpenAIGatewayServiceWithSettings(t, DefaultOpenAIFastPolicySettings())
 	account := &Account{Platform: PlatformOpenAI, Type: AccountTypeAPIKey}
@@ -384,6 +400,12 @@ func TestPolicyEnforcingFrameConn_WithoutCapturedFallbackPolicyMisses(t *testing
 // is normalized + filtered out by an explicit admin policy before being
 // written upstream.
 func TestWSResponseCreate_IngressFiltersServiceTierBeforeUpstream(t *testing.T) {
+	t.Run("filtered", func(t *testing.T) { testIngressSpeedTier(t, "") })
+	t.Run("forced UltraFast", func(t *testing.T) { testIngressSpeedTier(t, "ultrafast") })
+}
+
+func testIngressSpeedTier(t *testing.T, mode string) {
+	t.Helper()
 	gin.SetMode(gin.TestMode)
 
 	cfg := &config.Config{}
@@ -464,7 +486,8 @@ func TestWSResponseCreate_IngressFiltersServiceTierBeforeUpstream(t *testing.T) 
 			serverErrCh <- readErr
 			return
 		}
-		serverErrCh <- svc.ProxyResponsesWebSocketFromClient(r.Context(), ginCtx, conn, account, "sk-test", firstMessage, nil)
+		hooks := &OpenAIWSIngressHooks{BillingGroupForTurn: func(int) (*Group, error) { return &Group{Platform: PlatformOpenAI, ForcedFastMode: mode}, nil }}
+		serverErrCh <- svc.ProxyResponsesWebSocketFromClient(r.Context(), ginCtx, conn, account, "sk-test", firstMessage, hooks)
 	}))
 	defer wsServer.Close()
 
@@ -495,8 +518,11 @@ func TestWSResponseCreate_IngressFiltersServiceTierBeforeUpstream(t *testing.T) 
 
 	require.Len(t, captureConn.writes, 1, "上游应只收到一条 response.create")
 	upstream := captureConn.writes[0]
-	_, hasServiceTier := upstream["service_tier"]
-	require.False(t, hasServiceTier, "上游收到的 response.create 不应包含 service_tier 字段（已被 fast policy filter 删除）")
+	if mode == "" {
+		require.NotContains(t, upstream, "service_tier")
+	} else {
+		require.Equal(t, mode, upstream["service_tier"])
+	}
 	require.Equal(t, "response.create", upstream["type"])
 	require.Equal(t, "gpt-5.5", upstream["model"])
 }

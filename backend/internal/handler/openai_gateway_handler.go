@@ -2032,8 +2032,7 @@ type openAIWSTurnAPIKeyLookup interface {
 // 因此后续 turn 在 BeforeRequest（与 HTTP 请求进入认证中间件同位）经同一认证缓存
 // 重取快照，只采用其中的分组，作为该 turn 利润门准入与用量计费共同的分组；用户、
 // Key 限额、订阅仍沿用建连快照。只在同一把 Key、同一分组且平台与订阅类型未变时
-// 采用：Key 换组或分组改平台/订阅类型不是调价，该连接按建连分组调度，继续按建连
-// 快照计费；重取失败同样保留建连快照，不断连。
+// 采用：Key 换组、失效、分组改平台/订阅类型或刷新失败时，不能确认本轮计费权限，要求重连。
 //
 // 首轮沿用刚经认证中间件取得的建连快照；没有经过 BeforeRequest 的 turn 回退建连
 // 快照。只保留当前与上一个 turn：下一 turn 的 BeforeRequest 先于上一 turn 的
@@ -2045,13 +2044,21 @@ type openAIWSTurnBillingAPIKeys struct {
 
 // begin 在 BeforeRequest 重装利润门前调用：后续 turn 重取计费分组并按 turn 记下，
 // 返回换入该分组的上下文供本 turn 的利润门使用。
-func (k *openAIWSTurnBillingAPIKeys) begin(ctx context.Context, apiKeyService *service.APIKeyService, turn int, conn *service.APIKey) context.Context {
+func (k *openAIWSTurnBillingAPIKeys) begin(ctx context.Context, apiKeyService *service.APIKeyService, turn int, conn *service.APIKey) (*service.APIKey, error) {
+	if cached := k.forTurn(turn, nil); cached != nil {
+		return cached, nil
+	}
 	turnKey := conn
-	if turn > 1 && apiKeyService != nil {
+	if turn != 1 && apiKeyService != nil {
 		turnKey = refreshOpenAIWSTurnBillingAPIKey(ctx, apiKeyService, conn)
 	}
-	k.set(turn, turnKey)
-	return withOpenAIWSTurnBillingGroup(ctx, turnKey)
+	if turnKey == nil {
+		return nil, service.NewOpenAIWSClientCloseError(coderws.StatusPolicyViolation, "unable to authorize this turn; reconnect", nil)
+	}
+	if turn > 0 { // Control frames must not freeze the next billable turn's price.
+		k.set(turn, turnKey)
+	}
+	return turnKey, nil
 }
 
 func (k *openAIWSTurnBillingAPIKeys) set(turn int, key *service.APIKey) {
@@ -2078,20 +2085,26 @@ func (k *openAIWSTurnBillingAPIKeys) forTurn(turn int, conn *service.APIKey) *se
 }
 
 // refreshOpenAIWSTurnBillingAPIKey 返回本 turn 计费用的 API Key：分组取当前认证
-// 快照，其余字段与建连快照共享。不满足采用条件时原样返回建连快照。
+// 快照，其余字段与建连快照共享。不满足采用条件时返回 nil，禁止继续沿用旧价或已撤销的授权。
 func refreshOpenAIWSTurnBillingAPIKey(ctx context.Context, lookup openAIWSTurnAPIKeyLookup, conn *service.APIKey) *service.APIKey {
-	if lookup == nil || conn == nil || conn.Key == "" || conn.GroupID == nil || conn.Group == nil {
-		return conn
+	if lookup == nil || conn == nil || conn.Key == "" {
+		return nil
 	}
 	latest, err := lookup.GetByKey(ctx, conn.Key)
-	if err != nil || latest == nil || latest.ID != conn.ID || latest.GroupID == nil || *latest.GroupID != *conn.GroupID {
-		return conn
+	if err != nil || latest == nil || latest.ID != conn.ID || latest.UserID != conn.UserID || !latest.IsActive() || latest.IsExpired() || latest.IsQuotaExhausted() || latest.User == nil || !latest.User.IsActive() {
+		return nil
+	}
+	if conn.GroupID == nil && conn.Group == nil && latest.GroupID == nil && latest.Group == nil {
+		return conn // An unchanged, ungrouped key has no retail group policy.
+	}
+	if conn.GroupID == nil || conn.Group == nil || latest.GroupID == nil || *latest.GroupID != *conn.GroupID {
+		return nil
 	}
 	group := latest.Group
-	if group == nil || group.ID != conn.Group.ID ||
+	if group == nil || !group.IsActive() || group.ID != conn.Group.ID ||
 		group.Platform != conn.Group.Platform ||
 		group.SubscriptionType != conn.Group.SubscriptionType {
-		return conn
+		return nil
 	}
 	turnKey := *conn
 	turnKey.Group = group
@@ -2747,6 +2760,13 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 		var turnPricing openAIWSTurnPricing
 		var turnBillingAPIKeys openAIWSTurnBillingAPIKeys
 		hooks := &service.OpenAIWSIngressHooks{
+			BillingGroupForTurn: func(turn int) (*service.Group, error) {
+				key, err := turnBillingAPIKeys.begin(ctx, h.apiKeyService, turn, apiKey)
+				if err != nil {
+					return nil, err
+				}
+				return key.Group, nil
+			},
 			ClientLifecycleContext:  clientLifecycleCtx,
 			InitialRequestModel:     reqModel,
 			MaxReasoningEffort:      maxReasoningEffort,
@@ -2786,7 +2806,11 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 				// Passthrough invokes BeforeRequest for subsequent frames but has no
 				// BeforeTurn hook. Refresh and price here so both ingress modes use
 				// the current group before sending the next request upstream.
-				turnBillingCtx := turnBillingAPIKeys.begin(ctx, h.apiKeyService, turn, apiKey)
+				turnKey, err := turnBillingAPIKeys.begin(ctx, h.apiKeyService, turn, apiKey)
+				if err != nil {
+					return err
+				}
+				turnBillingCtx := withOpenAIWSTurnBillingGroup(ctx, turnKey)
 				turnCtx, turnAt := h.gatewayService.WithOpenAITurnPricingContext(turnBillingCtx, apiKey.GroupID)
 				if _, vetoed, _ := h.gatewayService.ProfitControlVetoLatest(turnCtx, account); vetoed {
 					return service.NewOpenAIWSClientCloseError(coderws.StatusTryAgainLater, "account is no longer eligible for this connection, please reconnect", nil)

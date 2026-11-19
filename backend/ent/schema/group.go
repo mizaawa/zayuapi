@@ -52,6 +52,10 @@ func (Group) Fields() []ent.Field {
 			SchemaType(map[string]string{dialect.Postgres: "decimal(10,4)"}).
 			Default(2.0).
 			Comment("OpenAI Fast 相对普通请求的用户计费倍率"),
+		field.Float("ultrafast_rate_multiplier").
+			SchemaType(map[string]string{dialect.Postgres: "decimal(10,4)"}).
+			Default(6),
+		field.String("forced_fast_mode").MaxLen(16).Default("off"),
 		// 高峰时段倍率（added by migration 158）
 		field.Bool("peak_rate_enabled").
 			Default(false).

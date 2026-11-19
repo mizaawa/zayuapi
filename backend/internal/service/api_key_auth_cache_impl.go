@@ -14,7 +14,7 @@ import (
 	"github.com/dgraph-io/ristretto"
 )
 
-const apiKeyAuthSnapshotVersion = 26 // v26: include the group cyber auto-charge settings
+const apiKeyAuthSnapshotVersion = 27 // v27: group speed policy and UltraFast pricing
 
 type apiKeyAuthCacheConfig struct {
 	l1Size        int
@@ -436,6 +436,8 @@ func (s *APIKeyService) snapshotFromAPIKey(ctx context.Context, apiKey *APIKey) 
 			PeakRateMultiplier:              apiKey.Group.PeakRateMultiplier,
 			FastRateEnabled:                 apiKey.Group.FastRateEnabled,
 			FastRateMultiplier:              apiKey.Group.FastRateMultiplier,
+			UltraFastRateMultiplier:         apiKey.Group.UltraFastRateMultiplier,
+			ForcedFastMode:                  apiKey.Group.ForcedFastMode,
 			ProfitControlEnabled:            apiKey.Group.ProfitControlEnabled,
 			ProfitMinMargin:                 apiKey.Group.ProfitMinMargin,
 			ProfitSafetyBuffer:              apiKey.Group.ProfitSafetyBuffer,
@@ -544,6 +546,8 @@ func (s *APIKeyService) snapshotToAPIKey(key string, snapshot *APIKeyAuthSnapsho
 			PeakRateMultiplier:              snapshot.Group.PeakRateMultiplier,
 			FastRateEnabled:                 snapshot.Group.FastRateEnabled,
 			FastRateMultiplier:              snapshot.Group.FastRateMultiplier,
+			UltraFastRateMultiplier:         snapshot.Group.UltraFastRateMultiplier,
+			ForcedFastMode:                  snapshot.Group.ForcedFastMode,
 			ProfitControlEnabled:            snapshot.Group.ProfitControlEnabled,
 			ProfitMinMargin:                 snapshot.Group.ProfitMinMargin,
 			ProfitSafetyBuffer:              snapshot.Group.ProfitSafetyBuffer,

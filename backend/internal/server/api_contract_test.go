@@ -377,6 +377,8 @@ func TestAPIContracts(t *testing.T) {
 						"rate_multiplier": 1.5,
 						"fast_rate_enabled": false,
 						"fast_rate_multiplier": 0,
+						"ultrafast_rate_multiplier": 0,
+						"forced_fast_mode": "",
 						"peak_rate_enabled": false,
 						"peak_start": "",
 						"peak_end": "",

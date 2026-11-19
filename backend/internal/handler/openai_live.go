@@ -232,5 +232,5 @@ func liveEnabledForAPIKey(apiKey *service.APIKey) bool {
 	return apiKey != nil &&
 		apiKey.Group != nil &&
 		apiKey.Group.Platform == service.PlatformOpenAI &&
-		apiKey.Group.AllowLive
+		apiKey.Group.AllowLive && apiKey.Group.ForcedOpenAIServiceTier() == ""
 }

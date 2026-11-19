@@ -25,6 +25,9 @@
             <span v-if="fastRateEnabled" class="plaza-badge plaza-badge-fast" :title="fastRateNote">
               Fast ×{{ group.fast_rate_multiplier ?? 2 }}
             </span>
+            <span v-if="fastRateEnabled" class="plaza-badge plaza-badge-fast" :title="ultraRateNote">
+              UltraFast ×{{ group.ultrafast_rate_multiplier ?? 6 }}
+            </span>
             <span
               v-if="group.is_exclusive"
               class="plaza-badge plaza-badge-exclusive"
@@ -57,6 +60,8 @@
             <span v-if="fastRateEnabled" class="plaza-fast-note">
               {{ fastRateNote }}
             </span>
+            <span v-if="fastRateEnabled" class="plaza-fast-note">{{ ultraRateNote }}</span>
+            <span v-if="forcedSpeed" class="plaza-fast-note">{{ t('modelPlaza.detail.forcedSpeedNote', { speed: forcedSpeed }) }}</span>
           </span>
           <!-- 收起时先露出前几个模型,不用展开也知道这个分组里有什么。 -->
           <span v-if="!expanded && previewModels.length > 0" class="plaza-group-preview">
@@ -137,6 +142,11 @@ const hasCustomRate = computed(
   () => props.group.user_rate_multiplier != null && props.group.user_rate_multiplier !== props.group.rate_multiplier
 )
 const fastRateEnabled = computed(() => props.group.platform === 'openai' && props.group.fast_rate_enabled)
+const forcedSpeed = computed(() => props.group.platform !== 'openai' ? null :
+  ({ fast: 'Fast', ultrafast: 'UltraFast', off: null })[props.group.forced_fast_mode ?? 'off'])
+const ultraRateNote = computed(() => t('modelPlaza.detail.ultraRateNote', {
+  multiplier: props.group.ultrafast_rate_multiplier ?? 6
+}))
 const fastRateNote = computed(() => t('modelPlaza.detail.fastRateNote', {
   multiplier: props.group.fast_rate_multiplier ?? 2
 }))

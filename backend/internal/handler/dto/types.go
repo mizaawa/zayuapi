@@ -111,16 +111,18 @@ type UsageAPIKey struct {
 }
 
 type Group struct {
-	ID                 int64   `json:"id"`
-	Name               string  `json:"name"`
-	Description        string  `json:"description"`
-	Platform           string  `json:"platform"`
-	RateMultiplier     float64 `json:"rate_multiplier"`
-	FastRateEnabled    bool    `json:"fast_rate_enabled"`
-	FastRateMultiplier float64 `json:"fast_rate_multiplier"`
-	IsExclusive        bool    `json:"is_exclusive"`
-	Status             string  `json:"status"`
-	BlockedForUser     bool    `json:"is_blocked_for_user,omitempty"`
+	ID                      int64   `json:"id"`
+	Name                    string  `json:"name"`
+	Description             string  `json:"description"`
+	Platform                string  `json:"platform"`
+	RateMultiplier          float64 `json:"rate_multiplier"`
+	FastRateEnabled         bool    `json:"fast_rate_enabled"`
+	FastRateMultiplier      float64 `json:"fast_rate_multiplier"`
+	UltraFastRateMultiplier float64 `json:"ultrafast_rate_multiplier"`
+	ForcedFastMode          string  `json:"forced_fast_mode"`
+	IsExclusive             bool    `json:"is_exclusive"`
+	Status                  string  `json:"status"`
+	BlockedForUser          bool    `json:"is_blocked_for_user,omitempty"`
 
 	SubscriptionType string   `json:"subscription_type"`
 	DailyLimitUSD    *float64 `json:"daily_limit_usd"`
@@ -511,7 +513,8 @@ type UsageLog struct {
 	RequestID     string                      `json:"request_id"`
 	Model         string                      `json:"model"`
 	// ServiceTier records the OpenAI service tier used for billing, e.g. "priority" / "flex".
-	ServiceTier *string `json:"service_tier,omitempty"`
+	ServiceTier           *string  `json:"service_tier,omitempty"`
+	ServiceTierMultiplier *float64 `json:"service_tier_multiplier,omitempty"`
 	// ReasoningEffort is the request's reasoning effort level.
 	// OpenAI: "low"/"medium"/"high"/"xhigh"; Claude: "low"/"medium"/"high"/"max".
 	ReasoningEffort *string `json:"reasoning_effort,omitempty"`

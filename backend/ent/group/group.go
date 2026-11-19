@@ -32,6 +32,10 @@ const (
 	FieldFastRateEnabled = "fast_rate_enabled"
 	// FieldFastRateMultiplier holds the string denoting the fast_rate_multiplier field in the database.
 	FieldFastRateMultiplier = "fast_rate_multiplier"
+	// FieldUltrafastRateMultiplier holds the string denoting the ultrafast_rate_multiplier field in the database.
+	FieldUltrafastRateMultiplier = "ultrafast_rate_multiplier"
+	// FieldForcedFastMode holds the string denoting the forced_fast_mode field in the database.
+	FieldForcedFastMode = "forced_fast_mode"
 	// FieldPeakRateEnabled holds the string denoting the peak_rate_enabled field in the database.
 	FieldPeakRateEnabled = "peak_rate_enabled"
 	// FieldPeakStart holds the string denoting the peak_start field in the database.
@@ -232,6 +236,8 @@ var Columns = []string{
 	FieldRateMultiplier,
 	FieldFastRateEnabled,
 	FieldFastRateMultiplier,
+	FieldUltrafastRateMultiplier,
+	FieldForcedFastMode,
 	FieldPeakRateEnabled,
 	FieldPeakStart,
 	FieldPeakEnd,
@@ -329,6 +335,12 @@ var (
 	DefaultFastRateEnabled bool
 	// DefaultFastRateMultiplier holds the default value on creation for the "fast_rate_multiplier" field.
 	DefaultFastRateMultiplier float64
+	// DefaultUltrafastRateMultiplier holds the default value on creation for the "ultrafast_rate_multiplier" field.
+	DefaultUltrafastRateMultiplier float64
+	// DefaultForcedFastMode holds the default value on creation for the "forced_fast_mode" field.
+	DefaultForcedFastMode string
+	// ForcedFastModeValidator is a validator for the "forced_fast_mode" field. It is called by the builders before save.
+	ForcedFastModeValidator func(string) error
 	// DefaultPeakRateEnabled holds the default value on creation for the "peak_rate_enabled" field.
 	DefaultPeakRateEnabled bool
 	// DefaultPeakStart holds the default value on creation for the "peak_start" field.
@@ -471,6 +483,16 @@ func ByFastRateEnabled(opts ...sql.OrderTermOption) OrderOption {
 // ByFastRateMultiplier orders the results by the fast_rate_multiplier field.
 func ByFastRateMultiplier(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldFastRateMultiplier, opts...).ToFunc()
+}
+
+// ByUltrafastRateMultiplier orders the results by the ultrafast_rate_multiplier field.
+func ByUltrafastRateMultiplier(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldUltrafastRateMultiplier, opts...).ToFunc()
+}
+
+// ByForcedFastMode orders the results by the forced_fast_mode field.
+func ByForcedFastMode(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldForcedFastMode, opts...).ToFunc()
 }
 
 // ByPeakRateEnabled orders the results by the peak_rate_enabled field.

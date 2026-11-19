@@ -17,14 +17,16 @@ type GroupModelsListConfig = domain.GroupModelsListConfig
 type ReasoningEffortMapping = domain.ReasoningEffortMapping
 
 type Group struct {
-	ID                 int64
-	Name               string
-	Description        string
-	Platform           string
-	RateMultiplier     float64
-	ModelPricing       []ChannelModelPricing
-	FastRateEnabled    bool
-	FastRateMultiplier float64
+	ID                      int64
+	Name                    string
+	Description             string
+	Platform                string
+	RateMultiplier          float64
+	ModelPricing            []ChannelModelPricing
+	FastRateEnabled         bool
+	FastRateMultiplier      float64
+	UltraFastRateMultiplier float64
+	ForcedFastMode          string
 	// 高峰时段倍率：peak_rate_enabled 为 true 且当前时刻处于 [PeakStart, PeakEnd) 时，
 	// token 计费倍率额外乘以 PeakRateMultiplier。详见 PeakMultiplierAt。
 	PeakRateEnabled    bool

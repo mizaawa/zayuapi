@@ -139,7 +139,8 @@ type UsageLog struct {
 	// BillingMode 计费模式：token/image
 	BillingMode *string
 	// ServiceTier records the OpenAI service tier used for billing, e.g. "priority" / "flex".
-	ServiceTier *string
+	ServiceTier           *string
+	ServiceTierMultiplier *float64 // Frozen customer speed factor, nil when separate pricing did not apply.
 	// ReasoningEffort is the request's reasoning effort level.
 	// OpenAI: "low" / "medium" / "high" / "xhigh"; Claude: "low" / "medium" / "high" / "max".
 	// Nil means not provided / not applicable.
