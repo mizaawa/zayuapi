@@ -2,7 +2,7 @@
   <div class="relative" ref="dropdownRef">
     <button
       @click="showDropdown = !showDropdown"
-      class="menu-trigger inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors"
+      class="menu-trigger inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors border-gray-200 bg-white text-gray-700 hover:bg-gray-50 dark:border-dark-600 dark:bg-dark-800 dark:text-gray-300 dark:hover:bg-dark-700"
       :class="{ 'control-latched': enabled }"
       :aria-expanded="showDropdown"
       :title="t('common.autoRefresh.title')"
@@ -24,16 +24,16 @@
 
     <div
       v-if="showDropdown"
-      class="menu-surface absolute right-0 z-20 mt-1 w-44 rounded-lg border shadow-lg"
+      class="menu-surface absolute right-0 z-20 mt-1 w-44 rounded-lg border shadow-lg border-gray-200 bg-white dark:border-dark-600 dark:bg-dark-800"
     >
       <div class="p-1.5">
         <button
           @click="$emit('update:enabled', !enabled)"
-          class="menu-option flex w-full items-center justify-between rounded-md px-3 py-1.5 text-sm"
+          class="menu-option flex w-full items-center justify-between rounded-md px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-dark-700"
           :aria-pressed="enabled"
         >
           <span>{{ t('common.autoRefresh.enable') }}</span>
-          <svg v-if="enabled" class="control-icon h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+          <svg v-if="enabled" class="control-icon h-4 w-4 text-primary-500" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
             <path fill-rule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clip-rule="evenodd" />
           </svg>
         </button>
@@ -42,11 +42,11 @@
           v-for="sec in intervals"
           :key="sec"
           @click="$emit('update:interval', sec)"
-          class="menu-option flex w-full items-center justify-between rounded-md px-3 py-1.5 text-sm"
+          class="menu-option flex w-full items-center justify-between rounded-md px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-dark-700"
           :aria-pressed="intervalSeconds === sec"
         >
           <span>{{ t('common.autoRefresh.seconds', { n: sec }) }}</span>
-          <svg v-if="intervalSeconds === sec" class="control-icon h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+          <svg v-if="intervalSeconds === sec" class="control-icon h-4 w-4 text-primary-500" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
             <path fill-rule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clip-rule="evenodd" />
           </svg>
         </button>

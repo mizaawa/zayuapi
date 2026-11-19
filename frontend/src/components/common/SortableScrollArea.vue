@@ -115,7 +115,7 @@ onUpdated(measure)
 .sort-scroll-track {
   touch-action: none;
   cursor: pointer;
-  background: var(--scroll-track);
+  background: var(--md-sys-color-surface-container);
 }
 .sort-scroll-track:focus-visible {
   outline: 2px solid var(--select-focus);
@@ -123,7 +123,7 @@ onUpdated(measure)
 }
 .sort-scroll-thumb {
   cursor: grab;
-  background: var(--scroll-thumb);
+  background: var(--md-sys-color-primary);
 }
 .sort-scroll-track:hover .sort-scroll-thumb,
 .sort-scroll-track.is-dragging .sort-scroll-thumb { background: var(--select-focus); }

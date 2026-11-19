@@ -1,5 +1,5 @@
 <template>
-  <button type="button" class="select-trigger min-h-11" aria-haspopup="dialog" :aria-expanded="open">
+  <button type="button" class="key-group-field select-trigger min-h-11" aria-haspopup="dialog" :aria-expanded="open">
     <span class="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
       <GroupBadge v-if="group" class="max-w-full" :name="group.name" :platform="group.platform"
         :subscription-type="group.subscription_type" :rate-multiplier="group.rate_multiplier" :user-rate-multiplier="userRate"
@@ -23,3 +23,9 @@ import type { Group } from '@/types'
 defineProps<{ group?: Group; userRate?: number | null; open: boolean; blocked?: boolean }>()
 const { t } = useI18n()
 </script>
+
+<style scoped>
+.key-group-field:hover { background: color-mix(in srgb, var(--md-sys-color-surface-container) 82%, var(--md-sys-color-surface-container-high)); }
+.key-group-field:is(:focus-visible, [aria-expanded='true']) { background: var(--md-sys-color-surface); }
+.key-group-field .select-icon { color: var(--md-sys-color-on-surface-variant); }
+</style>

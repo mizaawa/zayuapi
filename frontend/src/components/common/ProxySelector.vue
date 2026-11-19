@@ -24,7 +24,7 @@
         <!-- Search and Batch Test Header -->
         <div class="select-header">
           <div class="select-search">
-            <Icon name="search" size="sm" class="control-icon" />
+            <Icon name="search" size="sm" class="control-icon text-gray-400" />
             <input
               ref="searchInputRef"
               v-model="searchQuery"
@@ -69,7 +69,7 @@
             :class="['select-option', modelValue === null && 'select-option-selected']"
           >
             <span class="select-option-label">{{ t('admin.accounts.noProxy') }}</span>
-            <Icon v-if="modelValue === null" name="check" size="sm" class="text-[var(--select-focus)]" />
+            <Icon v-if="modelValue === null" name="check" size="sm" class="text-primary-500" />
           </div>
 
           <!-- Proxy options -->
@@ -150,7 +150,7 @@
               v-if="modelValue === proxy.id"
               name="check"
               size="sm"
-              class="select-icon"
+              class="select-icon text-primary-500"
             />
           </div>
 
@@ -324,16 +324,15 @@ onUnmounted(() => {
 
 <style scoped>
 .select-dropdown {
-  @apply absolute z-[100] mt-2 w-full;
+  @apply absolute z-[100] mt-2 w-full bg-white dark:bg-dark-800 border-gray-200 dark:border-dark-700 shadow-black/10 dark:shadow-black/30;
   @apply rounded-xl;
   border: 1px solid var(--select-line);
-  background: var(--select-surface);
   box-shadow: var(--theme-elevation-2);
   @apply overflow-hidden;
 }
 
 .select-header {
-  @apply flex items-center gap-2 px-3 py-2;
+  @apply flex items-center gap-2 px-3 py-2 border-gray-100 dark:border-dark-700;
   border-bottom: 1px solid var(--select-line);
 }
 
@@ -353,9 +352,8 @@ onUnmounted(() => {
 }
 
 .select-option {
-  @apply flex items-center justify-between gap-2;
+  @apply flex items-center justify-between gap-2 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-dark-700;
   @apply cursor-pointer rounded-lg px-3 py-2 text-sm transition-colors;
-  color: var(--md-sys-color-on-surface);
 }
 
 .select-option-label {
@@ -384,5 +382,29 @@ onUnmounted(() => {
 .select-dropdown-leave-to {
   opacity: 0;
   transform: translateY(-8px);
+}
+
+.select-trigger {
+  @apply bg-white dark:bg-dark-800 border-gray-200 dark:border-dark-600 text-gray-900 dark:text-gray-100 focus:border-primary-500 focus:ring-primary-500/30 hover:border-gray-300 dark:hover:border-dark-500;
+}
+
+.select-trigger[aria-expanded='true'] {
+  @apply border-primary-500 ring-primary-500/30;
+}
+
+.select-trigger:disabled {
+  @apply bg-gray-100 dark:bg-dark-900;
+}
+
+.select-icon {
+  @apply text-gray-400 dark:text-dark-400;
+}
+
+.select-search-input {
+  @apply bg-transparent text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-dark-400;
+}
+
+.select-option-selected {
+  @apply bg-primary-50 dark:bg-primary-900/20 text-primary-700 dark:text-primary-300;
 }
 </style>

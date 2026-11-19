@@ -13,7 +13,7 @@
                   <Icon
                     name="search"
                     size="md"
-                    class="control-icon pointer-events-none absolute left-3 top-1/2 -translate-y-1/2"
+                    class="control-icon pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
                   />
                   <input
                     v-model.trim="filters.q"

@@ -997,6 +997,7 @@ defineExpose({ requestedModelStats, refreshData })
 .admin-column-menu {
   border-radius: 1rem;
   box-shadow: var(--theme-highlight), var(--theme-elevation-3);
+  background: var(--md-sys-color-surface);
 }
 
 .admin-column-option {
@@ -1056,5 +1057,9 @@ defineExpose({ requestedModelStats, refreshData })
   .admin-records :deep(.pagination-shell) {
     border-radius: 0;
   }
+}
+
+.admin-column-option:hover {
+  background: color-mix(in srgb, var(--md-sys-color-primary) 14%, var(--md-sys-color-surface));
 }
 </style>

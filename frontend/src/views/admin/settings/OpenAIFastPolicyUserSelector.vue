@@ -32,7 +32,7 @@
       <Icon
         name="search"
         size="sm"
-        class="control-icon pointer-events-none absolute left-3 top-1/2 -translate-y-1/2"
+        class="control-icon pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
       />
       <input
         v-model="searchQuery"
@@ -47,7 +47,7 @@
 
     <div
       v-if="showDropdown && searchQuery.trim()"
-      class="menu-surface absolute z-50 mt-1 max-h-60 w-full overflow-auto rounded-lg border shadow-lg"
+      class="menu-surface absolute z-50 mt-1 max-h-60 w-full overflow-auto rounded-lg border shadow-lg border-gray-200 bg-white dark:border-dark-600 dark:bg-dark-700"
     >
       <div v-if="searchLoading" class="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">
         {{ t("common.loading") }}
@@ -63,10 +63,10 @@
           v-for="user in availableResults"
           :key="user.id"
           type="button"
-          class="menu-option flex w-full items-center justify-between gap-3 px-4 py-2 text-left text-sm"
+          class="menu-option flex w-full items-center justify-between gap-3 px-4 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-dark-600"
           @click="selectUser(user)"
         >
-          <span class="min-w-0 truncate font-medium text-gray-900">
+          <span class="min-w-0 truncate font-medium text-gray-900 dark:text-white">
             {{ user.email }}
             <span v-if="user.deleted" class="ml-1 text-xs font-normal text-gray-400">
               {{ t("admin.settings.openaiFastPolicy.userDeleted") }}

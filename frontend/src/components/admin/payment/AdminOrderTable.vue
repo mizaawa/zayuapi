@@ -89,7 +89,7 @@
         <div class="flex items-center gap-2">
           <button
             @click="emit('detail', row)"
-            class="control-quiet flex flex-col items-center gap-0.5 rounded-lg p-1.5 transition-colors"
+            class="control-quiet flex flex-col items-center gap-0.5 rounded-lg p-1.5 transition-colors text-gray-500 hover:bg-gray-50 hover:text-gray-700 dark:hover:bg-gray-800/50 dark:hover:text-gray-300"
           >
             <Icon name="eye" size="sm" />
             <span class="text-xs">{{ t('common.view') }}</span>

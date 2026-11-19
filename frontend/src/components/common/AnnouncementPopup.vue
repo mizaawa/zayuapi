@@ -392,4 +392,12 @@ onBeforeUnmount(restoreBodyOverflow)
     transform: none;
   }
 }
+
+.announcement-body::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.announcement-body::-webkit-scrollbar-thumb {
+  background: rgb(215 193 106 / 0.6);
+}
 </style>

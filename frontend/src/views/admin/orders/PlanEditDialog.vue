@@ -69,7 +69,7 @@
         <button
           type="button"
           :class="[
-            'relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out',
+            'relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 transition-colors duration-200 ease-in-out border-transparent focus:ring-primary-500',
             planForm.for_sale ? 'switch-on' : 'switch-off'
           ]"
           @click="planForm.for_sale = !planForm.for_sale"

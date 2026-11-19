@@ -6,11 +6,12 @@ import { describe, expect, it } from 'vitest'
 
 const dir = dirname(fileURLToPath(import.meta.url))
 const styleSource = readFileSync(resolve(dir, '../style.css'), 'utf8')
+const keyCard = readFileSync(resolve(dir, '../components/keys/KeyCard.vue'), 'utf8')
 const toastSource = readFileSync(resolve(dir, '../components/common/Toast.vue'), 'utf8')
 
-function getBlock(selector: string): string {
+function getBlock(selector: string, source = styleSource): string {
   const escapedSelector = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-  const match = styleSource.match(new RegExp(`${escapedSelector}\\s*{([^}]+)}`))
+  const match = source.match(new RegExp(`${escapedSelector}\\s*{([^}]+)}`))
   if (!match) throw new Error(`Missing CSS block: ${selector}`)
   return match[1]
 }
@@ -57,18 +58,30 @@ describe('light-only Monet palette', () => {
     expect(contrastRatio(bodyText, background)).toBeGreaterThanOrEqual(4.5)
   })
 
-  it.each([
-    ['surface', 'surface-container', 'on-surface-variant'],
-    ['hover', 'surface-container-high', 'on-surface-variant'],
-    ['selected', 'primary', 'on-primary'],
-  ])('shares the readable warm %s color between menus, fields and actions', (state, surface, ink) => {
-    expect(root).toContain(`--select-${state}: var(--control-${state})`)
-    expect(root).toContain(`--control-${state}: var(--md-sys-color-${surface})`)
-    expect(root).toContain('--select-focus: var(--control-focus)')
-    expect(root).toContain('--control-focus: var(--md-sys-color-on-primary-container)')
-    const fill = getVariable(root, `--md-sys-color-${surface}`)
-    expect(contrastRatio(getVariable(root, `--md-sys-color-${ink}`), fill)).toBeGreaterThanOrEqual(4.5)
-    expect(contrastRatio(getVariable(root, '--md-sys-color-on-primary-container'), fill)).toBeGreaterThanOrEqual(3)
+  it('keeps menu paper distinct from input surfaces and keeps keyboard focus visible', () => {
+    expect(root).toContain('--select-surface: var(--md-sys-color-surface)')
+    expect(root).toContain('--control-surface: var(--md-sys-color-surface-container)')
+    for (const surface of ['surface', 'surface-container', 'surface-container-high', 'primary']) {
+      const fill = getVariable(root, `--md-sys-color-${surface}`)
+      expect(contrastRatio(getVariable(root, '--md-sys-color-on-surface'), fill)).toBeGreaterThanOrEqual(4.5)
+      expect(contrastRatio(getVariable(root, '--md-sys-color-on-primary-container'), fill)).toBeGreaterThanOrEqual(3)
+    }
+  })
+
+  it('reserves the green resting tint for Use; other key actions are quiet until hovered', () => {
+    expect(getBlock('.key-action-use', keyCard)).toContain('background: #f2f8ef')
+    expect(getBlock('.key-action-use', keyCard)).toContain('color: #386344')
+    expect(contrastRatio('#386344', '#f2f8ef')).toBeGreaterThanOrEqual(4.5)
+    for (const [tone, fill, ink] of [
+      ['use', '#e4f0df', '#284331'], ['neutral', '#fff3bd', '#7e5600'],
+      ['warning', '#fef3c7', '#92400e'], ['success', '#e4f0df', '#2e5038'], ['danger', '#fee2e2', '#b91c1c']
+    ]) {
+      const hover = getBlock(`.key-action-${tone}:hover`, keyCard)
+      expect(hover).toContain(`background: ${fill}`)
+      expect(hover).toContain(`color: ${ink}`)
+      expect(contrastRatio(ink, fill)).toBeGreaterThanOrEqual(4.5)
+    }
+    expect(keyCard).not.toMatch(/control-selected|btn-danger-soft/)
   })
 
   it('uses readable dark text on the brighter primary yellow', () => {

@@ -167,8 +167,8 @@
                   :aria-checked="rule.enabled"
                   :aria-label="rule.name"
                   :class="[
-                    'relative inline-flex h-4 w-7 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out',
-                    rule.enabled ? 'switch-on' : 'switch-off'
+                    'relative inline-flex h-4 w-7 flex-shrink-0 cursor-pointer rounded-full border-2 transition-colors duration-200 ease-in-out border-transparent focus:ring-primary-500',
+                    rule.enabled ? 'switch-on bg-primary-600' : 'switch-off bg-gray-200 dark:bg-dark-600'
                   ]"
                 >
                   <span

@@ -6,7 +6,7 @@
         <Icon
           name="search"
           size="md"
-          class="control-icon absolute left-3 top-1/2 -translate-y-1/2"
+          class="control-icon absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500"
         />
         <input
           v-model="search"

@@ -316,6 +316,8 @@ onBeforeUnmount(() => {
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
   transition: background-color 160ms ease, box-shadow 160ms ease;
+  background: var(--md-sys-color-primary);
+  color: var(--md-sys-color-on-primary);
 }
 
 .page-picker-caret {
@@ -343,6 +345,8 @@ onBeforeUnmount(() => {
   padding: 6px;
   border-radius: 1rem;
   box-shadow: var(--theme-highlight), 0 0 0 1px rgb(215 193 106 / 0.45), var(--theme-elevation-3);
+  background: var(--md-sys-color-surface);
+  color: var(--md-sys-color-on-surface);
 }
 
 .page-picker-head {
@@ -405,11 +409,11 @@ onBeforeUnmount(() => {
 }
 
 .page-picker-option.is-active .page-picker-option-body {
-  background: var(--select-hover);
+  background: var(--md-sys-color-surface-container);
 }
 
 .page-picker-option.is-current .page-picker-option-body {
-  background: var(--select-selected);
+  background: var(--md-sys-color-primary);
   color: var(--md-sys-color-on-primary);
   font-weight: 600;
 }
@@ -429,6 +433,12 @@ onBeforeUnmount(() => {
   .page-picker-enter-active,
   .page-picker-leave-active {
     transition: none;
+  }
+}
+
+@media (hover: hover) {
+  .page-picker-trigger:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--md-sys-color-primary) 86%, var(--md-sys-color-on-primary));
   }
 }
 </style>

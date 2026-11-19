@@ -50,7 +50,7 @@
               v-model="apiKey"
               :type="keyVisible ? 'text' : 'password'"
               :placeholder="t('keyUsage.placeholder')"
-              class="control-field w-full h-12 pl-12 pr-12 rounded-xl border text-sm transition-all"
+              class="control-field w-full h-12 pl-12 pr-12 rounded-xl border text-sm transition-all border-gray-200 bg-white text-gray-900 dark:border-dark-700 dark:bg-dark-900 dark:text-white"
               @keydown.enter="queryKey"
             />
             <button
@@ -102,13 +102,13 @@
               <input
                 v-model="customStartDate"
                 type="date"
-                class="control-field text-xs px-2 py-1.5 rounded-lg border"
+                class="control-field text-xs px-2 py-1.5 rounded-lg border border-gray-200 bg-white text-gray-900 dark:border-dark-700 dark:bg-dark-900 dark:text-white"
               />
               <span class="text-xs text-gray-400">-</span>
               <input
                 v-model="customEndDate"
                 type="date"
-                class="control-field text-xs px-2 py-1.5 rounded-lg border"
+                class="control-field text-xs px-2 py-1.5 rounded-lg border border-gray-200 bg-white text-gray-900 dark:border-dark-700 dark:bg-dark-900 dark:text-white"
               />
               <button
                 @click="queryKey"

@@ -4,7 +4,7 @@
        wrapping line on wide screens, two columns on phones. Labels never wrap,
        so a narrow bar wraps whole buttons instead of squeezing them. -->
   <section
-    class="account-bulk-bar"
+    class="account-bulk-bar bg-primary-50 dark:bg-primary-900/20"
     :aria-busy="busy"
     data-testid="account-bulk-actions"
   >
@@ -162,6 +162,7 @@ const selectionActions = computed<SelectionAction[]>(() => [
     icon: 'sync',
     label: t('admin.accounts.bulkActions.resetStatus'),
     buttonClass: 'btn-secondary',
+    iconClass: 'text-sky-600 dark:text-sky-400',
     run: () => emit('reset-status')
   },
   {
@@ -169,6 +170,7 @@ const selectionActions = computed<SelectionAction[]>(() => [
     icon: 'key',
     label: t('admin.accounts.bulkActions.refreshToken'),
     buttonClass: 'btn-secondary',
+    iconClass: 'text-violet-600 dark:text-violet-400',
     run: () => emit('refresh-token')
   },
   {
@@ -176,6 +178,7 @@ const selectionActions = computed<SelectionAction[]>(() => [
     icon: 'trendingUp',
     label: t('admin.accounts.bulkActions.probeUpstreamBilling'),
     buttonClass: 'btn-secondary',
+    iconClass: 'text-teal-600 dark:text-teal-400',
     run: () => emit('probe-upstream-billing')
   },
   {
@@ -190,7 +193,6 @@ const selectionActions = computed<SelectionAction[]>(() => [
 
 <style scoped>
 .account-bulk-bar {
-  background: var(--md-sys-color-background);
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
@@ -209,12 +211,11 @@ const selectionActions = computed<SelectionAction[]>(() => [
 }
 
 .account-bulk-count {
-  @apply text-sm font-medium;
-  color: var(--control-ink);
+  @apply text-sm font-medium text-primary-900 dark:text-primary-100;
 }
 
 .account-bulk-link {
-  @apply whitespace-nowrap;
+  @apply whitespace-nowrap text-primary-700 hover:text-primary-800 dark:text-primary-300 dark:hover:text-primary-200;
 }
 
 .account-bulk-actions {
@@ -229,6 +230,7 @@ const selectionActions = computed<SelectionAction[]>(() => [
   flex-shrink: 0;
   gap: 0.375rem;
   white-space: nowrap;
+  border-color: transparent;
 }
 
 .account-bulk-filtered {
@@ -260,5 +262,11 @@ const selectionActions = computed<SelectionAction[]>(() => [
     overflow: hidden;
     text-overflow: ellipsis;
   }
+}
+
+.account-bulk-action.btn-danger-soft {
+  background-color: var(--md-sys-color-surface-container);
+
+  @apply text-red-700 hover:bg-red-50 dark:text-red-300 dark:hover:bg-red-900/30;
 }
 </style>

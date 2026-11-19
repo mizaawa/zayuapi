@@ -1604,7 +1604,7 @@
                       <span>{{ suffix }}</span>
                       <button
                         type="button"
-                        class="control-quiet rounded-full"
+                        class="control-quiet rounded-full text-gray-500 hover:bg-gray-200 hover:text-gray-700 dark:text-gray-300 dark:hover:bg-dark-500 dark:hover:text-white"
                         @click="
                           removeRegistrationEmailSuffixWhitelistTag(suffix)
                         "
@@ -1905,7 +1905,7 @@
                       <span>{{ header }}</span>
                       <button
                         type="button"
-                        class="control-quiet rounded-full"
+                        class="control-quiet rounded-full text-gray-500 hover:bg-gray-200 hover:text-gray-700 dark:text-gray-300 dark:hover:bg-dark-500 dark:hover:text-white"
                         :aria-label="t('admin.settings.apiKeyAcl.removeForwardedClientIpHeader', { header })"
                         @click="removeForwardedClientIpHeader(header)"
                       >
@@ -5895,7 +5895,7 @@
                     <button
                       v-if="index > 0"
                       type="button"
-                      class="control-quiet rounded p-1"
+                      class="control-quiet rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-dark-700"
                       :title="t('admin.settings.customMenu.moveUp')"
                       @click="moveMenuItem(index, -1)"
                     >
@@ -5917,7 +5917,7 @@
                     <button
                       v-if="index < form.custom_menu_items.length - 1"
                       type="button"
-                      class="control-quiet rounded p-1"
+                      class="control-quiet rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-dark-700"
                       :title="t('admin.settings.customMenu.moveDown')"
                       @click="moveMenuItem(index, 1)"
                     >
@@ -7642,7 +7642,7 @@
                       <button
                         type="button"
                         :class="[
-                          'relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out',
+                          'relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 transition-colors duration-200 ease-in-out border-transparent focus:ring-primary-500',
                           form.payment_cancel_rate_limit_enabled
                             ? 'switch-on' : 'switch-off',
                         ]"
@@ -7731,7 +7731,7 @@
                       <button
                         type="button"
                         :class="[
-                          'relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out',
+                          'relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 transition-colors duration-200 ease-in-out border-transparent focus:ring-primary-500',
                           form.payment_alipay_force_qrcode
                             ? 'switch-on' : 'switch-off',
                         ]"
@@ -7762,7 +7762,7 @@
                       <button
                         type="button"
                         :class="[
-                          'relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out',
+                          'relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 transition-colors duration-200 ease-in-out border-transparent focus:ring-primary-500',
                           form.payment_alipay_mobile_precreate_deep_link
                             ? 'switch-on' : 'switch-off',
                         ]"
@@ -8346,7 +8346,7 @@
                         class="sr-only peer"
                       />
                       <div
-                        class="w-9 h-5 rounded-full bg-[var(--control-surface)] ring-1 ring-inset ring-[var(--control-focus)] peer-checked:bg-[var(--control-selected)] peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-[var(--control-focus)] peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:shadow-sm after:transition-transform"
+                        class="w-9 h-5 rounded-full ring-1 ring-inset ring-[var(--control-focus)] peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:rounded-full after:h-4 after:w-4 after:shadow-sm after:transition-transform bg-gray-200 dark:bg-gray-600 peer-checked:after:border-white after:bg-white after:border-gray-300 dark:after:border-gray-500 peer-checked:bg-primary-600"
                       ></div>
                     </label>
                     <input

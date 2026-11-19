@@ -33,7 +33,7 @@
     width: 2.25rem;
     height: 0.25rem;
     border-radius: 1rem;
-    background: var(--select-line);
+    background: var(--md-sys-color-outline);
   }
   .mobile-sheet .modal-footer {
     padding-bottom: max(0.75rem, env(safe-area-inset-bottom, 0px));

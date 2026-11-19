@@ -2,7 +2,7 @@
   <button
     type="button"
     @click="toggle"
-    class="relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out"
+    class="relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 transition-colors duration-200 ease-in-out border-transparent focus:ring-primary-500 dark:focus:ring-offset-dark-800"
     :class="modelValue ? 'switch-on' : 'switch-off'"
     role="switch"
     :aria-checked="modelValue"

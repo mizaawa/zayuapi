@@ -1648,6 +1648,8 @@ onUnmounted(() => {
   justify-content: center;
   border-radius: 0.75rem;
   transition: background-color 160ms ease;
+  background: var(--md-sys-color-surface-container);
+  color: var(--md-sys-color-on-surface);
 }
 
 .keys-toolbar-actions {
@@ -1689,6 +1691,7 @@ onUnmounted(() => {
 .keys-field-menu {
   border-radius: 1rem;
   box-shadow: var(--theme-highlight), var(--theme-elevation-3);
+  background: var(--md-sys-color-surface);
 }
 
 .keys-field-option {
@@ -1852,5 +1855,13 @@ onUnmounted(() => {
     justify-content: flex-end;
     margin-left: auto;
   }
+}
+
+.keys-sort-order:hover {
+  background: var(--md-sys-color-surface-container-high);
+}
+
+.keys-field-option:hover {
+  background: color-mix(in srgb, var(--md-sys-color-primary) 14%, var(--md-sys-color-surface));
 }
 </style>

@@ -304,6 +304,7 @@ const submitJump = () => {
 
 .page-size-select :deep(.select-trigger) {
   @apply px-3 py-1.5 text-sm;
+  background: var(--md-sys-color-surface);
 }
 
 /* Phones: previous and next hug the edges with the page picker centred between them. */
@@ -367,5 +368,25 @@ const submitJump = () => {
   .pagination-step-icon {
     display: block;
   }
+}
+
+.pagination-button,
+.pagination-page-idle {
+  border-color: transparent;
+  background: var(--md-sys-color-surface);
+  color: var(--md-sys-color-on-surface-variant);
+}
+
+.pagination-button:hover:not(:disabled),
+.pagination-page-idle:hover {
+  border-color: transparent;
+  background: var(--md-sys-color-surface-container-high);
+  color: var(--md-sys-color-on-surface);
+}
+
+.pagination-page-active {
+  border-color: transparent;
+  background: var(--md-sys-color-primary);
+  color: var(--md-sys-color-on-primary);
 }
 </style>

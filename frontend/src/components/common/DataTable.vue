@@ -1169,14 +1169,37 @@ tbody tr:hover .sticky-col {
 .table-wrapper::-webkit-scrollbar {
   height: 12px;
   width: 12px;
+  background-color: transparent;
 }
 
 .table-wrapper::-webkit-scrollbar-track {
   border-radius: 6px;
   margin: 0 4px;
+  background-color: rgba(151, 104, 0, 0.05);
 }
 
 .table-wrapper::-webkit-scrollbar-thumb {
   border-width: 2px;
+  background-color: rgba(155, 140, 98, 0.6);
+  border-color: transparent;
+}
+
+.dark .table-wrapper::-webkit-scrollbar-track { background-color: rgba(255, 255, 255, 0.05);
+}
+
+.table-wrapper::-webkit-scrollbar-thumb:hover { background-color: rgba(113, 103, 68, 0.85);
+}
+
+.dark .table-wrapper::-webkit-scrollbar-thumb { background-color: rgba(156, 163, 175, 0.75);
+}
+
+.dark .table-wrapper::-webkit-scrollbar-thumb:hover { background-color: rgba(209, 213, 219, 0.9);
+}
+
+@supports (-moz-appearance:none) {
+  .table-wrapper { scrollbar-color: rgba(155, 140, 98, 0.55) rgba(151, 104, 0, 0.05);
+  }
+  .dark .table-wrapper { scrollbar-color: rgba(75, 85, 99, 0.5) rgba(255, 255, 255, 0.05);
+  }
 }
 </style>

@@ -235,7 +235,7 @@ const gOpts = computed(() => [
 
 .account-group-check {
   flex-shrink: 0;
-  color: var(--select-focus);
+  color: #976800;
 }
 
 .tone-anthropic {

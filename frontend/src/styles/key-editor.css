@@ -1,11 +1,11 @@
 /* Only the key editor opts into this surface; other BaseDialog instances keep their theme. */
 .modal-content.key-editor-panel {
   --ke-paper: var(--md-sys-color-surface);
-  --ke-wash: color-mix(in srgb, var(--md-sys-color-surface-container) 24%, var(--ke-paper));
-  --ke-line: color-mix(in srgb, var(--md-sys-color-outline) 39%, var(--ke-paper));
+  --ke-wash: var(--md-sys-color-surface);
+  --ke-line: transparent;
   --ke-ink: var(--md-sys-color-on-surface);
   --ke-muted: var(--md-sys-color-on-surface-variant);
-  --ke-gold-ink: color-mix(in srgb, var(--md-sys-color-on-primary) 72%, var(--md-sys-color-primary));
+  --ke-gold-ink: theme('colors.primary.700');
   --ke-pad: clamp(1rem, 3vw, 1.5rem);
   max-width: 43rem;
   color: var(--ke-ink);
@@ -89,8 +89,8 @@
 .key-editor-tabs button:hover { background: var(--control-hover); }
 .key-editor-tabs button[aria-selected='true'] {
   border-color: var(--ke-line);
-  color: var(--md-sys-color-on-primary);
-  background: var(--control-selected);
+  color: theme('colors.primary.700');
+  background: var(--md-sys-color-surface);
   box-shadow: var(--theme-highlight), 0 1px 2px rgb(63 52 32 / 0.08);
 }
 
@@ -151,7 +151,7 @@
 .key-editor-status label { position: relative; cursor: pointer; }
 .key-editor-status span { display: flex; align-items: center; justify-content: center; gap: 0.35rem; min-height: 2.1rem; border-radius: 0.45rem; font-size: 0.8125rem; color: var(--ke-muted); }
 .key-editor-status i { width: 0.4rem; height: 0.4rem; border: 1px solid currentColor; border-radius: 50%; }
-.key-editor-status input:checked + span { background: var(--control-selected); color: var(--control-ink); font-weight: 650; box-shadow: var(--theme-elevation-1); }
+.key-editor-status input:checked + span { background: var(--md-sys-color-surface-container); color: var(--control-ink); font-weight: 650; box-shadow: var(--theme-elevation-1); }
 .key-editor-status input:checked + span i { background: currentColor; }
 .key-editor-status input[value='active']:checked + span i { color: var(--md-sys-color-secondary); }
 .key-editor-status input:focus-visible + span { outline: 2px solid var(--control-focus); outline-offset: 1px; }

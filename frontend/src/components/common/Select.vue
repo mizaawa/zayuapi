@@ -70,7 +70,7 @@
         >
           <!-- Search input -->
           <div v-if="isSearchable" class="select-search">
-            <Icon name="search" size="sm" class="control-icon" />
+            <Icon name="search" size="sm" class="control-icon text-gray-400" />
             <input
               ref="searchInputRef"
               v-model="searchQuery"
@@ -106,14 +106,14 @@
                   v-if="option._creatable"
                   name="search"
                   size="sm"
-                  class="control-icon flex-shrink-0"
+                  class="control-icon flex-shrink-0 text-gray-400"
                 />
                 <span class="select-option-label" :class="option._creatable && 'italic text-gray-500 dark:text-dark-300'">{{ getOptionLabel(option) }}</span>
                 <Icon
                   v-if="isSelected(option)"
                   name="check"
                   size="sm"
-                  class="shrink-0 text-[var(--select-focus)]"
+                  class="shrink-0 text-primary-500"
                   :stroke-width="2"
                 />
               </slot>
@@ -529,13 +529,25 @@ onUnmounted(() => {
   @apply rounded text-gray-400 transition-colors;
   @apply hover:text-gray-600 dark:hover:text-gray-200;
 }
+
+.select-trigger[aria-expanded='true'] {
+  @apply border-transparent ring-primary-500/30;
+}
+
+.select-trigger[aria-invalid='true'] {
+  @apply border-red-500 focus:border-red-500 focus:ring-red-500/30;
+}
+
+.select-trigger:disabled {
+  background: var(--md-sys-color-surface-container-high);
+}
 </style>
 
 <style>
 .select-dropdown-portal {
-  @apply flex w-max min-w-[200px] flex-col overflow-hidden rounded-xl;
-  border: 1px solid var(--select-line);
-  background: var(--select-surface);
+  @apply flex w-max min-w-[200px] flex-col overflow-hidden rounded-xl shadow-black/10 dark:shadow-black/30;
+  border: 1px solid transparent;
+  background: var(--md-sys-color-surface);
   color: var(--md-sys-color-on-surface);
   box-shadow: var(--theme-elevation-2);
   outline: none;
@@ -545,6 +557,7 @@ onUnmounted(() => {
 .select-dropdown-portal .select-search {
   @apply flex shrink-0 items-center gap-2 px-3 py-2;
   border-bottom: 1px solid var(--select-line);
+  border-color: transparent;
 }
 
 .select-dropdown-portal .select-options {
@@ -553,18 +566,20 @@ onUnmounted(() => {
 
 .select-dropdown-portal .select-option {
   @apply flex cursor-pointer items-center justify-between gap-2 rounded-lg px-3 py-2 text-sm transition-colors;
+  color: var(--md-sys-color-on-surface);
 }
 
 .select-dropdown-portal .select-option-disabled {
   @apply cursor-not-allowed opacity-50;
 }
 
-.select-dropdown-portal .select-option-blocked { color: var(--monitor-down); }
+.select-dropdown-portal .select-option-blocked {
+  @apply text-red-700 dark:text-red-300;
+}
 
 .select-dropdown-portal .select-option-group {
-  @apply cursor-default select-none text-[11px] font-bold uppercase tracking-wider;
-  color: var(--md-sys-color-on-surface-variant);
-  background: var(--select-hover);
+  @apply cursor-default select-none text-[11px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400;
+  background: var(--md-sys-color-surface-container);
 }
 
 .select-dropdown-portal .select-option-label {
@@ -572,8 +587,7 @@ onUnmounted(() => {
 }
 
 .select-dropdown-portal .select-empty {
-  @apply px-4 py-8 text-center text-sm;
-  color: var(--md-sys-color-on-surface-variant);
+  @apply px-4 py-8 text-center text-sm text-gray-500 dark:text-dark-400;
 }
 
 .select-dropdown-enter-active,
@@ -585,5 +599,9 @@ onUnmounted(() => {
 .select-dropdown-leave-to {
   opacity: 0;
   transform: translateY(-8px);
+}
+
+.select-dropdown-portal .select-option-group:hover {
+  background: var(--md-sys-color-surface-container);
 }
 </style>

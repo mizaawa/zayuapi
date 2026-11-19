@@ -8,7 +8,7 @@
             <Icon
               name="search"
               size="md"
-              class="control-icon absolute left-3 top-1/2 -translate-y-1/2"
+              class="control-icon absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500"
             />
             <input
               v-model="searchQuery"
@@ -148,15 +148,15 @@
                 <!-- 右键展开格式选择菜单 -->
                 <div
                   v-if="copyMenuProxyId === row.id"
-                  class="menu-surface absolute left-0 top-full z-50 mt-1 w-auto min-w-[180px] rounded-lg border py-1 shadow-lg"
+                  class="menu-surface absolute left-0 top-full z-50 mt-1 w-auto min-w-[180px] rounded-lg border py-1 shadow-lg border-gray-200 bg-white dark:border-dark-500 dark:bg-dark-700"
                 >
                   <button
                     v-for="fmt in getCopyFormats(row)"
                     :key="fmt.label"
-                    class="menu-option flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs"
+                    class="menu-option flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs hover:bg-gray-100 dark:hover:bg-dark-600"
                     @click.stop="copyFormat(fmt.value)"
                   >
-                    <span class="truncate font-mono text-gray-600">{{ fmt.label }}</span>
+                    <span class="truncate font-mono text-gray-600 dark:text-gray-300">{{ fmt.label }}</span>
                   </button>
                 </div>
               </div>
@@ -202,7 +202,7 @@
             <button
               v-if="(value || 0) > 0"
               type="button"
-              class="control-quiet inline-flex items-center rounded px-2 py-0.5 text-xs font-medium text-primary-700 dark:text-primary-300"
+              class="control-quiet inline-flex items-center rounded px-2 py-0.5 text-xs font-medium bg-gray-100 text-primary-700 hover:bg-gray-200 dark:bg-dark-600 dark:text-primary-300 dark:hover:bg-dark-500"
               @click="openAccountsModal(row)"
             >
               {{ t('admin.groups.accountsCount', { count: value || 0 }) }}
@@ -327,7 +327,7 @@
               </button>
               <button
                 @click="handleEdit(row)"
-                class="control-quiet flex flex-col items-center gap-0.5 rounded-lg p-1.5 transition-colors"
+                class="control-quiet flex flex-col items-center gap-0.5 rounded-lg p-1.5 transition-colors text-gray-500 hover:bg-gray-100 hover:text-primary-600 dark:hover:bg-dark-700 dark:hover:text-primary-400"
               >
                 <Icon name="edit" size="sm" />
                 <span class="text-xs">{{ t('common.edit') }}</span>

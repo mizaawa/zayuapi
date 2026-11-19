@@ -488,7 +488,7 @@ onBeforeUnmount(() => teardown(false))
   border-radius: 1.75rem;
   outline: none;
   color: var(--md-sys-color-on-surface);
-  background: var(--select-surface);
+  background: var(--md-sys-color-surface);
   box-shadow:
     inset 0 1px 0 rgb(255 255 255 / 0.8),
     0 0 0 1px rgb(215 193 106 / 0.2),
@@ -542,7 +542,7 @@ onBeforeUnmount(() => teardown(false))
 
 .kgp-close:hover {
   color: var(--md-sys-color-on-surface);
-  background: var(--select-hover);
+  background: var(--md-sys-color-surface-container);
 }
 
 /* ---------- Search + platform chips ---------- */
@@ -575,7 +575,7 @@ onBeforeUnmount(() => teardown(false))
   border-radius: 1rem;
   font-size: 0.9375rem;
   color: var(--md-sys-color-on-surface);
-  background: var(--select-surface);
+  background: var(--md-sys-color-surface-container);
   box-shadow: inset 0 0 0 1px var(--select-line);
   transition: background-color 160ms ease, box-shadow 160ms ease;
 }
@@ -587,6 +587,7 @@ onBeforeUnmount(() => teardown(false))
 .kgp-search-input:focus {
   outline: 2px solid var(--select-focus);
   outline-offset: 1px;
+  background: var(--md-sys-color-surface);
 }
 
 .kgp-search-clear {
@@ -604,7 +605,7 @@ onBeforeUnmount(() => teardown(false))
 
 .kgp-search-clear:hover {
   color: var(--md-sys-color-on-surface);
-  background: var(--select-hover);
+  background: var(--md-sys-color-surface-container-high);
 }
 
 .kgp-platforms {
@@ -627,7 +628,7 @@ onBeforeUnmount(() => teardown(false))
   font-size: 0.8125rem;
   font-weight: 550;
   color: var(--md-sys-color-on-surface-variant);
-  background: var(--select-hover);
+  background: #faf6e8;
   box-shadow: inset 0 0 0 1px rgb(215 193 106 / 0.32);
   transition: background-color 160ms ease, color 160ms ease, box-shadow 160ms ease, opacity 160ms ease;
 }
@@ -685,6 +686,7 @@ onBeforeUnmount(() => teardown(false))
   padding: 0.375rem 0.875rem 1rem;
   border-top: 1px solid rgb(215 193 106 / 0.3);
   scrollbar-width: thin;
+  scrollbar-color: rgb(215 193 106 / 0.75) transparent;
 }
 
 .kgp-option {
@@ -834,19 +836,23 @@ onBeforeUnmount(() => teardown(false))
   .kgp-option:hover:not(.is-blocked, .is-selected) {
     background: var(--select-hover);
   }
+  .kgp-option:hover:not(.is-blocked) {
+    background: color-mix(in srgb, var(--kgp-accent) 7%, var(--md-sys-color-surface));
+  }
 }
 
 .kgp-list.is-keyboard .kgp-option.is-active {
   outline: 2px solid var(--select-focus);
   outline-offset: -2px;
+  background: color-mix(in srgb, var(--kgp-accent) 8%, var(--md-sys-color-surface));
 }
 
 .kgp-option:active:not(.is-blocked) {
-  background: var(--select-hover);
+  background: color-mix(in srgb, var(--kgp-accent) 13%, var(--md-sys-color-surface));
 }
 
 .kgp-option.is-selected {
-  background: var(--select-selected);
+  background: color-mix(in srgb, var(--kgp-accent) 11%, var(--md-sys-color-surface));
 }
 
 .kgp-option.is-selected .kgp-check {
@@ -917,13 +923,13 @@ onBeforeUnmount(() => teardown(false))
   border-radius: 999px;
   font-size: 0.8125rem;
   font-weight: 600;
-  color: var(--select-focus);
-  background: var(--select-hover);
+  color: #7e5600;
+  background: #fff3bd;
   transition: background-color 150ms ease;
 }
 
 .kgp-empty-reset:hover {
-  background: var(--select-selected);
+  background: #ffe78a;
 }
 
 /* ---------- Enter / leave ---------- */

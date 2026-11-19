@@ -3,7 +3,7 @@
     <button
       @click="toggleDropdown"
       :disabled="switching"
-      class="menu-trigger flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-sm font-medium transition-colors"
+      class="menu-trigger flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-sm font-medium transition-colors text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-dark-700"
       :aria-expanded="isOpen"
       :title="currentLocale?.name"
     >
@@ -12,7 +12,7 @@
       <Icon
         name="chevronDown"
         size="xs"
-        class="select-icon transition-transform duration-200"
+        class="select-icon transition-transform duration-200 text-gray-400"
         :class="{ 'rotate-180': isOpen }"
       />
     </button>
@@ -20,19 +20,19 @@
     <transition name="dropdown">
       <div
         v-if="isOpen"
-        class="menu-surface absolute right-0 z-50 mt-1 w-32 overflow-hidden rounded-lg border shadow-lg"
+        class="menu-surface absolute right-0 z-50 mt-1 w-32 overflow-hidden rounded-lg border shadow-lg border-gray-200 bg-white dark:border-dark-700 dark:bg-dark-800"
       >
         <button
           v-for="locale in availableLocales"
           :key="locale.code"
           :disabled="switching"
           @click="selectLocale(locale.code)"
-          class="menu-option flex w-full items-center gap-2 px-3 py-2 text-sm transition-colors"
+          class="menu-option flex w-full items-center gap-2 px-3 py-2 text-sm transition-colors text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-dark-700"
           :aria-pressed="locale.code === currentLocaleCode"
         >
           <span class="text-base">{{ locale.flag }}</span>
           <span>{{ locale.name }}</span>
-          <Icon v-if="locale.code === currentLocaleCode" name="check" size="sm" class="select-icon ml-auto" />
+          <Icon v-if="locale.code === currentLocaleCode" name="check" size="sm" class="select-icon ml-auto text-primary-500" />
         </button>
       </div>
     </transition>

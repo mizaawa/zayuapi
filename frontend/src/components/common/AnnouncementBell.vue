@@ -454,4 +454,12 @@ watch(
   width: 8px;
 }
 
+.overflow-y-auto::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.overflow-y-auto::-webkit-scrollbar-thumb {
+  background: var(--md-sys-color-outline);
+}
+
 </style>

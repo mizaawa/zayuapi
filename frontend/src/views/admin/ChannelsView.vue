@@ -9,7 +9,7 @@
               <Icon
                 name="search"
                 size="md"
-                class="control-icon absolute left-3 top-1/2 -translate-y-1/2"
+                class="control-icon absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500"
               />
               <input
                 v-model="searchQuery"
@@ -100,7 +100,7 @@
             <div class="flex items-center gap-1">
               <button
                 @click="openEditDialog(row)"
-                class="control-quiet flex flex-col items-center gap-0.5 rounded-lg p-1.5 transition-colors"
+                class="control-quiet flex flex-col items-center gap-0.5 rounded-lg p-1.5 transition-colors text-gray-500 hover:bg-gray-100 hover:text-primary-600 dark:hover:bg-dark-700 dark:hover:text-primary-400"
               >
                 <Icon name="edit" size="sm" />
                 <span class="text-xs">{{ t('common.edit', 'Edit') }}</span>
@@ -552,14 +552,14 @@
                     <!-- Search results dropdown -->
                     <div
                       v-if="showRuleAccountDropdown[`${section.platform}-${ruleIndex}`] && (ruleAccountSearchResults[`${section.platform}-${ruleIndex}`]?.length ?? 0) > 0"
-                      class="menu-surface absolute z-50 mt-1 max-h-48 w-full overflow-auto rounded-lg border shadow-lg"
+                      class="menu-surface absolute z-50 mt-1 max-h-48 w-full overflow-auto rounded-lg border shadow-lg bg-white dark:border-dark-600 dark:bg-dark-800"
                     >
                       <button
                         v-for="account in ruleAccountSearchResults[`${section.platform}-${ruleIndex}`]"
                         :key="account.id"
                         type="button"
                         @click="selectRuleAccount(rule, account, section.platform, ruleIndex)"
-                        class="menu-option w-full px-3 py-2 text-left text-sm"
+                        class="menu-option w-full px-3 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-dark-700"
                         :class="{ 'opacity-50': rule.account_ids.includes(account.id) }"
                         :disabled="rule.account_ids.includes(account.id)"
                       >
@@ -1781,5 +1781,26 @@ onUnmounted(() => {
 
 .channel-tab-inactive {
   @apply border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300;
+}
+
+.channel-tabs::-webkit-scrollbar-track {
+  @apply bg-gray-100 dark:bg-dark-800;
+}
+
+.channel-tabs::-webkit-scrollbar-thumb {
+  @apply bg-gray-400 dark:bg-dark-500;
+}
+
+.channel-tabs::-webkit-scrollbar-thumb:hover {
+  @apply bg-gray-500 dark:bg-dark-400;
+}
+
+@supports (-moz-appearance: none) {
+  .channel-tabs {
+    scrollbar-color: theme('colors.gray.400') theme('colors.gray.100');
+  }
+  .dark .channel-tabs {
+    scrollbar-color: theme('colors.dark.500') theme('colors.dark.800');
+  }
 }
 </style>

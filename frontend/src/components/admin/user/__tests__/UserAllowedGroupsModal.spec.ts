@@ -77,7 +77,7 @@ describe('UserAllowedGroupsModal', () => {
     expect(checkbox.attributes('role')).toBe('checkbox')
     expect(checkbox.attributes('aria-checked')).toBe('false')
     expect(checkbox.classes()).toContain('ring-1')
-    expect(checkbox.classes()).toContain('ring-[var(--control-focus)]')
+    expect(checkbox.classes()).toContain('ring-gray-400')
     expect(checkbox.classes()).toContain('control-quiet')
   })
 

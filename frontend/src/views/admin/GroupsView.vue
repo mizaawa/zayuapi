@@ -698,7 +698,7 @@
               aria-labelledby="create-fast-rate-label"
               @click="createForm.fast_rate_enabled = !createForm.fast_rate_enabled"
               :class="[
-                'relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors',
+                'relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors focus-visible:ring-primary-500',
                 createForm.fast_rate_enabled ? 'switch-on' : 'switch-off',
               ]"
             >
@@ -915,7 +915,7 @@
                 </button>
                 <button
                   type="button"
-                  class="control-quiet rounded px-2 py-1 font-medium transition-colors"
+                  class="control-quiet rounded px-2 py-1 font-medium transition-colors text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-dark-700"
                   @click="invertModelsListSelection(createModelsListState)"
                 >
                   {{ t("admin.groups.modelsList.invertSelection") }}
@@ -950,7 +950,7 @@
                 <button
                   type="button"
                   :disabled="index === 0"
-                  class="control-quiet rounded p-1 disabled:opacity-40"
+                  class="control-quiet rounded p-1 disabled:opacity-40 text-gray-400 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-dark-600 dark:hover:text-gray-200"
                   @click="moveCreateModelsListItem(index, index - 1)"
                 >
                   <Icon name="arrowUp" size="sm" />
@@ -958,7 +958,7 @@
                 <button
                   type="button"
                   :disabled="index === createModelsListState.items.length - 1"
-                  class="control-quiet rounded p-1 disabled:opacity-40"
+                  class="control-quiet rounded p-1 disabled:opacity-40 text-gray-400 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-dark-600 dark:hover:text-gray-200"
                   @click="moveCreateModelsListItem(index, index + 1)"
                 >
                   <Icon name="arrowDown" size="sm" />
@@ -2141,7 +2141,7 @@
                           accountSearchResults[getCreateRuleSearchKey(rule)]
                             ?.length > 0
                         "
-                        class="menu-surface absolute z-50 mt-1 max-h-48 w-full overflow-auto rounded-lg border shadow-lg"
+                        class="menu-surface absolute z-50 mt-1 max-h-48 w-full overflow-auto rounded-lg border shadow-lg bg-white dark:border-dark-600 dark:bg-dark-800"
                       >
                         <button
                           v-for="account in accountSearchResults[
@@ -2150,7 +2150,7 @@
                           :key="account.id"
                           type="button"
                           @click="selectAccount(rule, account)"
-                          class="menu-option w-full px-3 py-2 text-left text-sm"
+                          class="menu-option w-full px-3 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-dark-700"
                           :class="{
                             'opacity-50': rule.accounts.some(
                               (a) => a.id === account.id,
@@ -2415,7 +2415,7 @@
               aria-labelledby="edit-fast-rate-label"
               @click="editForm.fast_rate_enabled = !editForm.fast_rate_enabled"
               :class="[
-                'relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors',
+                'relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors focus-visible:ring-primary-500',
                 editForm.fast_rate_enabled ? 'switch-on' : 'switch-off',
               ]"
             >
@@ -2634,7 +2634,7 @@
                 </button>
                 <button
                   type="button"
-                  class="control-quiet rounded px-2 py-1 font-medium transition-colors"
+                  class="control-quiet rounded px-2 py-1 font-medium transition-colors text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-dark-700"
                   @click="invertModelsListSelection(editModelsListState)"
                 >
                   {{ t("admin.groups.modelsList.invertSelection") }}
@@ -2669,7 +2669,7 @@
                 <button
                   type="button"
                   :disabled="index === 0"
-                  class="control-quiet rounded p-1 disabled:opacity-40"
+                  class="control-quiet rounded p-1 disabled:opacity-40 text-gray-400 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-dark-600 dark:hover:text-gray-200"
                   @click="moveEditModelsListItem(index, index - 1)"
                 >
                   <Icon name="arrowUp" size="sm" />
@@ -2677,7 +2677,7 @@
                 <button
                   type="button"
                   :disabled="index === editModelsListState.items.length - 1"
-                  class="control-quiet rounded p-1 disabled:opacity-40"
+                  class="control-quiet rounded p-1 disabled:opacity-40 text-gray-400 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-dark-600 dark:hover:text-gray-200"
                   @click="moveEditModelsListItem(index, index + 1)"
                 >
                   <Icon name="arrowDown" size="sm" />
@@ -3855,7 +3855,7 @@
                           accountSearchResults[getEditRuleSearchKey(rule)]
                             ?.length > 0
                         "
-                        class="menu-surface absolute z-50 mt-1 max-h-48 w-full overflow-auto rounded-lg border shadow-lg"
+                        class="menu-surface absolute z-50 mt-1 max-h-48 w-full overflow-auto rounded-lg border shadow-lg bg-white dark:border-dark-600 dark:bg-dark-800"
                       >
                         <button
                           v-for="account in accountSearchResults[
@@ -3864,7 +3864,7 @@
                           :key="account.id"
                           type="button"
                           @click="selectAccount(rule, account, true)"
-                          class="menu-option w-full px-3 py-2 text-left text-sm"
+                          class="menu-option w-full px-3 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-dark-700"
                           :class="{
                             'opacity-50': rule.accounts.some(
                               (a) => a.id === account.id,
@@ -4198,7 +4198,7 @@
                       <div class="flex justify-end gap-1">
                         <button
                           type="button"
-                          class="control-quiet rounded p-1.5"
+                          class="control-quiet rounded p-1.5 text-gray-500 hover:bg-gray-100 hover:text-primary-600 dark:hover:bg-dark-700 dark:hover:text-primary-400"
                           :title="t('common.edit')"
                           @click="editCompositeRoute(route)"
                         >

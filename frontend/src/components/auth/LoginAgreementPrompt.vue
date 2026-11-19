@@ -122,7 +122,7 @@
             <div class="grid grid-cols-2 gap-3">
               <button
                 type="button"
-                class="control-quiet rounded-xl border px-4 py-3 text-sm font-semibold transition"
+                class="control-quiet rounded-xl border px-4 py-3 text-sm font-semibold transition border-gray-200 bg-white text-gray-700 hover:bg-gray-100 dark:border-dark-700 dark:bg-dark-800 dark:text-dark-200 dark:hover:bg-dark-700"
                 @click="emit('reject')"
               >
                 {{ t('legal.loginAgreementPrompt.reject') }}

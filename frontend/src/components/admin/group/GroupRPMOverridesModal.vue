@@ -33,17 +33,17 @@
             />
             <div
               v-if="showDropdown && searchResults.length > 0"
-              class="menu-surface absolute left-0 right-0 top-full z-10 mt-1 max-h-48 overflow-y-auto rounded-lg border shadow-lg"
+              class="menu-surface absolute left-0 right-0 top-full z-10 mt-1 max-h-48 overflow-y-auto rounded-lg border shadow-lg border-gray-200 bg-white dark:border-dark-500 dark:bg-dark-700"
             >
               <button
                 v-for="user in searchResults"
                 :key="user.id"
                 type="button"
-                class="menu-option flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm"
+                class="menu-option flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm hover:bg-gray-50 dark:hover:bg-dark-600"
                 @click="selectUser(user)"
               >
                 <span class="text-gray-400">#{{ user.id }}</span>
-                <span class="text-gray-900">{{ user.username || user.email }}</span>
+                <span class="text-gray-900 dark:text-white">{{ user.username || user.email }}</span>
                 <span v-if="user.username" class="text-xs text-gray-400">{{ user.email }}</span>
               </button>
             </div>
@@ -144,7 +144,7 @@
                         min="0"
                         autocomplete="off"
                         :value="entry.rpm_override"
-                        class="control-field hide-spinner w-20 rounded border px-2 py-1 text-center text-sm font-medium transition-colors"
+                        class="control-field hide-spinner w-20 rounded border px-2 py-1 text-center text-sm font-medium transition-colors border-gray-200 bg-white focus:border-primary-500 focus:ring-primary-500/20 dark:border-dark-500 dark:bg-dark-700 dark:focus:border-primary-500"
                         @change="updateLocalRpm(entry.user_id, ($event.target as HTMLInputElement).value)"
                       />
                     </td>

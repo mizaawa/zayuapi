@@ -46,8 +46,8 @@
                     :aria-checked="config.isSelected"
                     :aria-label="config.isSelected ? t('admin.users.deselectExclusiveGroup') : t('admin.users.selectExclusiveGroup')"
                     :data-test="`exclusive-group-checkbox-${config.groupId}`"
-                    class="flex h-6 w-6 cursor-pointer items-center justify-center rounded-md ring-1 ring-inset ring-[var(--control-focus)] transition-colors"
-                    :class="config.isSelected ? 'control-selected' : 'control-quiet'"
+                    class="flex h-6 w-6 cursor-pointer items-center justify-center rounded-md ring-1 ring-inset transition-colors text-white focus:ring-primary-400 dark:focus:ring-offset-dark-800"
+                    :class="config.isSelected ? 'control-selected bg-primary-500 ring-primary-600 dark:bg-primary-500 dark:ring-primary-300' : 'control-quiet bg-gray-100 ring-gray-400 hover:bg-primary-50 hover:ring-primary-400 dark:bg-dark-700 dark:ring-dark-400 dark:hover:bg-dark-600 dark:hover:ring-primary-400'"
                     @click.stop="toggleExclusiveGroup(config.groupId)"
                   >
                     <svg v-if="config.isSelected" class="h-full w-full" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3">
@@ -86,7 +86,7 @@
                     :value="config.customRate ?? ''"
                     @input="updateCustomRate(config.groupId, ($event.target as HTMLInputElement).value)"
                     :placeholder="String(config.defaultRate)"
-                    class="control-field hide-spinner w-24 rounded-lg border px-3 py-2 text-sm font-medium transition-colors"
+                    class="control-field hide-spinner w-24 rounded-lg border px-3 py-2 text-sm font-medium transition-colors border-gray-300 bg-white focus:border-primary-500 focus:ring-primary-500/20 dark:border-dark-500 dark:bg-dark-700 dark:focus:border-primary-500"
                   />
                 </div>
               </div>
@@ -164,7 +164,7 @@
                     :value="config.customRate ?? ''"
                     @input="updateCustomRate(config.groupId, ($event.target as HTMLInputElement).value)"
                     :placeholder="String(config.defaultRate)"
-                    class="control-field hide-spinner w-24 rounded-lg border px-3 py-2 text-sm font-medium transition-colors"
+                    class="control-field hide-spinner w-24 rounded-lg border px-3 py-2 text-sm font-medium transition-colors border-gray-300 bg-white focus:border-primary-500 focus:ring-primary-500/20 dark:border-dark-500 dark:bg-dark-700 dark:focus:border-primary-500"
                   />
                 </div>
               </div>

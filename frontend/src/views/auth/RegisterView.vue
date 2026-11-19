@@ -1064,8 +1064,8 @@ async function handleRegister(): Promise<void> {
 
 <style scoped>
 .registration-announcement {
-  border: 1px solid var(--entry-line);
-  background: var(--md-sys-color-background);
+  border: 1px solid color-mix(in srgb, var(--md-sys-color-primary) 32%, var(--md-sys-color-outline));
+  background: color-mix(in srgb, var(--md-sys-color-surface) 70%, transparent);
   color: var(--md-sys-color-on-surface-variant);
 }
 

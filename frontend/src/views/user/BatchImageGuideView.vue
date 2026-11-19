@@ -107,14 +107,14 @@
 	              <button
 	                v-if="row.child_count > 0 && !row.is_child"
 	                type="button"
-	                class="control-quiet mt-1 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md transition-colors focus-visible:ring-2"
+	                class="control-quiet mt-1 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md transition-colors focus-visible:ring-2 text-gray-500 hover:bg-gray-100 hover:text-gray-900 focus-visible:ring-primary-500/30 dark:text-gray-400 dark:hover:bg-dark-700 dark:hover:text-white"
 	                :title="expandedParentIds.has(row.id) ? t('batchImage.list.collapseChildren') : t('batchImage.list.expandChildren', { n: row.child_count }, row.child_count)"
 	                @click.stop="toggleChildRows(row.id)"
 	              >
 	                <Icon :name="expandedParentIds.has(row.id) ? 'chevronDown' : 'chevronRight'" size="xs" />
 	              </button>
 	              <span v-else class="w-6 flex-shrink-0" />
-	              <button type="button" class="control-quiet min-w-0 flex-1 rounded-lg py-1 text-left transition-colors focus-visible:ring-2" @click="selectJob(row.id)">
+	              <button type="button" class="control-quiet min-w-0 flex-1 rounded-lg py-1 text-left transition-colors focus-visible:ring-2 hover:bg-gray-100 focus-visible:ring-primary-500/30 dark:hover:bg-dark-700" @click="selectJob(row.id)">
 	                <span
 	                  class="flex min-w-0 items-center gap-2 text-sm font-medium"
 	                  :class="row.task_name ? 'text-gray-900 dark:text-white' : 'text-gray-500 dark:text-gray-400'"
@@ -179,7 +179,7 @@
 	            <div class="flex items-center justify-center gap-1">
               <button
                 type="button"
-                class="control-quiet batch-row-action flex flex-col items-center gap-0.5 rounded-lg p-1.5 transition-colors focus-visible:ring-2"
+                class="control-quiet batch-row-action flex flex-col items-center gap-0.5 rounded-lg p-1.5 transition-colors focus-visible:ring-2 text-gray-500 hover:bg-gray-100 hover:text-primary-600 focus-visible:ring-primary-500/30 dark:hover:bg-dark-700 dark:hover:text-primary-400"
                 :title="t('batchImage.actions.viewDetail')"
                 @click="selectJob(row.id)"
               >
@@ -204,7 +204,7 @@
               <div v-if="canRetry(row) || canDeleteRecord(row)">
                 <button
                   type="button"
-                  class="menu-trigger batch-row-action flex flex-col items-center gap-0.5 rounded-lg p-1.5 transition-colors"
+                  class="menu-trigger batch-row-action flex flex-col items-center gap-0.5 rounded-lg p-1.5 transition-colors text-gray-500 hover:bg-gray-100 hover:text-gray-900 focus-visible:ring-primary-500/30 dark:hover:bg-dark-700 dark:hover:text-white"
                   :aria-expanded="openMoreJobId === row.id"
                   :title="t('batchImage.actions.moreActions')"
                   @click.stop="toggleMoreMenu(row, $event)"
@@ -281,7 +281,7 @@
     <Teleport to="body">
       <div
         v-if="openMoreJobId"
-        class="menu-surface fixed z-[9999] w-44 overflow-hidden rounded-xl py-1 text-sm shadow-lg ring-1 ring-black/5 dark:ring-white/10"
+        class="menu-surface fixed z-[9999] w-44 overflow-hidden rounded-xl py-1 text-sm shadow-lg ring-1 bg-white ring-black/5 dark:bg-dark-800 dark:ring-white/10"
         :style="moreMenuStyle"
         @click.stop
       >
@@ -290,7 +290,7 @@
             <button
               v-if="canRetry(job)"
               type="button"
-              class="menu-option flex w-full items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-amber-50 hover:text-amber-700 disabled:opacity-60 dark:hover:bg-amber-900/20 dark:hover:text-amber-300"
+              class="menu-option flex w-full items-center gap-2 px-3 py-2 text-left transition-colors disabled:opacity-60 text-gray-700 hover:bg-amber-50 hover:text-amber-700 dark:text-gray-200 dark:hover:bg-amber-900/20 dark:hover:text-amber-300"
               :disabled="retryingBatchId === job.id"
               @click="retryFailedJob(job)"
             >
@@ -615,7 +615,7 @@
             <textarea
               v-model="promptDraft"
               rows="3"
-              class="control-field h-[76px] w-full resize-y rounded-md border px-3 py-2 text-sm leading-5"
+              class="control-field h-[76px] w-full resize-y rounded-md border px-3 py-2 text-sm leading-5 border-gray-300 focus:border-primary-500 focus:ring-primary-100 dark:border-dark-600 dark:bg-dark-900 dark:text-gray-100 dark:focus:border-primary-500 dark:focus:ring-primary-900/40"
               :placeholder="t('batchImage.create.promptPlaceholder')"
             />
             <div class="mt-2 grid gap-2 md:grid-cols-[minmax(0,1fr)_112px_132px_112px] md:items-center">
@@ -734,7 +734,7 @@
 	        <textarea
 	          :value="agentInstruction"
 	          readonly
-	          class="control-field min-h-[420px] w-full resize-y rounded-md border p-4 font-mono text-sm leading-6"
+	          class="control-field min-h-[420px] w-full resize-y rounded-md border p-4 font-mono text-sm leading-6 border-gray-200 bg-gray-50 text-gray-800 focus:border-primary-400 focus:ring-primary-100 dark:border-dark-600 dark:bg-dark-900 dark:text-gray-100 dark:focus:border-primary-500 dark:focus:ring-primary-900/40"
 	        />
 	        </section>
 	      </div>

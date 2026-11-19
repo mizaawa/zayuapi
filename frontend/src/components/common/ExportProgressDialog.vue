@@ -28,7 +28,7 @@
       <button
         @click="handleCancel"
         type="button"
-        class="control-quiet rounded-md border px-4 py-2 text-sm font-medium"
+        class="control-quiet rounded-md border px-4 py-2 text-sm font-medium border-gray-300 bg-white text-gray-700 hover:bg-gray-50 focus:ring-primary-500 dark:border-dark-600 dark:bg-dark-700 dark:text-gray-200 dark:hover:bg-dark-600 dark:focus:ring-offset-dark-800"
       >
         {{ t('usage.cancelExport') }}
       </button>

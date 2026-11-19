@@ -862,6 +862,7 @@ onUnmounted(() => {
   font-weight: 650;
   color: var(--lb-ink);
   transition: background-color 160ms ease;
+  background: #fffbe8;
 }
 
 .lb-switch:disabled {
@@ -875,7 +876,7 @@ onUnmounted(() => {
   height: 1.25rem;
   flex-shrink: 0;
   border-radius: 999px;
-  background: var(--control-surface);
+  background: #e3d9b8;
   box-shadow: inset 0 0 0 1px var(--control-focus);
   transition: background-color 180ms ease;
 }
@@ -893,7 +894,7 @@ onUnmounted(() => {
 }
 
 .lb-switch[aria-checked='true'] .lb-switch-track {
-  background: var(--control-selected);
+  background: #e9b824;
 }
 
 .lb-switch[aria-checked='true'] .lb-switch-thumb {
@@ -1283,5 +1284,9 @@ onUnmounted(() => {
   .lb-switch-thumb {
     transition: none;
   }
+}
+
+.lb-switch:hover:not(:disabled) {
+  background: #fff3bd;
 }
 </style>

@@ -328,10 +328,13 @@ onUnmounted(() => {
   @apply rounded-xl px-3 py-2 text-sm;
   @apply transition-all duration-200;
   @apply cursor-pointer;
+  border-color: transparent;
+  background: var(--md-sys-color-surface-container);
+  color: var(--md-sys-color-on-surface);
 }
 
 .date-picker-icon {
-  color: var(--select-focus);
+  color: var(--md-sys-color-primary);
 }
 
 .date-picker-value {
@@ -339,16 +342,18 @@ onUnmounted(() => {
 }
 
 .date-picker-chevron {
-  color: var(--select-focus);
+  color: var(--md-sys-color-on-surface-variant);
 }
 
 .date-picker-dropdown {
   @apply absolute left-0 z-[100] mt-2;
   @apply rounded-2xl;
-  border: 1px solid var(--select-line);
+  border: 1px solid transparent;
   box-shadow: 0 1rem 2.5rem rgb(45 37 31 / 0.16);
   @apply overflow-hidden;
   @apply min-w-[320px];
+  background: var(--md-sys-color-surface);
+  color: var(--md-sys-color-on-surface);
 }
 
 .date-picker-presets {
@@ -364,6 +369,7 @@ onUnmounted(() => {
 .date-picker-preset[aria-pressed='true'] {
   color: var(--md-sys-color-on-primary);
   font-weight: 700;
+  background: var(--md-sys-color-primary);
 }
 
 .date-picker-divider {
@@ -385,6 +391,9 @@ onUnmounted(() => {
 
 .date-picker-input {
   @apply w-full rounded-lg px-2 py-1.5 text-sm;
+  border-color: transparent;
+  background: var(--md-sys-color-surface-container);
+  color: var(--md-sys-color-on-surface);
 }
 
 .date-picker-input::-webkit-calendar-picker-indicator {
@@ -421,5 +430,28 @@ onUnmounted(() => {
 .date-picker-dropdown-leave-to {
   opacity: 0;
   transform: translateY(-8px);
+}
+
+.date-picker-trigger:hover {
+  border-color: transparent;
+  background: var(--md-sys-color-surface-container-high);
+}
+
+.date-picker-trigger[aria-expanded='true'] {
+  border-color: transparent;
+}
+
+.date-picker-preset:hover {
+  background: var(--md-sys-color-surface-container-high);
+  color: var(--md-sys-color-on-surface);
+}
+
+.date-picker-preset[aria-pressed='true']:hover {
+  background: var(--md-sys-color-primary);
+  color: var(--md-sys-color-on-primary);
+}
+
+.date-picker-input:focus {
+  border-color: transparent;
 }
 </style>

@@ -35,8 +35,8 @@
               role="switch"
               :aria-checked="endpoint.enabled"
               :aria-label="t('admin.promptAudit.pool.toggleNode', { name: endpoint.name })"
-              class="relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors duration-200"
-              :class="endpoint.enabled ? 'switch-on' : 'switch-off'"
+              class="relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full border-2 transition-colors duration-200 border-transparent focus-visible:ring-primary-500"
+              :class="endpoint.enabled ? 'switch-on bg-primary-600' : 'switch-off bg-gray-200 dark:bg-dark-600'"
               @click="toggleEndpoint(endpoint.id)"
             >
               <span

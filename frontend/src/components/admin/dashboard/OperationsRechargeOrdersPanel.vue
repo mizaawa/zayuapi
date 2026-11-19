@@ -17,13 +17,13 @@
 
     <div class="relative z-10 space-y-3 px-4 py-3 sm:px-5">
       <div class="relative">
-        <Icon name="search" size="sm" class="control-icon pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2" />
+        <Icon name="search" size="sm" class="control-icon pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
         <input :value="search" type="search" class="input menu-trigger ops-search"
           :placeholder="t('admin.operations.recharge.searchEmail')" :aria-label="t('admin.operations.recharge.searchEmail')" role="combobox" aria-autocomplete="list" aria-controls="recharge-order-suggestions" :aria-expanded="suggestionsOpen && Boolean(search.trim())" data-testid="recharge-order-search"
           @input="$emit('update:search', ($event.target as HTMLInputElement).value)" @focus="$emit('focus-search')" @blur="$emit('blur-search')" @keydown.esc="($event.target as HTMLInputElement).blur()" />
         <div v-if="suggestionsOpen && search.trim()" id="recharge-order-suggestions" role="listbox" class="menu-surface absolute left-0 right-0 top-full z-30 mt-1 max-h-48 overflow-y-auto ops-popover py-1" data-testid="recharge-order-suggestions">
           <p v-if="suggestionsLoading" class="flex items-center gap-2 px-3 py-2 text-xs text-gray-500" role="status"><LoadingSpinner size="sm" />{{ t('admin.operations.loading') }}</p>
-          <button v-for="user in suggestions" :key="user.id" type="button" role="option" class="menu-option block w-full truncate px-3 py-2 text-left text-sm" :aria-selected="false" @mousedown.prevent @click="$emit('select-suggestion', user)">{{ user.email }}</button>
+          <button v-for="user in suggestions" :key="user.id" type="button" role="option" class="menu-option block w-full truncate px-3 py-2 text-left text-sm text-gray-700 hover:bg-primary-50 focus:bg-primary-50 dark:text-gray-200 dark:hover:bg-dark-700 dark:focus:bg-dark-700" :aria-selected="false" @mousedown.prevent @click="$emit('select-suggestion', user)">{{ user.email }}</button>
           <p v-if="!suggestionsLoading && !suggestions.length" class="px-3 py-2 text-xs text-gray-500">{{ t('admin.operations.noMatchingEmails') }}</p>
         </div>
       </div>

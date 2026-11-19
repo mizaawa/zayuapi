@@ -23,7 +23,7 @@
               <button
                 :ref="(el) => setGroupButtonRef(key.id, el)"
                 @click="openGroupSelector(key)"
-                class="menu-trigger -mx-1 -my-0.5 flex cursor-pointer items-center gap-1 rounded-md px-1 py-0.5 transition-colors"
+                class="menu-trigger -mx-1 -my-0.5 flex cursor-pointer items-center gap-1 rounded-md px-1 py-0.5 transition-colors hover:bg-gray-100 dark:hover:bg-dark-700"
                 :aria-expanded="groupSelectorKeyId === key.id"
                 :disabled="updatingKeyIds.has(key.id)"
               >
@@ -55,7 +55,7 @@
     <div
       v-if="groupSelectorKeyId !== null && dropdownPosition"
       ref="dropdownRef"
-      class="menu-surface animate-in fade-in slide-in-from-top-2 fixed z-[100000020] w-64 md:w-[520px] overflow-hidden rounded-xl shadow-lg ring-1 ring-black/5 duration-200 dark:ring-white/10"
+      class="menu-surface animate-in fade-in slide-in-from-top-2 fixed z-[100000020] w-64 md:w-[520px] overflow-hidden rounded-xl shadow-lg ring-1 duration-200 bg-white ring-black/5 dark:bg-dark-800 dark:ring-white/10"
       :style="{ top: dropdownPosition.top + 'px', left: dropdownPosition.left + 'px' }"
     >
       <div class="max-h-64 overflow-y-auto p-1.5">

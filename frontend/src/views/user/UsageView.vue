@@ -1246,6 +1246,7 @@ watch(endpointDistributionSource, () => {
 .usage-column-menu {
   border-radius: 1rem;
   box-shadow: var(--theme-highlight), var(--theme-elevation-3);
+  background: var(--md-sys-color-surface);
 }
 
 .usage-column-option {
@@ -1323,5 +1324,9 @@ watch(endpointDistributionSource, () => {
   .usage-filter-grid.usage-filter-grid--errors {
     grid-template-columns: repeat(4, minmax(0, 1fr));
   }
+}
+
+.usage-column-option:hover {
+  background: color-mix(in srgb, var(--md-sys-color-primary) 14%, var(--md-sys-color-surface));
 }
 </style>

@@ -14,7 +14,7 @@
               <Icon
                 name="search"
                 size="md"
-                class="control-icon absolute left-3 top-1/2 -translate-y-1/2"
+                class="control-icon absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
               />
               <input
                 v-model="filterUserKeyword"
@@ -37,7 +37,7 @@
               <!-- User Dropdown -->
               <div
                 v-if="showFilterUserDropdown && (filterUserResults.length > 0 || filterUserKeyword)"
-                class="menu-surface absolute z-50 mt-1 max-h-60 w-full overflow-auto rounded-lg border shadow-lg"
+                class="menu-surface absolute z-50 mt-1 max-h-60 w-full overflow-auto rounded-lg border shadow-lg border-gray-200 bg-white dark:border-dark-700 dark:bg-dark-800"
               >
                 <div
                   v-if="filterUserLoading"
@@ -56,9 +56,9 @@
                   :key="user.id"
                   type="button"
                   @click="selectFilterUser(user)"
-                  class="menu-option w-full px-4 py-2 text-left text-sm"
+                  class="menu-option w-full px-4 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-dark-700"
                 >
-                  <span class="font-medium text-gray-900">{{ user.email }}</span>
+                  <span class="font-medium text-gray-900 dark:text-white">{{ user.email }}</span>
                   <span class="ml-2 text-gray-500 dark:text-gray-400">#{{ user.id }}</span>
                 </button>
               </div>
@@ -117,7 +117,7 @@
               <!-- Dropdown menu -->
               <div
                 v-if="showColumnDropdown"
-                class="menu-surface absolute right-0 z-50 mt-2 w-48 origin-top-right rounded-lg border shadow-lg"
+                class="menu-surface absolute right-0 z-50 mt-2 w-48 origin-top-right rounded-lg border shadow-lg border-gray-200 bg-white dark:border-dark-700 dark:bg-dark-800"
               >
                 <div class="p-2">
                   <!-- User column mode selection -->
@@ -128,7 +128,7 @@
                     <button
                       @click="setUserColumnMode('email')"
                       :aria-pressed="userColumnMode === 'email'"
-                      class="menu-option flex w-full items-center justify-between rounded-md px-3 py-2 text-sm"
+                      class="menu-option flex w-full items-center justify-between rounded-md px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-dark-700"
                     >
                       <span>{{ t('admin.users.columns.email') }}</span>
                       <Icon v-if="userColumnMode === 'email'" name="check" size="sm" class="text-primary-500" />
@@ -136,7 +136,7 @@
                     <button
                       @click="setUserColumnMode('username')"
                       :aria-pressed="userColumnMode === 'username'"
-                      class="menu-option flex w-full items-center justify-between rounded-md px-3 py-2 text-sm"
+                      class="menu-option flex w-full items-center justify-between rounded-md px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-dark-700"
                     >
                       <span>{{ t('admin.users.columns.username') }}</span>
                       <Icon v-if="userColumnMode === 'username'" name="check" size="sm" class="text-primary-500" />
@@ -148,7 +148,7 @@
                     :key="col.key"
                     @click="toggleColumn(col.key)"
                     :aria-pressed="isColumnVisible(col.key)"
-                    class="menu-option flex w-full items-center justify-between rounded-md px-3 py-2 text-sm"
+                    class="menu-option flex w-full items-center justify-between rounded-md px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-dark-700"
                   >
                     <span>{{ col.label }}</span>
                     <Icon v-if="isColumnVisible(col.key)" name="check" size="sm" class="text-primary-500" />
@@ -482,7 +482,7 @@
             <!-- User Dropdown -->
             <div
               v-if="showUserDropdown && (userSearchResults.length > 0 || userSearchKeyword)"
-              class="menu-surface absolute z-50 mt-1 max-h-60 w-full overflow-auto rounded-lg border shadow-lg"
+              class="menu-surface absolute z-50 mt-1 max-h-60 w-full overflow-auto rounded-lg border shadow-lg border-gray-200 bg-white dark:border-dark-700 dark:bg-dark-800"
             >
               <div
                 v-if="userSearchLoading"
@@ -501,9 +501,9 @@
                 :key="user.id"
                 type="button"
                 @click="selectUser(user)"
-                class="menu-option w-full px-4 py-2 text-left text-sm"
+                class="menu-option w-full px-4 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-dark-700"
               >
-                <span class="font-medium text-gray-900">{{ user.email }}</span>
+                <span class="font-medium text-gray-900 dark:text-white">{{ user.email }}</span>
                 <span class="ml-2 text-gray-500 dark:text-gray-400">#{{ user.id }}</span>
               </button>
             </div>

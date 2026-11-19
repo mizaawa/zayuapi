@@ -644,6 +644,7 @@ defineExpose({ getUserSearchRevision, setUserKeyword })
   padding: 0.375rem 0;
   border-radius: 1rem;
   box-shadow: var(--theme-highlight), var(--theme-elevation-3);
+  background: var(--md-sys-color-surface);
 }
 
 .usage-filter-option {
@@ -697,5 +698,9 @@ defineExpose({ getUserSearchRevision, setUserKeyword })
   .usage-filters-grid.is-open {
     grid-template-columns: repeat(5, minmax(0, 1fr));
   }
+}
+
+.usage-filter-option:hover {
+  background: color-mix(in srgb, var(--md-sys-color-primary) 14%, var(--md-sys-color-surface));
 }
 </style>

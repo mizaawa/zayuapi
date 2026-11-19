@@ -4,21 +4,21 @@
       <!-- Backdrop: click anywhere outside to close -->
       <div class="fixed inset-0 z-[9998]" @click="emit('close')"></div>
       <div
-        class="menu-surface action-menu-content fixed z-[9999] w-52 overflow-hidden rounded-xl shadow-lg ring-1 ring-black/5"
+        class="menu-surface action-menu-content fixed z-[9999] w-52 overflow-hidden rounded-xl shadow-lg ring-1 bg-white ring-black/5 dark:bg-dark-800"
         :style="{ top: position.top + 'px', left: position.left + 'px' }"
         @click.stop
       >
         <div class="py-1">
           <template v-if="account">
-            <button @click="$emit('test', account); $emit('close')" class="menu-option flex w-full items-center gap-2 px-4 py-2 text-sm">
+            <button @click="$emit('test', account); $emit('close')" class="menu-option flex w-full items-center gap-2 px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-dark-700">
               <Icon name="play" size="sm" class="text-green-500" :stroke-width="2" />
               {{ t('admin.accounts.testConnection') }}
             </button>
-            <button @click="$emit('stats', account); $emit('close')" class="menu-option flex w-full items-center gap-2 px-4 py-2 text-sm">
+            <button @click="$emit('stats', account); $emit('close')" class="menu-option flex w-full items-center gap-2 px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-dark-700">
               <Icon name="chart" size="sm" class="text-indigo-500" />
               {{ t('admin.accounts.viewStats') }}
             </button>
-            <button @click="$emit('schedule', account); $emit('close')" class="menu-option flex w-full items-center gap-2 px-4 py-2 text-sm">
+            <button @click="$emit('schedule', account); $emit('close')" class="menu-option flex w-full items-center gap-2 px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-dark-700">
               <Icon name="clock" size="sm" class="text-orange-500" />
               {{ t('admin.scheduledTests.schedule') }}
             </button>
@@ -28,28 +28,28 @@
               :disabled="duplicating"
               data-testid="account-menu-duplicate"
               @click="$emit('duplicate', account); $emit('close')"
-              class="menu-option flex w-full items-center gap-2 px-4 py-2 text-sm disabled:cursor-wait disabled:opacity-60 disabled:hover:bg-transparent"
+              class="menu-option flex w-full items-center gap-2 px-4 py-2 text-sm disabled:cursor-wait disabled:opacity-60 hover:bg-gray-100 disabled:hover:bg-transparent dark:hover:bg-dark-700"
             >
               <Icon :name="duplicating ? 'refresh' : 'copy'" size="sm" :class="duplicating ? 'animate-spin text-sky-500' : 'text-sky-500'" />
               {{ duplicating ? t('admin.accounts.duplicatingShort') : t('admin.accounts.duplicateAccount') }}
             </button>
             <!-- 影子账号不持凭据:刷新 token 对其无效(后端拒绝),故隐藏(外审 G4)。 -->
             <template v-if="(account.type === 'oauth' || account.type === 'setup-token') && !isShadow">
-              <button @click="$emit('refresh-token', account); $emit('close')" class="menu-option flex w-full items-center gap-2 px-4 py-2 text-sm text-purple-600">
+              <button @click="$emit('refresh-token', account); $emit('close')" class="menu-option flex w-full items-center gap-2 px-4 py-2 text-sm text-purple-600 hover:bg-gray-100 dark:hover:bg-dark-700">
                 <Icon name="refresh" size="sm" />
                 {{ t('admin.accounts.refreshToken') }}
               </button>
             </template>
-            <button v-if="supportsPrivacy" @click="$emit('set-privacy', account); $emit('close')" class="menu-option flex w-full items-center gap-2 px-4 py-2 text-sm text-emerald-600">
+            <button v-if="supportsPrivacy" @click="$emit('set-privacy', account); $emit('close')" class="menu-option flex w-full items-center gap-2 px-4 py-2 text-sm text-emerald-600 hover:bg-gray-100 dark:hover:bg-dark-700">
               <Icon name="shield" size="sm" />
               {{ t('admin.accounts.setPrivacy') }}
             </button>
             <div v-if="hasRecoverableState" class="my-1 border-t border-gray-100 dark:border-dark-700"></div>
-            <button v-if="hasRecoverableState" @click="$emit('recover-state', account); $emit('close')" class="menu-option flex w-full items-center gap-2 px-4 py-2 text-sm text-emerald-600">
+            <button v-if="hasRecoverableState" @click="$emit('recover-state', account); $emit('close')" class="menu-option flex w-full items-center gap-2 px-4 py-2 text-sm text-emerald-600 hover:bg-gray-100 dark:hover:bg-dark-700">
               <Icon name="sync" size="sm" />
               {{ t('admin.accounts.recoverState') }}
             </button>
-            <button v-if="hasQuotaLimit" @click="$emit('reset-quota', account); $emit('close')" class="menu-option flex w-full items-center gap-2 px-4 py-2 text-sm text-teal-600">
+            <button v-if="hasQuotaLimit" @click="$emit('reset-quota', account); $emit('close')" class="menu-option flex w-full items-center gap-2 px-4 py-2 text-sm text-teal-600 hover:bg-gray-100 dark:hover:bg-dark-700">
               <Icon name="refresh" size="sm" />
               {{ t('admin.accounts.resetQuota') }}
             </button>

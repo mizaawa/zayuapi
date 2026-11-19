@@ -34,7 +34,7 @@
 
       <button
         type="button"
-        class="control-quiet h-8 w-8 rounded-lg flex items-center justify-center transition-colors disabled:opacity-50"
+        class="control-quiet h-8 w-8 rounded-lg flex items-center justify-center transition-colors disabled:opacity-50 text-gray-500 hover:text-gray-700 hover:bg-gray-100 dark:text-gray-400 dark:hover:text-gray-200 dark:hover:bg-dark-700"
         :disabled="loading"
         :title="t('common.refresh')"
         @click="emit('refresh')"
