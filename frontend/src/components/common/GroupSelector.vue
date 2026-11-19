@@ -8,7 +8,7 @@
       v-if="isSearchable"
       class="flex items-center gap-2 rounded-t-lg border border-b-0 border-gray-200 bg-gray-50 px-3 py-2 dark:border-dark-600 dark:bg-dark-800"
     >
-      <Icon name="search" size="sm" class="shrink-0 text-gray-400" />
+      <Icon name="search" size="sm" class="control-icon shrink-0" />
       <input
         v-model="searchText"
         type="text"

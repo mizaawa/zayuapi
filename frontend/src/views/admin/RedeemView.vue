@@ -579,7 +579,7 @@
             </div>
             <button
               @click="closeResultDialog"
-              class="rounded-lg p-1.5 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-dark-700 dark:hover:text-gray-300"
+              class="control-quiet rounded-lg p-1.5 transition-colors"
             >
               <Icon name="x" size="md" :stroke-width="2" />
             </button>
@@ -591,7 +591,7 @@
                 readonly
                 :value="generatedCodesText"
                 :style="{ height: textareaHeight }"
-                class="w-full resize-none rounded-lg border border-gray-200 bg-gray-50 p-3 font-mono text-sm text-gray-800 focus:outline-none dark:border-dark-600 dark:bg-dark-700 dark:text-gray-200"
+                class="control-field w-full resize-none rounded-lg border p-3 font-mono text-sm"
               ></textarea>
             </div>
           </div>

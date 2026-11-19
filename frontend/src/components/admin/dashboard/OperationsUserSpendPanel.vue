@@ -14,7 +14,7 @@
         </span>
       </div>
       <div class="relative w-full">
-        <Icon name="search" size="sm" class="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
+        <Icon name="search" size="sm" class="control-icon pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2" />
         <input :value="search" type="search" class="input menu-trigger ops-search"
           :placeholder="t('admin.operations.searchEmail')" :aria-label="t('admin.operations.searchEmail')" role="combobox" aria-autocomplete="list"
           aria-controls="operations-user-suggestions" :aria-expanded="suggestionsOpen" data-testid="user-search"

@@ -22,7 +22,7 @@
             <button
               v-if="showCloseButton"
               @click="emit('close')"
-              class="modal-close -mr-2 flex-shrink-0 rounded-xl p-2 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/30"
+              class="modal-close -mr-2 flex-shrink-0 rounded-xl p-2 transition-colors"
               aria-label="Close modal"
             >
               <Icon name="x" size="md" />

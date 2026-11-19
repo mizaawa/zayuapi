@@ -4,7 +4,7 @@
        wrapping line on wide screens, two columns on phones. Labels never wrap,
        so a narrow bar wraps whole buttons instead of squeezing them. -->
   <section
-    class="account-bulk-bar bg-primary-50 dark:bg-primary-900/20"
+    class="account-bulk-bar"
     :aria-busy="busy"
     data-testid="account-bulk-actions"
   >
@@ -19,16 +19,15 @@
         {{ t('admin.accounts.bulkEdit.title') }}
       </span>
       <template v-if="hasSelection">
-        <button type="button" class="account-bulk-link" @click="$emit('select-page')">
+        <button type="button" class="btn btn-ghost btn-sm account-bulk-link" :disabled="busy" @click="$emit('select-page')">
           {{ t('admin.accounts.bulkActions.selectCurrentPage') }}
         </button>
       </template>
       <template v-if="!allResultsSelected && totalResults > selectedIds.length">
-        <span v-if="hasSelection" class="account-bulk-dot" aria-hidden="true">•</span>
         <button
           type="button"
-          class="account-bulk-link"
-          :disabled="selectingAll"
+          class="btn btn-ghost btn-sm account-bulk-link"
+          :disabled="selectingAll || busy"
           @click="$emit('select-all-results')"
         >
           {{
@@ -39,8 +38,7 @@
         </button>
       </template>
       <template v-if="hasSelection">
-        <span class="account-bulk-dot" aria-hidden="true">•</span>
-        <button type="button" class="account-bulk-link" :disabled="busy" @click="$emit('clear')">
+        <button type="button" class="btn btn-ghost btn-sm account-bulk-link" :disabled="busy" @click="$emit('clear')">
           {{ t('admin.accounts.bulkActions.clear') }}
         </button>
       </template>
@@ -164,7 +162,6 @@ const selectionActions = computed<SelectionAction[]>(() => [
     icon: 'sync',
     label: t('admin.accounts.bulkActions.resetStatus'),
     buttonClass: 'btn-secondary',
-    iconClass: 'text-sky-600 dark:text-sky-400',
     run: () => emit('reset-status')
   },
   {
@@ -172,7 +169,6 @@ const selectionActions = computed<SelectionAction[]>(() => [
     icon: 'key',
     label: t('admin.accounts.bulkActions.refreshToken'),
     buttonClass: 'btn-secondary',
-    iconClass: 'text-violet-600 dark:text-violet-400',
     run: () => emit('refresh-token')
   },
   {
@@ -180,14 +176,13 @@ const selectionActions = computed<SelectionAction[]>(() => [
     icon: 'trendingUp',
     label: t('admin.accounts.bulkActions.probeUpstreamBilling'),
     buttonClass: 'btn-secondary',
-    iconClass: 'text-teal-600 dark:text-teal-400',
     run: () => emit('probe-upstream-billing')
   },
   {
     key: 'delete',
     icon: 'trash',
     label: t('admin.accounts.bulkActions.delete'),
-    buttonClass: 'btn-secondary account-bulk-action-danger',
+    buttonClass: 'btn-danger-soft',
     run: () => emit('delete')
   }
 ])
@@ -195,6 +190,7 @@ const selectionActions = computed<SelectionAction[]>(() => [
 
 <style scoped>
 .account-bulk-bar {
+  background: var(--md-sys-color-background);
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
@@ -213,15 +209,12 @@ const selectionActions = computed<SelectionAction[]>(() => [
 }
 
 .account-bulk-count {
-  @apply text-sm font-medium text-primary-900 dark:text-primary-100;
+  @apply text-sm font-medium;
+  color: var(--control-ink);
 }
 
 .account-bulk-link {
-  @apply whitespace-nowrap text-xs font-medium text-primary-700 hover:text-primary-800 disabled:cursor-not-allowed disabled:opacity-60 dark:text-primary-300 dark:hover:text-primary-200;
-}
-
-.account-bulk-dot {
-  @apply text-gray-300 dark:text-primary-800;
+  @apply whitespace-nowrap;
 }
 
 .account-bulk-actions {
@@ -235,16 +228,11 @@ const selectionActions = computed<SelectionAction[]>(() => [
 .account-bulk-action {
   flex-shrink: 0;
   gap: 0.375rem;
-  border: 1px solid transparent;
   white-space: nowrap;
 }
 
 .account-bulk-filtered {
   justify-self: end;
-}
-
-.account-bulk-action-danger {
-  @apply text-red-700 hover:bg-red-50 dark:text-red-300 dark:hover:bg-red-900/30;
 }
 
 /* Phones: the primary action spans the row, the rest pair up below it. */

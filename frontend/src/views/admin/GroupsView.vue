@@ -698,8 +698,8 @@
               aria-labelledby="create-fast-rate-label"
               @click="createForm.fast_rate_enabled = !createForm.fast_rate_enabled"
               :class="[
-                'relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2',
-                createForm.fast_rate_enabled ? 'bg-primary-500' : 'bg-gray-300 dark:bg-dark-600',
+                'relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors',
+                createForm.fast_rate_enabled ? 'switch-on' : 'switch-off',
               ]"
             >
               <span :class="[
@@ -780,8 +780,7 @@
               :class="[
                 'relative inline-flex h-6 w-11 items-center rounded-full transition-colors',
                 createForm.is_exclusive
-                  ? 'bg-primary-500'
-                  : 'bg-gray-300 dark:bg-dark-600',
+                  ? 'switch-on' : 'switch-off',
               ]"
             >
               <span
@@ -879,8 +878,7 @@
               :class="[
                 'relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors',
                 createModelsListState.enabled
-                  ? 'bg-primary-500'
-                  : 'bg-gray-300 dark:bg-dark-600',
+                  ? 'switch-on' : 'switch-off',
               ]"
             >
               <span
@@ -917,7 +915,7 @@
                 </button>
                 <button
                   type="button"
-                  class="rounded px-2 py-1 font-medium text-gray-600 transition-colors hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-dark-700"
+                  class="control-quiet rounded px-2 py-1 font-medium transition-colors"
                   @click="invertModelsListSelection(createModelsListState)"
                 >
                   {{ t("admin.groups.modelsList.invertSelection") }}
@@ -952,7 +950,7 @@
                 <button
                   type="button"
                   :disabled="index === 0"
-                  class="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700 disabled:opacity-40 dark:hover:bg-dark-600 dark:hover:text-gray-200"
+                  class="control-quiet rounded p-1 disabled:opacity-40"
                   @click="moveCreateModelsListItem(index, index - 1)"
                 >
                   <Icon name="arrowUp" size="sm" />
@@ -960,7 +958,7 @@
                 <button
                   type="button"
                   :disabled="index === createModelsListState.items.length - 1"
-                  class="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700 disabled:opacity-40 dark:hover:bg-dark-600 dark:hover:text-gray-200"
+                  class="control-quiet rounded p-1 disabled:opacity-40"
                   @click="moveCreateModelsListItem(index, index + 1)"
                 >
                   <Icon name="arrowDown" size="sm" />
@@ -989,7 +987,7 @@
             @click="createForm.image_workbench_enabled = !createForm.image_workbench_enabled"
             :class="[
               'relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors',
-              createForm.image_workbench_enabled ? 'bg-primary-500' : 'bg-gray-300 dark:bg-dark-600',
+              createForm.image_workbench_enabled ? 'switch-on' : 'switch-off',
             ]"
           >
             <span :class="[
@@ -1018,7 +1016,7 @@
             @click="createForm.video_workbench_enabled = !createForm.video_workbench_enabled"
             :class="[
               'relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors',
-              createForm.video_workbench_enabled ? 'bg-primary-500' : 'bg-gray-300 dark:bg-dark-600',
+              createForm.video_workbench_enabled ? 'switch-on' : 'switch-off',
             ]"
           >
             <span :class="[
@@ -1390,8 +1388,7 @@
               :class="[
                 'relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors',
                 createForm.cyber_auto_charge_enabled
-                  ? 'bg-primary-500'
-                  : 'bg-gray-300 dark:bg-dark-600',
+                  ? 'switch-on' : 'switch-off',
               ]"
             >
               <span
@@ -1527,8 +1524,7 @@
               :class="[
                 'relative inline-flex h-6 w-11 items-center rounded-full transition-colors',
                 createForm.mcp_xml_inject
-                  ? 'bg-primary-500'
-                  : 'bg-gray-300 dark:bg-dark-600',
+                  ? 'switch-on' : 'switch-off',
               ]"
             >
               <span
@@ -1587,8 +1583,7 @@
               :class="[
                 'relative inline-flex h-6 w-11 items-center rounded-full transition-colors',
                 createForm.claude_code_only
-                  ? 'bg-primary-500'
-                  : 'bg-gray-300 dark:bg-dark-600',
+                  ? 'switch-on' : 'switch-off',
               ]"
             >
               <span
@@ -1693,11 +1688,10 @@
             <button
               type="button"
               @click="toggleLive('create')"
-              class="relative inline-flex h-6 w-12 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none"
+              class="relative inline-flex h-6 w-12 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out"
               :class="
                 createForm.allow_live
-                  ? 'bg-primary-500'
-                  : 'bg-gray-300 dark:bg-dark-600'
+                  ? 'switch-on' : 'switch-off'
               "
             >
               <span
@@ -1731,11 +1725,10 @@
                 createForm.allow_messages_dispatch =
                   !createForm.allow_messages_dispatch
               "
-              class="relative inline-flex h-6 w-12 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none"
+              class="relative inline-flex h-6 w-12 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out"
               :class="
                 createForm.allow_messages_dispatch
-                  ? 'bg-primary-500'
-                  : 'bg-gray-300 dark:bg-dark-600'
+                  ? 'switch-on' : 'switch-off'
               "
             >
               <span
@@ -1970,11 +1963,10 @@
               @click="
                 createForm.require_privacy_set = !createForm.require_privacy_set
               "
-              class="relative inline-flex h-6 w-12 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none"
+              class="relative inline-flex h-6 w-12 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out"
               :class="
                 createForm.require_privacy_set
-                  ? 'bg-primary-500'
-                  : 'bg-gray-300 dark:bg-dark-600'
+                  ? 'switch-on' : 'switch-off'
               "
             >
               <span
@@ -2051,8 +2043,7 @@
               :class="[
                 'relative inline-flex h-6 w-11 items-center rounded-full transition-colors',
                 createForm.model_routing_enabled
-                  ? 'bg-primary-500'
-                  : 'bg-gray-300 dark:bg-dark-600',
+                  ? 'switch-on' : 'switch-off',
               ]"
             >
               <span
@@ -2424,8 +2415,8 @@
               aria-labelledby="edit-fast-rate-label"
               @click="editForm.fast_rate_enabled = !editForm.fast_rate_enabled"
               :class="[
-                'relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2',
-                editForm.fast_rate_enabled ? 'bg-primary-500' : 'bg-gray-300 dark:bg-dark-600',
+                'relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors',
+                editForm.fast_rate_enabled ? 'switch-on' : 'switch-off',
               ]"
             >
               <span :class="[
@@ -2503,8 +2494,7 @@
               :class="[
                 'relative inline-flex h-6 w-11 items-center rounded-full transition-colors',
                 editForm.is_exclusive
-                  ? 'bg-primary-500'
-                  : 'bg-gray-300 dark:bg-dark-600',
+                  ? 'switch-on' : 'switch-off',
               ]"
             >
               <span
@@ -2607,8 +2597,7 @@
               :class="[
                 'relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors',
                 editModelsListState.enabled
-                  ? 'bg-primary-500'
-                  : 'bg-gray-300 dark:bg-dark-600',
+                  ? 'switch-on' : 'switch-off',
               ]"
             >
               <span
@@ -2645,7 +2634,7 @@
                 </button>
                 <button
                   type="button"
-                  class="rounded px-2 py-1 font-medium text-gray-600 transition-colors hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-dark-700"
+                  class="control-quiet rounded px-2 py-1 font-medium transition-colors"
                   @click="invertModelsListSelection(editModelsListState)"
                 >
                   {{ t("admin.groups.modelsList.invertSelection") }}
@@ -2680,7 +2669,7 @@
                 <button
                   type="button"
                   :disabled="index === 0"
-                  class="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700 disabled:opacity-40 dark:hover:bg-dark-600 dark:hover:text-gray-200"
+                  class="control-quiet rounded p-1 disabled:opacity-40"
                   @click="moveEditModelsListItem(index, index - 1)"
                 >
                   <Icon name="arrowUp" size="sm" />
@@ -2688,7 +2677,7 @@
                 <button
                   type="button"
                   :disabled="index === editModelsListState.items.length - 1"
-                  class="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700 disabled:opacity-40 dark:hover:bg-dark-600 dark:hover:text-gray-200"
+                  class="control-quiet rounded p-1 disabled:opacity-40"
                   @click="moveEditModelsListItem(index, index + 1)"
                 >
                   <Icon name="arrowDown" size="sm" />
@@ -2717,7 +2706,7 @@
             @click="editForm.image_workbench_enabled = !editForm.image_workbench_enabled"
             :class="[
               'relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors',
-              editForm.image_workbench_enabled ? 'bg-primary-500' : 'bg-gray-300 dark:bg-dark-600',
+              editForm.image_workbench_enabled ? 'switch-on' : 'switch-off',
             ]"
           >
             <span :class="[
@@ -2746,7 +2735,7 @@
             @click="editForm.video_workbench_enabled = !editForm.video_workbench_enabled"
             :class="[
               'relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors',
-              editForm.video_workbench_enabled ? 'bg-primary-500' : 'bg-gray-300 dark:bg-dark-600',
+              editForm.video_workbench_enabled ? 'switch-on' : 'switch-off',
             ]"
           >
             <span :class="[
@@ -3118,8 +3107,7 @@
               :class="[
                 'relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors',
                 editForm.cyber_auto_charge_enabled
-                  ? 'bg-primary-500'
-                  : 'bg-gray-300 dark:bg-dark-600',
+                  ? 'switch-on' : 'switch-off',
               ]"
             >
               <span
@@ -3255,8 +3243,7 @@
               :class="[
                 'relative inline-flex h-6 w-11 items-center rounded-full transition-colors',
                 editForm.mcp_xml_inject
-                  ? 'bg-primary-500'
-                  : 'bg-gray-300 dark:bg-dark-600',
+                  ? 'switch-on' : 'switch-off',
               ]"
             >
               <span
@@ -3313,8 +3300,7 @@
               :class="[
                 'relative inline-flex h-6 w-11 items-center rounded-full transition-colors',
                 editForm.claude_code_only
-                  ? 'bg-primary-500'
-                  : 'bg-gray-300 dark:bg-dark-600',
+                  ? 'switch-on' : 'switch-off',
               ]"
             >
               <span
@@ -3417,11 +3403,10 @@
             <button
               type="button"
               @click="toggleLive('edit')"
-              class="relative inline-flex h-6 w-12 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none"
+              class="relative inline-flex h-6 w-12 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out"
               :class="
                 editForm.allow_live
-                  ? 'bg-primary-500'
-                  : 'bg-gray-300 dark:bg-dark-600'
+                  ? 'switch-on' : 'switch-off'
               "
             >
               <span
@@ -3455,11 +3440,10 @@
                 editForm.allow_messages_dispatch =
                   !editForm.allow_messages_dispatch
               "
-              class="relative inline-flex h-6 w-12 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none"
+              class="relative inline-flex h-6 w-12 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out"
               :class="
                 editForm.allow_messages_dispatch
-                  ? 'bg-primary-500'
-                  : 'bg-gray-300 dark:bg-dark-600'
+                  ? 'switch-on' : 'switch-off'
               "
             >
               <span
@@ -3694,11 +3678,10 @@
               @click="
                 editForm.require_privacy_set = !editForm.require_privacy_set
               "
-              class="relative inline-flex h-6 w-12 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none"
+              class="relative inline-flex h-6 w-12 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out"
               :class="
                 editForm.require_privacy_set
-                  ? 'bg-primary-500'
-                  : 'bg-gray-300 dark:bg-dark-600'
+                  ? 'switch-on' : 'switch-off'
               "
             >
               <span
@@ -3774,8 +3757,7 @@
               :class="[
                 'relative inline-flex h-6 w-11 items-center rounded-full transition-colors',
                 editForm.model_routing_enabled
-                  ? 'bg-primary-500'
-                  : 'bg-gray-300 dark:bg-dark-600',
+                  ? 'switch-on' : 'switch-off',
               ]"
             >
               <span
@@ -4216,7 +4198,7 @@
                       <div class="flex justify-end gap-1">
                         <button
                           type="button"
-                          class="rounded p-1.5 text-gray-500 hover:bg-gray-100 hover:text-primary-600 dark:hover:bg-dark-700 dark:hover:text-primary-400"
+                          class="control-quiet rounded p-1.5"
                           :title="t('common.edit')"
                           @click="editCompositeRoute(route)"
                         >

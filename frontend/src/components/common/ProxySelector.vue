@@ -24,7 +24,7 @@
         <!-- Search and Batch Test Header -->
         <div class="select-header">
           <div class="select-search">
-            <Icon name="search" size="sm" class="text-gray-400" />
+            <Icon name="search" size="sm" class="control-icon" />
             <input
               ref="searchInputRef"
               v-model="searchQuery"

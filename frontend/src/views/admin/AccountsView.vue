@@ -26,6 +26,7 @@
                   "
                   class="btn menu-trigger px-2 md:px-3 max-sm:h-11 max-sm:w-11 max-sm:shrink-0 max-sm:p-0"
                   :aria-expanded="showAutoRefreshDropdown"
+                  :class="{ 'control-latched': autoRefreshEnabled }"
                   :title="t('admin.accounts.autoRefresh')"
                 >
                   <Icon name="refresh" size="sm" :class="[autoRefreshEnabled ? 'animate-spin' : '']" />
@@ -49,7 +50,7 @@
                       class="menu-option flex w-full items-center justify-between rounded-md px-3 py-2 text-sm"
                     >
                       <span>{{ t('admin.accounts.enableAutoRefresh') }}</span>
-                      <Icon v-if="autoRefreshEnabled" name="check" size="sm" class="text-primary-500" />
+                      <Icon v-if="autoRefreshEnabled" name="check" size="sm" class="control-icon" />
                     </button>
                     <div class="my-1 border-t border-gray-100 dark:border-dark-700"></div>
                     <button
@@ -60,7 +61,7 @@
                       class="menu-option flex w-full items-center justify-between rounded-md px-3 py-2 text-sm"
                     >
                       <span>{{ autoRefreshIntervalLabel(sec) }}</span>
-                      <Icon v-if="autoRefreshIntervalSeconds === sec" name="check" size="sm" class="text-primary-500" />
+                      <Icon v-if="autoRefreshIntervalSeconds === sec" name="check" size="sm" class="control-icon" />
                     </button>
                   </div>
                 </div>
@@ -93,13 +94,13 @@
                         </div>
                       </div>
                       <button class="menu-option account-tools-menu-item" @click="openImportData">
-                        <span class="account-tools-menu-icon bg-emerald-50 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-300">
+                        <span class="account-tools-menu-icon">
                           <Icon name="upload" size="sm" />
                         </span>
                         <span class="flex-1 text-left">{{ t('admin.accounts.dataImport') }}</span>
                       </button>
                       <button class="menu-option account-tools-menu-item" @click="openExportDataDialogFromMenu">
-                        <span class="account-tools-menu-icon bg-violet-50 text-violet-600 dark:bg-violet-900/30 dark:text-violet-300">
+                        <span class="account-tools-menu-icon">
                           <Icon name="download" size="sm" />
                         </span>
                         <span class="flex-1 text-left">
@@ -120,13 +121,13 @@
                         </div>
                       </div>
                       <button class="menu-option account-tools-menu-item" @click="openErrorPassthrough">
-                        <span class="account-tools-menu-icon bg-amber-50 text-amber-600 dark:bg-amber-900/30 dark:text-amber-300">
+                        <span class="account-tools-menu-icon">
                           <Icon name="shield" size="sm" />
                         </span>
                         <span class="flex-1 text-left">{{ t('admin.errorPassthrough.title') }}</span>
                       </button>
                       <button class="menu-option account-tools-menu-item" @click="openTLSFingerprintProfiles">
-                        <span class="account-tools-menu-icon bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-200">
+                        <span class="account-tools-menu-icon">
                           <Icon name="lock" size="sm" />
                         </span>
                         <span class="flex-1 text-left">{{ t('admin.tlsFingerprintProfiles.title') }}</span>
@@ -150,7 +151,7 @@
                           class="menu-option flex w-full items-center justify-between rounded-md px-3 py-2 text-sm transition-colors"
                         >
                           <span class="truncate">{{ col.label }}</span>
-                          <Icon v-if="isColumnVisible(col.key)" name="check" size="sm" class="text-primary-500" />
+                          <Icon v-if="isColumnVisible(col.key)" name="check" size="sm" class="control-icon" />
                         </button>
                       </div>
                     </div>
@@ -295,7 +296,7 @@
             </div>
           </template>
           <template #cell-schedulable="{ row }">
-            <button @click="handleToggleSchedulable(row)" :disabled="togglingSchedulable === row.id" class="relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 dark:focus:ring-offset-dark-800" :class="[row.schedulable ? 'bg-primary-500 hover:bg-primary-600' : 'bg-gray-200 hover:bg-gray-300 dark:bg-dark-600 dark:hover:bg-dark-500']" :title="row.schedulable ? t('admin.accounts.schedulableEnabled') : t('admin.accounts.schedulableDisabled')">
+            <button role="switch" :aria-checked="row.schedulable" @click="handleToggleSchedulable(row)" :disabled="togglingSchedulable === row.id" class="relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out disabled:cursor-not-allowed disabled:opacity-50" :class="[row.schedulable ? 'switch-on' : 'switch-off']" :title="row.schedulable ? t('admin.accounts.schedulableEnabled') : t('admin.accounts.schedulableDisabled')">
               <span class="pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out" :class="[row.schedulable ? 'translate-x-4' : 'translate-x-0']" />
             </button>
           </template>
@@ -341,7 +342,7 @@
                 <span class="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200" :title="t('admin.accounts.fallbackActiveTip', { origin: row.proxy_fallback_origin_name })">
                   {{ t('admin.accounts.fallbackActive') }}
                 </span>
-                <button class="text-xs px-1.5 py-0.5 rounded border border-gray-300 dark:border-dark-600 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-dark-700" @click="onRevertFallback(row)">{{ t('admin.accounts.revertProxy') }}</button>
+                <button class="control-quiet text-xs px-1.5 py-0.5 rounded border" @click="onRevertFallback(row)">{{ t('admin.accounts.revertProxy') }}</button>
               </div>
             </div>
           </template>
@@ -429,7 +430,7 @@
           </template>
           <template #cell-actions="{ row }">
             <div class="flex items-center gap-1">
-              <button @click="handleEdit(row)" class="flex flex-col items-center gap-0.5 rounded-lg p-1.5 text-gray-500 transition-colors hover:bg-gray-100 hover:text-primary-600 dark:hover:bg-dark-700 dark:hover:text-primary-400">
+              <button @click="handleEdit(row)" class="control-quiet flex flex-col items-center gap-0.5 rounded-lg p-1.5 transition-colors">
                 <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10" /></svg>
                 <span class="text-xs">{{ t('common.edit') }}</span>
               </button>
@@ -613,8 +614,8 @@
                     role="switch"
                     :aria-checked="row.schedulable"
                     :disabled="togglingSchedulable === row.id"
-                    class="relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary-500 disabled:cursor-not-allowed disabled:opacity-50"
-                    :class="[row.schedulable ? 'bg-primary-500' : 'bg-gray-200']"
+                    class="relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out disabled:cursor-not-allowed disabled:opacity-50"
+                    :class="[row.schedulable ? 'switch-on' : 'switch-off']"
                     @click="handleToggleSchedulable(row)"
                   >
                     <span class="pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out" :class="[row.schedulable ? 'translate-x-4' : 'translate-x-0']" />
@@ -622,11 +623,11 @@
                   <span>{{ t('admin.accounts.card.schedulable') }}</span>
                 </label>
                 <div class="account-card-actions">
-                  <button type="button" class="account-card-action" @click="handleEdit(row)">
+                  <button type="button" class="control-quiet account-card-action" @click="handleEdit(row)">
                     <Icon name="edit" size="sm" />
                     <span>{{ t('common.edit') }}</span>
                   </button>
-                  <button type="button" class="account-card-action is-danger" @click="handleDelete(row)">
+                  <button type="button" class="btn-danger-soft account-card-action" @click="handleDelete(row)">
                     <Icon name="trash" size="sm" />
                     <span>{{ t('common.delete') }}</span>
                   </button>
@@ -2637,6 +2638,8 @@ onUnmounted(() => {
 }
 
 .account-tools-menu-icon {
+  background: var(--control-hover);
+  color: var(--control-focus);
   @apply inline-flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-md;
 }
 /* ---------- Account card (below the desktop breakpoint) ---------- */
@@ -3023,18 +3026,7 @@ onUnmounted(() => {
   padding: 0.375rem 0.5rem;
   border-radius: 0.75rem;
   font-size: 0.75rem;
-  color: var(--md-sys-color-on-surface-variant);
   transition: background-color 150ms ease, color 150ms ease;
-}
-
-.account-card-action:not(.menu-trigger):hover {
-  background: #fff3bd;
-  color: #7e5600;
-}
-
-.account-card-action.is-danger:hover {
-  background: #fee2e2;
-  color: #b91c1c;
 }
 
 /* The narrowest phones (320px) keep money values in their tiles. */

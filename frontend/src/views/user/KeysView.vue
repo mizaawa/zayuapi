@@ -109,7 +109,7 @@
               </Select>
               <button
                 type="button"
-                class="keys-sort-order"
+                class="control-quiet keys-sort-order"
                 :title="sortOrderLabel"
                 :aria-label="`${t('keys.sortDirection')}: ${sortOrderLabel}`"
                 data-test="keys-sort-order"
@@ -332,7 +332,7 @@
           <p id="key-quota-hint" class="input-hint">{{ t('keys.quotaAmountHint') }}</p>
           <div v-if="showEditModal && selectedKey && selectedKey.quota > 0" class="key-quota-used">
             <div><span>{{ t('keys.quotaUsed') }}</span> <strong>${{ selectedKey.quota_used?.toFixed(4) || '0.0000' }}</strong> / ${{ selectedKey.quota.toFixed(2) }}</div>
-            <button type="button" class="key-reset-button" :title="t('keys.resetQuotaUsed')" @click="confirmResetQuota">
+            <button type="button" class="control-quiet key-reset-button" :title="t('keys.resetQuotaUsed')" @click="confirmResetQuota">
               <Icon name="refresh" size="xs" aria-hidden="true" />{{ t('keys.reset') }}
             </button>
           </div>
@@ -356,18 +356,18 @@
           </div>
           <p id="key-rate-hint" class="input-hint">{{ t('keys.rateLimitHint') }}</p>
           <button v-if="showEditModal && selectedKey && rateWindows.some(p => selectedKey![p.limit] > 0)" type="button"
-            class="key-reset-button mt-2" @click="confirmResetRateLimit">
+            class="control-quiet key-reset-button mt-2" @click="confirmResetRateLimit">
             <Icon name="refresh" size="xs" aria-hidden="true" />{{ t('keys.resetRateLimitUsage') }}
           </button>
         </KeyFormSection>
         <KeyFormSection id="key-expiry" v-model:enabled="formData.enable_expiration" icon="calendar"
           :title="t('keys.expiration')" :hint="showEditModal ? t('keys.editor.expiryHint') : undefined">
           <div class="mb-3 flex flex-wrap gap-2">
-            <button v-for="days in ['7', '30', '90']" :key="days" type="button" class="key-expiry-preset"
+            <button v-for="days in ['7', '30', '90']" :key="days" type="button" class="control-quiet key-expiry-preset"
               :aria-pressed="formData.expiration_preset === days" @click="setExpirationDays(Number(days))">
               {{ showEditModal ? t('keys.extendDays', { days }) : t('keys.expiresInDays', { days }) }}
             </button>
-            <button type="button" class="key-expiry-preset" :aria-pressed="formData.expiration_preset === 'custom'"
+            <button type="button" class="control-quiet key-expiry-preset" :aria-pressed="formData.expiration_preset === 'custom'"
               @click="formData.expiration_preset = 'custom'">{{ t('keys.customDate') }}</button>
           </div>
           <label class="input-label" for="key-expiry-date">{{ t('keys.expirationDate') }}</label>
@@ -1647,18 +1647,7 @@ onUnmounted(() => {
   align-items: center;
   justify-content: center;
   border-radius: 0.75rem;
-  background: var(--md-sys-color-surface-container);
-  color: var(--md-sys-color-on-surface);
   transition: background-color 160ms ease;
-}
-
-.keys-sort-order:hover {
-  background: var(--md-sys-color-surface-container-high);
-}
-
-.keys-sort-order:focus-visible {
-  outline: none;
-  box-shadow: 0 0 0 2px rgb(233 184 36 / 0.45);
 }
 
 .keys-toolbar-actions {

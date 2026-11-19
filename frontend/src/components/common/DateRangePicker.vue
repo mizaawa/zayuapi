@@ -46,7 +46,7 @@
               type="date"
               v-model="localStartDate"
               :max="localEndDate || tomorrow"
-              class="date-picker-input"
+              class="control-field date-picker-input"
               @change="onDateChange"
             />
           </div>
@@ -60,7 +60,7 @@
               v-model="localEndDate"
               :min="localStartDate"
               :max="tomorrow"
-              class="date-picker-input"
+              class="control-field date-picker-input"
               @change="onDateChange"
             />
           </div>
@@ -385,24 +385,11 @@ onUnmounted(() => {
 
 .date-picker-input {
   @apply w-full rounded-lg px-2 py-1.5 text-sm;
-  border: 1px solid transparent;
-  background: var(--md-sys-color-surface-container);
-  color: var(--md-sys-color-on-surface);
-  @apply focus:outline-none;
-}
-
-.date-picker-input:focus {
-  border-color: transparent;
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--md-sys-color-primary) 20%, transparent);
 }
 
 .date-picker-input::-webkit-calendar-picker-indicator {
   @apply cursor-pointer opacity-60 hover:opacity-100;
   filter: invert(0.5);
-}
-
-:global(.dark) .date-picker-input::-webkit-calendar-picker-indicator {
-  filter: invert(0.7);
 }
 
 .date-picker-separator {

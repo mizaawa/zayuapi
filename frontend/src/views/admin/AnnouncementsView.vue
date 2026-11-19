@@ -161,7 +161,7 @@
               </button>
               <button
                 @click="openEditDialog(row)"
-                class="flex flex-col items-center gap-0.5 rounded-lg p-1.5 text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-dark-600 dark:hover:text-gray-300"
+                class="control-quiet flex flex-col items-center gap-0.5 rounded-lg p-1.5 transition-colors"
                 :title="t('common.edit')"
               >
                 <Icon name="edit" size="sm" />

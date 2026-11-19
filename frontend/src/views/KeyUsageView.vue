@@ -50,7 +50,7 @@
               v-model="apiKey"
               :type="keyVisible ? 'text' : 'password'"
               :placeholder="t('keyUsage.placeholder')"
-              class="input-ring w-full h-12 pl-12 pr-12 rounded-xl border border-gray-200 bg-white text-sm text-gray-900 transition-all dark:border-dark-700 dark:bg-dark-900 dark:text-white"
+              class="control-field w-full h-12 pl-12 pr-12 rounded-xl border text-sm transition-all"
               @keydown.enter="queryKey"
             />
             <button
@@ -102,13 +102,13 @@
               <input
                 v-model="customStartDate"
                 type="date"
-                class="input-ring text-xs px-2 py-1.5 rounded-lg border border-gray-200 bg-white text-gray-900 dark:border-dark-700 dark:bg-dark-900 dark:text-white"
+                class="control-field text-xs px-2 py-1.5 rounded-lg border"
               />
               <span class="text-xs text-gray-400">-</span>
               <input
                 v-model="customEndDate"
                 type="date"
-                class="input-ring text-xs px-2 py-1.5 rounded-lg border border-gray-200 bg-white text-gray-900 dark:border-dark-700 dark:bg-dark-900 dark:text-white"
+                class="control-field text-xs px-2 py-1.5 rounded-lg border"
               />
               <button
                 @click="queryKey"
@@ -916,16 +916,6 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
-/* Input focus ring */
-.input-ring {
-  transition: box-shadow 0.2s ease, border-color 0.2s ease;
-}
-.input-ring:focus {
-  box-shadow: 0 0 0 3px rgba(233, 184, 36, 0.28);
-  border-color: #e9b824;
-  outline: none;
-}
-
 /* Ring animation */
 .progress-ring {
   transition: stroke-dashoffset 1.2s cubic-bezier(0.4, 0, 0.2, 1);

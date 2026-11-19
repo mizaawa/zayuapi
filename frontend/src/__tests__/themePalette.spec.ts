@@ -61,9 +61,11 @@ describe('light-only Monet palette', () => {
     ['surface', 'surface-container', 'on-surface-variant'],
     ['hover', 'surface-container-high', 'on-surface-variant'],
     ['selected', 'primary', 'on-primary'],
-  ])('uses the global warm %s color for dropdowns and keeps it readable', (state, surface, ink) => {
-    expect(root).toContain(`--select-${state}: var(--md-sys-color-${surface})`)
-    expect(root).toContain('--select-focus: var(--md-sys-color-on-primary-container)')
+  ])('shares the readable warm %s color between menus, fields and actions', (state, surface, ink) => {
+    expect(root).toContain(`--select-${state}: var(--control-${state})`)
+    expect(root).toContain(`--control-${state}: var(--md-sys-color-${surface})`)
+    expect(root).toContain('--select-focus: var(--control-focus)')
+    expect(root).toContain('--control-focus: var(--md-sys-color-on-primary-container)')
     const fill = getVariable(root, `--md-sys-color-${surface}`)
     expect(contrastRatio(getVariable(root, `--md-sys-color-${ink}`), fill)).toBeGreaterThanOrEqual(4.5)
     expect(contrastRatio(getVariable(root, '--md-sys-color-on-primary-container'), fill)).toBeGreaterThanOrEqual(3)

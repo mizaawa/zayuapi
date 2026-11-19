@@ -43,7 +43,7 @@
             }}</span>
             <button
               @click="refreshVersion(true)"
-              class="rounded-lg p-1.5 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-dark-700 dark:hover:text-dark-200"
+              class="control-quiet rounded-lg p-1.5 transition-colors"
               :disabled="loading"
               :title="t('version.refresh')"
             >
@@ -453,7 +453,7 @@
                         </p>
                         <button
                           @click="loadRollbackVersions"
-                          class="w-full rounded-lg border border-gray-200 py-1.5 text-xs text-gray-500 transition-colors hover:bg-gray-50 hover:text-gray-700 dark:border-dark-700 dark:text-dark-400 dark:hover:bg-dark-700/50 dark:hover:text-dark-200"
+                          class="control-quiet w-full rounded-lg border py-1.5 text-xs transition-colors"
                         >
                           {{ t('version.retry') }}
                         </button>
@@ -547,7 +547,7 @@
                                 </div>
                                 <button
                                   @click="copyToClipboard(activeManualCommand)"
-                                  class="flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] text-gray-400 transition-colors hover:bg-gray-200 hover:text-gray-600 dark:text-dark-400 dark:hover:bg-dark-600 dark:hover:text-dark-200"
+                                  class="control-quiet flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] transition-colors"
                                 >
                                   <Icon
                                     :name="copied ? 'check' : 'copy'"

@@ -70,7 +70,7 @@
   padding: 0.25rem;
   margin: 0 var(--ke-pad) 0.875rem;
   border-radius: 0.875rem;
-  background: var(--ke-wash);
+  background: var(--control-surface);
   border: 1px solid var(--ke-line);
 }
 .key-editor-tabs button {
@@ -86,11 +86,11 @@
   font-weight: 600;
   color: var(--ke-muted);
 }
-.key-editor-tabs button:hover { background: var(--ke-paper); }
+.key-editor-tabs button:hover { background: var(--control-hover); }
 .key-editor-tabs button[aria-selected='true'] {
   border-color: var(--ke-line);
-  color: var(--ke-gold-ink);
-  background: var(--md-sys-color-surface-container);
+  color: var(--md-sys-color-on-primary);
+  background: var(--control-selected);
   box-shadow: var(--theme-highlight), 0 1px 2px rgb(63 52 32 / 0.08);
 }
 
@@ -124,18 +124,7 @@
   min-width: 0;
   min-height: 2.625rem;
   padding-block: 0.5rem;
-  border: 1px solid var(--ke-line);
   border-radius: 0.7rem;
-  color: var(--ke-ink);
-  background: var(--ke-wash);
-  box-shadow: none;
-}
-.key-editor-panel .input:hover:not(:disabled):not(:focus) { border-color: var(--md-sys-color-outline); background: var(--ke-wash); }
-.key-editor-panel .input:focus {
-  border-color: var(--md-sys-color-primary);
-  background: var(--ke-paper);
-  outline: 2px solid color-mix(in srgb, var(--md-sys-color-primary) 33%, transparent);
-  outline-offset: 1px;
 }
 .key-editor-note {
   display: flex;
@@ -162,26 +151,23 @@
 .key-editor-status label { position: relative; cursor: pointer; }
 .key-editor-status span { display: flex; align-items: center; justify-content: center; gap: 0.35rem; min-height: 2.1rem; border-radius: 0.45rem; font-size: 0.8125rem; color: var(--ke-muted); }
 .key-editor-status i { width: 0.4rem; height: 0.4rem; border: 1px solid currentColor; border-radius: 50%; }
-.key-editor-status input:checked + span { background: var(--ke-paper); color: var(--ke-ink); font-weight: 650; box-shadow: var(--theme-elevation-1); }
+.key-editor-status input:checked + span { background: var(--control-selected); color: var(--control-ink); font-weight: 650; box-shadow: var(--theme-elevation-1); }
 .key-editor-status input:checked + span i { background: currentColor; }
-.key-editor-status input[value='active']:checked + span { color: var(--md-sys-color-secondary); }
-.key-editor-status input:focus-visible + span { outline: 2px solid var(--md-sys-color-primary); outline-offset: 1px; }
+.key-editor-status input[value='active']:checked + span i { color: var(--md-sys-color-secondary); }
+.key-editor-status input:focus-visible + span { outline: 2px solid var(--control-focus); outline-offset: 1px; }
 
 .key-currency { position: absolute; inset-inline-start: 0.8rem; top: 50%; transform: translateY(-50%); font-size: 0.875rem; color: var(--md-sys-color-on-surface-variant); pointer-events: none; }
 .key-quota-used, .key-reset-button { display: flex; align-items: center; gap: 0.5rem; font-size: 0.75rem; }
 .key-quota-used { justify-content: space-between; flex-wrap: wrap; margin-top: 0.75rem; color: var(--ke-muted); font-variant-numeric: tabular-nums; }
 .key-quota-used strong { margin-inline-start: 0.35rem; color: var(--ke-ink); }
-.key-reset-button, .key-expiry-preset { padding: 0.375rem 0.7rem; border-radius: 0.55rem; background: var(--md-sys-color-background); color: var(--md-sys-color-on-surface-variant); }
+.key-reset-button, .key-expiry-preset { padding: 0.375rem 0.7rem; border-radius: 0.55rem; }
 .key-expiry-preset { font-size: 0.8125rem; }
-.key-expiry-preset[aria-pressed='true'], .key-reset-button:hover, .key-expiry-preset:hover { background: var(--md-sys-color-surface-container); color: var(--md-sys-color-on-surface); }
 .key-rate-usage { margin-top: 0.4rem; font: 0.7rem/1.5 ui-monospace, monospace; color: var(--ke-muted); overflow-wrap: anywhere; }
 .key-rate-usage progress { display: block; width: 100%; height: 0.3rem; margin-top: 0.25rem; border-radius: 1rem; accent-color: var(--md-sys-color-secondary); }
 .key-rate-usage .is-high { accent-color: var(--monitor-warn); }
 .key-rate-usage .is-full { accent-color: var(--monitor-down); }
 .key-editor-panel .modal-footer { padding: 0.875rem var(--ke-pad); border: 0; background: var(--ke-paper); }
 .key-editor-panel .modal-footer .btn { min-height: 2.625rem; border-radius: 0.75rem; }
-.key-editor-panel .modal-footer .btn-secondary { background: transparent; box-shadow: inset 0 0 0 1px var(--ke-line); }
-.key-editor-panel .modal-footer .btn-secondary:hover { background: var(--ke-wash); }
 .key-editor-created { gap: 0.35rem; margin-inline-end: auto; font-size: 0.75rem; color: var(--ke-muted); }
 .key-editor-created time { font-variant-numeric: tabular-nums; }
 

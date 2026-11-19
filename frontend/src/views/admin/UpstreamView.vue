@@ -17,7 +17,7 @@
 
       <div class="upstream-toolbar card">
         <div class="relative min-w-[12rem] flex-1">
-          <Icon name="search" size="sm" class="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
+          <Icon name="search" size="sm" class="control-icon pointer-events-none absolute left-4 top-1/2 -translate-y-1/2" />
           <input v-model.trim="search" type="search" class="input w-full pl-11" :placeholder="t('admin.upstream.search')" :aria-label="t('admin.upstream.search')" @input="debouncedLoad" />
         </div>
         <div class="w-full sm:w-44">

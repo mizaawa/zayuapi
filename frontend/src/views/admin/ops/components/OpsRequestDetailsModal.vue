@@ -212,7 +212,7 @@ const kindBadgeClass = (kind: string) => {
                       {{ row.request_id }}
                     </span>
                     <button
-                      class="shrink-0 rounded-md bg-gray-100 px-2 py-1 text-[10px] font-bold text-gray-600 hover:bg-gray-200 dark:bg-dark-700 dark:text-gray-300 dark:hover:bg-dark-600"
+                      class="control-quiet shrink-0 rounded-md px-2 py-1 text-[10px] font-bold"
                       @click="handleCopyRequestId(row.request_id)"
                     >
                       {{ t('admin.ops.requestDetails.copy') }}
@@ -284,7 +284,7 @@ const kindBadgeClass = (kind: string) => {
                         {{ row.request_id }}
                       </span>
                       <button
-                        class="rounded-md bg-gray-100 px-2 py-1 text-[10px] font-bold text-gray-600 hover:bg-gray-200 dark:bg-dark-700 dark:text-gray-300 dark:hover:bg-dark-600"
+                        class="control-quiet rounded-md px-2 py-1 text-[10px] font-bold"
                         @click="handleCopyRequestId(row.request_id)"
                       >
                         {{ t('admin.ops.requestDetails.copy') }}

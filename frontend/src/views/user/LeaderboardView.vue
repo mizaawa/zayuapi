@@ -101,7 +101,7 @@
             <button
               type="button"
               role="switch"
-              class="lb-switch"
+              class="control-quiet lb-switch"
               :aria-checked="participating"
               :disabled="loading || participationLoading"
               @click="toggleParticipation"
@@ -858,15 +858,10 @@ onUnmounted(() => {
   gap: 0.5rem;
   padding: 0.25rem 0.25rem 0.25rem 0.75rem;
   border-radius: 999px;
-  background: #fffbe8;
   font-size: 0.75rem;
   font-weight: 650;
   color: var(--lb-ink);
   transition: background-color 160ms ease;
-}
-
-.lb-switch:hover:not(:disabled) {
-  background: #fff3bd;
 }
 
 .lb-switch:disabled {
@@ -880,7 +875,8 @@ onUnmounted(() => {
   height: 1.25rem;
   flex-shrink: 0;
   border-radius: 999px;
-  background: #e3d9b8;
+  background: var(--control-surface);
+  box-shadow: inset 0 0 0 1px var(--control-focus);
   transition: background-color 180ms ease;
 }
 
@@ -897,7 +893,7 @@ onUnmounted(() => {
 }
 
 .lb-switch[aria-checked='true'] .lb-switch-track {
-  background: #e9b824;
+  background: var(--control-selected);
 }
 
 .lb-switch[aria-checked='true'] .lb-switch-thumb {

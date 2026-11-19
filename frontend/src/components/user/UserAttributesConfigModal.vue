@@ -70,7 +70,7 @@
           <div class="flex items-center gap-1">
             <button
               @click="openEditModal(attr)"
-              class="rounded-lg p-1.5 text-gray-500 hover:bg-gray-100 hover:text-primary-600 dark:hover:bg-dark-700 dark:hover:text-primary-400"
+              class="control-quiet rounded-lg p-1.5"
               :title="t('common.edit')"
             >
               <Icon name="edit" size="sm" />

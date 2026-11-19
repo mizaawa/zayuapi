@@ -204,7 +204,7 @@
         :key="action.name"
         type="button"
         class="key-action"
-        :class="`key-action-${action.tone}`"
+        :class="actionClass[action.tone]"
         :disabled="action.name === 'toggle' && toggling"
         :title="action.label"
         :data-test="`key-action-${action.name}`"
@@ -304,6 +304,10 @@ type CardActionButton = {
   label: string
 }
 
+const actionClass: Record<CardActionButton['tone'], string> = {
+  use: 'control-selected', neutral: 'control-quiet', danger: 'btn-danger-soft',
+  warning: 'key-action-warning', success: 'key-action-success'
+}
 const actions = computed<CardActionButton[]>(() => {
   const list: CardActionButton[] = [{ name: 'use', icon: 'terminal', tone: 'use', label: t('keys.useKey') }]
   if (props.showCcsImport) {
@@ -700,7 +704,6 @@ const actions = computed<CardActionButton[]>(() => {
   padding: 0.125rem 0.5rem;
   border-radius: 0.5rem;
   font-size: 0.75rem;
-  color: var(--md-sys-color-on-surface-variant);
   transition: background-color 150ms ease, color 150ms ease;
 }
 
@@ -845,22 +848,6 @@ const actions = computed<CardActionButton[]>(() => {
   font-size: 0.75rem;
 }
 
-/* "Use key" is the most common next step, so it keeps a quiet tint at rest. */
-.key-action-use {
-  background: #f2f8ef;
-  color: #386344;
-}
-
-.key-action-use:hover {
-  background: #e4f0df;
-  color: #284331;
-}
-
-.key-action-neutral:hover {
-  background: #fff3bd;
-  color: #7e5600;
-}
-
 .key-action-warning:hover {
   background: #fef3c7;
   color: #92400e;
@@ -869,11 +856,6 @@ const actions = computed<CardActionButton[]>(() => {
 .key-action-success:hover {
   background: #e4f0df;
   color: #2e5038;
-}
-
-.key-action-danger:hover {
-  background: #fee2e2;
-  color: #b91c1c;
 }
 
 @keyframes key-card-pulse {

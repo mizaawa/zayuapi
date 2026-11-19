@@ -17,7 +17,7 @@
 
     <div class="relative z-10 space-y-3 px-4 py-3 sm:px-5">
       <div class="relative">
-        <Icon name="search" size="sm" class="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
+        <Icon name="search" size="sm" class="control-icon pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2" />
         <input :value="search" type="search" class="input menu-trigger ops-search"
           :placeholder="t('admin.operations.recharge.searchEmail')" :aria-label="t('admin.operations.recharge.searchEmail')" role="combobox" aria-autocomplete="list" aria-controls="recharge-order-suggestions" :aria-expanded="suggestionsOpen && Boolean(search.trim())" data-testid="recharge-order-search"
           @input="$emit('update:search', ($event.target as HTMLInputElement).value)" @focus="$emit('focus-search')" @blur="$emit('blur-search')" @keydown.esc="($event.target as HTMLInputElement).blur()" />

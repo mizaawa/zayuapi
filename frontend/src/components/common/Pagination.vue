@@ -14,7 +14,7 @@
         type="button"
         @click="goToPage(page - 1)"
         :disabled="page <= 1"
-        class="pagination-button pagination-step"
+        class="control-quiet pagination-button pagination-step"
         data-testid="pagination-previous"
       >
         <Icon name="chevronLeft" size="sm" class="pagination-step-icon" />
@@ -30,7 +30,7 @@
         type="button"
         @click="goToPage(page + 1)"
         :disabled="page >= totalPages"
-        class="pagination-button pagination-step"
+        class="control-quiet pagination-button pagination-step"
         data-testid="pagination-next"
       >
         <span>{{ t('pagination.next') }}</span>
@@ -43,7 +43,7 @@
       <button
         @click="goToPage(page - 1)"
         :disabled="page === 1"
-        class="pagination-button relative inline-flex items-center rounded-lg border px-4 py-2 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-50"
+        class="control-quiet pagination-button relative inline-flex items-center rounded-lg border px-4 py-2 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-50"
       >
         {{ t('pagination.previous') }}
       </button>
@@ -53,7 +53,7 @@
       <button
         @click="goToPage(page + 1)"
         :disabled="page === totalPages"
-        class="pagination-button relative ml-3 inline-flex items-center rounded-lg border px-4 py-2 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-50"
+        class="control-quiet pagination-button relative ml-3 inline-flex items-center rounded-lg border px-4 py-2 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-50"
       >
         {{ t('pagination.next') }}
       </button>
@@ -113,7 +113,7 @@
         <button
           @click="goToPage(page - 1)"
           :disabled="page === 1"
-          class="pagination-button relative inline-flex items-center rounded-lg border px-2 py-2 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-50"
+          class="control-quiet pagination-button relative inline-flex items-center rounded-lg border px-2 py-2 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-50"
           :aria-label="t('pagination.previous')"
         >
           <Icon name="chevronLeft" size="md" />
@@ -128,8 +128,8 @@
           :class="[
             'pagination-page relative inline-flex items-center rounded-lg border px-4 py-2 text-sm font-medium',
             pageNum === page
-              ? 'pagination-page-active z-10'
-              : 'pagination-page-idle',
+              ? 'control-selected pagination-page-active z-10'
+              : 'control-quiet pagination-page-idle',
             typeof pageNum !== 'number' && 'cursor-default'
           ]"
           :aria-label="
@@ -144,7 +144,7 @@
         <button
           @click="goToPage(page + 1)"
           :disabled="page === totalPages"
-          class="pagination-button relative inline-flex items-center rounded-lg border px-2 py-2 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-50"
+          class="control-quiet pagination-button relative inline-flex items-center rounded-lg border px-2 py-2 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-50"
           :aria-label="t('pagination.next')"
         >
           <Icon name="chevronRight" size="md" />
@@ -298,25 +298,8 @@ const submitJump = () => {
   color: var(--md-sys-color-on-surface-variant);
 }
 
-.pagination-button,
-.pagination-page-idle {
-  border-color: transparent;
-  background: var(--md-sys-color-surface);
-  color: var(--md-sys-color-on-surface-variant);
+.pagination-button, .pagination-page {
   transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease;
-}
-
-.pagination-button:hover:not(:disabled),
-.pagination-page-idle:hover {
-  border-color: transparent;
-  background: var(--md-sys-color-surface-container-high);
-  color: var(--md-sys-color-on-surface);
-}
-
-.pagination-page-active {
-  border-color: transparent;
-  background: var(--md-sys-color-primary);
-  color: var(--md-sys-color-on-primary);
 }
 
 .page-size-select :deep(.select-trigger) {

@@ -25,8 +25,23 @@ describe('AccountBulkActionsBar', () => {
     )
 
     expect(button).toBeDefined()
+    expect(button!.classes()).toContain('btn-ghost')
     await button!.trigger('click')
     expect(wrapper.emitted('select-all-results')).toHaveLength(1)
+  })
+
+  it('moves primary emphasis to the selection and keeps destructive actions distinct', async () => {
+    const wrapper = mount(AccountBulkActionsBar, {
+      props: { selectedIds: [], totalResults: 2, selectingAll: false, allResultsSelected: false }
+    })
+    const button = (name: string) => wrapper.get(`[data-testid="account-bulk-${name}"]`)
+    expect(button('edit-filtered').classes()).toContain('btn-primary')
+    await wrapper.setProps({ selectedIds: [1] })
+    expect(button('edit-filtered').classes()).toContain('btn-secondary')
+    expect(button('edit').classes()).toContain('btn-primary')
+    expect(button('delete').classes()).toContain('btn-danger-soft')
+    await wrapper.setProps({ busyAction: 'edit' })
+    expect(wrapper.findAll('button').every(b => b.element.disabled)).toBe(true)
   })
 
   it('preserves the upstream billing probe action from v0.1.166', async () => {
