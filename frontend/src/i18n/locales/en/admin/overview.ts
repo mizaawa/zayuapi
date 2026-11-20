@@ -1078,7 +1078,7 @@ export default {
         hint: 'Token cost = standard model price × group or user rate × speed multiplier. Peak rates still apply. Defaults: Fast 2, UltraFast 6.',
         invalid: 'Both speed multipliers are required and must be between 0.1 and 100.',
         force: 'Force Fast mode', off: 'Off',
-        forceHint: 'For tier-capable requests, send and bill the selected speed regardless of client settings. Off keeps normal tier and downgrade billing.'
+        forceHint: 'Forcing a speed sets the upstream tier. Customers pay the standard rate unless separate speed pricing is on, in which case the selected tier’s multiplier applies.'
       },
       exclusiveHint: 'Exclusive group, manually assign to specific users',
       exclusiveTooltip: {

@@ -61,7 +61,7 @@
               {{ fastRateNote }}
             </span>
             <span v-if="fastRateEnabled" class="plaza-fast-note">{{ ultraRateNote }}</span>
-            <span v-if="forcedSpeed" class="plaza-fast-note">{{ t('modelPlaza.detail.forcedSpeedNote', { speed: forcedSpeed }) }}</span>
+            <span v-if="forcedSpeed" class="plaza-fast-note">{{ t(fastRateEnabled ? 'modelPlaza.detail.forcedSpeedNote' : 'modelPlaza.detail.forcedSpeedStandardNote', { speed: forcedSpeed }) }}</span>
           </span>
           <!-- 收起时先露出前几个模型,不用展开也知道这个分组里有什么。 -->
           <span v-if="!expanded && previewModels.length > 0" class="plaza-group-preview">

@@ -44,6 +44,10 @@ func forcedOpenAIServiceTier(group *Group) string {
 
 func (g *Group) ForcedOpenAIServiceTier() string { return forcedOpenAIServiceTier(g) }
 
+func standardPriceForForcedOpenAISpeed(group *Group) bool {
+	return group != nil && !group.FastRateEnabled && forcedOpenAIServiceTier(group) != ""
+}
+
 func isOpenAISpeedTier(tier string) bool {
 	return tier == OpenAIFastTierPriority || tier == OpenAIFastTierUltraFast
 }

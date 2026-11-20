@@ -62,3 +62,49 @@ func TestMediaImagePricingKeepsAdmissionPrice(t *testing.T) {
 		})
 	}
 }
+
+func TestForcedSpeedMediaPriceSurvivesGroupEdits(t *testing.T) {
+	const model = "speed-image"
+	for _, tc := range []struct {
+		name              string
+		enabled, perImage bool
+		want              float64
+	}{
+		{"forced token speed at standard rate", false, false, .02},
+		{"explicit token surcharge", true, false, .15},
+		{"per-image without surcharge", false, true, .4},
+		{"per-image with speed pricing enabled", true, true, .4},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s := newOpenAIRecordUsageServiceForTest(&openAIRecordUsageLogRepoStub{}, &openAIRecordUsageUserRepoStub{}, &openAIRecordUsageSubRepoStub{}, nil)
+			s.usageBillingRepo, s.billingCacheService = &mediaOutcomeRepository{}, nil
+			s.resolver = NewModelPricingResolver(nil, s.billingService)
+			inputPrice, perImagePrice := .001, .4
+			group := &Group{ID: 812, Platform: PlatformOpenAI, RateMultiplier: 2, ImageRateIndependent: true, ImageRateMultiplier: 1, ImagePrice1K: &perImagePrice,
+				ForcedFastMode: "ultrafast", FastRateEnabled: tc.enabled, UltraFastRateMultiplier: 7.5}
+			if !tc.perImage {
+				group.ModelPricing = []ChannelModelPricing{{Models: []string{model}, BillingMode: BillingModeToken, InputPrice: &inputPrice}}
+			}
+			key := &APIKey{ID: 813, UserID: 814, GroupID: &group.ID, Group: group}
+			result := &OpenAIForwardResult{Model: model, ImageCount: 1, ImageSize: "1K", ServiceTier: optionalTrimmedStringPtr("ultrafast"), Usage: OpenAIUsage{InputTokens: 10}}
+			input := &OpenAIRecordUsageInput{Result: result, APIKey: key, User: &User{ID: key.UserID}, Account: &Account{ID: 815, Platform: PlatformOpenAI}, WorkbenchKind: "image"}
+			reservation, err := s.PrechargeMedia(context.Background(), input)
+			require.NoError(t, err)
+			require.InDelta(t, tc.want, reservation.Quote.Command.BalanceCost, 1e-10)
+			data, err := json.Marshal(reservation)
+			require.NoError(t, err)
+			var restored MediaBillingReservation
+			require.NoError(t, json.Unmarshal(data, &restored))
+			group.FastRateEnabled, group.UltraFastRateMultiplier = !tc.enabled, 12
+			var quote *MediaBillingQuote
+			input.MediaReservation, input.MediaQuote = &restored, &quote
+			require.NoError(t, s.RecordUsage(context.Background(), input))
+			require.InDelta(t, tc.want, quote.Command.BalanceCost, 1e-10)
+			if !tc.perImage && tc.enabled {
+				require.Equal(t, 7.5, *quote.Usage.ServiceTierMultiplier)
+			} else {
+				require.Nil(t, quote.Usage.ServiceTierMultiplier)
+			}
+		})
+	}
+}

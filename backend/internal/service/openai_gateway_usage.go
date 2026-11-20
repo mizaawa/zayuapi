@@ -657,41 +657,17 @@ func (s *OpenAIGatewayService) calculateOpenAIRecordUsageTokenCost(
 	serviceTier string,
 	longContextBillingEnabled bool,
 ) (*CostBreakdown, error) {
-	if s.resolver != nil && apiKey.Group != nil {
-		gid := apiKey.Group.ID
-		return s.billingService.CalculateCostUnified(CostInput{
-			Ctx:                       ctx,
-			Model:                     billingModel,
-			GroupID:                   &gid,
-			Group:                     apiKey.Group,
-			Tokens:                    tokens,
-			RequestCount:              1,
-			RateMultiplier:            multiplier,
-			ServiceTier:               serviceTier,
-			FastRateMultiplier:        openAIFastRateMultiplier(apiKey.Group, serviceTier),
-			Resolver:                  s.resolver,
-			LongContextBillingEnabled: &longContextBillingEnabled,
-		})
+	input := CostInput{
+		Ctx: ctx, Model: billingModel, Group: apiKey.Group, Tokens: tokens, RequestCount: 1,
+		RateMultiplier: multiplier, ServiceTier: serviceTier,
+		FastRateMultiplier:          openAIFastRateMultiplier(apiKey.Group, serviceTier),
+		StandardPriceForForcedSpeed: standardPriceForForcedOpenAISpeed(apiKey.Group),
+		LongContextBillingEnabled:   &longContextBillingEnabled,
 	}
-	cost, err := s.billingService.calculateCostWithServiceTierPolicy(
-		billingModel,
-		tokens,
-		multiplier,
-		serviceTier,
-		longContextBillingEnabled,
-	)
-	fastRate := openAIFastRateMultiplier(apiKey.Group, serviceTier)
-	if err != nil || fastRate <= 0 {
-		return cost, err
+	if apiKey.Group != nil {
+		input.GroupID, input.Resolver = &apiKey.Group.ID, s.resolver
 	}
-	customerCost, err := s.billingService.calculateCostWithServiceTierPolicy(
-		billingModel, tokens, multiplier*fastRate, "", longContextBillingEnabled)
-	if err != nil {
-		return nil, err
-	}
-	cost.ActualCost = customerCost.ActualCost
-	cost.CustomerBase = customerCost
-	return cost, nil
+	return s.billingService.CalculateCostUnified(input)
 }
 
 func (s *OpenAIGatewayService) calculateOpenAIImageCost(

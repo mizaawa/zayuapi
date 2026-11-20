@@ -788,7 +788,8 @@ export default {
       peakNote: '高峰时段 {window} 计费倍率 ×{multiplier}',
       fastRateNote: 'Fast：普通模型 token 价 × 当前倍率 × {multiplier}，高峰倍率另计。',
       ultraRateNote: 'UltraFast：普通模型 token 价 × 当前倍率 × {multiplier}，高峰倍率另计。',
-      forcedSpeedNote: '本组强制使用 {speed}：成功请求按此档位计费。'
+      forcedSpeedNote: '本组强制使用 {speed}，按该档位的单独倍率计费。',
+      forcedSpeedStandardNote: '本组强制使用 {speed}，按普通档计费，不收加速费。'
     },
     table: {
       model: '模型',

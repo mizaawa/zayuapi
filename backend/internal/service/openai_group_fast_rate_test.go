@@ -31,6 +31,12 @@ func TestOpenAIGroupFastRateRecordUsage(t *testing.T) {
 		{name: "fast alias", model: "gpt-5.4", requested: "fast", enabled: true, fastRate: 3, wantTier: "priority", wantCustomerFactor: 3.75, wantLogRate: 3.75},
 		{name: "fast with resolver and explicit priority prices", model: "gpt-5.1-codex", requested: "priority", enabled: true, useResolver: true, fastRate: 2.5, wantTier: "priority", wantCustomerFactor: 3.125, wantLogRate: 3.125},
 		{name: "fast switch disabled", model: "gpt-5.4", requested: "priority", fastRate: 3, wantTier: "priority", wantCustomerFactor: 2.5, wantLogRate: 1.25},
+		{name: "voluntary UltraFast keeps catalog pricing", model: "gpt-5.4", requested: "ultrafast", wantTier: "ultrafast", wantCustomerFactor: 7.5, wantLogRate: 1.25},
+		{name: "forced Fast without surcharge uses standard not catalog priority prices", model: "gpt-5.1-codex", force: "fast", requested: "priority", observed: "priority", fastRate: 4.75, useResolver: true, wantTier: "priority", wantCustomerFactor: 1.25, wantLogRate: 1.25},
+		{name: "forced Fast without surcharge ignores stored rate without resolver", model: "gpt-5.4", force: "fast", requested: "priority", fastRate: 4.75, wantTier: "priority", wantCustomerFactor: 1.25, wantLogRate: 1.25},
+		{name: "forced UltraFast without surcharge ignores stored and catalog rates", model: "gpt-5.4", force: "ultrafast", requested: "ultrafast", observed: "ultrafast", fastRate: 4.75, wantTier: "ultrafast", wantCustomerFactor: 1.25, wantLogRate: 1.25},
+		{name: "forced UltraFast without surcharge after upstream downgrade", model: "gpt-5.4", force: "ultrafast", requested: "ultrafast", observed: "default", useResolver: true, wantTier: "ultrafast", wantCustomerFactor: 1.25, wantLogRate: 1.25},
+		{name: "forced Fast with independent pricing at one keeps explicit badge", model: "gpt-5.1-codex", force: "fast", requested: "priority", observed: "priority", enabled: true, fastRate: 1, wantTier: "priority", wantCustomerFactor: 1.25, wantLogRate: 1.25},
 		{name: "upstream downgrade", model: "gpt-5.4", requested: "fast", observed: "default", enabled: true, fastRate: 3, wantTier: "default", wantCustomerFactor: 1.25, wantLogRate: 1.25},
 		{name: "automatic UltraFast to Fast downgrade", model: "gpt-5.4", requested: "ultrafast", observed: "fast", enabled: true, fastRate: 3, wantTier: "priority", wantCustomerFactor: 3.75, wantLogRate: 3.75},
 		{name: "forced UltraFast retains contracted rate", model: "gpt-5.4", force: "ultrafast", requested: "ultrafast", observed: "default", enabled: true, useResolver: true, wantTier: "ultrafast", wantCustomerFactor: 8.125, wantLogRate: 8.125},
@@ -59,20 +65,20 @@ func TestOpenAIGroupFastRateRecordUsage(t *testing.T) {
 			base, err := svc.billingService.CalculateCost(tc.model, tokens, 1)
 			require.NoError(t, err)
 			upstreamTier := tc.wantTier
-			if tc.force != "" {
+			if tc.force != "" && tc.observed != "" {
 				upstreamTier = tc.observed
 			}
 			upstream, err := svc.billingService.CalculateCostWithServiceTier(tc.model, tokens, 1, upstreamTier)
 			require.NoError(t, err)
 			wantLogTotal := upstream.TotalCost
-			if tc.enabled && isOpenAISpeedTier(tc.wantTier) {
+			if (tc.enabled || tc.force != "") && isOpenAISpeedTier(tc.wantTier) {
 				wantLogTotal = base.TotalCost
 				require.NotNil(t, usageRepo.lastLog.AccountStatsCost)
 				require.InDelta(t, upstream.TotalCost, *usageRepo.lastLog.AccountStatsCost, 1e-10)
 			}
 			require.InDelta(t, wantLogTotal, usageRepo.lastLog.TotalCost, 1e-10)
 			wantActual := base.TotalCost * tc.wantCustomerFactor
-			if !tc.enabled && tc.wantTier == "priority" {
+			if !tc.enabled && tc.force == "" && tc.wantTier == "priority" {
 				wantActual = upstream.TotalCost * 1.25
 			}
 			require.InDelta(t, wantActual, usageRepo.lastLog.ActualCost, 1e-10)
@@ -88,6 +94,48 @@ func TestOpenAIGroupFastRateRecordUsage(t *testing.T) {
 			require.Equal(t, optionalTrimmedStringPtr(tc.wantTier), usageRepo.lastLog.ServiceTier)
 			require.Equal(t, 1, userRepo.deductCalls)
 		})
+	}
+}
+
+func TestForcedSpeedSeparatesCustomerAndAccountQuota(t *testing.T) {
+	for _, mode := range []string{"fast", "ultrafast"} {
+		for _, subscription := range []string{SubscriptionTypeStandard, SubscriptionTypeSubscription} {
+			t.Run(mode+"/"+subscription, func(t *testing.T) {
+				s := newOpenAIRecordUsageServiceForTest(&openAIRecordUsageLogRepoStub{}, &openAIRecordUsageUserRepoStub{}, &openAIRecordUsageSubRepoStub{}, nil)
+				s.billingCacheService.cfg = s.cfg
+				g := &Group{ID: 41, Platform: PlatformOpenAI, ForcedFastMode: mode, FastRateMultiplier: 4, UltraFastRateMultiplier: 10, RateMultiplier: 1.5, SubscriptionType: subscription}
+				key := &APIKey{ID: 42, Group: g, GroupID: &g.ID, Quota: 100, RateLimit5h: 50}
+				account := &Account{ID: 43, Platform: PlatformOpenAI, Type: AccountTypeAPIKey, Extra: map[string]any{"quota_limit": 100.0}}
+				tier := g.ForcedOpenAIServiceTier()
+				const model = "gpt-5.4"
+				var q *MediaBillingQuote
+				input := &OpenAIRecordUsageInput{APIKey: key, User: &User{ID: 44}, Account: account, APIKeyService: &openAIRecordUsageAPIKeyQuotaStub{}, MediaQuote: &q,
+					Result: &OpenAIForwardResult{RequestID: "quota-split", Model: model, ServiceTier: &tier, UpstreamServiceTier: &tier, Usage: OpenAIUsage{InputTokens: 1000, OutputTokens: 100}}}
+				if subscription == SubscriptionTypeSubscription {
+					input.Subscription = &UserSubscription{ID: 45}
+				}
+				require.NoError(t, s.RecordUsage(context.Background(), input))
+				tokens := UsageTokens{InputTokens: 1000, OutputTokens: 100}
+				base, err := s.billingService.CalculateCost(model, tokens, g.RateMultiplier)
+				require.NoError(t, err)
+				upstream, err := s.billingService.CalculateCostWithServiceTier(model, tokens, 1, tier)
+				require.NoError(t, err)
+				require.Greater(t, upstream.TotalCost, base.ActualCost)
+				require.InDelta(t, upstream.TotalCost, q.Command.AccountQuotaCost, 1e-9)
+				require.InDelta(t, base.ActualCost, q.Command.APIKeyQuotaCost, 1e-9)
+				require.InDelta(t, base.ActualCost, q.Command.APIKeyRateLimitCost, 1e-9)
+				if subscription == SubscriptionTypeSubscription {
+					require.InDelta(t, base.ActualCost, q.Command.SubscriptionCost, 1e-9)
+					require.Zero(t, q.Command.BalanceCost)
+					require.Zero(t, q.Command.UserPlatformQuotaCost)
+				} else {
+					require.InDelta(t, base.ActualCost, q.Command.BalanceCost, 1e-9)
+					require.InDelta(t, base.ActualCost, q.Command.UserPlatformQuotaCost, 1e-9)
+					require.Zero(t, q.Command.SubscriptionCost)
+				}
+				require.Nil(t, q.Usage.ServiceTierMultiplier)
+			})
+		}
 	}
 }
 

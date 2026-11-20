@@ -1062,7 +1062,7 @@ export default {
         hint: 'Token 实付 = 普通模型价 × 分组或用户倍率 × 所用档位倍率。高峰倍率另计。Fast 默认 2，UltraFast 默认 6。',
         invalid: 'Fast 和 UltraFast 倍率均为必填项，范围为 0.1–100。',
         force: '强制开启 Fast 模式', off: '关闭',
-        forceHint: '开启后，支持速度档位的请求统一按所选模式转发和计费，客户端设置无效。关闭时按请求及上游实际档位计费。'
+        forceHint: '强制档位只决定发给上游的速度。上方单独倍率计费关闭时，用户按普通档计费；开启时，按所选档位的倍率计费。'
       },
       platforms: {
         all: '全部平台',

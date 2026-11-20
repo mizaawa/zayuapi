@@ -783,7 +783,8 @@ export default {
       peakNote: 'Peak hours {window}: billing rate ×{multiplier}',
       fastRateNote: 'Fast: standard token price × your rate × {multiplier}. Peak rates still apply.',
       ultraRateNote: 'UltraFast: standard token price × your rate × {multiplier}. Peak rates still apply.',
-      forcedSpeedNote: 'This group requires {speed}. Successful tier-capable requests are billed at that speed.'
+      forcedSpeedNote: 'This group uses {speed} and bills at its configured multiplier.',
+      forcedSpeedStandardNote: 'This group uses {speed} at the standard rate, with no speed surcharge.'
     },
     table: {
       model: 'Model',

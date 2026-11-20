@@ -124,6 +124,21 @@ describe('PlazaGroupSection', () => {
     expect(mountSection({ platform: 'anthropic', fast_rate_enabled: true } as Partial<ModelPlazaGroup>).find('.plaza-badge-fast').exists()).toBe(false)
   })
 
+  it.each(['fast', 'ultrafast'] as const)('shows the standard price note only when %s is forced without speed pricing', async (mode) => {
+    const forced = { ...group, forced_fast_mode: mode, fast_rate_multiplier: 4, ultrafast_rate_multiplier: 9 }
+    const wrapper = mountSection({ ...forced, fast_rate_enabled: false })
+    expect(wrapper.text()).toContain('modelPlaza.detail.forcedSpeedStandardNote')
+    expect(wrapper.find('.plaza-badge-fast').exists()).toBe(false)
+
+    await wrapper.setProps({ group: { ...forced, fast_rate_enabled: true } })
+    expect(wrapper.text()).toContain('modelPlaza.detail.forcedSpeedNote')
+    expect(wrapper.text()).not.toContain('modelPlaza.detail.forcedSpeedStandardNote')
+    expect(wrapper.text()).toContain('Fast ×4')
+    expect(wrapper.text()).toContain('UltraFast ×9')
+    await wrapper.setProps({ group: { ...forced, forced_fast_mode: 'off' } })
+    expect(wrapper.text()).not.toContain('modelPlaza.detail.forcedSpeed')
+  })
+
   it('passes video independent pricing to the expanded table', async () => {
     const wrapper = mountSection({ video_rate_independent: true, video_rate_multiplier: 0.25 })
     await wrapper.get('[data-testid="group-toggle"]').trigger('click')
