@@ -368,10 +368,10 @@ func (r *degradationMonitorRepository) CreateRun(ctx context.Context, run *servi
 func (r *degradationMonitorRepository) FinishRun(ctx context.Context, run *service.DegradationRun) error {
 	_, err := r.sql.ExecContext(ctx, `UPDATE degradation_runs SET status = $2, response_model = $3, output = $4,
 		error_message = $5, attempts = $6, first_token_ms = $7, duration_ms = $8, input_tokens = $9, output_tokens = $10,
-		cache_read_tokens = $11, cache_creation_tokens = $12, reasoning_tokens = $13, finished_at = $14 WHERE id = $1`,
+		cache_read_tokens = $11, cache_creation_tokens = $12, reasoning_tokens = $13, finished_at = $14, protocol = $15 WHERE id = $1`,
 		run.ID, run.Status, run.ResponseModel, run.Output, run.ErrorMessage, run.Attempts,
 		nullableDegradationInt(run.FirstTokenMs), nullableDegradationInt(run.DurationMs), run.InputTokens,
-		run.OutputTokens, run.CacheReadTokens, run.CacheCreationTokens, run.ReasoningTokens, run.FinishedAt)
+		run.OutputTokens, run.CacheReadTokens, run.CacheCreationTokens, run.ReasoningTokens, run.FinishedAt, run.Protocol)
 	return err
 }
 

@@ -25,6 +25,11 @@ func buildGeminiAIStudioModelActionURL(baseURL, model, action string, stream boo
 	if trimmedBase == "" {
 		return "", errors.New("gemini base url is required")
 	}
+	// A relay may advertise either its native or OA versioned base URL.
+	trimmedBase = geminiCompatibleModelsBaseURL(trimmedBase)
+	if !isOfficialModelsUpstream(trimmedBase) {
+		trimmedBase = strings.TrimSuffix(trimmedBase, "/v1")
+	}
 	trimmedModel := strings.TrimSpace(model)
 	if trimmedModel == "" {
 		return "", errors.New("gemini model is required")

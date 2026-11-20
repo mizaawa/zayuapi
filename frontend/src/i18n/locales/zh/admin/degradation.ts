@@ -58,7 +58,7 @@ export default {
       modelHint: '候选来自该分组账号的模型映射，也可以直接输入。',
       useModel: '使用',
       protocol: '请求协议',
-      protocolHint: 'Anthropic 平台默认使用 Anthropic Messages，其它平台默认使用 OpenAI Responses。',
+      protocolHint: 'Gemini 分组默认使用 Gemini 原生协议，Anthropic 分组使用 Messages，其余分组使用 OpenAI Responses。',
       defaultTag: '默认',
       effort: '模型思考强度',
       effortFollow: '跟随默认（{effort}）',

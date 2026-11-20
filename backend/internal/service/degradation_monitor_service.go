@@ -458,7 +458,7 @@ func (s *DegradationMonitorService) applyMonitorInput(ctx context.Context, monit
 	if protocol == "" {
 		protocol = DefaultDegradationProtocol(group.Platform)
 	}
-	if !IsDegradationProtocol(protocol) {
+	if !IsDegradationProtocol(protocol) || (protocol == DegradationProtocolGemini && group.Platform != PlatformGemini && group.Platform != PlatformComposite) {
 		return ErrDegradationInvalidProtocol
 	}
 	if input.IntervalMinutes != 0 && (input.IntervalMinutes < DegradationMinIntervalMinutes || input.IntervalMinutes > DegradationMaxIntervalMinutes) {

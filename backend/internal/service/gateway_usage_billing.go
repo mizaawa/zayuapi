@@ -630,6 +630,16 @@ type recordUsageOpts struct {
 	LongContextMultiplier float64
 }
 
+const GeminiLongContextThreshold = 200000
+const GeminiLongContextMultiplier = 2.0
+
+func accountUsageOptions(account *Account) *recordUsageOpts {
+	if account != nil && account.Platform == PlatformGemini {
+		return &recordUsageOpts{LongContextThreshold: GeminiLongContextThreshold, LongContextMultiplier: GeminiLongContextMultiplier}
+	}
+	return &recordUsageOpts{}
+}
+
 // RecordUsage 记录使用量并扣费（或更新订阅用量）
 func (s *GatewayService) RecordUsage(ctx context.Context, input *RecordUsageInput) error {
 	return s.recordUsageCore(ctx, &recordUsageCoreInput{
@@ -650,7 +660,7 @@ func (s *GatewayService) RecordUsage(ctx context.Context, input *RecordUsageInpu
 		QuotaPlatform:      input.QuotaPlatform,
 		CyberBlocked:       input.CyberBlocked,
 		ChannelUsageFields: input.ChannelUsageFields,
-	}, &recordUsageOpts{})
+	}, accountUsageOptions(input.Account))
 }
 
 // RecordUsageLongContextInput 记录使用量的输入参数（支持长上下文双倍计费）
@@ -754,6 +764,9 @@ func (s *GatewayService) recordUsageCore(ctx context.Context, input *recordUsage
 	user := input.User
 	account := input.Account
 	subscription := input.Subscription
+	if account != nil && account.Platform == PlatformGemini && result != nil && (result.NegotiatedUpstreamEndpoint == providerOpenAIPath || result.NegotiatedUpstreamEndpoint == providerOpenAIResponsesPath) {
+		input.UpstreamEndpoint = result.NegotiatedUpstreamEndpoint
+	}
 	// Do not let untrusted upstream usage reach cost calculation or quota writes.
 	if result != nil && !sanitizeClaudeUsage(&result.Usage) {
 		accountID := int64(0)

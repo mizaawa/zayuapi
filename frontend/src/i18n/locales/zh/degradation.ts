@@ -64,6 +64,7 @@ export default {
       max: '最大 · max',
     },
     protocols: {
+      gemini_native: 'Gemini 原生',
       openai_responses: 'OpenAI Responses',
       openai_chat: 'OpenAI Chat',
       anthropic: 'Anthropic Messages',

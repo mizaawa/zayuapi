@@ -1140,18 +1140,39 @@ func (s *AccountTestService) testGeminiAccountConnection(c *gin.Context, account
 		proxyURL = account.Proxy.URL()
 	}
 
-	resp, err := s.httpUpstream.DoWithTLS(req, proxyURL, account.ID, account.Concurrency, s.tlsFPProfileService.ResolveTLSProfile(account))
+	resp, err := geminiRelayRequest(account, testModelID, req, func(r *http.Request) (*http.Response, error) {
+		if strings.HasSuffix(r.URL.Path, "/responses") {
+			s.sendEvent(c, TestEvent{Type: "status", Text: "OpenAI Responses"})
+		} else if strings.HasSuffix(r.URL.Path, "/chat/completions") {
+			s.sendEvent(c, TestEvent{Type: "status", Text: "OpenAI Chat Completions"})
+		} else {
+			s.sendEvent(c, TestEvent{Type: "status", Text: "Gemini Native"})
+		}
+		return s.httpUpstream.DoWithTLS(r, proxyURL, account.ID, account.Concurrency, s.tlsFPProfileService.ResolveTLSProfile(account))
+	})
 	if err != nil {
 		return s.sendErrorAndEnd(c, fmt.Sprintf("Request failed: %s", err.Error()))
 	}
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return s.sendErrorAndEnd(c, fmt.Sprintf("API returned %d: %s", resp.StatusCode, string(body)))
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		return s.sendErrorAndEnd(c, fmt.Sprintf("API returned %d: %s", resp.StatusCode, sanitizeErrorMessageWithSecrets(string(body), account.GetCredential("api_key"), req.Header.Get("Authorization"))))
 	}
 
 	// Process SSE stream
+	if isDegradationJSONResponse(resp.Header.Get("Content-Type")) {
+		const limit = 16 << 20
+		body, err := io.ReadAll(io.LimitReader(resp.Body, limit+1))
+		if err != nil || len(body) > limit || !json.Valid(body) {
+			return s.sendErrorAndEnd(c, "Invalid Gemini response")
+		}
+		var compact bytes.Buffer
+		if err := json.Compact(&compact, body); err != nil {
+			return s.sendErrorAndEnd(c, "Invalid Gemini response")
+		}
+		return s.processGeminiStream(c, strings.NewReader("data: "+compact.String()+"\n\n"))
+	}
 	return s.processGeminiStream(c, resp.Body)
 }
 
@@ -1387,26 +1408,32 @@ func createGeminiTestPayload(modelID string, prompt string) []byte {
 // processGeminiStream processes SSE stream from Gemini API
 func (s *AccountTestService) processGeminiStream(c *gin.Context, body io.Reader) error {
 	reader := bufio.NewReader(body)
+	var contentSeen bool
+	finish := func() error {
+		if !contentSeen {
+			return s.sendErrorAndEnd(c, "No Gemini content received")
+		}
+		s.sendEvent(c, TestEvent{Type: "test_complete", Success: true})
+		return nil
+	}
 
 	for {
 		line, err := reader.ReadString('\n')
-		if err != nil {
+		if err != nil && (err != io.EOF || len(line) == 0) {
 			if err == io.EOF {
-				s.sendEvent(c, TestEvent{Type: "test_complete", Success: true})
-				return nil
+				return finish()
 			}
 			return s.sendErrorAndEnd(c, fmt.Sprintf("Stream read error: %s", err.Error()))
 		}
 
 		line = strings.TrimSpace(line)
-		if line == "" || !strings.HasPrefix(line, "data: ") {
+		if line == "" || !strings.HasPrefix(line, "data:") {
 			continue
 		}
 
-		jsonStr := strings.TrimPrefix(line, "data: ")
+		jsonStr := strings.TrimSpace(strings.TrimPrefix(line, "data:"))
 		if jsonStr == "[DONE]" {
-			s.sendEvent(c, TestEvent{Type: "test_complete", Success: true})
-			return nil
+			return finish()
 		}
 
 		var data map[string]any
@@ -1427,13 +1454,18 @@ func (s *AccountTestService) processGeminiStream(c *gin.Context, body io.Reader)
 					if parts, ok := content["parts"].([]any); ok {
 						for _, part := range parts {
 							if partMap, ok := part.(map[string]any); ok {
+								if thought, _ := partMap["thought"].(bool); thought {
+									continue
+								}
 								if text, ok := partMap["text"].(string); ok && text != "" {
+									contentSeen = true
 									s.sendEvent(c, TestEvent{Type: "content", Text: text})
 								}
 								if inlineData, ok := partMap["inlineData"].(map[string]any); ok {
 									mimeType, _ := inlineData["mimeType"].(string)
 									data, _ := inlineData["data"].(string)
 									if strings.HasPrefix(strings.ToLower(mimeType), "image/") && data != "" {
+										contentSeen = true
 										s.sendEvent(c, TestEvent{
 											Type:     "image",
 											ImageURL: fmt.Sprintf("data:%s;base64,%s", mimeType, data),
@@ -1448,8 +1480,10 @@ func (s *AccountTestService) processGeminiStream(c *gin.Context, body io.Reader)
 
 				// Check for completion after extracting content
 				if finishReason, ok := candidate["finishReason"].(string); ok && finishReason != "" {
-					s.sendEvent(c, TestEvent{Type: "test_complete", Success: true})
-					return nil
+					if finishReason != "STOP" && finishReason != "MAX_TOKENS" {
+						return s.sendErrorAndEnd(c, "Gemini generation stopped: "+finishReason)
+					}
+					return finish()
 				}
 			}
 		}

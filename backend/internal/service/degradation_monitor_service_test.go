@@ -486,7 +486,8 @@ func TestDegradationRunHelpers(t *testing.T) {
 	require.Equal(t, "minimal", degradationEffortForProtocol(DegradationProtocolOpenAIChat, " Minimal "))
 
 	require.Equal(t, DegradationProtocolAnthropic, DefaultDegradationProtocol(PlatformAnthropic))
-	for _, platform := range []string{PlatformOpenAI, PlatformGemini, PlatformGrok, PlatformComposite} {
+	require.Equal(t, DegradationProtocolGemini, DefaultDegradationProtocol(PlatformGemini))
+	for _, platform := range []string{PlatformOpenAI, PlatformGrok, PlatformComposite} {
 		require.Equal(t, DegradationProtocolOpenAIResponses, DefaultDegradationProtocol(platform))
 		require.True(t, IsDegradationGroupPlatform(platform))
 	}

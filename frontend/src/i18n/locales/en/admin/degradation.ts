@@ -58,7 +58,7 @@ export default {
       modelHint: 'Suggestions come from the model mappings of accounts in this group; any name may be typed.',
       useModel: 'Use',
       protocol: 'Request protocol',
-      protocolHint: 'Anthropic groups default to Anthropic Messages; other platforms default to OpenAI Responses.',
+      protocolHint: 'Gemini groups default to Gemini Native, Anthropic groups to Messages, and other groups to OpenAI Responses.',
       defaultTag: 'Default',
       effort: 'Reasoning effort',
       effortFollow: 'Follow default ({effort})',

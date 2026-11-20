@@ -263,7 +263,23 @@ func (h *GatewayHandler) Responses(c *gin.Context) {
 		}
 		var result *service.ForwardResult
 		setActualUpstreamEndpoint(c, "")
-		if shouldUseAntigravityCompat(account) {
+		if effectiveAPIKeyPlatform(c, apiKey) == service.PlatformGemini && account.Platform != service.PlatformGemini {
+			if accountReleaseFunc != nil {
+				accountReleaseFunc()
+			}
+			h.responsesErrorResponse(c, http.StatusServiceUnavailable, "upstream_error", "No Gemini account available")
+			return
+		}
+		if account.Platform == service.PlatformGemini {
+			if h.geminiCompatService == nil {
+				if accountReleaseFunc != nil {
+					accountReleaseFunc()
+				}
+				h.responsesErrorResponse(c, http.StatusBadGateway, "upstream_error", "Gemini compatibility service is not configured")
+				return
+			}
+			result, err = h.geminiCompatService.ForwardAsResponses(requestCtx, c, account, forwardBody)
+		} else if shouldUseAntigravityCompat(account) {
 			if h.antigravityGatewayService == nil {
 				h.responsesErrorResponse(c, http.StatusBadGateway, "upstream_error", "Antigravity compatibility service is not configured")
 				if accountReleaseFunc != nil {
@@ -312,7 +328,7 @@ func (h *GatewayHandler) Responses(c *gin.Context) {
 				zap.Bool("upstream_error_response_already_written", upstreamErrorAlreadyCommunicated),
 				zap.Error(err),
 			)
-			if !gatewayCompatibilityHasBillablePartialUsage(c, result, err, writerSizeBeforeForward) {
+			if !result.HasMeteredGeminiReceipt(account) && !gatewayCompatibilityHasBillablePartialUsage(c, result, err, writerSizeBeforeForward) {
 				return
 			}
 		}
@@ -328,6 +344,7 @@ func (h *GatewayHandler) Responses(c *gin.Context) {
 		sessionID := service.ExtractClientSessionID(c)
 		// 上游按协议返回 cyber 拦截（如 Claude 的 cyber 拒答）：标记用量行并追加分组的 Cyber 自动扣款。
 		cyberBlocked := service.UpstreamCyberSignalObserved(c)
+		forceCacheBilling := account.Platform == service.PlatformGemini && fs.ForceCacheBilling
 		h.submitUsageRecordTask(c.Request.Context(), func(ctx context.Context) {
 			if err := h.gatewayService.RecordUsage(ctx, &service.RecordUsageInput{
 				Result:             result,
@@ -345,6 +362,7 @@ func (h *GatewayHandler) Responses(c *gin.Context) {
 				APIKeyService:      h.apiKeyService,
 				SessionID:          sessionID,
 				CyberBlocked:       cyberBlocked,
+				ForceCacheBilling:  forceCacheBilling,
 				ChannelUsageFields: clientRequestedUsageFields(c, channelMapping, reqModel, result.UpstreamModel),
 			}); err != nil {
 				reqLog.Error("gateway.responses.record_usage_failed",

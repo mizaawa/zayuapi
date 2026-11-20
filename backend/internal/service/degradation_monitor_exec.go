@@ -146,9 +146,20 @@ func (s *DegradationMonitorService) performRun(ctx context.Context, monitor *Deg
 		if attempt > 0 && !sleepContext(ctx, s.retryDelay) {
 			break
 		}
-		run.Attempts = attempt + 1
+		run.Attempts++
 		last = runDegradationAttempt(ctx, s.client, request)
 		sent = sent || last.Sent
+		if attempt == 0 && group.Platform == PlatformGemini && geminiProtocolMismatch(last.HTTPStatus) && ctx.Err() == nil {
+			if request.Protocol == DegradationProtocolGemini {
+				request.Protocol = DegradationProtocolOpenAIChat
+			} else {
+				request.Protocol = DegradationProtocolGemini
+			}
+			run.Attempts++
+			last = runDegradationAttempt(ctx, s.client, request)
+			sent = sent || last.Sent
+		}
+		run.Protocol = request.Protocol
 		if last.Err == nil || ctx.Err() != nil {
 			break
 		}

@@ -92,6 +92,11 @@
         </div>
       </div>
 
+      <div v-else-if="form.provider === PROVIDER_GEMINI">
+        <label class="input-label">{{ t('admin.channelMonitor.form.apiMode') }}</label>
+        <span class="text-sm" data-testid="monitor-gemini-protocol">{{ t('degradationCheck.protocols.gemini_native') }}</span>
+      </div>
+
       <div>
         <label class="input-label">{{ t('admin.channelMonitor.form.primaryModel') }} <span class="text-red-500">*</span></label>
         <input

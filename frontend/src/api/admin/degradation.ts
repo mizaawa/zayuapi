@@ -7,7 +7,7 @@ import { apiClient } from '../client'
 import type { GroupPlatform } from '@/types'
 import type { DegradationRun } from '../degradation'
 
-export type DegradationProtocol = 'openai_chat' | 'openai_responses' | 'anthropic'
+export type DegradationProtocol = 'openai_chat' | 'openai_responses' | 'anthropic' | 'gemini_native'
 export type DegradationEffort = 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'
 export type DegradationRunStatus = 'running' | 'success' | 'failed'
 

@@ -251,9 +251,15 @@ const platformOptions = computed<{ value: PlatformValue; label: string }[]>(() =
   { value: 'composite', label: t('degradationCheck.platforms.custom') },
 ])
 
-const defaultProtocol = computed<DegradationProtocol>(() => (form.platform === 'anthropic' ? 'anthropic' : 'openai_responses'))
+const defaultProtocol = computed<DegradationProtocol>(() => {
+  if (form.platform === 'gemini') return 'gemini_native'
+  return form.platform === 'anthropic' ? 'anthropic' : 'openai_responses'
+})
 
 const protocolOptions = computed<{ value: DegradationProtocol; label: string }[]>(() => [
+  ...(form.platform === 'gemini' || form.platform === 'composite'
+    ? [{ value: 'gemini_native' as const, label: t('degradationCheck.protocols.gemini_native') }]
+    : []),
   { value: 'openai_responses', label: t('degradationCheck.protocols.openai_responses') },
   { value: 'openai_chat', label: t('degradationCheck.protocols.openai_chat') },
   { value: 'anthropic', label: t('degradationCheck.protocols.anthropic') },
@@ -331,7 +337,10 @@ function selectPlatform(platform: PlatformValue) {
   if (form.platform === platform) return
   form.platform = platform
   form.group_id = null
-  if (!form.protocolTouched) form.protocol = defaultProtocol.value
+  if (!form.protocolTouched || !protocolOptions.value.some(option => option.value === form.protocol)) {
+    form.protocol = defaultProtocol.value
+    form.protocolTouched = false
+  }
 }
 
 function selectProtocol(protocol: DegradationProtocol) {

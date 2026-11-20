@@ -52,6 +52,7 @@ type degradationRequest struct {
 
 // degradationAttempt is the outcome of one request.
 type degradationAttempt struct {
+	HTTPStatus      int
 	Output          string
 	ResponseModel   string
 	FirstTokenMs    *int
@@ -87,6 +88,19 @@ func buildDegradationRequest(req degradationRequest) (string, []byte, map[string
 		"Accept":       "text/event-stream",
 	}
 	switch req.Protocol {
+	case DegradationProtocolGemini:
+		if err := validateUpstreamPathSegment("gemini model", req.Model); err != nil {
+			return "", nil, nil, err
+		}
+		path = fmt.Sprintf("/v1beta/models/%s:streamGenerateContent?alt=sse", req.Model)
+		body = map[string]any{
+			"systemInstruction": map[string]any{"parts": []map[string]string{{"text": degradationSystemInstructions}}},
+			"contents":          []map[string]any{{"role": "user", "parts": []map[string]string{{"text": req.Prompt}}}},
+		}
+		if thinking := geminiProbeThinking(req.Model, effort); thinking != nil {
+			body["generationConfig"] = map[string]any{"thinkingConfig": thinking}
+		}
+		headers["x-goog-api-key"] = req.APIKey
 	case DegradationProtocolOpenAIResponses:
 		path = providerOpenAIResponsesPath
 		body["store"] = false
@@ -172,6 +186,7 @@ func runDegradationAttempt(ctx context.Context, client *http.Client, req degrada
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		attempt.HTTPStatus = resp.StatusCode
 		snippet, _ := io.ReadAll(io.LimitReader(resp.Body, degradationErrorBodyBytes))
 		attempt.Err = fmt.Errorf("upstream HTTP %d: %s", resp.StatusCode, truncateForErrorBody(degradationErrorText(snippet)))
 		return attempt
@@ -268,6 +283,7 @@ type degradationStreamState struct {
 	model           string
 	usage           DegradationUsageSummary
 	reasoningTokens int64
+	geminiMeter     geminiUsageMeter
 	completed       bool
 	failure         string
 }
@@ -299,6 +315,8 @@ func (s *degradationStreamState) setModel(model string) {
 
 func (s *degradationStreamState) handle(protocol, event string, data []byte) error {
 	switch protocol {
+	case DegradationProtocolGemini:
+		return s.handleGeminiEvent(data)
 	case DegradationProtocolOpenAIResponses:
 		return s.handleResponsesEvent(event, data)
 	case DegradationProtocolOpenAIChat:
@@ -308,6 +326,35 @@ func (s *degradationStreamState) handle(protocol, event string, data []byte) err
 	default:
 		return ErrDegradationInvalidProtocol
 	}
+}
+
+func (s *degradationStreamState) handleGeminiEvent(data []byte) error {
+	root := gjson.ParseBytes(data)
+	s.setModel(root.Get("modelVersion").String())
+	if msg := root.Get("error.message").String(); msg != "" {
+		s.failure = msg
+		return nil
+	}
+	if reason := root.Get("promptFeedback.blockReason").String(); reason != "" {
+		s.failure = "prompt blocked: " + reason
+	}
+	if usage := s.geminiMeter.observe(data); usage.hasObservedTokens() {
+		s.usage.InputTokens = int64(usage.InputTokens)
+		s.usage.OutputTokens = int64(usage.OutputTokens)
+		s.usage.CacheReadTokens = int64(usage.CacheReadInputTokens)
+		s.reasoningTokens = int64(s.geminiMeter.thoughts)
+	}
+	if err := s.appendText(extractGeminiMonitorText(data)); err != nil {
+		return err
+	}
+	switch reason := root.Get("candidates.0.finishReason").String(); reason {
+	case "", "FINISH_REASON_UNSPECIFIED":
+	case "STOP":
+		s.completed = true
+	default:
+		s.failure = "generation stopped: " + reason
+	}
+	return nil
 }
 
 func (s *degradationStreamState) handleResponsesEvent(event string, data []byte) error {
@@ -462,6 +509,8 @@ func (s *degradationStreamState) consumeJSON(protocol string, body io.Reader) er
 		return err
 	}
 	switch protocol {
+	case DegradationProtocolGemini:
+		return s.handleGeminiEvent(raw)
 	case DegradationProtocolOpenAIResponses:
 		s.applyResponsesFinal(gjson.ParseBytes(raw))
 		s.completed = s.output.Len() > 0

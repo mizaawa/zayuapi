@@ -28,7 +28,7 @@ type degradationMonitorRequest struct {
 	GroupID         int64  `json:"group_id" binding:"required,gt=0"`
 	Model           string `json:"model" binding:"required,max=200"`
 	ReasoningEffort string `json:"reasoning_effort" binding:"omitempty,max=16"`
-	Protocol        string `json:"protocol" binding:"omitempty,oneof=openai_chat openai_responses anthropic"`
+	Protocol        string `json:"protocol" binding:"omitempty,oneof=openai_chat openai_responses anthropic gemini_native"`
 	IntervalMinutes *int   `json:"interval_minutes" binding:"omitempty,min=0,max=10080"`
 	PromptID        *int64 `json:"prompt_id" binding:"omitempty,min=0"`
 	RandomPrompt    bool   `json:"random_prompt"`

@@ -15,6 +15,7 @@ import (
 
 const (
 	DegradationProtocolOpenAIChat      = "openai_chat"
+	DegradationProtocolGemini          = "gemini_native"
 	DegradationProtocolOpenAIResponses = "openai_responses"
 	DegradationProtocolAnthropic       = "anthropic"
 
@@ -79,7 +80,7 @@ var (
 		"DEGRADATION_INVALID_MODEL", "model is required and must not exceed 200 characters",
 	)
 	ErrDegradationInvalidProtocol = infraerrors.BadRequest(
-		"DEGRADATION_INVALID_PROTOCOL", "protocol must be openai_chat, openai_responses or anthropic",
+		"DEGRADATION_INVALID_PROTOCOL", "unsupported degradation monitor protocol",
 	)
 	ErrDegradationInvalidEffort = infraerrors.BadRequest(
 		"DEGRADATION_INVALID_REASONING_EFFORT", "reasoning_effort must be none, minimal, low, medium, high, xhigh or max",
@@ -193,16 +194,18 @@ func IsDegradationReasoningEffort(effort string) bool {
 // IsDegradationProtocol reports whether protocol names a supported request format.
 func IsDegradationProtocol(protocol string) bool {
 	switch protocol {
-	case DegradationProtocolOpenAIChat, DegradationProtocolOpenAIResponses, DegradationProtocolAnthropic:
+	case DegradationProtocolOpenAIChat, DegradationProtocolOpenAIResponses, DegradationProtocolAnthropic, DegradationProtocolGemini:
 		return true
 	default:
 		return false
 	}
 }
 
-// DefaultDegradationProtocol is Anthropic Messages for Anthropic groups and the
-// OpenAI Responses API for every other platform.
+// DefaultDegradationProtocol follows the group's native wire protocol.
 func DefaultDegradationProtocol(platform string) string {
+	if platform == PlatformGemini {
+		return DegradationProtocolGemini
+	}
 	if platform == PlatformAnthropic {
 		return DegradationProtocolAnthropic
 	}

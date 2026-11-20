@@ -799,8 +799,11 @@ func (s *GeminiMessagesCompatService) Forward(ctx context.Context, c *gin.Contex
 		}
 		requestIDHeader = idHeader
 
-		resp, err = s.httpUpstream.Do(upstreamReq, proxyURL, account.ID, account.Concurrency)
+		resp, err = s.doGeminiGeneration(account, mappedModel, upstreamReq, proxyURL)
 		if err != nil {
+			if errors.Is(err, errGeminiRelayReceipt) || errors.Is(err, errGeminiRelayUncertain) {
+				return nil, s.writeClaudeError(c, http.StatusBadGateway, "upstream_error", err.Error())
+			}
 			if APIKeyFailoverAttemptEnabled(ctx) {
 				RecordAPIKeyFailoverUpstreamFailure(ctx, 0, nil)
 			}
@@ -1119,14 +1122,14 @@ func (s *GeminiMessagesCompatService) Forward(ctx context.Context, c *gin.Contex
 		if useUpstreamStream {
 			collected, usageObj, err := collectGeminiSSE(resp.Body, true)
 			if err != nil {
-				return nil, s.writeClaudeError(c, http.StatusBadGateway, "upstream_error", "Failed to read upstream stream")
+				return geminiBufferedReceipt(usageObj, requestID, originalModel, mappedModel, startTime), s.writeClaudeError(c, http.StatusBadGateway, "upstream_error", "Failed to read upstream stream")
 			}
 			collectedBytes, _ := json.Marshal(collected)
 			upstreamResponseModelObserverFromContext(c).ObserveGemini(collectedBytes)
 			claudeResp, usageObj2 := convertGeminiToClaudeMessage(collected, responseModel, collectedBytes, false)
 			c.JSON(http.StatusOK, claudeResp)
 			usage = usageObj2
-			if usageObj != nil && (usageObj.InputTokens > 0 || usageObj.OutputTokens > 0) {
+			if usageObj.hasObservedTokens() {
 				usage = usageObj
 			}
 		} else {
@@ -1150,6 +1153,7 @@ func (s *GeminiMessagesCompatService) Forward(ctx context.Context, c *gin.Contex
 		Usage:                         *usage,
 		Model:                         originalModel,
 		UpstreamModel:                 mappedModel,
+		NegotiatedUpstreamEndpoint:    geminiNegotiatedEndpoint(resp),
 		UpstreamResponseModel:         observedUpstreamResponseModel(c),
 		UpstreamResponseModelConflict: observedUpstreamResponseModelConflict(c),
 		Stream:                        req.Stream,
@@ -1366,8 +1370,11 @@ func (s *GeminiMessagesCompatService) ForwardNative(ctx context.Context, c *gin.
 		}
 		requestIDHeader = idHeader
 
-		resp, err = s.httpUpstream.Do(upstreamReq, proxyURL, account.ID, account.Concurrency)
+		resp, err = s.doGeminiGeneration(account, mappedModel, upstreamReq, proxyURL)
 		if err != nil {
+			if errors.Is(err, errGeminiRelayReceipt) || errors.Is(err, errGeminiRelayUncertain) {
+				return nil, s.writeGoogleError(c, http.StatusBadGateway, err.Error())
+			}
 			if APIKeyFailoverAttemptEnabled(ctx) {
 				RecordAPIKeyFailoverUpstreamFailure(ctx, 0, nil)
 			}
@@ -1688,7 +1695,7 @@ func (s *GeminiMessagesCompatService) ForwardNative(ctx context.Context, c *gin.
 		if useUpstreamStream {
 			collected, usageObj, err := collectGeminiSSE(resp.Body, isOAuth)
 			if err != nil {
-				return nil, s.writeGoogleError(c, http.StatusBadGateway, "Failed to read upstream stream")
+				return geminiBufferedReceipt(usageObj, requestID, originalModel, mappedModel, startTime), s.writeGoogleError(c, http.StatusBadGateway, "Failed to read upstream stream")
 			}
 			b, _ := json.Marshal(collected)
 			upstreamResponseModelObserverFromContext(c).ObserveGemini(b)
@@ -1709,12 +1716,15 @@ func (s *GeminiMessagesCompatService) ForwardNative(ctx context.Context, c *gin.
 	if usage == nil {
 		usage = &ClaudeUsage{}
 	}
+	if action == "countTokens" {
+		usage = &ClaudeUsage{}
+	}
 
 	// 图片生成计费
 	imageCount := 0
 	imageInputSize := s.extractImageInputSize(body)
 	imageSize := normalizeOpenAIImageSizeTier(imageInputSize)
-	if isImageGenerationModel(originalModel) {
+	if action != "countTokens" && isImageGenerationModel(originalModel) {
 		imageCount = 1
 	}
 
@@ -1723,6 +1733,7 @@ func (s *GeminiMessagesCompatService) ForwardNative(ctx context.Context, c *gin.
 		Usage:                         *usage,
 		Model:                         originalModel,
 		UpstreamModel:                 mappedModel,
+		NegotiatedUpstreamEndpoint:    geminiNegotiatedEndpoint(resp),
 		UpstreamResponseModel:         observedUpstreamResponseModel(c),
 		UpstreamResponseModelConflict: observedUpstreamResponseModelConflict(c),
 		Stream:                        stream,
@@ -2144,6 +2155,7 @@ func (s *GeminiMessagesCompatService) handleStreamingResponse(c *gin.Context, re
 
 	var firstTokenMs *int
 	var usage ClaudeUsage
+	var meter geminiUsageMeter
 	finishReason := ""
 	sawToolUse := false
 
@@ -2341,7 +2353,7 @@ func (s *GeminiMessagesCompatService) handleStreamingResponse(c *gin.Context, re
 			}
 		}
 
-		if u := extractGeminiUsage(unwrappedBytes); u != nil {
+		if u := meter.observe(unwrappedBytes); u != nil {
 			usage = *u
 		}
 
@@ -2459,6 +2471,7 @@ func collectGeminiSSE(body io.Reader, isOAuth bool) (map[string]any, *ClaudeUsag
 	var lastWithParts map[string]any
 	var collectedTextParts []string // Collect all text parts for aggregation
 	usage := &ClaudeUsage{}
+	var meter geminiUsageMeter
 
 	for {
 		line, err := reader.ReadString('\n')
@@ -2486,7 +2499,7 @@ func collectGeminiSSE(body io.Reader, isOAuth bool) (map[string]any, *ClaudeUsag
 					}
 					if parsed != nil {
 						last = parsed
-						if u := extractGeminiUsage(rawBytes); u != nil {
+						if u := meter.observe(rawBytes); u != nil {
 							usage = u
 						}
 						if parts := extractGeminiParts(parsed); len(parts) > 0 {
@@ -2507,7 +2520,7 @@ func collectGeminiSSE(body io.Reader, isOAuth bool) (map[string]any, *ClaudeUsag
 			break
 		}
 		if err != nil {
-			return nil, nil, err
+			return nil, usage, err
 		}
 	}
 
@@ -2758,6 +2771,7 @@ func (s *GeminiMessagesCompatService) handleNativeStreamingResponse(c *gin.Conte
 
 	usage := &ClaudeUsage{}
 	observer := upstreamResponseModelObserverFromContext(c)
+	var meter geminiUsageMeter
 	if observer == nil {
 		observer = beginUpstreamResponseModelObservation(c)
 	}
@@ -2810,7 +2824,7 @@ func (s *GeminiMessagesCompatService) handleNativeStreamingResponse(c *gin.Conte
 						rawBytes = []byte(payload)
 					}
 
-					if u := extractGeminiUsage(rawBytes); u != nil {
+					if u := meter.observe(rawBytes); u != nil {
 						usage = u
 					}
 					observer.ObserveGemini(rawBytes)
@@ -3026,12 +3040,37 @@ func isValidBase64(data string) bool {
 }
 
 func extractGeminiUsage(data []byte) *ClaudeUsage {
+	var m geminiUsageMeter
+	return m.observe(data)
+}
+
+func geminiBufferedReceipt(usage *ClaudeUsage, id, model, mapped string, start time.Time) *ForwardResult {
+	if !usage.hasObservedTokens() {
+		return nil
+	}
+	return &ForwardResult{RequestID: id, Model: model, UpstreamModel: mapped, Usage: *usage, Duration: time.Since(start)}
+}
+
+// HasMeteredGeminiReceipt is evidence from the selected account, independent of
+// whether the client socket was still writable when an upstream read failed.
+func (r *ForwardResult) HasMeteredGeminiReceipt(account *Account) bool {
+	return r != nil && account != nil && account.Platform == PlatformGemini && r.Usage.hasObservedTokens()
+}
+
+// Gemini sends cumulative counters, sometimes split across frames. Validate a
+// whole snapshot before replacing it; never sum retransmissions or erase a prior receipt.
+type geminiUsageMeter struct {
+	prompt, tools, cached, candidates, thoughts, image int
+	usage                                              ClaudeUsage
+}
+
+func (m *geminiUsageMeter) observe(data []byte) *ClaudeUsage {
 	usage := gjson.GetBytes(data, "usageMetadata")
 	if !usage.Exists() {
 		return nil
 	}
 	if usage.Type == gjson.Null || !usage.IsObject() {
-		return &ClaudeUsage{}
+		return &m.usage
 	}
 	readToken := func(path string) (int, bool) {
 		return readOptionalBoundedUsageGJSONInt(usage.Get(path))
@@ -3040,12 +3079,20 @@ func extractGeminiUsage(data []byte) *ClaudeUsage {
 	cand, candOK := readToken("candidatesTokenCount")
 	cached, cachedOK := readToken("cachedContentTokenCount")
 	thoughts, thoughtsOK := readToken("thoughtsTokenCount")
-	if !promptOK || !candOK || !cachedOK || !thoughtsOK {
-		return &ClaudeUsage{}
+	tools, toolsOK := readToken("toolUsePromptTokenCount")
+	if !promptOK || !candOK || !cachedOK || !thoughtsOK || !toolsOK {
+		return &m.usage
 	}
-	output, outputOK := addBoundedReportedUsageInts(cand, thoughts)
-	if !outputOK || cached > prompt {
-		return &ClaudeUsage{}
+	next := *m
+	next.prompt, next.cached = max(m.prompt, prompt), max(m.cached, cached)
+	next.tools, next.candidates, next.thoughts = max(m.tools, tools), max(m.candidates, cand), max(m.thoughts, thoughts)
+	output, outputOK := addBoundedReportedUsageInts(next.candidates, next.thoughts)
+	if !outputOK || next.cached > next.prompt {
+		return &m.usage
+	}
+	input, inputOK := addBoundedReportedUsageInts(next.prompt-next.cached, next.tools)
+	if !inputOK {
+		return &m.usage
 	}
 
 	// 从 candidatesTokensDetails 提取 IMAGE 模态 token 数
@@ -3053,7 +3100,7 @@ func extractGeminiUsage(data []byte) *ClaudeUsage {
 	candidateDetails := usage.Get("candidatesTokensDetails")
 	if candidateDetails.Exists() && candidateDetails.Type != gjson.Null {
 		if !candidateDetails.IsArray() {
-			return &ClaudeUsage{}
+			return &m.usage
 		}
 		validDetails := true
 		foundImage := false
@@ -3074,22 +3121,24 @@ func extractGeminiUsage(data []byte) *ClaudeUsage {
 			return true
 		})
 		if !validDetails {
-			return &ClaudeUsage{}
+			return &m.usage
 		}
 	}
 
 	// 注意：Gemini 的 promptTokenCount 包含 cachedContentTokenCount，
 	// 但 Claude 的 input_tokens 不包含 cache_read_input_tokens，需要减去
-	result := &ClaudeUsage{
-		InputTokens:          prompt - cached,
+	next.image = max(m.image, imageTokens)
+	next.usage = ClaudeUsage{
+		InputTokens:          input,
 		OutputTokens:         output,
-		CacheReadInputTokens: cached,
-		ImageOutputTokens:    imageTokens,
+		CacheReadInputTokens: next.cached,
+		ImageOutputTokens:    next.image,
 	}
-	if !sanitizeClaudeUsage(result) {
-		return &ClaudeUsage{}
+	if !sanitizeClaudeUsage(&next.usage) {
+		return &m.usage
 	}
-	return result
+	*m = next
+	return &m.usage
 }
 
 func asInt(v any) (int, bool) {

@@ -3,6 +3,7 @@ package service
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -261,7 +262,7 @@ var providerAdapters = map[string]providerAdapter{
 		buildHeaders: func(apiKey string) map[string]string {
 			return map[string]string{"x-goog-api-key": apiKey}
 		},
-		textPath: "candidates.0.content.parts.0.text",
+		extractText: extractGeminiMonitorText,
 	},
 }
 
@@ -335,6 +336,38 @@ func isSupportedProvider(p string) bool {
 //   - status: HTTP 状态码
 //   - err: 网络 / 序列化错误
 func callProvider(ctx context.Context, provider, endpoint, apiKey, model, prompt string, opts *CheckOptions) (extractedText, rawBody string, status int, err error) {
+	if provider == MonitorProviderGemini {
+		if err := validateUpstreamPathSegment("gemini model", model); err != nil {
+			return "", "", 0, err
+		}
+		// Bound group monitors already negotiate on the selected account at the
+		// gateway. Never reinterpret an administrator's custom payload or headers.
+		if !isOfficialModelsUpstream(endpoint) && (opts == nil || (!opts.ManagedGateway && len(opts.ExtraHeaders) == 0 && bodyOverrideMode(opts) == MonitorBodyOverrideModeOff)) {
+			key := sha256.Sum256([]byte("monitor\x00" + endpoint + "\x00" + model + "\x00" + apiKey))
+			for i, path := range geminiProtocolOrder(key) {
+				candidate := provider
+				candidateOpts := opts
+				if path != "" {
+					candidate = MonitorProviderOpenAI
+					if path == providerOpenAIResponsesPath {
+						candidateOpts = &CheckOptions{APIMode: MonitorAPIModeResponses}
+					}
+				}
+				text, raw, code, err := callMonitorAdapter(ctx, candidate, endpoint, apiKey, model, prompt, candidateOpts)
+				if i < 2 && err == nil && geminiProtocolMismatch(code) && ctx.Err() == nil {
+					continue
+				}
+				if err == nil && code >= 200 && code < 300 && strings.TrimSpace(text) != "" {
+					rememberGeminiRoute(key, path)
+				}
+				return text, raw, code, err
+			}
+		}
+	}
+	return callMonitorAdapter(ctx, provider, endpoint, apiKey, model, prompt, opts)
+}
+
+func callMonitorAdapter(ctx context.Context, provider, endpoint, apiKey, model, prompt string, opts *CheckOptions) (extractedText, rawBody string, status int, err error) {
 	requestedAPIMode := checkAPIMode(opts)
 	if err := validateAPIMode(provider, requestedAPIMode); err != nil {
 		return "", "", 0, err
@@ -369,6 +402,17 @@ func extractMonitorResponseText(adapter providerAdapter, respBytes []byte) strin
 		return adapter.extractText(respBytes)
 	}
 	return gjson.GetBytes(respBytes, adapter.textPath).String()
+}
+
+func extractGeminiMonitorText(body []byte) string {
+	var text strings.Builder
+	gjson.GetBytes(body, "candidates.0.content.parts").ForEach(func(_, part gjson.Result) bool {
+		if !part.Get("thought").Bool() {
+			text.WriteString(part.Get("text").String())
+		}
+		return true
+	})
+	return text.String()
 }
 
 func extractAnthropicMonitorText(respBytes []byte) string {

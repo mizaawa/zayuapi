@@ -526,7 +526,7 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 				reqLog.Error("gateway.forward_failed", forwardFailedFields...)
 				// Gemini can return metered partial output together with a read
 				// error. Keep the charge once that stream reached the client.
-				if !gatewayCompatibilityHasBillablePartialUsage(c, result, err, writerSizeBeforeForward) {
+				if !result.HasMeteredGeminiReceipt(account) && !gatewayCompatibilityHasBillablePartialUsage(c, result, err, writerSizeBeforeForward) {
 					return
 				}
 			}
