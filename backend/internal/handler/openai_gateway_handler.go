@@ -3292,7 +3292,7 @@ func (h *OpenAIGatewayHandler) handleFailoverExhausted(c *gin.Context, failoverE
 		return
 	}
 	if failoverErr.RawResponsePassthrough && !streamStarted && h.gatewayService != nil &&
-		h.gatewayService.WriteCustomRawUpstreamResponse(c, failoverErr.StatusCode, failoverErr.ResponseHeaders, failoverErr.ResponseBody) {
+		h.gatewayService.WriteCustomFailoverResponse(c, failoverErr) {
 		return
 	}
 	if failoverErr.IsOpenAIRequestBodyTooLarge() {

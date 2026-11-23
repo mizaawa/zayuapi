@@ -113,6 +113,7 @@ type channelMonitorCheckResultResponse struct {
 	Model         string `json:"model"`
 	Status        string `json:"status"`
 	LatencyMs     *int   `json:"latency_ms"`
+	DurationMs    *int   `json:"duration_ms"`
 	PingLatencyMs *int   `json:"ping_latency_ms"`
 	Message       string `json:"message"`
 	CheckedAt     string `json:"checked_at"`
@@ -123,6 +124,7 @@ type channelMonitorHistoryItemResponse struct {
 	Model         string `json:"model"`
 	Status        string `json:"status"`
 	LatencyMs     *int   `json:"latency_ms"`
+	DurationMs    *int   `json:"duration_ms"`
 	PingLatencyMs *int   `json:"ping_latency_ms"`
 	Message       string `json:"message"`
 	CheckedAt     string `json:"checked_at"`
@@ -181,6 +183,7 @@ func checkResultToResponse(r *service.CheckResult) channelMonitorCheckResultResp
 		Model:         r.Model,
 		Status:        r.Status,
 		LatencyMs:     r.LatencyMs,
+		DurationMs:    r.DurationMs,
 		PingLatencyMs: r.PingLatencyMs,
 		Message:       r.Message,
 		CheckedAt:     r.CheckedAt.UTC().Format(time.RFC3339),
@@ -193,6 +196,7 @@ func historyEntryToResponse(e *service.ChannelMonitorHistoryEntry) channelMonito
 		Model:         e.Model,
 		Status:        e.Status,
 		LatencyMs:     e.LatencyMs,
+		DurationMs:    e.DurationMs,
 		PingLatencyMs: e.PingLatencyMs,
 		Message:       e.Message,
 		CheckedAt:     e.CheckedAt.UTC().Format(time.RFC3339),

@@ -40,9 +40,9 @@
               </span>
             </td>
             <td class="py-2 pr-3 text-gray-700 dark:text-gray-300">{{ formatLatency(m.latest_latency_ms) }}</td>
-            <td class="py-2 pr-3 text-gray-700 dark:text-gray-300">{{ formatPercent(m.availability_7d) }}</td>
-            <td class="py-2 pr-3 text-gray-700 dark:text-gray-300">{{ formatPercent(m.availability_15d) }}</td>
-            <td class="py-2 pr-3 text-gray-700 dark:text-gray-300">{{ formatPercent(m.availability_30d) }}</td>
+            <td class="py-2 pr-3 text-primary-800">{{ formatPercent(m.availability_7d) }}</td>
+            <td class="py-2 pr-3 text-primary-800">{{ formatPercent(m.availability_15d) }}</td>
+            <td class="py-2 pr-3 text-primary-800">{{ formatPercent(m.availability_30d) }}</td>
             <td class="py-2 pr-3 text-gray-700 dark:text-gray-300">{{ formatLatency(m.avg_latency_7d_ms) }}</td>
           </tr>
         </tbody>

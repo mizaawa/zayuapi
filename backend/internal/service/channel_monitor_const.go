@@ -9,11 +9,11 @@ import (
 // ChannelMonitor 全局常量。
 // 这些是 MVP 阶段的硬编码值，按需可以提到 config 中。
 const (
-	// monitorRequestTimeout 单次模型请求总超时（含 Body 读取）。60s 超时按失败处理。
-	monitorRequestTimeout = 60 * time.Second
+	// monitorRequestTimeout 单次模型请求总超时（含 Body 读取）。独立于首 Token 的速度阈值，给流式回答留出完成时间。
+	monitorRequestTimeout = 3 * time.Minute
 	// monitorPingTimeout HEAD 请求 endpoint origin 的超时。
 	monitorPingTimeout = 8 * time.Second
-	// monitorDegradedThreshold / monitorFailedThreshold 是主请求耗时状态边界。
+	// monitorDegradedThreshold / monitorFailedThreshold 是首 Token 延迟状态边界。
 	monitorDegradedThreshold = 10 * time.Second
 	monitorFailedThreshold   = 60 * time.Second
 	// monitorHistoryRetentionDays 明细历史保留天数。
@@ -56,8 +56,8 @@ const (
 	providerOpenAIResponsesPath = "/v1/responses"
 	// providerAnthropicPath Anthropic Messages 路径。
 	providerAnthropicPath = "/v1/messages"
-	// providerGeminiPathTemplate Gemini generateContent 路径模板（含 model 占位）。
-	providerGeminiPathTemplate = "/v1beta/models/%s:generateContent"
+	// providerGeminiPathTemplate Gemini SSE 路径模板（含 model 占位）。
+	providerGeminiPathTemplate = "/v1beta/models/%s:streamGenerateContent?alt=sse"
 
 	// MonitorProviderOpenAI / Anthropic / Gemini / Grok / Custom provider 字符串常量（也是 ent enum 的实际值）。
 	MonitorProviderOpenAI    = "openai"

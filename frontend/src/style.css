@@ -1201,7 +1201,14 @@
     padding: 6.3rem 0.75rem 5rem;
     border: 1px solid transparent;
     border-radius: 1.5rem;
-    background: color-mix(in srgb, var(--md-sys-color-surface) 92%, transparent);
+    /* An open drawer must hide the scrim and the page beneath it. */
+    background-color: var(--md-sys-color-background);
+  }
+
+  @screen lg {
+    /* The desktop rail sits beside the content: let the same canvas and its
+     * fixed gradients show through instead of painting a second surface. */
+    .sidebar-nav { background-color: transparent; }
   }
 
   .sidebar-link {
@@ -1223,13 +1230,10 @@
     background: color-mix(in srgb, var(--md-sys-color-primary) 14%, transparent);
   }
 
-  .sidebar-link-active {
-    background: color-mix(in srgb, var(--md-sys-color-primary) 24%, var(--md-sys-color-surface));
-    color: color-mix(in srgb, var(--md-sys-color-primary) 76%, var(--md-sys-color-on-surface));
-  }
-
+  .sidebar-link-active,
   .sidebar-link-active:hover {
-    background: color-mix(in srgb, var(--md-sys-color-primary) 31%, var(--md-sys-color-surface));
+    background: var(--md-sys-color-surface-container-high);
+    color: var(--md-sys-color-on-primary-container);
   }
 
   /* Active marker: a short gold-to-garden pill on the leading edge. Drawn

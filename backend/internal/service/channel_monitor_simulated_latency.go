@@ -110,7 +110,7 @@ func applySimulatedFirstTokenLatency(
 		summary.ExtraModels[i].LatencyMs = &latency
 	}
 	for i := range timeline {
-		if !isSimulatedCheckPoint(timeline[i].Status, timeline[i].LatencyMs) {
+		if (timeline[i].DurationMs != nil && *timeline[i].DurationMs > 0) || !isSimulatedCheckPoint(timeline[i].Status, timeline[i].LatencyMs) {
 			continue
 		}
 		latency := simulatedFirstTokenLatencyMs(m.ID, m.PrimaryModel, timeline[i].CheckedAt)

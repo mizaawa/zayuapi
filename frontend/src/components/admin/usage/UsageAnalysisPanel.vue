@@ -2,7 +2,17 @@
   <section class="usage-analysis">
     <header class="usage-analysis-head">
       <div class="min-w-0">
-        <h2 class="usage-analysis-title">{{ t('usage.analysis.title') }}</h2>
+        <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
+          <h2 class="usage-analysis-title">{{ t('usage.analysis.title') }}</h2>
+          <div
+            v-if="loading"
+            role="status"
+            class="inline-flex items-center gap-1.5 text-xs text-[var(--md-sys-color-on-surface-variant)]"
+          >
+            <LoadingSpinner size="sm" aria-hidden="true" />
+            {{ t('usage.analysis.loading') }}
+          </div>
+        </div>
         <p class="usage-analysis-subtitle">{{ t('usage.analysis.subtitle') }}</p>
       </div>
       <div class="usage-analysis-controls">
@@ -32,7 +42,7 @@
     </header>
 
     <!-- The chart components bring their own cards; inside this panel they sit flat, split by hairlines. -->
-    <div class="usage-analysis-grid">
+    <div class="usage-analysis-grid" :aria-busy="loading">
       <slot />
     </div>
   </section>
@@ -42,6 +52,7 @@
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import DateRangePicker from '@/components/common/DateRangePicker.vue'
+import LoadingSpinner from '@/components/common/LoadingSpinner.vue'
 
 type Granularity = 'day' | 'hour'
 
@@ -49,6 +60,7 @@ const props = defineProps<{
   startDate: string
   endDate: string
   granularity: Granularity
+  loading: boolean
 }>()
 
 const emit = defineEmits<{

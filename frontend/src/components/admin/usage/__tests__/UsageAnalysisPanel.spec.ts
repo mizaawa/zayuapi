@@ -10,7 +10,7 @@ import UsageAnalysisPanel from '../UsageAnalysisPanel.vue'
 
 function mountPanel(granularity: 'day' | 'hour' = 'day') {
   return mount(UsageAnalysisPanel, {
-    props: { startDate: '2026-10-01', endDate: '2026-10-29', granularity },
+    props: { startDate: '2026-10-01', endDate: '2026-10-29', granularity, loading: false },
     slots: { default: '<div class="card">chart</div>' },
     global: { stubs: { DateRangePicker: { template: '<div data-testid="range" />' } } },
   })
@@ -27,6 +27,20 @@ describe('UsageAnalysisPanel', () => {
     await wrapper.get('[data-testid="usage-granularity-hour"]').trigger('click')
     expect(wrapper.emitted('update:granularity')).toEqual([['hour']])
     expect(wrapper.emitted('granularityChange')).toEqual([['hour']])
+  })
+
+  it('shows a loading status without hiding charts or range controls', async () => {
+    const wrapper = mountPanel()
+    expect(wrapper.find('[role="status"]').exists()).toBe(false)
+    await wrapper.setProps({ loading: true })
+    expect(wrapper.get('header [role="status"]').text()).toContain('usage.analysis.loading')
+    expect(wrapper.get('header .animate-spin').attributes('aria-hidden')).toBe('true')
+    expect(wrapper.get('.usage-analysis-grid').attributes('aria-busy')).toBe('true')
+    expect(wrapper.get('.usage-analysis-grid').text()).toContain('chart')
+    expect(wrapper.get('[data-testid="range"]').isVisible()).toBe(true)
+    await wrapper.setProps({ loading: false })
+    expect(wrapper.find('[role="status"]').exists()).toBe(false)
+    expect(wrapper.get('.usage-analysis-grid').attributes('aria-busy')).toBe('false')
   })
 
   it('renders the charts it is given inside the panel', () => {

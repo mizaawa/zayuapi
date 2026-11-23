@@ -419,6 +419,7 @@ export default {
     summaryRange: '所选范围',
     analysis: {
       title: '用量分析',
+      loading: '正在统计用量…',
       subtitle: '按模型、分组、端点与时间拆分所选范围',
     },
     filtersTitle: '筛选条件',

@@ -34,7 +34,7 @@
           <Icon name="bolt" size="xs" />
           {{ latencyLabel }}
         </span>
-        <span class="monitor-row-uptime" :class="`is-${uptimeTone}`">{{ uptimeLabel }}</span>
+        <span class="monitor-row-uptime text-primary-800">{{ uptimeLabel }}</span>
       </div>
     </div>
 
@@ -117,13 +117,6 @@ const uptimeLabel = computed(() => {
   return t('channelStatus.uptime', { value: formatted })
 })
 
-const uptimeTone = computed(() => {
-  const value = uptimeValue.value
-  if (value === null) return 'unknown'
-  if (value >= 99) return 'good'
-  if (value >= 95) return 'warn'
-  return 'bad'
-})
 </script>
 
 <style scoped>
@@ -214,11 +207,6 @@ const uptimeTone = computed(() => {
   font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
-
-.monitor-row-uptime.is-good { color: var(--monitor-ok-ink); }
-.monitor-row-uptime.is-warn { color: var(--monitor-warn-ink); }
-.monitor-row-uptime.is-bad { color: var(--monitor-down-ink); }
-.monitor-row-uptime.is-unknown { font-weight: 600; color: #9b8c62; }
 
 .monitor-row-timeline {
   margin-top: 0.75rem;

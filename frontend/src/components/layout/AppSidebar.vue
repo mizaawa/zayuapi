@@ -1136,11 +1136,10 @@ onBeforeUnmount(() => {
   padding: 0.625rem;
   border: 1px solid transparent;
   border-radius: 1.25rem;
-  background: color-mix(in srgb, var(--md-sys-color-primary) 14%, var(--md-sys-color-surface));
+  background: var(--md-sys-color-background);
   box-shadow:
     0 0.9rem 1.7rem rgb(63 52 32 / 0.12),
     0 0.3rem 0.75rem rgb(63 52 32 / 0.06);
-  backdrop-filter: blur(14px) saturate(135%);
 }
 
 .sidebar-footer {
@@ -1152,11 +1151,10 @@ onBeforeUnmount(() => {
   padding: 0.375rem;
   border: 1px solid transparent;
   border-radius: 1.25rem;
-  background: color-mix(in srgb, var(--md-sys-color-primary) 14%, var(--md-sys-color-surface));
+  background: var(--md-sys-color-background);
   box-shadow:
     0 -0.9rem 1.7rem rgb(63 52 32 / 0.08),
     0 -0.3rem 0.75rem rgb(63 52 32 / 0.05);
-  backdrop-filter: blur(14px) saturate(135%);
 }
 
 .sidebar-footer-collapsed {
@@ -1164,9 +1162,8 @@ onBeforeUnmount(() => {
   left: 0.5rem;
 }
 
-.admin-panel-toggle {
-  border-color: transparent;
-  background: color-mix(in srgb, var(--md-sys-color-surface-container) 82%, var(--md-sys-color-primary));
+.admin-panel-toggle:not(.sidebar-link-active):not(:hover) {
+  background: var(--md-sys-color-surface-container);
 }
 
 .admin-panel-section,
@@ -1174,7 +1171,7 @@ onBeforeUnmount(() => {
   padding: 0.55rem;
   border: 1px solid transparent;
   border-radius: 1.25rem;
-  background: color-mix(in srgb, var(--md-sys-color-surface) 58%, var(--md-sys-color-surface-container-high));
+  background: var(--md-sys-color-surface-container);
 }
 
 .sidebar-submenu { border: 0; }

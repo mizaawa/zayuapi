@@ -1666,12 +1666,8 @@ func (s *GeminiMessagesCompatService) ForwardNative(ctx context.Context, c *gin.
 			Detail:             upstreamDetail,
 		})
 
-		contentType := resp.Header.Get("Content-Type")
-		if contentType == "" {
-			contentType = "application/json"
-		}
 		MarkResponseCommitted(c)
-		c.Data(resp.StatusCode, contentType, respBody)
+		c.Data(resp.StatusCode, "application/json", sanitizeUpstreamClientErrorBody(respBody, account))
 		if upstreamMsg == "" {
 			return nil, fmt.Errorf("gemini upstream error: %d", resp.StatusCode)
 		}
@@ -2680,9 +2676,10 @@ func estimateTokensForText(s string) int {
 }
 
 type UpstreamHTTPResult struct {
-	StatusCode int
-	Headers    http.Header
-	Body       []byte
+	StatusCode        int
+	Headers           http.Header
+	Body              []byte
+	InsufficientScope bool
 }
 
 func (s *GeminiMessagesCompatService) handleNativeNonStreamingResponse(c *gin.Context, resp *http.Response, isOAuth bool, modelOverride ...string) (*ClaudeUsage, error) {
@@ -2925,15 +2922,18 @@ func (s *GeminiMessagesCompatService) ForwardAIStudioGET(ctx context.Context, ac
 	defer func() { _ = resp.Body.Close() }()
 
 	body, _ := io.ReadAll(io.LimitReader(resp.Body, 8<<20))
-	wwwAuthenticate := resp.Header.Get("Www-Authenticate")
-	filteredHeaders := responseheaders.FilterHeaders(resp.Header, s.responseHeaderFilter)
-	if wwwAuthenticate != "" {
-		filteredHeaders.Set("Www-Authenticate", wwwAuthenticate)
+	insufficientScope := isGeminiInsufficientScope(resp.Header, body)
+	if resp.StatusCode >= http.StatusBadRequest {
+		body = sanitizeUpstreamClientErrorBody(body, account)
 	}
+	filteredHeaders := responseheaders.FilterHeaders(resp.Header, s.responseHeaderFilter)
+	filteredHeaders.Del("Location")
+	filteredHeaders.Del("Www-Authenticate")
 	return &UpstreamHTTPResult{
-		StatusCode: resp.StatusCode,
-		Headers:    filteredHeaders,
-		Body:       body,
+		StatusCode:        resp.StatusCode,
+		Headers:           filteredHeaders,
+		Body:              body,
+		InsufficientScope: insufficientScope,
 	}, nil
 }
 

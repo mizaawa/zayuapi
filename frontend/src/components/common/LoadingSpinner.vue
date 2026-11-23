@@ -1,6 +1,6 @@
 <template>
   <div
-    :class="['spinner', sizeClasses, colorClass]"
+    :class="['spinner animate-spin motion-reduce:animate-none', sizeClasses, colorClass]"
     role="status"
     :aria-label="t('common.loading')"
   >
@@ -51,15 +51,5 @@ const colorClass = computed(() => {
 <style scoped>
 .spinner {
   @apply inline-block rounded-full border-solid border-current border-r-transparent;
-  animation: spin 0.75s linear infinite;
-}
-
-@keyframes spin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
 }
 </style>

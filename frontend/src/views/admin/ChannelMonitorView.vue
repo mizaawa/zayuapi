@@ -52,7 +52,7 @@
           </template>
 
           <template #cell-availability_7d="{ row }">
-            <span class="text-sm text-gray-900 dark:text-gray-100">{{ formatAvailability(row) }}</span>
+            <span class="text-sm text-primary-800">{{ formatAvailability(row) }}</span>
           </template>
 
           <template #cell-latency="{ row }">

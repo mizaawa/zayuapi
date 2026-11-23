@@ -736,7 +736,7 @@ func shouldFallbackGeminiModels(res *service.UpstreamHTTPResult) bool {
 	if res.StatusCode != http.StatusUnauthorized && res.StatusCode != http.StatusForbidden {
 		return false
 	}
-	if strings.Contains(strings.ToLower(res.Headers.Get("Www-Authenticate")), "insufficient_scope") {
+	if res.InsufficientScope || strings.Contains(strings.ToLower(res.Headers.Get("Www-Authenticate")), "insufficient_scope") {
 		return true
 	}
 	if strings.Contains(strings.ToLower(string(res.Body)), "insufficient authentication scopes") {

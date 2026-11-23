@@ -326,9 +326,7 @@ func (r *channelMonitorRepository) InsertHistoryBatch(ctx context.Context, rows 
 			SetStatus(channelmonitorhistory.Status(row.Status)).
 			SetMessage(row.Message).
 			SetCheckedAt(row.CheckedAt)
-		if row.LatencyMs != nil {
-			c = c.SetLatencyMs(*row.LatencyMs)
-		}
+		c = c.SetNillableFirstTokenMs(row.LatencyMs).SetNillableLatencyMs(row.DurationMs)
 		if row.PingLatencyMs != nil {
 			c = c.SetPingLatencyMs(*row.PingLatencyMs)
 		}
@@ -367,7 +365,8 @@ func (r *channelMonitorRepository) ListHistory(ctx context.Context, monitorID in
 			ID:            row.ID,
 			Model:         row.Model,
 			Status:        string(row.Status),
-			LatencyMs:     row.LatencyMs,
+			LatencyMs:     row.FirstTokenMs,
+			DurationMs:    row.LatencyMs,
 			PingLatencyMs: row.PingLatencyMs,
 			Message:       row.Message,
 			CheckedAt:     row.CheckedAt,
@@ -384,7 +383,7 @@ func (r *channelMonitorRepository) ListHistory(ctx context.Context, monitorID in
 func (r *channelMonitorRepository) ListLatestPerModel(ctx context.Context, monitorID int64) ([]*service.ChannelMonitorLatest, error) {
 	const q = `
 		SELECT DISTINCT ON (model)
-		    model, status, latency_ms, ping_latency_ms, checked_at
+		    model, status, first_token_ms, ping_latency_ms, checked_at
 		FROM channel_monitor_histories
 		WHERE monitor_id = $1
 		ORDER BY model, checked_at DESC
@@ -433,9 +432,7 @@ func (r *channelMonitorRepository) ComputeAvailability(ctx context.Context, moni
 		SELECT model,
 		       COUNT(*)                                                             AS total,
 		       COUNT(*) FILTER (WHERE status IN ('operational','degraded'))         AS ok,
-		       CASE WHEN COUNT(latency_ms) > 0
-		            THEN SUM(latency_ms) FILTER (WHERE latency_ms IS NOT NULL)::float8 / COUNT(latency_ms)
-		            ELSE NULL END                                                   AS avg_latency_ms
+		       AVG(first_token_ms)::float8 AS avg_latency_ms
 		FROM channel_monitor_histories
 		WHERE monitor_id = $1
 		  AND checked_at >= NOW() - ($2::int || ' days')::interval
@@ -491,7 +488,7 @@ func (r *channelMonitorRepository) ListLatestForMonitorIDs(ctx context.Context, 
 	}
 	const q = `
 		SELECT DISTINCT ON (monitor_id, model)
-		    monitor_id, model, status, latency_ms, ping_latency_ms, checked_at
+		    monitor_id, model, status, first_token_ms, ping_latency_ms, checked_at
 		FROM channel_monitor_histories
 		WHERE monitor_id = ANY($1)
 		ORDER BY monitor_id, model, checked_at DESC
@@ -547,6 +544,7 @@ func (r *channelMonitorRepository) ListRecentHistoryForMonitors(
 		ranked AS (
 		    SELECT h.monitor_id,
 		           h.status,
+		           h.first_token_ms,
 		           h.latency_ms,
 		           h.ping_latency_ms,
 		           h.checked_at,
@@ -555,7 +553,7 @@ func (r *channelMonitorRepository) ListRecentHistoryForMonitors(
 		    JOIN targets t
 		      ON t.monitor_id = h.monitor_id AND t.model = h.model
 		)
-		SELECT monitor_id, status, latency_ms, ping_latency_ms, checked_at
+		SELECT monitor_id, status, first_token_ms, latency_ms, ping_latency_ms, checked_at
 		FROM ranked
 		WHERE rn <= $3
 		ORDER BY monitor_id, checked_at DESC
@@ -569,11 +567,12 @@ func (r *channelMonitorRepository) ListRecentHistoryForMonitors(
 	for rows.Next() {
 		var monitorID int64
 		entry := &service.ChannelMonitorHistoryEntry{}
-		var latency, ping sql.NullInt64
-		if err := rows.Scan(&monitorID, &entry.Status, &latency, &ping, &entry.CheckedAt); err != nil {
+		var latency, duration, ping sql.NullInt64
+		if err := rows.Scan(&monitorID, &entry.Status, &latency, &duration, &ping, &entry.CheckedAt); err != nil {
 			return nil, fmt.Errorf("scan recent history row: %w", err)
 		}
 		assignNullInt(&entry.LatencyMs, latency)
+		assignNullInt(&entry.DurationMs, duration)
 		assignNullInt(&entry.PingLatencyMs, ping)
 		out[monitorID] = append(out[monitorID], entry)
 	}
@@ -635,9 +634,7 @@ func (r *channelMonitorRepository) ComputeAvailabilityForMonitors(ctx context.Co
 		       model,
 		       COUNT(*)                                                             AS total,
 		       COUNT(*) FILTER (WHERE status IN ('operational','degraded'))         AS ok,
-		       CASE WHEN COUNT(latency_ms) > 0
-		            THEN SUM(latency_ms) FILTER (WHERE latency_ms IS NOT NULL)::float8 / COUNT(latency_ms)
-		            ELSE NULL END                                                   AS avg_latency_ms
+		       AVG(first_token_ms)::float8 AS avg_latency_ms
 		FROM channel_monitor_histories
 		WHERE monitor_id = ANY($1)
 		  AND checked_at >= NOW() - ($2::int || ' days')::interval

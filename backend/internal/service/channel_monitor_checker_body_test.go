@@ -188,8 +188,8 @@ func TestRunCheckForModel_OpenAI_DefaultChatRequest(t *testing.T) {
 	if _, ok := h.lastBody["instructions"]; ok {
 		t.Error("chat body must not contain top-level instructions")
 	}
-	if h.lastBody["stream"] != false {
-		t.Errorf("chat body should set stream=false, got %v", h.lastBody["stream"])
+	if h.lastBody["stream"] != true {
+		t.Errorf("chat body should set stream=true, got %v", h.lastBody["stream"])
 	}
 	if h.lastHeaders.Get("Authorization") != "Bearer sk-openai" {
 		t.Errorf("expected bearer auth header, got %q", h.lastHeaders.Get("Authorization"))
@@ -223,8 +223,8 @@ func TestRunCheckForModel_Grok_DefaultChatRequest(t *testing.T) {
 	if res.Status != MonitorStatusOperational {
 		t.Fatalf("Grok request should pass challenge, got status=%s message=%q", res.Status, res.Message)
 	}
-	if res.LatencyMs == nil {
-		t.Fatal("Grok request should record latency")
+	if res.DurationMs == nil || res.LatencyMs != nil {
+		t.Fatal("buffered JSON has elapsed time, but no measured first token")
 	}
 	if h.lastPath != providerGrokPath {
 		t.Fatalf("expected Grok chat completions path %q, got %q", providerGrokPath, h.lastPath)
@@ -235,8 +235,8 @@ func TestRunCheckForModel_Grok_DefaultChatRequest(t *testing.T) {
 	if _, ok := h.lastBody["messages"]; !ok {
 		t.Error("Grok body should contain messages")
 	}
-	if h.lastBody["stream"] != false {
-		t.Errorf("Grok body should set stream=false, got %v", h.lastBody["stream"])
+	if h.lastBody["stream"] != true {
+		t.Errorf("Grok body should set stream=true, got %v", h.lastBody["stream"])
 	}
 	if h.lastHeaders.Get("Authorization") != "Bearer xai-key" {
 		t.Errorf("expected Grok bearer auth header, got %q", h.lastHeaders.Get("Authorization"))
@@ -255,7 +255,7 @@ func TestRunCheckForModel_Grok_UpstreamFailure(t *testing.T) {
 	if !strings.Contains(res.Message, "upstream HTTP 429") {
 		t.Fatalf("Grok failure should preserve upstream status, got %q", res.Message)
 	}
-	if res.LatencyMs == nil {
+	if res.DurationMs == nil {
 		t.Fatal("Grok failure should still record latency")
 	}
 }
@@ -447,8 +447,8 @@ func TestRunCheckForModel_Custom_DefaultChatRequest(t *testing.T) {
 	if _, ok := h.lastBody["messages"]; !ok {
 		t.Error("custom body should contain messages")
 	}
-	if h.lastBody["stream"] != false {
-		t.Errorf("custom body should set stream=false, got %v", h.lastBody["stream"])
+	if h.lastBody["stream"] != true {
+		t.Errorf("custom body should set stream=true, got %v", h.lastBody["stream"])
 	}
 	if h.lastHeaders.Get("Authorization") != "Bearer custom-key" {
 		t.Errorf("expected custom bearer auth header, got %q", h.lastHeaders.Get("Authorization"))
@@ -554,8 +554,8 @@ func TestRunCheckForModel_OpenAIResponses_DefaultRequest(t *testing.T) {
 	if _, ok := h.lastBody["messages"]; ok {
 		t.Error("responses body must not contain chat messages")
 	}
-	if h.lastBody["stream"] != false {
-		t.Errorf("responses body should set stream=false, got %v", h.lastBody["stream"])
+	if h.lastBody["stream"] != true {
+		t.Errorf("responses body should set stream=true, got %v", h.lastBody["stream"])
 	}
 	if h.lastHeaders.Get("Authorization") != "Bearer sk-openai" {
 		t.Errorf("expected bearer auth header, got %q", h.lastHeaders.Get("Authorization"))

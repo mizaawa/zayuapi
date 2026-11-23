@@ -320,7 +320,7 @@ func (s *OpenAIGatewayService) RecordUsage(ctx context.Context, input *OpenAIRec
 	if requestID == "" {
 		requestID = resolveUsageBillingRequestID(ctx, result.RequestID)
 	}
-	if result.OpenAIWSMode {
+	if result.OpenAIWSMode && strings.TrimSpace(input.BillingRequestID) == "" {
 		if upstreamRequestID := strings.TrimSpace(result.RequestID); upstreamRequestID != "" {
 			requestID = upstreamRequestID
 		}

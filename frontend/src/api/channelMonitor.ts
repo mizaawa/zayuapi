@@ -15,6 +15,7 @@ export interface UserMonitorExtraModel {
 }
 
 export interface MonitorTimelinePoint {
+  duration_ms?: number | null
   status: MonitorStatus
   latency_ms: number | null
   ping_latency_ms: number | null

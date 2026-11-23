@@ -89,7 +89,7 @@ func TestGeminiRelayFollowsVerifiedProtocolAndSwitchesBack(t *testing.T) {
 		require.NoError(t, err)
 		b, err := io.ReadAll(r.Body)
 		require.NoError(t, err)
-		r.Body.Close()
+		_ = r.Body.Close()
 		require.Equal(t, want, paths)
 		u := extractGeminiUsage(b)
 		require.NotNil(t, u)
@@ -159,7 +159,7 @@ func TestGeminiResponsesOnlyRelayIsRemembered(t *testing.T) {
 		require.NoError(t, err)
 		b, err := io.ReadAll(r.Body)
 		require.NoError(t, err)
-		r.Body.Close()
+		_ = r.Body.Close()
 		require.Equal(t, providerOpenAIResponsesPath, geminiNegotiatedEndpoint(r))
 		require.Contains(t, string(b), `"thoughtsTokenCount":2`)
 		if i == 0 {

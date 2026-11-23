@@ -112,7 +112,7 @@ func geminiRelayRequest(account *Account, model string, native *http.Request, do
 		if err != nil {
 			return nil
 		}
-		defer r.Close()
+		defer func() { _ = r.Close() }()
 		payload, ok := geminiTextToRelayChat(r, model)
 		if !ok {
 			return nil
@@ -229,7 +229,7 @@ func geminiTextToRelayChat(r io.Reader, model string) ([]byte, bool) {
 			if len(p) != 1 || json.Unmarshal(p["text"], &t) != nil {
 				return false
 			}
-			text.WriteString(t)
+			_, _ = text.WriteString(t)
 		}
 		messages = append(messages, map[string]string{"role": role, "content": text.String()})
 		return true
@@ -284,8 +284,8 @@ func geminiTextToRelayChat(r io.Reader, model string) ([]byte, bool) {
 	return b, err == nil
 }
 
-var errGeminiRelayReceipt = errors.New("Gemini relay returned an invalid or unmetered Chat Completions response")
-var errGeminiRelayUncertain = errors.New("Gemini relay generation outcome is unknown")
+var errGeminiRelayReceipt = errors.New("gemini relay returned an invalid or unmetered Chat Completions response")
+var errGeminiRelayUncertain = errors.New("gemini relay generation outcome is unknown")
 
 type geminiRelayBody struct {
 	io.ReadCloser
@@ -308,7 +308,7 @@ func (s *GeminiMessagesCompatService) doGeminiGeneration(account *Account, model
 // Buffer an OA-only relay's receipt before releasing text. A caller disabling
 // usage reporting (or disconnecting) must not control whether a bill is issued.
 func normalizeGeminiRelayResponse(resp *http.Response, stream bool, path string) (*http.Response, error) {
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	const limit = 16 << 20
 	b, err := io.ReadAll(io.LimitReader(resp.Body, limit+1))
 	if err != nil || len(b) > limit || !gjson.ValidBytes(b) {

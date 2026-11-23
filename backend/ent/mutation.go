@@ -18778,6 +18778,8 @@ type ChannelMonitorHistoryMutation struct {
 	status             *channelmonitorhistory.Status
 	latency_ms         *int
 	addlatency_ms      *int
+	first_token_ms     *int
+	addfirst_token_ms  *int
 	ping_latency_ms    *int
 	addping_latency_ms *int
 	message            *string
@@ -19066,6 +19068,76 @@ func (m *ChannelMonitorHistoryMutation) ResetLatencyMs() {
 	delete(m.clearedFields, channelmonitorhistory.FieldLatencyMs)
 }
 
+// SetFirstTokenMs sets the "first_token_ms" field.
+func (m *ChannelMonitorHistoryMutation) SetFirstTokenMs(i int) {
+	m.first_token_ms = &i
+	m.addfirst_token_ms = nil
+}
+
+// FirstTokenMs returns the value of the "first_token_ms" field in the mutation.
+func (m *ChannelMonitorHistoryMutation) FirstTokenMs() (r int, exists bool) {
+	v := m.first_token_ms
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldFirstTokenMs returns the old "first_token_ms" field's value of the ChannelMonitorHistory entity.
+// If the ChannelMonitorHistory object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ChannelMonitorHistoryMutation) OldFirstTokenMs(ctx context.Context) (v *int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldFirstTokenMs is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldFirstTokenMs requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldFirstTokenMs: %w", err)
+	}
+	return oldValue.FirstTokenMs, nil
+}
+
+// AddFirstTokenMs adds i to the "first_token_ms" field.
+func (m *ChannelMonitorHistoryMutation) AddFirstTokenMs(i int) {
+	if m.addfirst_token_ms != nil {
+		*m.addfirst_token_ms += i
+	} else {
+		m.addfirst_token_ms = &i
+	}
+}
+
+// AddedFirstTokenMs returns the value that was added to the "first_token_ms" field in this mutation.
+func (m *ChannelMonitorHistoryMutation) AddedFirstTokenMs() (r int, exists bool) {
+	v := m.addfirst_token_ms
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ClearFirstTokenMs clears the value of the "first_token_ms" field.
+func (m *ChannelMonitorHistoryMutation) ClearFirstTokenMs() {
+	m.first_token_ms = nil
+	m.addfirst_token_ms = nil
+	m.clearedFields[channelmonitorhistory.FieldFirstTokenMs] = struct{}{}
+}
+
+// FirstTokenMsCleared returns if the "first_token_ms" field was cleared in this mutation.
+func (m *ChannelMonitorHistoryMutation) FirstTokenMsCleared() bool {
+	_, ok := m.clearedFields[channelmonitorhistory.FieldFirstTokenMs]
+	return ok
+}
+
+// ResetFirstTokenMs resets all changes to the "first_token_ms" field.
+func (m *ChannelMonitorHistoryMutation) ResetFirstTokenMs() {
+	m.first_token_ms = nil
+	m.addfirst_token_ms = nil
+	delete(m.clearedFields, channelmonitorhistory.FieldFirstTokenMs)
+}
+
 // SetPingLatencyMs sets the "ping_latency_ms" field.
 func (m *ChannelMonitorHistoryMutation) SetPingLatencyMs(i int) {
 	m.ping_latency_ms = &i
@@ -19282,7 +19354,7 @@ func (m *ChannelMonitorHistoryMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *ChannelMonitorHistoryMutation) Fields() []string {
-	fields := make([]string, 0, 7)
+	fields := make([]string, 0, 8)
 	if m.monitor != nil {
 		fields = append(fields, channelmonitorhistory.FieldMonitorID)
 	}
@@ -19294,6 +19366,9 @@ func (m *ChannelMonitorHistoryMutation) Fields() []string {
 	}
 	if m.latency_ms != nil {
 		fields = append(fields, channelmonitorhistory.FieldLatencyMs)
+	}
+	if m.first_token_ms != nil {
+		fields = append(fields, channelmonitorhistory.FieldFirstTokenMs)
 	}
 	if m.ping_latency_ms != nil {
 		fields = append(fields, channelmonitorhistory.FieldPingLatencyMs)
@@ -19320,6 +19395,8 @@ func (m *ChannelMonitorHistoryMutation) Field(name string) (ent.Value, bool) {
 		return m.Status()
 	case channelmonitorhistory.FieldLatencyMs:
 		return m.LatencyMs()
+	case channelmonitorhistory.FieldFirstTokenMs:
+		return m.FirstTokenMs()
 	case channelmonitorhistory.FieldPingLatencyMs:
 		return m.PingLatencyMs()
 	case channelmonitorhistory.FieldMessage:
@@ -19343,6 +19420,8 @@ func (m *ChannelMonitorHistoryMutation) OldField(ctx context.Context, name strin
 		return m.OldStatus(ctx)
 	case channelmonitorhistory.FieldLatencyMs:
 		return m.OldLatencyMs(ctx)
+	case channelmonitorhistory.FieldFirstTokenMs:
+		return m.OldFirstTokenMs(ctx)
 	case channelmonitorhistory.FieldPingLatencyMs:
 		return m.OldPingLatencyMs(ctx)
 	case channelmonitorhistory.FieldMessage:
@@ -19386,6 +19465,13 @@ func (m *ChannelMonitorHistoryMutation) SetField(name string, value ent.Value) e
 		}
 		m.SetLatencyMs(v)
 		return nil
+	case channelmonitorhistory.FieldFirstTokenMs:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetFirstTokenMs(v)
+		return nil
 	case channelmonitorhistory.FieldPingLatencyMs:
 		v, ok := value.(int)
 		if !ok {
@@ -19418,6 +19504,9 @@ func (m *ChannelMonitorHistoryMutation) AddedFields() []string {
 	if m.addlatency_ms != nil {
 		fields = append(fields, channelmonitorhistory.FieldLatencyMs)
 	}
+	if m.addfirst_token_ms != nil {
+		fields = append(fields, channelmonitorhistory.FieldFirstTokenMs)
+	}
 	if m.addping_latency_ms != nil {
 		fields = append(fields, channelmonitorhistory.FieldPingLatencyMs)
 	}
@@ -19431,6 +19520,8 @@ func (m *ChannelMonitorHistoryMutation) AddedField(name string) (ent.Value, bool
 	switch name {
 	case channelmonitorhistory.FieldLatencyMs:
 		return m.AddedLatencyMs()
+	case channelmonitorhistory.FieldFirstTokenMs:
+		return m.AddedFirstTokenMs()
 	case channelmonitorhistory.FieldPingLatencyMs:
 		return m.AddedPingLatencyMs()
 	}
@@ -19449,6 +19540,13 @@ func (m *ChannelMonitorHistoryMutation) AddField(name string, value ent.Value) e
 		}
 		m.AddLatencyMs(v)
 		return nil
+	case channelmonitorhistory.FieldFirstTokenMs:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddFirstTokenMs(v)
+		return nil
 	case channelmonitorhistory.FieldPingLatencyMs:
 		v, ok := value.(int)
 		if !ok {
@@ -19466,6 +19564,9 @@ func (m *ChannelMonitorHistoryMutation) ClearedFields() []string {
 	var fields []string
 	if m.FieldCleared(channelmonitorhistory.FieldLatencyMs) {
 		fields = append(fields, channelmonitorhistory.FieldLatencyMs)
+	}
+	if m.FieldCleared(channelmonitorhistory.FieldFirstTokenMs) {
+		fields = append(fields, channelmonitorhistory.FieldFirstTokenMs)
 	}
 	if m.FieldCleared(channelmonitorhistory.FieldPingLatencyMs) {
 		fields = append(fields, channelmonitorhistory.FieldPingLatencyMs)
@@ -19489,6 +19590,9 @@ func (m *ChannelMonitorHistoryMutation) ClearField(name string) error {
 	switch name {
 	case channelmonitorhistory.FieldLatencyMs:
 		m.ClearLatencyMs()
+		return nil
+	case channelmonitorhistory.FieldFirstTokenMs:
+		m.ClearFirstTokenMs()
 		return nil
 	case channelmonitorhistory.FieldPingLatencyMs:
 		m.ClearPingLatencyMs()
@@ -19515,6 +19619,9 @@ func (m *ChannelMonitorHistoryMutation) ResetField(name string) error {
 		return nil
 	case channelmonitorhistory.FieldLatencyMs:
 		m.ResetLatencyMs()
+		return nil
+	case channelmonitorhistory.FieldFirstTokenMs:
+		m.ResetFirstTokenMs()
 		return nil
 	case channelmonitorhistory.FieldPingLatencyMs:
 		m.ResetPingLatencyMs()

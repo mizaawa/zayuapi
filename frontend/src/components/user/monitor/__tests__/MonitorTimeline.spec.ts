@@ -168,7 +168,7 @@ describe('MonitorTimeline', () => {
 
   it('pins a tapped check and puts it away on a second tap or a tap elsewhere', async () => {
     const wrapper = mount(MonitorTimeline, {
-      props: { length: 4, buckets: [point('failed', 4, 2_100), point('operational', 3, 800)] },
+      props: { length: 4, buckets: [{ ...point('failed', 4), latency_ms: null, duration_ms: 2_100 }, point('operational', 3, 800)] },
     })
     const bar = stubBarWidth(wrapper, 80)
 

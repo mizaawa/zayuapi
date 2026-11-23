@@ -94,6 +94,11 @@ vi.mock('@/stores/app', () => ({
   useAppStore: () => ({ showError, showWarning, showSuccess, showInfo }),
 }))
 
+vi.mock('vue-chartjs', async (importOriginal) => ({
+  ...await importOriginal<typeof import('vue-chartjs')>(),
+  Line: { template: '<div data-testid="trend-line" />' },
+}))
+
 vi.mock('file-saver', () => ({ saveAs }))
 
 vi.mock('xlsx', () => ({
@@ -160,7 +165,7 @@ function deferred<T>() {
   return { promise, resolve, reject }
 }
 
-function mountUsageView() {
+function mountUsageView({ renderTrend = false } = {}) {
   return mount(UsageView, {
     global: {
       stubs: {
@@ -174,7 +179,7 @@ function mountUsageView() {
         ModelDistributionChart: chartStub,
         GroupDistributionChart: chartStub,
         EndpointDistributionChart: chartStub,
-        TokenUsageTrend: chartStub,
+        TokenUsageTrend: renderTrend ? false : chartStub,
       },
     },
   })
@@ -282,6 +287,31 @@ describe('user UsageView', () => {
     await flushPromises()
     expect((restored.vm as any).visibleColumns.map((column: { key: string }) => column.key)).not.toContain('cache_hit_rate')
     restored.unmount()
+  })
+
+  it.each(['data', 'empty', 'error'] as const)('shows progress until a slow chart settles with %s', async (outcome) => {
+    const slowTrend = deferred<{ trend: typeof trend }>()
+    getDashboardSnapshotV2.mockImplementation((params) => params.include_trend
+      ? slowTrend.promise
+      : Promise.resolve({ models: modelStats, groups: groupStats }))
+    const wrapper = mountUsageView({ renderTrend: true })
+    await flushPromises()
+    const panel = wrapper.get('.usage-analysis')
+    expect(panel.get('header [role="status"]').text()).toContain('usage.analysis.loading')
+    expect(panel.get('.usage-analysis-grid').attributes('aria-busy')).toBe('true')
+    expect(panel.text()).not.toContain('admin.dashboard.noDataAvailable')
+    expect((wrapper.vm as any).requestedModelStats).toEqual(modelStats)
+    expect((wrapper.vm as any).usageLogs).toEqual([usageLog])
+
+    if (outcome === 'error') slowTrend.reject({ status: 400 })
+    else slowTrend.resolve({ trend: outcome === 'empty' ? [] : trend })
+    await flushPromises()
+    expect(panel.find('header [role="status"]').exists()).toBe(false)
+    expect(panel.get('.usage-analysis-grid').attributes('aria-busy')).toBe('false')
+    expect(wrapper.find('[data-usage-error="trend"]').exists()).toBe(outcome === 'error')
+    if (outcome === 'empty') expect(panel.text()).toContain('admin.dashboard.noDataAvailable')
+    if (outcome === 'data') expect(panel.find('[data-testid="trend-line"]').exists()).toBe(true)
+    wrapper.unmount()
   })
 
   it('loads logs without counting history and loads each chart independently', async () => {

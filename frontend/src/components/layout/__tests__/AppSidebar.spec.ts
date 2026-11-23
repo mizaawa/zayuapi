@@ -158,6 +158,17 @@ describe('AppSidebar console appearance', () => {
     expect(collapsedBlock).toContain('padding-right: 0;')
   })
 
+  it('uses an opaque page-colored mobile drawer and exposes the page canvas on desktop', () => {
+    const pageColor = 'background-color: var(--md-sys-color-background);'
+    expect(layoutSource.match(/\.app-shell\s*\{([^}]+)\}/)?.[1]).toContain(pageColor)
+    expect(styleSource.match(/\.sidebar-nav\s*\{([^}]+)\}/)?.[1]).toContain(pageColor)
+    expect(styleSource).toMatch(/@screen lg\s*\{[^}]*\.sidebar-nav\s*\{\s*background-color: transparent;/)
+    for (const panel of ['sidebar-header', 'sidebar-footer']) {
+      const block = componentSource.match(new RegExp(`\\.${panel}\\s*\\{([^}]+)\\}`))?.[1]
+      expect(block).toContain('background: var(--md-sys-color-background);')
+    }
+  })
+
   it('floats matching brand and collapse panels above the scrolling navigation surface', () => {
     expect(componentSource).toContain('class="sidebar-footer"')
     expect(componentSource).toContain("'sidebar-footer-collapsed': sidebarCollapsed")
@@ -165,8 +176,6 @@ describe('AppSidebar console appearance', () => {
     expect(componentSource).toContain('.sidebar-footer-collapsed {')
     expect(componentSource).toContain('top: 0.75rem;')
     expect(componentSource).toContain('bottom: 0.75rem;')
-    expect(componentSource).toContain('backdrop-filter: blur(14px) saturate(135%);')
-    expect(styleSource).toContain('background: transparent;')
     expect(styleSource).toContain('position: absolute;')
     expect(styleSource).toContain('padding: 6.3rem 0.75rem 5rem;')
     expect(componentSource).toContain("sidebarCollapsed ? 'w-[84px]' : 'w-64'")

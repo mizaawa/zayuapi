@@ -11,6 +11,7 @@
         v-model:start-date="startDate"
         v-model:end-date="endDate"
         v-model:granularity="granularity"
+        :loading="modelStatsLoading || groupStatsLoading || endpointStatsLoading || trendLoading"
         @date-range-change="onDateRangeChange"
         @granularity-change="loadTrendData"
       >

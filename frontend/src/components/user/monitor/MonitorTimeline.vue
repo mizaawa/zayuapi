@@ -157,17 +157,16 @@ function describeBar(bar: TimelineBar): MonitorCheckDetail {
   const checkedAt = formatDate(point.checked_at, CHECK_TIME_FORMAT)
   if (checkedAt) rows.push({ label: t('channelStatus.tooltip.checkedAt'), value: checkedAt })
 
-  const latency = formatMonitorLatency(point.latency_ms)
-  if (latency) {
-    // A failed check never produced a usable first token; its time is only
-    // how long the attempt took, so it is labelled and coloured neutrally.
-    const answered = tone !== 'down'
-    const latencyTone = answered ? monitorLatencyTone(point.latency_ms) : 'unknown'
+  const firstToken = formatMonitorLatency(point.latency_ms)
+  if (firstToken) {
+    const tone = monitorLatencyTone(point.latency_ms)
     rows.push({
-      label: t(answered ? 'channelStatus.tooltip.firstToken' : 'channelStatus.tooltip.elapsed'),
-      value: latency,
-      tone: latencyTone === 'warn' || latencyTone === 'bad' ? latencyTone : undefined,
+      label: t('channelStatus.tooltip.firstToken'), value: firstToken,
+      tone: tone === 'warn' || tone === 'bad' ? tone : undefined,
     })
+  } else {
+    const elapsed = formatMonitorLatency(point.duration_ms)
+    if (elapsed) rows.push({ label: t('channelStatus.tooltip.elapsed'), value: elapsed })
   }
 
   return {

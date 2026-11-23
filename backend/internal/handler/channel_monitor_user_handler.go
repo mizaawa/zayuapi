@@ -61,6 +61,7 @@ type channelMonitorUserListItem struct {
 type channelMonitorUserTimelinePoint struct {
 	Status        string `json:"status"`
 	LatencyMs     *int   `json:"latency_ms"`
+	DurationMs    *int   `json:"duration_ms"`
 	PingLatencyMs *int   `json:"ping_latency_ms"`
 	CheckedAt     string `json:"checked_at"`
 }
@@ -98,6 +99,7 @@ func userMonitorViewToItem(v *service.UserMonitorView) channelMonitorUserListIte
 		timeline = append(timeline, channelMonitorUserTimelinePoint{
 			Status:        p.Status,
 			LatencyMs:     p.LatencyMs,
+			DurationMs:    p.DurationMs,
 			PingLatencyMs: p.PingLatencyMs,
 			CheckedAt:     p.CheckedAt.UTC().Format(time.RFC3339),
 		})

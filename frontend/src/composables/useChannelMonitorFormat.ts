@@ -4,7 +4,7 @@
  * Centralises:
  *  - status / provider label + badge class lookups
  *  - latency / availability / percent number formatting
- *  - dashboard-style helpers (HSL for availability, provider gradient, relative time)
+ *  - dashboard-style helpers (provider gradient, relative time)
  *
  * i18n keys live under `monitorCommon.*` so admin and user views share the
  * same translation source.
@@ -25,11 +25,6 @@ import {
 } from '@/constants/channelMonitor'
 
 const NEUTRAL_BADGE = 'bg-gray-100 text-gray-800 dark:bg-dark-700 dark:text-gray-300'
-
-/** Availability HSL hue multiplier: 0%=red(0) / 50%=yellow(60) / 100%=green(120). */
-const HSL_HUE_PER_PERCENT = 1.2
-const HSL_SATURATION = 72
-const HSL_LIGHTNESS = 42
 
 export interface AvailabilityRow {
   primary_status: MonitorStatus | ''
@@ -135,17 +130,6 @@ export function useChannelMonitorFormat() {
     formatAvailability,
     formatRelativeTime,
   }
-}
-
-/**
- * Map availability percent to an HSL colour (red -> yellow -> green).
- * Returns undefined for null/NaN so callers can fall back to a neutral colour.
- */
-export function hslForPct(pct: number | null | undefined): string | undefined {
-  if (pct === null || pct === undefined || Number.isNaN(pct)) return undefined
-  const clamped = Math.max(0, Math.min(100, pct))
-  const hue = clamped * HSL_HUE_PER_PERCENT
-  return `hsl(${hue} ${HSL_SATURATION}% ${HSL_LIGHTNESS}%)`
 }
 
 /**

@@ -8,6 +8,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
+	"mime"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -109,10 +111,11 @@ func runCheckForModel(ctx context.Context, provider, endpoint, apiKey, model str
 	requestSecrets := monitorRequestSecrets(apiKey, opts)
 
 	start := time.Now()
-	respText, rawBody, statusCode, err := callProvider(ctx, provider, endpoint, apiKey, model, challenge.Prompt, opts)
-	latency := time.Since(start)
-	latencyMs := int(latency / time.Millisecond)
-	res.LatencyMs = &latencyMs
+	reply, err := callProvider(ctx, provider, endpoint, apiKey, model, challenge.Prompt, opts, start)
+	duration := int(time.Since(start).Milliseconds())
+	res.DurationMs = &duration
+	res.LatencyMs = reply.firstTokenMs
+	respText, rawBody, statusCode := reply.text, reply.rawBody, reply.status
 
 	if err != nil {
 		res.Status = MonitorStatusError
@@ -142,7 +145,7 @@ func runCheckForModel(ctx context.Context, provider, endpoint, apiKey, model str
 			res.Message = truncateMessage("replace-mode: upstream returned 2xx with empty text")
 			return res
 		}
-		return finalizeOperationalOrDegraded(res, latency, latencyMs)
+		return finalizeOperationalOrDegraded(res)
 	}
 
 	if !validateChallenge(respText, challenge.Expected) {
@@ -154,23 +157,25 @@ func runCheckForModel(ctx context.Context, provider, endpoint, apiKey, model str
 		return res
 	}
 
-	return finalizeOperationalOrDegraded(res, latency, latencyMs)
+	return finalizeOperationalOrDegraded(res)
 }
 
-// finalizeOperationalOrDegraded 负责走到最后一步的耗时状态判定。
-// 拆出来是为了让 runCheckForModel 不超过 30 行。
-func finalizeOperationalOrDegraded(res *CheckResult, latency time.Duration, latencyMs int) *CheckResult {
-	if latency >= monitorFailedThreshold {
-		res.Status = MonitorStatusFailed
-		res.Message = truncateMessage(fmt.Sprintf("response exceeded latency limit: %dms", latencyMs))
-		return res
-	}
-	if latency >= monitorDegradedThreshold {
-		res.Status = MonitorStatusDegraded
-		res.Message = truncateMessage(fmt.Sprintf("slow response: %dms", latencyMs))
-		return res
-	}
+// Only a measured output token can make a valid answer slow. Buffered JSON
+// still verifies availability, but cannot supply an honest streaming TTFT.
+func finalizeOperationalOrDegraded(res *CheckResult) *CheckResult {
 	res.Status = MonitorStatusOperational
+	if res.LatencyMs == nil {
+		return res
+	}
+	ms := *res.LatencyMs
+	switch {
+	case ms >= int(monitorFailedThreshold.Milliseconds()):
+		res.Status = MonitorStatusFailed
+		res.Message = fmt.Sprintf("first token exceeded latency limit: %dms", ms)
+	case ms >= int(monitorDegradedThreshold.Milliseconds()):
+		res.Status = MonitorStatusDegraded
+		res.Message = fmt.Sprintf("slow first token: %dms", ms)
+	}
 	return res
 }
 
@@ -237,6 +242,7 @@ var providerAdapters = map[string]providerAdapter{
 				"model":      model,
 				"messages":   []map[string]string{{"role": "user", "content": prompt}},
 				"max_tokens": monitorChallengeMaxTokens,
+				"stream":     true,
 			})
 		},
 		buildHeaders: func(apiKey string) map[string]string {
@@ -283,7 +289,7 @@ func newOpenAICompatibleChatAdapter(path string) providerAdapter {
 				"model":      model,
 				"messages":   []map[string]string{{"role": "user", "content": prompt}},
 				"max_tokens": monitorChallengeMaxTokens,
-				"stream":     false,
+				"stream":     true,
 			})
 		},
 		buildHeaders: func(apiKey string) map[string]string {
@@ -302,7 +308,7 @@ var providerOpenAIResponsesAdapter = providerAdapter{
 			"instructions":      "You are a channel health-check endpoint. Answer the arithmetic challenge exactly and briefly.",
 			"input":             prompt,
 			"max_output_tokens": monitorChallengeMaxTokens,
-			"stream":            false,
+			"stream":            true,
 		})
 	},
 	buildHeaders: func(apiKey string) map[string]string {
@@ -327,18 +333,17 @@ func isSupportedProvider(p string) bool {
 	return ok
 }
 
-// callProvider 通过 providerAdapters 分发到具体实现。
-// opts 承载用户的自定义 headers / body 覆盖（可为 nil）。
-//
-// 返回值：
-//   - extractedText: 按 textPath 抽出的成功文本，仅在 status 2xx 时有意义；非 2xx 时通常为空串
-//   - rawBody: 完整响应体的字符串形式（已被 monitorResponseMaxBytes 截断），用于错误路径保留上游真实回包
-//   - status: HTTP 状态码
-//   - err: 网络 / 序列化错误
-func callProvider(ctx context.Context, provider, endpoint, apiKey, model, prompt string, opts *CheckOptions) (extractedText, rawBody string, status int, err error) {
+type monitorReply struct {
+	text, rawBody string
+	status        int
+	firstTokenMs  *int
+}
+
+// Keep one start time across protocol negotiation and all output events.
+func callProvider(ctx context.Context, provider, endpoint, apiKey, model, prompt string, opts *CheckOptions, start time.Time) (monitorReply, error) {
 	if provider == MonitorProviderGemini {
 		if err := validateUpstreamPathSegment("gemini model", model); err != nil {
-			return "", "", 0, err
+			return monitorReply{}, err
 		}
 		// Bound group monitors already negotiate on the selected account at the
 		// gateway. Never reinterpret an administrator's custom payload or headers.
@@ -353,32 +358,32 @@ func callProvider(ctx context.Context, provider, endpoint, apiKey, model, prompt
 						candidateOpts = &CheckOptions{APIMode: MonitorAPIModeResponses}
 					}
 				}
-				text, raw, code, err := callMonitorAdapter(ctx, candidate, endpoint, apiKey, model, prompt, candidateOpts)
-				if i < 2 && err == nil && geminiProtocolMismatch(code) && ctx.Err() == nil {
+				reply, err := callMonitorAdapter(ctx, candidate, endpoint, apiKey, model, prompt, candidateOpts, start)
+				if i < 2 && err == nil && geminiProtocolMismatch(reply.status) && ctx.Err() == nil {
 					continue
 				}
-				if err == nil && code >= 200 && code < 300 && strings.TrimSpace(text) != "" {
+				if err == nil && reply.status >= 200 && reply.status < 300 && strings.TrimSpace(reply.text) != "" {
 					rememberGeminiRoute(key, path)
 				}
-				return text, raw, code, err
+				return reply, err
 			}
 		}
 	}
-	return callMonitorAdapter(ctx, provider, endpoint, apiKey, model, prompt, opts)
+	return callMonitorAdapter(ctx, provider, endpoint, apiKey, model, prompt, opts, start)
 }
 
-func callMonitorAdapter(ctx context.Context, provider, endpoint, apiKey, model, prompt string, opts *CheckOptions) (extractedText, rawBody string, status int, err error) {
+func callMonitorAdapter(ctx context.Context, provider, endpoint, apiKey, model, prompt string, opts *CheckOptions, start time.Time) (monitorReply, error) {
 	requestedAPIMode := checkAPIMode(opts)
 	if err := validateAPIMode(provider, requestedAPIMode); err != nil {
-		return "", "", 0, err
+		return monitorReply{}, err
 	}
 	adapter, apiMode, ok := providerAdapterFor(provider, requestedAPIMode)
 	if !ok {
-		return "", "", 0, fmt.Errorf("unsupported provider %q", provider)
+		return monitorReply{}, fmt.Errorf("unsupported provider %q", provider)
 	}
 	body, err := buildRequestBody(adapter, provider, apiMode, model, prompt, opts)
 	if err != nil {
-		return "", "", 0, err
+		return monitorReply{}, err
 	}
 	headers := mergeHeaders(adapter.buildHeaders(apiKey), opts)
 	full := joinURL(endpoint, adapter.buildPath(model))
@@ -387,14 +392,34 @@ func callMonitorAdapter(ctx context.Context, provider, endpoint, apiKey, model, 
 	if opts != nil {
 		attestor = opts.ManagedAttestor
 	}
-	respBytes, status, err := postRawJSON(ctx, full, body, headers, managedGateway, attestor, apiKey)
+	resp, err := postMonitorRequest(ctx, full, body, headers, managedGateway, attestor, apiKey)
 	if err != nil {
-		return "", "", status, err
+		return monitorReply{}, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	reply := monitorReply{status: resp.StatusCode}
+	limited := &io.LimitedReader{R: resp.Body, N: monitorResponseMaxBytes + 1}
+	mediaType, _, _ := mime.ParseMediaType(resp.Header.Get("Content-Type"))
+	if resp.StatusCode >= 200 && resp.StatusCode < 300 && mediaType == "text/event-stream" {
+		return readMonitorStream(limited, reply, provider, apiMode, start)
+	}
+	raw, err := io.ReadAll(limited)
+	if err != nil {
+		return reply, fmt.Errorf("read body: %w", err)
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		reply.rawBody = string(raw)
+		return reply, nil
+	}
+	if limited.N == 0 {
+		return reply, errors.New("monitor response exceeds size limit")
 	}
 	if isMonitorResponsesProvider(provider) && apiMode == MonitorAPIModeResponses {
-		return extractOpenAIResponsesText(respBytes), string(respBytes), status, nil
+		reply.text = extractOpenAIResponsesText(raw)
+	} else {
+		reply.text = extractMonitorResponseText(adapter, raw)
 	}
-	return extractMonitorResponseText(adapter, respBytes), string(respBytes), status, nil
+	return reply, nil
 }
 
 func extractMonitorResponseText(adapter providerAdapter, respBytes []byte) string {
@@ -408,7 +433,7 @@ func extractGeminiMonitorText(body []byte) string {
 	var text strings.Builder
 	gjson.GetBytes(body, "candidates.0.content.parts").ForEach(func(_, part gjson.Result) bool {
 		if !part.Get("thought").Bool() {
-			text.WriteString(part.Get("text").String())
+			_, _ = text.WriteString(part.Get("text").String())
 		}
 		return true
 	})
@@ -514,7 +539,12 @@ func buildRequestBody(adapter providerAdapter, provider, apiMode, model, prompt 
 		if err := validateReplaceRequestBody(provider, apiMode, opts.BodyOverride); err != nil {
 			return nil, err
 		}
-		body, err := json.Marshal(opts.BodyOverride)
+		override := opts.BodyOverride
+		if _, explicit := override["stream"]; !explicit && provider != MonitorProviderGemini {
+			override = maps.Clone(override)
+			override["stream"] = true
+		}
+		body, err := json.Marshal(override)
 		if err != nil {
 			return nil, fmt.Errorf("marshal body_override (replace): %w", err)
 		}
@@ -558,7 +588,7 @@ var bodyMergeKeyDenyList = map[string]map[string]bool{
 	MonitorProviderCustom + ":" + MonitorAPIModeChatCompletions: {"model": true, "messages": true, "stream": true},
 	MonitorProviderCustom + ":" + MonitorAPIModeResponses:       {"model": true, "instructions": true, "input": true, "stream": true},
 	MonitorProviderGrok:      {"model": true, "messages": true, "stream": true},
-	MonitorProviderAnthropic: {"model": true, "messages": true},
+	MonitorProviderAnthropic: {"model": true, "messages": true, "stream": true},
 	MonitorProviderGemini:    {"contents": true},
 }
 
@@ -615,9 +645,8 @@ func hasNonEmptyBodyValue(v any) bool {
 	}
 }
 
-// postRawJSON 发送 POST + 已序列化好的 JSON 字节，限制响应体大小，返回响应字节、HTTP status、错误。
-// adapter 自行 marshal 是为了精确控制字段顺序与类型，所以这里直接收 []byte 而不是 any。
-func postRawJSON(
+// Sign the final payload and preserve the existing redirect and dial policies.
+func postMonitorRequest(
 	ctx context.Context,
 	fullURL string,
 	payload []byte,
@@ -625,19 +654,19 @@ func postRawJSON(
 	managedGateway bool,
 	attestor *ChannelMonitorAttestor,
 	apiKey string,
-) ([]byte, int, error) {
+) (*http.Response, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, fullURL, bytes.NewReader(payload))
 	if err != nil {
-		return nil, 0, fmt.Errorf("build request: %w", err)
+		return nil, fmt.Errorf("build request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Accept", "text/event-stream, application/json")
 	for k, v := range headers {
 		req.Header.Set(k, v)
 	}
 	if managedGateway {
 		if err := attestor.SignRequest(req, apiKey, payload); err != nil {
-			return nil, 0, fmt.Errorf("sign managed request: %w", err)
+			return nil, fmt.Errorf("sign managed request: %w", err)
 		}
 	}
 
@@ -647,15 +676,9 @@ func postRawJSON(
 	}
 	resp, err := client.Do(req)
 	if err != nil {
-		return nil, 0, fmt.Errorf("do request: %w", err)
+		return nil, fmt.Errorf("do request: %w", err)
 	}
-	defer func() { _ = resp.Body.Close() }()
-
-	respBody, err := io.ReadAll(io.LimitReader(resp.Body, monitorResponseMaxBytes))
-	if err != nil {
-		return nil, resp.StatusCode, fmt.Errorf("read body: %w", err)
-	}
-	return respBody, resp.StatusCode, nil
+	return resp, nil
 }
 
 // joinURL 把 base origin 与 path 拼成完整 URL。

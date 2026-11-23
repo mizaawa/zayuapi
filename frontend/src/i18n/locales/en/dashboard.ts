@@ -414,6 +414,7 @@ export default {
     summaryRange: 'Selected range',
     analysis: {
       title: 'Usage analysis',
+      loading: 'Calculating usage…',
       subtitle: 'Break the selected range down by model, group, endpoint and time',
     },
     filtersTitle: 'Filters',

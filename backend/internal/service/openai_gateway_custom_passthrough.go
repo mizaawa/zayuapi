@@ -187,13 +187,11 @@ func (s *OpenAIGatewayService) forwardCustomTransparent(
 	clientDisconnected := false
 	firstTokenMs := (*int)(nil)
 	if stream {
-		usage, responseID, firstTokenMs, clientDisconnected, err = s.forwardCustomStreamResponse(ctx, c, resp, startTime)
+		usage, responseID, firstTokenMs, clientDisconnected, err = s.forwardCustomStreamResponse(ctx, c, resp, startTime, account)
 	} else {
-		usage, responseID, err = s.forwardCustomBufferedResponse(ctx, c, resp)
+		usage, responseID, err = s.forwardCustomBufferedResponse(ctx, c, resp, account)
 	}
-	if err != nil {
-		return nil, err
-	}
+	// Preserve the partial usage receipt when a streamed response is interrupted.
 	// Only Responses IDs are valid HTTP continuation ownership keys. Anthropic
 	// message IDs are still returned in the forwarding result for observability,
 	// but must not be registered as OpenAI response bindings.
@@ -216,7 +214,7 @@ func (s *OpenAIGatewayService) forwardCustomTransparent(
 		Duration:                      time.Since(startTime),
 		FirstTokenMs:                  firstTokenMs,
 		ClientDisconnect:              clientDisconnected,
-	}, nil
+	}, err
 }
 
 func (s *OpenAIGatewayService) handleCustomRawErrorResponse(
@@ -255,8 +253,36 @@ func (s *OpenAIGatewayService) handleCustomRawErrorResponse(
 		Detail:               upstreamDetail,
 		UpstreamResponseBody: upstreamDetail,
 	})
-	s.WriteCustomRawUpstreamResponse(c, resp.StatusCode, resp.Header, responseBody)
+	s.writeCustomSanitizedErrorResponse(c, resp.StatusCode, resp.Header, responseBody, account)
 	return fmt.Errorf("custom upstream error: %d", resp.StatusCode)
+}
+
+func (s *OpenAIGatewayService) writeCustomSanitizedErrorResponse(c *gin.Context, statusCode int, headers http.Header, body []byte, account *Account) bool {
+	return s.WriteCustomFailoverResponse(c, &UpstreamFailoverError{
+		StatusCode: statusCode, ResponseHeaders: headers, ResponseBody: body, clientAccount: account,
+	})
+}
+
+// WriteCustomFailoverResponse preserves the upstream status and JSON error contract
+// while removing provider endpoints, credentials, and unsafe response headers.
+func (s *OpenAIGatewayService) WriteCustomFailoverResponse(c *gin.Context, failoverErr *UpstreamFailoverError) bool {
+	if failoverErr == nil || failoverErr.StatusCode < http.StatusBadRequest || failoverErr.StatusCode > 599 {
+		return false
+	}
+	headers := failoverErr.ResponseHeaders.Clone()
+	if headers == nil {
+		headers = make(http.Header)
+	}
+	headers.Del("Location")
+	headers.Del("Www-Authenticate")
+	headers.Del("Content-Encoding")
+	headers.Del("Content-Length")
+	contentType := strings.ToLower(strings.TrimSpace(strings.Split(headers.Get("Content-Type"), ";")[0]))
+	if contentType != "application/json" && !strings.HasSuffix(contentType, "+json") {
+		headers.Set("Content-Type", "application/json")
+	}
+	body := sanitizeUpstreamClientErrorBody(failoverErr.ResponseBody, failoverErr.clientAccount)
+	return s.WriteCustomRawUpstreamResponse(c, failoverErr.StatusCode, headers, body)
 }
 
 // WriteCustomRawUpstreamResponse preserves Custom's upstream HTTP contract
@@ -339,10 +365,6 @@ func isCustomAnthropicPassthroughAllowedHeader(lowerKey string, allowTimeoutHead
 	}
 }
 
-func endpointForCustomObserver(c *gin.Context) string {
-	return GetActualOpenAIUpstreamEndpoint(c)
-}
-
 // extractCustomUsageFromJSONBytes accepts both OpenAI usage envelopes and the
 // Anthropic Messages shapes emitted by native-compatible upstreams. Anthropic
 // streaming usage is split between message_start.message.usage and
@@ -408,115 +430,97 @@ func extractCustomResponseIDFromJSONBytes(body []byte) string {
 	return id
 }
 
-func observeCustomSSEBody(observer *upstreamResponseModelObserver, body, endpoint string) {
-	if observer == nil || strings.TrimSpace(body) == "" {
-		return
+// observeCustomPayload captures usage and provider identity from a complete event.
+func observeCustomPayload(c *gin.Context, payload []byte, usage *OpenAIUsage, responseID *string) {
+	if parsed, ok := extractCustomUsageFromJSONBytes(payload); ok {
+		*usage = mergeCustomObservedUsage(*usage, parsed)
+	} else if parsed := extractCCStreamUsage(string(payload)); parsed != nil {
+		*usage = mergeCustomObservedUsage(*usage, *parsed)
 	}
-	forEachOpenAISSEDataPayload(body, func(payload []byte) {
-		if strings.HasPrefix(endpoint, customMessagesEndpoint) {
-			observer.ObserveAnthropic(payload)
-			return
-		}
-		eventType := strings.TrimSpace(gjson.GetBytes(payload, "type").String())
-		observer.ObserveOpenAI(payload, eventType)
-	})
+	if id := extractCustomResponseIDFromJSONBytes(payload); id != "" {
+		*responseID = id
+	}
+	if observer := upstreamResponseModelObserverFromContext(c); observer != nil {
+		observer.ObserveAnthropic(payload)
+		observer.ObserveOpenAI(payload, gjson.GetBytes(payload, "type").String())
+	}
 }
 
-// forwardCustomBufferedResponse writes the upstream body byte-for-byte. It
-// only observes usage/model metadata for billing and operations.
 func (s *OpenAIGatewayService) forwardCustomBufferedResponse(
-	ctx context.Context,
-	c *gin.Context,
-	resp *http.Response,
+	ctx context.Context, c *gin.Context, resp *http.Response, account *Account,
 ) (OpenAIUsage, string, error) {
 	body, err := ReadUpstreamResponseBody(resp.Body, s.cfg, c, openAITooLargeError)
 	if err != nil {
 		return OpenAIUsage{}, "", err
 	}
-	usage, _ := extractCustomUsageFromJSONBytes(body)
-	responseID := extractCustomResponseIDFromJSONBytes(body)
-	if observer := upstreamResponseModelObserverFromContext(c); observer != nil {
-		if bodyHasSSEFraming(body) {
-			observeCustomSSEBody(observer, string(body), endpointForCustomObserver(c))
-		} else {
-			observer.ObserveAnthropic(body)
-			observer.ObserveOpenAI(body, strings.TrimSpace(gjson.GetBytes(body, "type").String()))
+	var usage OpenAIUsage
+	responseID := ""
+	observe := func(payload []byte) { observeCustomPayload(c, payload, &usage, &responseID) }
+	if bodyHasSSEFraming(body) {
+		var output bytes.Buffer
+		err = relayCustomSSE(bytes.NewReader(body), s.cfg, account, observe, func(frame []byte) { _, _ = output.Write(frame) })
+		body = output.Bytes()
+	} else {
+		observe(body)
+		if upstreamErrorPayload(body, "") {
+			body = sanitizeUpstreamClientErrorBody(body, account)
 		}
 	}
 	if c != nil {
 		writeOpenAIPassthroughResponseHeaders(c.Writer.Header(), resp.Header, s.responseHeaderFilter)
-		contentType := resp.Header.Get("Content-Type")
-		if contentType == "" {
-			contentType = "application/json"
-		}
-		c.Data(resp.StatusCode, contentType, body)
+		c.Writer.Header().Del("Location")
+		c.Writer.Header().Del("Www-Authenticate")
+		c.Data(resp.StatusCode, firstNonEmpty(resp.Header.Get("Content-Type"), "application/json"), body)
 	}
-	return usage, responseID, nil
+	return usage, responseID, err
 }
 
-// forwardCustomStreamResponse copies each read chunk unchanged while observing
-// SSE usage and IDs. ReadBytes preserves line endings, unlike Scanner/Text.
+// Observe complete SSE events before emitting; preserve successful frames and
+// return a metering receipt even when the upstream stream is interrupted.
 func (s *OpenAIGatewayService) forwardCustomStreamResponse(
-	ctx context.Context,
-	c *gin.Context,
-	resp *http.Response,
-	startTime time.Time,
+	ctx context.Context, c *gin.Context, resp *http.Response, startTime time.Time, account *Account,
 ) (OpenAIUsage, string, *int, bool, error) {
+	reader := bufio.NewReader(resp.Body)
+	first, peekErr := reader.Peek(1)
+	if peekErr != nil && !errors.Is(peekErr, io.EOF) {
+		return OpenAIUsage{}, "", nil, false, peekErr
+	}
+	if !strings.Contains(strings.ToLower(resp.Header.Get("Content-Type")), "text/event-stream") && len(first) > 0 && (first[0] == '{' || first[0] == '[') {
+		copyResp := *resp
+		copyResp.Body = io.NopCloser(reader)
+		usage, id, err := s.forwardCustomBufferedResponse(ctx, c, &copyResp, account)
+		return usage, id, nil, false, err
+	}
 	var usage OpenAIUsage
 	responseID := ""
 	var firstTokenMs *int
 	clientDisconnected := false
 	if c != nil {
 		writeOpenAIPassthroughResponseHeaders(c.Writer.Header(), resp.Header, s.responseHeaderFilter)
+		c.Writer.Header().Del("Location")
+		c.Writer.Header().Del("Www-Authenticate")
 		c.Writer.Header().Set("Content-Type", firstNonEmpty(resp.Header.Get("Content-Type"), "text/event-stream"))
 		c.Writer.WriteHeader(resp.StatusCode)
 	}
-	reader := bufio.NewReader(resp.Body)
 	flusher, _ := writerFlusher(c)
-	for {
-		chunk, readErr := reader.ReadBytes('\n')
-		if len(chunk) > 0 {
-			if payload, ok := extractOpenAISSEDataLine(strings.TrimRight(string(chunk), "\r\n")); ok {
-				trimmed := strings.TrimSpace(payload)
-				if trimmed != "" && trimmed != "[DONE]" {
-					if parsed, ok := extractCustomUsageFromJSONBytes([]byte(trimmed)); ok {
-						usage = mergeCustomObservedUsage(usage, parsed)
-					} else if parsed := extractCCStreamUsage(trimmed); parsed != nil {
-						usage = mergeCustomObservedUsage(usage, *parsed)
-					}
-					if responseID == "" {
-						responseID = extractCustomResponseIDFromJSONBytes([]byte(trimmed))
-					}
-					if observer := upstreamResponseModelObserverFromContext(c); observer != nil {
-						if strings.HasPrefix(endpointForCustomObserver(c), customMessagesEndpoint) {
-							observer.ObserveAnthropic([]byte(trimmed))
-						} else {
-							observer.ObserveOpenAI([]byte(trimmed), strings.TrimSpace(gjson.GetBytes([]byte(trimmed), "type").String()))
-						}
-					}
-					if firstTokenMs == nil {
-						firstTokenMsValue := int(time.Since(startTime).Milliseconds())
-						firstTokenMs = &firstTokenMsValue
-					}
-				}
-			}
-			if c != nil && !clientDisconnected {
-				if _, writeErr := c.Writer.Write(chunk); writeErr != nil {
-					clientDisconnected = true
-					logger.L().Debug("custom upstream client disconnected; draining response", zap.Error(writeErr))
-				} else if flusher != nil {
-					flusher.Flush()
-				}
-			}
+	err := relayCustomSSE(reader, s.cfg, account, func(payload []byte) {
+		observeCustomPayload(c, payload, &usage, &responseID)
+		if firstTokenMs == nil {
+			ms := int(time.Since(startTime).Milliseconds())
+			firstTokenMs = &ms
 		}
-		if readErr != nil {
-			if errors.Is(readErr, io.EOF) {
-				break
-			}
-			return usage, responseID, firstTokenMs, clientDisconnected, readErr
+	}, func(frame []byte) {
+		if c == nil || clientDisconnected {
+			return
 		}
-	}
-	return usage, responseID, firstTokenMs, clientDisconnected, nil
+		if _, writeErr := c.Writer.Write(frame); writeErr != nil {
+			clientDisconnected = true
+			logger.L().Debug("custom upstream client disconnected; draining response", zap.Error(writeErr))
+		} else if flusher != nil {
+			flusher.Flush()
+		}
+	})
+	return usage, responseID, firstTokenMs, clientDisconnected, err
 }
 
 type customWriterFlusher interface {

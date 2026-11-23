@@ -309,6 +309,7 @@ func buildTimelinePoints(entries []*ChannelMonitorHistoryEntry) []UserMonitorTim
 		out = append(out, UserMonitorTimelinePoint{
 			Status:        e.Status,
 			LatencyMs:     e.LatencyMs,
+			DurationMs:    e.DurationMs,
 			PingLatencyMs: e.PingLatencyMs,
 			CheckedAt:     e.CheckedAt,
 		})

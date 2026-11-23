@@ -659,13 +659,17 @@ func (s *OpenAIGatewayService) handleFailoverErrorResponsePassthrough(
 		Detail:               upstreamDetail,
 		UpstreamResponseBody: upstreamDetail,
 	})
-	return newOpenAIUpstreamFailoverError(
+	failoverErr := newOpenAIUpstreamFailoverError(
 		resp.StatusCode,
 		resp.Header,
 		body,
 		upstreamMsg,
 		!shouldDisable && account.IsPoolMode() && account.IsPoolModeRetryableStatus(resp.StatusCode),
 	)
+	if account != nil && account.IsCustom() {
+		failoverErr.clientAccount = account
+	}
+	return failoverErr
 }
 
 func (s *OpenAIGatewayService) handleErrorResponsePassthrough(

@@ -6,6 +6,7 @@
         v-model:start-date="startDate"
         v-model:end-date="endDate"
         v-model:granularity="granularity"
+        :loading="modelStatsLoading || chartsLoading || endpointStatsLoading"
         @date-range-change="onDateRangeChange"
         @granularity-change="loadChartData"
       >

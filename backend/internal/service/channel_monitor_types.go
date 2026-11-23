@@ -133,7 +133,8 @@ type ChannelMonitorUpdateParams struct {
 type CheckResult struct {
 	Model         string
 	Status        string // operational / degraded / failed / error
-	LatencyMs     *int
+	LatencyMs     *int   // Measured first token; nil for buffered responses and legacy rows.
+	DurationMs    *int   // Whole request, never a speed input.
 	PingLatencyMs *int
 	Message       string
 	CheckedAt     time.Time
@@ -162,6 +163,7 @@ type UserMonitorView struct {
 type UserMonitorTimelinePoint struct {
 	Status        string    `json:"status"`
 	LatencyMs     *int      `json:"latency_ms"`
+	DurationMs    *int      `json:"duration_ms"`
 	PingLatencyMs *int      `json:"ping_latency_ms"`
 	CheckedAt     time.Time `json:"checked_at"`
 }
@@ -199,7 +201,8 @@ type ChannelMonitorHistoryRow struct {
 	MonitorID     int64
 	Model         string
 	Status        string
-	LatencyMs     *int
+	LatencyMs     *int // Measured first token; nil for buffered responses and legacy rows.
+	DurationMs    *int // Whole request, never a speed input.
 	PingLatencyMs *int
 	Message       string
 	CheckedAt     time.Time
@@ -210,7 +213,8 @@ type ChannelMonitorHistoryEntry struct {
 	ID            int64
 	Model         string
 	Status        string
-	LatencyMs     *int
+	LatencyMs     *int // Measured first token; nil for buffered responses and legacy rows.
+	DurationMs    *int // Whole request, never a speed input.
 	PingLatencyMs *int
 	Message       string
 	CheckedAt     time.Time

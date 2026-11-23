@@ -90,6 +90,8 @@ func configuredPoolHTTPFailover(c *gin.Context, account *Account, resp *http.Res
 	return &UpstreamFailoverError{
 		StatusCode: resp.StatusCode, ResponseBody: body, ResponseHeaders: resp.Header.Clone(),
 		RetryableOnSameAccount: true,
+		RawResponsePassthrough: account.IsCustom(),
+		clientAccount:          account,
 	}
 }
 

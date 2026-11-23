@@ -621,7 +621,8 @@ type UpstreamFailoverError struct {
 	NextAccountAction        NextAccountAction
 	ClientStatusCode         int
 	ClientMessage            string
-	RawResponsePassthrough   bool // Custom API-key routes return the final upstream status/body unchanged.
+	RawResponsePassthrough   bool     // Custom API-key routes return the final upstream status/body unchanged.
+	clientAccount            *Account // used only to redact credentials before Custom error egress
 }
 
 func (e *UpstreamFailoverError) Error() string {

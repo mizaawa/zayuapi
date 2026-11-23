@@ -21,11 +21,8 @@ func TestFinalizeOperationalOrDegradedUsesTenAndSixtySecondBoundaries(t *testing
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := finalizeOperationalOrDegraded(
-				&CheckResult{},
-				tt.latency,
-				int(tt.latency/time.Millisecond),
-			)
+			ms := int(tt.latency.Milliseconds())
+			result := finalizeOperationalOrDegraded(&CheckResult{LatencyMs: &ms})
 			require.Equal(t, tt.expected, result.Status)
 		})
 	}

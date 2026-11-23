@@ -283,6 +283,24 @@ describe('ChannelStatusView', () => {
     wrapper.unmount()
   })
 
+  it('keeps uptime in the same brand colour for every value and missing data', async () => {
+    listMonitors.mockResolvedValue({ items: [
+      makeMonitor({ id: 1, availability_7d: 0 }),
+      makeMonitor({ id: 2, availability_7d: 96 }),
+      makeMonitor({ id: 3, availability_7d: 100 }),
+      makeMonitor({ id: 4, primary_status: '', timeline: [] }),
+    ] })
+    const wrapper = mountView()
+    await flushPromises()
+    const labels = wrapper.findAll('.monitor-row-uptime')
+    expect(labels.map(label => label.text())).toEqual(['0% uptime', '96% uptime', '100% uptime', '-- uptime'])
+    for (const label of labels) {
+      expect(label.classes()).toContain('text-primary-800')
+      expect(label.classes()).toEqual(labels[0].classes())
+    }
+    wrapper.unmount()
+  })
+
   it('keeps the leading status icon in sync with the current latency rules', async () => {
     listMonitors.mockResolvedValue({
       items: [
