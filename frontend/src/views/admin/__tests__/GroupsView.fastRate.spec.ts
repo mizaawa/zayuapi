@@ -129,7 +129,7 @@ function mountView() {
         BaseDialog: BaseDialogStub,
         ConfirmDialog: true,
         EmptyState: true,
-        Select: true,
+        Teleport: true,
         PlatformIcon: true,
         Icon: true,
         GroupCapacityBadge: true,
@@ -195,7 +195,17 @@ describe('GroupsView Fast billing multiplier', () => {
     await wrapper.get('form#edit-group-form').trigger('submit.prevent')
     expect(updateGroup).not.toHaveBeenCalled()
     await ultra.setValue('6.25')
-    await wrapper.get('[data-testid="forced-fast-mode"]').setValue('ultrafast')
+    const picker = wrapper.get('[data-testid="forced-fast-mode"]')
+    const trigger = picker.get('button[aria-haspopup="listbox"]')
+    expect(trigger.text()).toBe('admin.groups.fastRate.off')
+    await trigger.trigger('click')
+    const menu = picker.get('[role="listbox"]')
+    const options = menu.findAll('[role="option"]')
+    expect(options.map(option => option.text())).toEqual(['admin.groups.fastRate.off', 'Fast', 'UltraFast'])
+    expect(menu.get('[aria-selected="true"]').text()).toBe('admin.groups.fastRate.off')
+    await options[2].trigger('click')
+    expect(trigger.text()).toBe('UltraFast')
+    expect(trigger.attributes('aria-expanded')).toBe('false')
 
     await wrapper.get('form#edit-group-form').trigger('submit.prevent')
     await flushPromises()
