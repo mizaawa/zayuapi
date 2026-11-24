@@ -400,6 +400,66 @@ func TestCreateNewAPIKeyFindsAcknowledgedTokenByName(t *testing.T) {
 	require.Equal(t, "4", result.KeyID, "the pre-existing token with the same name is not the new one")
 }
 
+// Exercise the same preview route used by the create dialog: dashboard auth is
+// used only for the selected key, and only its relay secret reaches the catalog.
+func TestProviderModelPreviewUsesSelectedKeyAndProxy(t *testing.T) {
+	for _, site := range []string{"newapi", "sub2api", "legacy-newapi"} {
+		t.Run(site, func(t *testing.T) {
+			paths := []string{}
+			server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				paths = append(paths, r.URL.Path)
+				assert.Equal(t, "Bearer dashboard", r.Header.Get("Authorization"))
+				switch r.URL.Path {
+				case "/api/token/7":
+					if site == "legacy-newapi" {
+						http.NotFound(w, r)
+						return
+					}
+					writeProviderJSON(w, 200, `{"success":true,"data":{"id":7,"status":1,"key":"masked****key"}}`)
+				case "/api/token/7/key":
+					assert.Equal(t, http.MethodPost, r.Method)
+					if len(paths) == 2 {
+						w.WriteHeader(520)
+						return
+					}
+					writeProviderJSON(w, 200, `{"success":true,"data":{"key":"relay-secret"}}`)
+				case "/api/token/":
+					writeProviderJSON(w, 200, `{"success":true,"data":{"total":500,"items":[{"id":7,"status":1,"key":"relay-secret"}]}}`)
+				case "/api/v1/keys/7":
+					writeProviderJSON(w, 200, `{"code":0,"data":{"id":7,"status":"active","key":"sk-relay-secret"}}`)
+				default:
+					t.Errorf("unexpected dashboard request %s", r.URL.Path)
+					http.NotFound(w, r)
+				}
+			}))
+			defer server.Close()
+			useProviderTestServer(t, server)
+			secret, err := encodeProviderToken("dashboard", "", "Bearer")
+			require.NoError(t, err)
+			h := newProviderKeyTestHandler(t, providerRecord{ID: "panel", SiteType: strings.TrimPrefix(site, "legacy-"), BaseURL: server.URL, AuthMode: "token"}, secret)
+			admin := newStubAdminService()
+			proxy := service.Proxy{ID: 3, Protocol: "http", Host: "proxy.example", Port: 3128}
+			admin.proxies = []service.Proxy{proxy}
+			h.adminService = admin
+			u := &syncUpstreamHTTPUpstream{resp: &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(`{"models":[{"name":"models/test"}]}`))}}
+			h.accountTestService = service.NewAccountTestService(nil, nil, nil, nil, nil, u, &config.Config{}, nil)
+			const route = "/api/v1/admin/accounts/models/sync-upstream-preview"
+			w := providerKeyTestRequest(t, h.SyncUpstreamModelsPreview, http.MethodPost, route, route, `{"platform":"gemini","type":"apikey","provider_id":"panel","provider_key_id":"7","proxy_id":3}`)
+			require.Equal(t, 200, w.Code, w.Body.String())
+			require.Equal(t, []string{"test"}, decodeProviderData[struct {
+				Models []string `json:"models"`
+			}](t, w).Models)
+			require.Equal(t, server.URL+"/v1beta/models", u.req.URL.String())
+			require.Equal(t, "sk-relay-secret", u.req.Header.Get("x-goog-api-key"))
+			require.Empty(t, u.req.Header.Get("Authorization"))
+			require.Equal(t, proxy.URL(), u.proxyURL)
+			require.NotContains(t, w.Body.String(), "secret")
+			want := map[string][]string{"newapi": {"/api/token/7", "/api/token/7/key", "/api/token/7/key"}, "sub2api": {"/api/v1/keys/7"}, "legacy-newapi": {"/api/token/7", "/api/token/"}}
+			require.Equal(t, want[site], paths)
+		})
+	}
+}
+
 func TestLegacyNewAPIKeyPagesStartAtZero(t *testing.T) {
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		pages := map[string]string{"0": `[{"id":1},{"id":2}]`, "1": `[{"id":3}]`}
@@ -411,7 +471,7 @@ func TestLegacyNewAPIKeyPagesStartAtZero(t *testing.T) {
 	}))
 	defer server.Close()
 	session := &providerSession{record: providerRecord{SiteType: "newapi"}, remote: providerRemote{client: server.Client(), base: server.URL}}
-	rows, err := session.newAPIKeyRows(context.Background())
+	rows, err := session.keyRows(context.Background(), "")
 	require.NoError(t, err)
 	ids := make([]string, 0, len(rows))
 	for _, row := range rows {
@@ -432,9 +492,7 @@ func TestProviderKeyPagesWithoutTotalContinueAfterShortPage(t *testing.T) {
 	}))
 	defer server.Close()
 	session := &providerSession{record: providerRecord{SiteType: "sub2api"}, remote: providerRemote{client: server.Client(), base: server.URL}}
-	rows, err := session.listRows(context.Background(), func(page int) string {
-		return fmt.Sprintf("/keys?page=%d&page_size=100", page)
-	}, false)
+	rows, err := session.keyRows(context.Background(), "")
 	require.NoError(t, err)
 	require.Len(t, rows, 2)
 }

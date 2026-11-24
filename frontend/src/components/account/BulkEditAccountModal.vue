@@ -260,6 +260,11 @@
               </button>
             </div>
 
+            <ModelRestrictionFilter
+              v-model="modelFilter"
+              :no-matches="!!modelFilter.trim() && modelRestrictionMode === 'mapping' && !visibleMappings.length"
+            />
+
             <!-- Whitelist Mode -->
             <div v-if="modelRestrictionMode === 'whitelist'">
               <div class="mb-3 rounded-lg bg-blue-50 p-3 dark:bg-blue-900/20">
@@ -283,6 +288,7 @@
 
               <ModelWhitelistSelector
                 v-model="allowedModels"
+                :filter="modelFilter"
                 :platforms="targetSelectedPlatforms"
               />
 
@@ -318,7 +324,9 @@
               <!-- Model Mapping List -->
               <div v-if="modelMappings.length > 0" class="mb-3 space-y-2">
                 <div
-                  v-for="(mapping, index) in modelMappings"
+                  v-for="{ mapping, index } in visibleMappings"
+                  @focusin="editingMapping = mapping"
+                  @focusout="onMappingBlur"
                   :key="index"
                   class="flex items-center gap-2"
                 >
@@ -1223,6 +1231,8 @@ import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import Select from '@/components/common/Select.vue'
 import ProxySelector from '@/components/common/ProxySelector.vue'
 import GroupSelector from '@/components/common/GroupSelector.vue'
+import ModelRestrictionFilter from './ModelRestrictionFilter.vue'
+import { useModelRestrictionFilter } from './modelRestrictionFilter'
 import ModelWhitelistSelector from '@/components/account/ModelWhitelistSelector.vue'
 import Icon from '@/components/icons/Icon.vue'
 import {
@@ -1408,6 +1418,7 @@ const baseUrl = ref('')
 const modelRestrictionMode = ref<'whitelist' | 'mapping'>('whitelist')
 const allowedModels = ref<string[]>([])
 const modelMappings = ref<ModelMapping[]>([])
+const { modelFilter, visibleMappings, editingMapping, onMappingBlur } = useModelRestrictionFilter(modelMappings)
 const selectedErrorCodes = ref<number[]>([])
 const customErrorCodeInput = ref<number | null>(null)
 const interceptWarmupRequests = ref(false)
@@ -1486,6 +1497,7 @@ const openAIAPIKeyWSModeConcurrencyHintKey = computed(() =>
 
 // Model mapping helpers
 const addModelMapping = () => {
+  modelFilter.value = ''
   modelMappings.value.push({ from: '', to: '' })
 }
 
@@ -1944,6 +1956,7 @@ watch(
       baseUrl.value = ''
       openaiPassthroughEnabled.value = false
       openaiFlattenNamespacesEnabled.value = false
+      modelFilter.value = ''
       modelRestrictionMode.value = 'whitelist'
       allowedModels.value = []
       modelMappings.value = []

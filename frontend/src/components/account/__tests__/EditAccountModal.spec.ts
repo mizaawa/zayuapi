@@ -420,6 +420,26 @@ describe('EditAccountModal', () => {
     })
   })
 
+  it('filters either mapping column and deletes the displayed row without dropping hidden mappings on save', async () => {
+    const account = buildAccount()
+    account.credentials.model_mapping = { hidden: 'other', 'deep-client': 'wire', alias: 'Deep-Wire' }
+    checkMixedChannelRiskMock.mockReset().mockResolvedValue({ has_risk: false })
+    updateAccountMock.mockReset().mockResolvedValue(account)
+    const wrapper = mountModal(account)
+    const filter = wrapper.get('input[placeholder="admin.accounts.modelFilterPlaceholder"]')
+    await filter.setValue('  DEEP  ')
+    const inputs = wrapper.findAll<HTMLInputElement>('input[placeholder="admin.accounts.requestModel"]')
+    expect(inputs.map(row => row.element.value)).toEqual(['deep-client', 'alias'])
+    await inputs[0].element.parentElement!.querySelector('button')!.click()
+    await wrapper.get('form#edit-account-form').trigger('submit.prevent')
+    await flushPromises()
+    expect(updateAccountMock.mock.calls[0]?.[1]?.credentials?.model_mapping).toEqual({ hidden: 'other', alias: 'Deep-Wire' })
+    await wrapper.setProps({ show: false })
+    await wrapper.setProps({ show: true })
+    expect(wrapper.get<HTMLInputElement>('input[placeholder="admin.accounts.modelFilterPlaceholder"]').element.value).toBe('')
+    wrapper.unmount()
+  })
+
   it('preserves model mappings when editing the whitelist', async () => {
     const account = buildAccount()
     account.credentials.model_mapping = {

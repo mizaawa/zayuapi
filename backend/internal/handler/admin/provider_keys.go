@@ -259,7 +259,7 @@ func (h *AccountHandler) applyProviderKeyBinding(ctx context.Context, req *Creat
 	if key, _ := req.Credentials["api_key"].(string); strings.TrimSpace(key) != "" {
 		return infraerrors.BadRequest("PROVIDER_BINDING_CONFLICT", "A provider import cannot also include a manual API key")
 	}
-	resolved, err := h.resolveProviderSelection(ctx, req.ProviderID, req.ProviderKeyID, req.Platform)
+	resolved, err := h.resolveProviderSelection(ctx, req.ProviderID, req.ProviderKeyID, req.Platform, (*providerSession).resolveKey)
 	if err != nil {
 		return err
 	}
@@ -277,7 +277,7 @@ func (h *AccountHandler) applyProviderKeyBinding(ctx context.Context, req *Creat
 
 // resolveProviderSelection reads one active provider key with its complete
 // secret. Stale, inactive or masked keys are refused.
-func (h *AccountHandler) resolveProviderSelection(ctx context.Context, providerID, keyID, platform string) (*providerResolvedKey, error) {
+func (h *AccountHandler) resolveProviderSelection(ctx context.Context, providerID, keyID, platform string, resolve func(*providerSession, context.Context, string) (providerKeyView, error)) (*providerResolvedKey, error) {
 	providerID, keyID = strings.TrimSpace(providerID), strings.TrimSpace(keyID)
 	if providerID == "" || keyID == "" {
 		return nil, infraerrors.BadRequest("PROVIDER_BINDING_INCOMPLETE", "Choose both a provider and one of its API keys")
@@ -294,7 +294,7 @@ func (h *AccountHandler) resolveProviderSelection(ctx context.Context, providerI
 	var key providerKeyView
 	err = h.withProviderSession(ctx, record, func(session *providerSession) error {
 		var resolveErr error
-		key, resolveErr = session.resolveKey(ctx, keyID)
+		key, resolveErr = resolve(session, ctx, keyID)
 		return resolveErr
 	})
 	if err != nil {

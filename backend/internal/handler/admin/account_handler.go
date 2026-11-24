@@ -2510,6 +2510,7 @@ func (h *AccountHandler) SyncUpstreamModelsPreview(c *gin.Context) {
 		Type          string `json:"type" binding:"required"`
 		BaseURL       string `json:"base_url"`
 		APIKey        string `json:"api_key"`
+		ProxyID       *int64 `json:"proxy_id" binding:"omitempty,gt=0"`
 		ProviderID    string `json:"provider_id"`
 		ProviderKeyID string `json:"provider_key_id"`
 	}
@@ -2517,9 +2518,15 @@ func (h *AccountHandler) SyncUpstreamModelsPreview(c *gin.Context) {
 		response.BadRequest(c, "Invalid request: "+err.Error())
 		return
 	}
+	ctx, cancel := context.WithTimeout(c.Request.Context(), time.Minute)
+	defer cancel()
 	// A provider import previews models with the provider key resolved here.
 	if req.ProviderID != "" || req.ProviderKeyID != "" {
-		resolved, err := h.resolveProviderSelection(c.Request.Context(), req.ProviderID, req.ProviderKeyID, req.Platform)
+		if req.Type != service.AccountTypeAPIKey {
+			response.BadRequest(c, "Provider model preview requires an API key account")
+			return
+		}
+		resolved, err := h.resolveProviderSelection(ctx, req.ProviderID, req.ProviderKeyID, req.Platform, (*providerSession).resolveModelPreviewKey)
 		if err != nil {
 			response.ErrorFrom(c, err)
 			return
@@ -2545,7 +2552,15 @@ func (h *AccountHandler) SyncUpstreamModelsPreview(c *gin.Context) {
 		return
 	}
 
-	models, err := h.accountTestService.FetchUpstreamSupportedModels(c.Request.Context(), tempAccount)
+	if req.ProxyID != nil {
+		proxy, err := h.adminService.GetProxy(ctx, *req.ProxyID)
+		if err != nil || proxy == nil {
+			response.BadRequest(c, "Selected proxy is unavailable")
+			return
+		}
+		tempAccount.ProxyID, tempAccount.Proxy = req.ProxyID, proxy
+	}
+	models, err := h.accountTestService.FetchUpstreamSupportedModels(ctx, tempAccount)
 	if err != nil {
 		var syncErr *service.UpstreamModelSyncError
 		if errors.As(err, &syncErr) {

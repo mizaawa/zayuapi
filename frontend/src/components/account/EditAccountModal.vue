@@ -152,9 +152,14 @@
               </button>
             </div>
 
+            <ModelRestrictionFilter
+              v-model="modelFilter"
+              :no-matches="!!modelFilter.trim() && modelRestrictionMode === 'mapping' && !visibleMappings.length"
+            />
+
             <!-- Whitelist Mode -->
             <div v-if="modelRestrictionMode === 'whitelist'">
-              <ModelWhitelistSelector v-model="allowedModels" :platform="account?.platform || 'anthropic'" :account-id="account?.id" :account-type="account?.type" :sync-overrides="syncModelOverrides" />
+              <ModelWhitelistSelector :filter="modelFilter" v-model="allowedModels" :platform="account?.platform || 'anthropic'" :account-id="account?.id" :account-type="account?.type" :sync-overrides="syncModelOverrides" />
               <p class="text-xs text-gray-500 dark:text-gray-400">
                 {{ t('admin.accounts.selectedModels', { count: allowedModels.length }) }}
                 <span v-if="allowedModels.length === 0 && modelMappings.length === 0">{{
@@ -187,7 +192,9 @@
             <!-- Model Mapping List -->
             <div v-if="modelMappings.length > 0" class="mb-3 space-y-2">
               <div
-                v-for="(mapping, index) in modelMappings"
+                v-for="{ mapping, index } in visibleMappings"
+                @focusin="editingMapping = mapping"
+                @focusout="onMappingBlur"
                 :key="getModelMappingKey(mapping)"
                 class="flex items-center gap-2"
               >
@@ -581,9 +588,14 @@
             </button>
           </div>
 
+          <ModelRestrictionFilter
+            v-model="modelFilter"
+            :no-matches="!!modelFilter.trim() && modelRestrictionMode === 'mapping' && !visibleMappings.length"
+          />
+
           <!-- Whitelist Mode -->
           <div v-if="modelRestrictionMode === 'whitelist'">
-            <ModelWhitelistSelector v-model="allowedModels" :platform="account?.platform || 'anthropic'" :account-id="account?.id" :account-type="account?.type" />
+            <ModelWhitelistSelector :filter="modelFilter" v-model="allowedModels" :platform="account?.platform || 'anthropic'" :account-id="account?.id" :account-type="account?.type" />
             <p class="text-xs text-gray-500 dark:text-gray-400">
               {{ t('admin.accounts.selectedModels', { count: allowedModels.length }) }}
               <span v-if="allowedModels.length === 0 && modelMappings.length === 0">{{
@@ -602,7 +614,9 @@
 
             <div v-if="modelMappings.length > 0" class="mb-3 space-y-2">
               <div
-                v-for="(mapping, index) in modelMappings"
+                v-for="{ mapping, index } in visibleMappings"
+                @focusin="editingMapping = mapping"
+                @focusout="onMappingBlur"
                 :key="'oauth-' + getModelMappingKey(mapping)"
                 class="flex items-center gap-2"
               >
@@ -797,9 +811,14 @@
             </button>
           </div>
 
+          <ModelRestrictionFilter
+            v-model="modelFilter"
+            :no-matches="!!modelFilter.trim() && modelRestrictionMode === 'mapping' && !visibleMappings.length"
+          />
+
           <!-- Whitelist Mode -->
           <div v-if="modelRestrictionMode === 'whitelist'">
-            <ModelWhitelistSelector v-model="allowedModels" :platform="account?.platform || 'anthropic'" :account-id="account?.id" :account-type="account?.type" />
+            <ModelWhitelistSelector :filter="modelFilter" v-model="allowedModels" :platform="account?.platform || 'anthropic'" :account-id="account?.id" :account-type="account?.type" />
             <p class="text-xs text-gray-500 dark:text-gray-400">
               {{ t('admin.accounts.selectedModels', { count: allowedModels.length }) }}
               <span v-if="allowedModels.length === 0 && modelMappings.length === 0">{{
@@ -832,7 +851,9 @@
             <!-- Model Mapping List -->
             <div v-if="modelMappings.length > 0" class="mb-3 space-y-2">
               <div
-                v-for="(mapping, index) in modelMappings"
+                v-for="{ mapping, index } in visibleMappings"
+                @focusin="editingMapping = mapping"
+                @focusout="onMappingBlur"
                 :key="getModelMappingKey(mapping)"
                 class="flex items-center gap-2"
               >
@@ -1031,9 +1052,14 @@
             </button>
           </div>
 
+          <ModelRestrictionFilter
+            v-model="modelFilter"
+            :no-matches="!!modelFilter.trim() && modelRestrictionMode === 'mapping' && !visibleMappings.length"
+          />
+
           <!-- Whitelist Mode -->
           <div v-if="modelRestrictionMode === 'whitelist'">
-            <ModelWhitelistSelector v-model="allowedModels" platform="anthropic" />
+            <ModelWhitelistSelector :filter="modelFilter" v-model="allowedModels" platform="anthropic" />
             <p class="text-xs text-gray-500 dark:text-gray-400">
               {{ t('admin.accounts.selectedModels', { count: allowedModels.length }) }}
               <span v-if="allowedModels.length === 0 && modelMappings.length === 0">{{ t('admin.accounts.supportsAllModels') }}</span>
@@ -1042,7 +1068,7 @@
 
           <!-- Mapping Mode -->
           <div v-else class="space-y-3">
-            <div v-for="(mapping, index) in modelMappings" :key="getModelMappingKey(mapping)" class="flex items-center gap-2">
+            <div v-for="{ mapping, index } in visibleMappings" @focusin="editingMapping = mapping" @focusout="onMappingBlur" :key="getModelMappingKey(mapping)" class="flex items-center gap-2">
               <input v-model="mapping.from" type="text" class="input flex-1" :placeholder="t('admin.accounts.fromModel')" />
               <span class="text-gray-400">→</span>
               <input v-model="mapping.to" type="text" class="input flex-1" :placeholder="t('admin.accounts.toModel')" />
@@ -1050,7 +1076,7 @@
                 <Icon name="trash" size="sm" />
               </button>
             </div>
-            <button type="button" @click="modelMappings.push({ from: '', to: '' })" class="btn btn-secondary text-sm">
+            <button type="button" @click="addModelMapping" class="btn btn-secondary text-sm">
               + {{ t('admin.accounts.addMapping') }}
             </button>
             <!-- Bedrock Preset Mappings -->
@@ -2644,6 +2670,8 @@ import { extractApiErrorMessage } from '@/utils/apiError'
 import ProxySelector from '@/components/common/ProxySelector.vue'
 import ProxyAdBanner from '@/components/common/ProxyAdBanner.vue'
 import GroupSelector from '@/components/common/GroupSelector.vue'
+import ModelRestrictionFilter from './ModelRestrictionFilter.vue'
+import { useModelRestrictionFilter } from './modelRestrictionFilter'
 import ModelWhitelistSelector from '@/components/account/ModelWhitelistSelector.vue'
 import QuotaLimitCard from '@/components/account/QuotaLimitCard.vue'
 import GrokBaseUrlPresets from '@/components/account/GrokBaseUrlPresets.vue'
@@ -2765,6 +2793,7 @@ const isBedrockAPIKeyMode = computed(() =>
   (props.account?.credentials as Record<string, unknown>)?.auth_mode === 'apikey'
 )
 const modelMappings = ref<ModelMapping[]>([])
+const { modelFilter, visibleMappings, editingMapping, onMappingBlur } = useModelRestrictionFilter(modelMappings)
 const openAICompactModelMappings = ref<ModelMapping[]>([])
 const modelRestrictionMode = ref<'whitelist' | 'mapping'>('whitelist')
 const allowedModels = ref<string[]>([])
@@ -3626,6 +3655,8 @@ watch(
       return
     }
     if (!wasShow || newAccount !== previousAccount) {
+      modelFilter.value = ''
+      editingMapping.value = null
       syncFormFromAccount(newAccount)
       loadTLSProfiles()
     }
@@ -3635,6 +3666,7 @@ watch(
 
 // Model mapping helpers
 const addModelMapping = () => {
+  modelFilter.value = ''
   modelMappings.value.push({ from: '', to: '' })
 }
 

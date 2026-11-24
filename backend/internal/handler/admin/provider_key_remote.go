@@ -66,33 +66,85 @@ func (s *providerSession) resolveKey(ctx context.Context, keyID string) (provide
 		if key.ID != keyID {
 			continue
 		}
-		if !key.Available {
-			return providerKeyView{}, errProviderKeyUnavailable
-		}
-		if s.record.SiteType == "newapi" {
-			if !completeProviderSecret(key.secret) {
-				// Current New API releases mask keys in the list response.
-				if key.secret, err = s.newAPIKeySecret(ctx, key.ID); err != nil {
-					return providerKeyView{}, err
-				}
-			}
-			// New API stores keys without their sk- display prefix.
-			if key.secret != "" && !strings.HasPrefix(key.secret, "sk-") {
-				key.secret = "sk-" + key.secret
-			}
-		}
-		if !completeProviderSecret(key.secret) {
-			return providerKeyView{}, errProviderKeySecretUnavailable
-		}
-		return key, nil
+		return s.completeSelectedKey(ctx, key)
 	}
 	return providerKeyView{}, errProviderKeyMissing
 }
 
+// Model previews need only the selected active key, not every dashboard page,
+// group and rate. Keep the enriched listing for account creation/provenance.
+func (s *providerSession) resolveModelPreviewKey(ctx context.Context, keyID string) (providerKeyView, error) {
+	path := "/api/token/" + url.PathEscape(keyID)
+	if s.record.SiteType == "sub2api" {
+		path = "/api/v1/keys/" + url.PathEscape(keyID)
+	}
+	data, _, err := s.call(ctx, http.MethodGet, path, nil, nil, true)
+	if err != nil {
+		// Older dashboards can implement the list but not the detail route.
+		// A gateway error on the detail route can likewise leave the list usable.
+		if !providerDetailFallback(err) {
+			return providerKeyView{}, err
+		}
+		rows, listErr := s.keyRows(ctx, keyID)
+		if listErr != nil {
+			return providerKeyView{}, listErr
+		}
+		data = rows[0]
+	}
+	row, ok := data.(map[string]any)
+	if !ok || providerText(row["id"]) != keyID {
+		return providerKeyView{}, errProviderResponse
+	}
+	if s.record.SiteType == "sub2api" {
+		return s.completeSelectedKey(ctx, sub2apiKeyView(row, nil))
+	}
+	return s.completeSelectedKey(ctx, newAPIKeyView(row))
+}
+
+func providerKeyHTTPStatus(err error) int {
+	var remote *providerRemoteError
+	var api *providerAPIError
+	switch {
+	case errors.As(err, &remote):
+		return remote.status
+	case errors.As(err, &api):
+		return api.status
+	default:
+		return 0
+	}
+}
+
+func providerDetailFallback(err error) bool {
+	status := providerKeyHTTPStatus(err)
+	return status == http.StatusNotFound || status == http.StatusMethodNotAllowed || status >= 500 || errors.Is(err, errProviderResponse)
+}
+
+func (s *providerSession) completeSelectedKey(ctx context.Context, key providerKeyView) (providerKeyView, error) {
+	if !key.Available {
+		return providerKeyView{}, errProviderKeyUnavailable
+	}
+	if s.record.SiteType == "newapi" {
+		if !completeProviderSecret(key.secret) {
+			// Current New API releases mask keys in the list response.
+			secret, err := s.newAPIKeySecret(ctx, key.ID)
+			if err != nil {
+				return providerKeyView{}, err
+			}
+			key.secret = secret
+		}
+		// New API stores keys without their sk- display prefix.
+		if key.secret != "" && !strings.HasPrefix(key.secret, "sk-") {
+			key.secret = "sk-" + key.secret
+		}
+	}
+	if !completeProviderSecret(key.secret) {
+		return providerKeyView{}, errProviderKeySecretUnavailable
+	}
+	return key, nil
+}
+
 func (s *providerSession) listSub2APIKeys(ctx context.Context) ([]providerKeyView, error) {
-	rows, err := s.listRows(ctx, func(page int) string {
-		return fmt.Sprintf("/api/v1/keys?page=%d&page_size=%d&sort_by=created_at&sort_order=desc", page, providerKeyPageSize)
-	}, false)
+	rows, err := s.keyRows(ctx, "")
 	if err != nil {
 		return nil, err
 	}
@@ -240,14 +292,8 @@ func (s *providerSession) createSub2APIKey(ctx context.Context, group providerGr
 	return created, nil
 }
 
-func (s *providerSession) newAPIKeyRows(ctx context.Context) ([]map[string]any, error) {
-	return s.listRows(ctx, func(page int) string {
-		return fmt.Sprintf("/api/token/?p=%d&page_size=%d", page, providerKeyPageSize)
-	}, true)
-}
-
 func (s *providerSession) listNewAPIKeys(ctx context.Context) ([]providerKeyView, error) {
-	rows, err := s.newAPIKeyRows(ctx)
+	rows, err := s.keyRows(ctx, "")
 	if err != nil {
 		return nil, err
 	}
@@ -363,7 +409,7 @@ func (s *providerSession) newAPIUserGroup(ctx context.Context) string {
 func (s *providerSession) createNewAPIKey(ctx context.Context, group providerGroupView) (providerCreatedKey, error) {
 	// Older releases acknowledge a creation without returning the token, so
 	// remember the existing IDs to recognize the new row afterwards.
-	before, err := s.newAPIKeyRows(ctx)
+	before, err := s.keyRows(ctx, "")
 	if err != nil {
 		return providerCreatedKey{}, err
 	}
@@ -386,7 +432,7 @@ func (s *providerSession) createNewAPIKey(ctx context.Context, group providerGro
 		}
 	}
 	if created.keyID == "" {
-		if after, listErr := s.newAPIKeyRows(ctx); listErr == nil {
+		if after, listErr := s.keyRows(ctx, ""); listErr == nil {
 			created.keyID = newestCreatedKeyID(after, known, group.KeyName)
 		}
 	}
@@ -398,10 +444,15 @@ func (s *providerSession) createNewAPIKey(ctx context.Context, group providerGro
 func (s *providerSession) newAPIKeySecret(ctx context.Context, keyID string) (string, error) {
 	path := "/api/token/" + url.PathEscape(keyID) + "/key"
 	data, _, err := s.call(ctx, http.MethodPost, path, map[string]any{}, nil, true)
-	var remote *providerRemoteError
-	if errors.As(err, &remote) && (remote.status == http.StatusNotFound || remote.status == http.StatusMethodNotAllowed) {
+	status := providerKeyHTTPStatus(err)
+	if status >= 520 && status <= 524 && ctx.Err() == nil {
+		// This POST reads an existing key; never replay a key-creation request.
+		data, _, err = s.call(ctx, http.MethodPost, path, map[string]any{}, nil, true)
+		status = providerKeyHTTPStatus(err)
+	}
+	if status == http.StatusNotFound || status == http.StatusMethodNotAllowed {
 		data, _, err = s.call(ctx, http.MethodGet, path, nil, nil, true)
-		if errors.As(err, &remote) && (remote.status == http.StatusNotFound || remote.status == http.StatusMethodNotAllowed) {
+		if status = providerKeyHTTPStatus(err); status == http.StatusNotFound || status == http.StatusMethodNotAllowed {
 			return "", errProviderKeySecretUnavailable
 		}
 	}
@@ -427,15 +478,22 @@ type providerList struct {
 	legacy bool
 }
 
-// listRows walks a paginated list. A page without new IDs ends the walk, so a
-// site that ignores the page parameter cannot loop forever.
-func (s *providerSession) listRows(ctx context.Context, pathFor func(page int) string, zeroBasedLegacy bool) ([]map[string]any, error) {
+// keyRows walks the key list, stopping at wantedID when only one key is needed.
+// A page without new IDs ends the walk if the provider ignores pagination.
+func (s *providerSession) keyRows(ctx context.Context, wantedID string) ([]map[string]any, error) {
+	newAPI := s.record.SiteType == "newapi"
+	pathFor := func(page int) string {
+		if newAPI {
+			return fmt.Sprintf("/api/token/?p=%d&page_size=%d", page, providerKeyPageSize)
+		}
+		return fmt.Sprintf("/api/v1/keys?page=%d&page_size=%d&sort_by=created_at&sort_order=desc", page, providerKeyPageSize)
+	}
 	page := 1
 	current, err := s.listPage(ctx, pathFor(page))
 	if err != nil {
 		return nil, err
 	}
-	if current.legacy && zeroBasedLegacy {
+	if current.legacy && newAPI {
 		// Legacy New API pages are numbered from zero and ignore page_size.
 		page = 0
 		if current, err = s.listPage(ctx, pathFor(page)); err != nil {
@@ -451,6 +509,9 @@ func (s *providerSession) listRows(ctx context.Context, pathFor func(page int) s
 			if !validProviderKeyID(id) {
 				return nil, errProviderResponse
 			}
+			if id == wantedID {
+				return []map[string]any{item}, nil
+			}
 			if !seen[id] {
 				seen[id] = true
 				rows = append(rows, item)
@@ -460,6 +521,9 @@ func (s *providerSession) listRows(ctx context.Context, pathFor func(page int) s
 		// An upstream may cap page_size below our requested size without
 		// returning total. A short page does not prove there is no next page.
 		if added == 0 || (current.total >= 0 && len(rows) >= current.total) {
+			if wantedID != "" {
+				return nil, errProviderKeyMissing
+			}
 			return rows, nil
 		}
 		if fetched >= providerKeyMaxPages {

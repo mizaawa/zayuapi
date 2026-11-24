@@ -469,6 +469,9 @@ export async function getAvailableModels(id: number): Promise<ClaudeModel[]> {
   return data
 }
 
+// Allow for provider key resolution (25s) and four bounded catalog reads (8s each).
+const modelSyncTimeout = 65_000
+
 export interface SyncUpstreamModelsResult {
   models: string[]
 }
@@ -480,7 +483,7 @@ export interface SyncUpstreamModelsOverrides {
 
 /** Fetch upstream models with nonempty form values overriding saved credentials. */
 export async function syncUpstreamModels(id: number, overrides?: SyncUpstreamModelsOverrides): Promise<SyncUpstreamModelsResult> {
-  const { data } = await apiClient.post<SyncUpstreamModelsResult>(`/admin/accounts/${id}/models/sync-upstream`, overrides)
+  const { data } = await apiClient.post<SyncUpstreamModelsResult>(`/admin/accounts/${id}/models/sync-upstream`, overrides, { timeout: modelSyncTimeout })
   return data
 }
 
@@ -489,6 +492,7 @@ export interface SyncUpstreamPreviewParams {
   type: string
   base_url?: string
   api_key?: string
+  proxy_id?: number
   /** Provider import: the server resolves this provider key for the preview. */
   provider_id?: string
   provider_key_id?: string
@@ -500,7 +504,7 @@ export interface SyncUpstreamPreviewParams {
  * @returns List of model IDs returned by the upstream
  */
 export async function syncUpstreamModelsPreview(params: SyncUpstreamPreviewParams): Promise<SyncUpstreamModelsResult> {
-  const { data } = await apiClient.post<SyncUpstreamModelsResult>('/admin/accounts/models/sync-upstream-preview', params)
+  const { data } = await apiClient.post<SyncUpstreamModelsResult>('/admin/accounts/models/sync-upstream-preview', params, { timeout: modelSyncTimeout })
   return data
 }
 

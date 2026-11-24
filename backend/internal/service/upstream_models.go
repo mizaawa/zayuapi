@@ -3,12 +3,14 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/pkg/antigravity"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/claude"
@@ -98,28 +100,17 @@ func (s *AccountTestService) FetchUpstreamSupportedModels(ctx context.Context, a
 	if err != nil {
 		return nil, err
 	}
+	// The native builder checked this account's key and validated its base URL.
+	// The relay attempts use only that configured origin and its tenant mount.
+	if base, protocols := relayModelProtocols(account); len(protocols) > 0 {
+		return s.fetchRelayModelList(ctx, account, base, protocols)
+	}
 
 	extractModels := extractUpstreamModelIDs
 	if account.IsGrok() {
 		extractModels = extractGrokUpstreamModelIDs
 	}
-	models, err := s.fetchUpstreamModelList(req, account, extractModels)
-	if err == nil {
-		return models, nil
-	}
-
-	// Relays (New API, sub2api and their forks) often list a platform's
-	// models only through the OpenAI-compatible endpoint, for example when the
-	// key belongs to an upstream group that speaks the OpenAI protocol. Try
-	// that list before reporting the native failure.
-	fallbackReq, ok := s.buildCompatibleModelsFallbackRequest(ctx, account)
-	if !ok {
-		return nil, err
-	}
-	if models, fallbackErr := s.fetchUpstreamModelList(fallbackReq, account, extractUpstreamModelIDs); fallbackErr == nil {
-		return models, nil
-	}
-	return nil, err
+	return s.fetchUpstreamModelList(req, account, extractModels)
 }
 
 // fetchUpstreamModelList reads every page of one model list. Google's list
@@ -166,6 +157,13 @@ func (s *AccountTestService) readUpstreamModelsPage(req *http.Request, proxyURL 
 	}
 	defer func() { _ = resp.Body.Close() }()
 
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+		return nil, newUpstreamModelSyncUpstreamError(
+			fmt.Sprintf("Upstream model list request failed with HTTP %d", resp.StatusCode),
+			fmt.Errorf("upstream model list returned HTTP %d", resp.StatusCode),
+		)
+	}
+
 	body, err := io.ReadAll(io.LimitReader(resp.Body, upstreamModelsBodyLimit+1))
 	if err != nil {
 		return nil, newUpstreamModelSyncUpstreamError("Failed to read upstream model list", err)
@@ -174,12 +172,6 @@ func (s *AccountTestService) readUpstreamModelsPage(req *http.Request, proxyURL 
 		return nil, newUpstreamModelSyncUpstreamError("Upstream model list response is too large", fmt.Errorf("response exceeds %d bytes", upstreamModelsBodyLimit))
 	}
 
-	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
-		return nil, newUpstreamModelSyncUpstreamError(
-			fmt.Sprintf("Upstream model list request failed with HTTP %d", resp.StatusCode),
-			fmt.Errorf("upstream model list returned HTTP %d", resp.StatusCode),
-		)
-	}
 	return body, nil
 }
 
@@ -203,39 +195,99 @@ func upstreamModelsNextPage(body []byte) (string, string) {
 	return "", ""
 }
 
-// buildCompatibleModelsFallbackRequest builds the OpenAI-compatible model list
-// request (GET {base}/v1/models with a Bearer key) for Gemini and Anthropic
-// API-key accounts on relays. Official upstreams have no such fallback: their
-// native list is authoritative.
-func (s *AccountTestService) buildCompatibleModelsFallbackRequest(ctx context.Context, account *Account) (*http.Request, bool) {
-	if account == nil || account.Type != AccountTypeAPIKey {
-		return nil, false
+// Responses and Chat Completions share the same read-only bearer catalog. A
+// second GET gives a transient gateway failure a chance to recover; never POST
+// to a generation endpoint (it needs a known model and may incur charges).
+const (
+	modelsResponses       = "Responses"
+	modelsChat            = "Chat"
+	modelsAnthropic       = "Anthropic"
+	modelsGemini          = "Gemini"
+	relayModelListTimeout = 8 * time.Second // whole protocol, including pagination
+)
+
+func relayModelProtocols(account *Account) (*url.URL, []string) {
+	base := strings.TrimSpace(account.GetCredential("base_url"))
+	if account.Type != AccountTypeAPIKey || base == "" || isOfficialModelsUpstream(base) {
+		return nil, nil
 	}
-	var baseURL string
-	switch {
-	case account.IsGemini():
-		baseURL = geminiCompatibleModelsBaseURL(account.GetCredential("base_url"))
-	case account.IsAnthropic():
-		baseURL = strings.TrimSpace(account.GetCredential("base_url"))
+	u, err := url.Parse(base)
+	if err != nil || strings.EqualFold(u.Hostname(), "api.openai.com") || strings.EqualFold(u.Hostname(), "api.x.ai") {
+		return nil, nil
+	}
+	switch account.Platform {
+	case PlatformGemini:
+		return u, []string{modelsGemini, modelsResponses, modelsChat, modelsAnthropic}
+	case PlatformAnthropic:
+		return u, []string{modelsAnthropic, modelsResponses, modelsChat, modelsGemini}
+	case PlatformOpenAI, PlatformGrok, PlatformCustom:
+		return u, []string{modelsResponses, modelsChat, modelsAnthropic, modelsGemini}
 	default:
-		return nil, false
+		return nil, nil
 	}
-	apiKey := strings.TrimSpace(account.GetCredential("api_key"))
-	if baseURL == "" || apiKey == "" || isOfficialModelsUpstream(baseURL) {
-		return nil, false
+}
+
+// Only change known endpoint suffixes on the validated relay URL. Keep its
+// origin, tenant mount and any query parameters; never use a URL from a reply.
+func relayModelListURL(base url.URL, protocol string) string {
+	path := strings.TrimRight(base.Path, "/")
+	for _, suffix := range []string{"/v1beta/openai/models", "/v1beta/openai", "/v1beta/models", "/v1beta", "/v1/chat/completions", "/v1/responses", "/v1/messages", "/v1/models", "/v1"} {
+		if strings.HasSuffix(strings.ToLower(path), suffix) {
+			path = path[:len(path)-len(suffix)]
+			break
+		}
 	}
-	normalizedBaseURL, err := s.validateUpstreamBaseURL(baseURL)
-	if err != nil {
-		return nil, false
+	base.Path, base.RawPath, base.Fragment = path, "", ""
+	if protocol == modelsGemini {
+		base.Path += "/v1beta/models"
+		return base.String()
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, buildOpenAIModelsURL(normalizedBaseURL), nil)
-	if err != nil {
-		return nil, false
+	return buildOpenAIModelsURL(base.String())
+}
+
+func (s *AccountTestService) fetchRelayModelList(ctx context.Context, account *Account, base *url.URL, protocols []string) ([]string, error) {
+	key := strings.TrimSpace(account.GetCredential("api_key"))
+
+	var failures []string
+	for _, protocol := range protocols {
+		if err := ctx.Err(); err != nil {
+			return nil, newUpstreamModelSyncUpstreamError("Model sync interrupted", err)
+		}
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, relayModelListURL(*base, protocol), nil)
+		if err != nil {
+			return nil, newUpstreamModelSyncConfigError("Invalid upstream model list URL", err)
+		}
+		req.Header.Set("Accept", "application/json")
+		switch protocol {
+		case modelsAnthropic:
+			req.Header.Set("anthropic-version", "2023-06-01")
+			setAnthropicAPIKeyAuthHeader(req.Header, account, key)
+		case modelsGemini:
+			req.Header.Set("x-goog-api-key", key)
+		default:
+			req.Header.Set("Authorization", "Bearer "+key)
+		}
+		account.ApplyHeaderOverrides(req.Header)
+		extract := extractUpstreamModelIDs
+		if account.IsGrok() && (protocol == modelsResponses || protocol == modelsChat) {
+			extract = extractGrokUpstreamModelIDs
+		}
+		attempt, cancel := context.WithTimeout(ctx, relayModelListTimeout)
+		models, err := s.fetchUpstreamModelList(req.WithContext(attempt), account, extract)
+		cancel()
+		if err == nil {
+			return models, nil
+		}
+		reason := "request failed"
+		var failure *UpstreamModelSyncError
+		if errors.Is(err, context.DeadlineExceeded) {
+			reason = "timed out"
+		} else if errors.As(err, &failure) {
+			reason = failure.SafeMessage()
+		}
+		failures = append(failures, protocol+": "+reason)
 	}
-	req.Header.Set("Accept", "application/json")
-	req.Header.Set("Authorization", "Bearer "+apiKey)
-	account.ApplyHeaderOverrides(req.Header)
-	return req, true
+	return nil, newUpstreamModelSyncUpstreamError(strings.Join(failures, "; "), nil)
 }
 
 // geminiCompatibleModelsBaseURL strips the Gemini-native path from a relay
@@ -648,8 +700,9 @@ func extractGrokUpstreamModelIDs(body []byte) ([]string, error) {
 
 func extractUpstreamModelIDsWithSelector(body []byte, selectID func(upstreamModelEntry) string) ([]string, error) {
 	var response struct {
-		Data   []upstreamModelEntry `json:"data"`
-		Models []upstreamModelEntry `json:"models"`
+		Success *bool                `json:"success"`
+		Data    []upstreamModelEntry `json:"data"`
+		Models  []upstreamModelEntry `json:"models"`
 	}
 	if err := json.Unmarshal(body, &response); err != nil {
 		var arrayResponse []upstreamModelEntry
@@ -664,6 +717,9 @@ func extractUpstreamModelIDsWithSelector(body []byte, selectID func(upstreamMode
 		return dedupeAndSortModelIDs(models), nil
 	}
 
+	if response.Success != nil && !*response.Success {
+		return nil, nil // a failed relay envelope is not a model catalog
+	}
 	models := make([]string, 0, len(response.Data)+len(response.Models))
 	for _, entry := range response.Data {
 		models = append(models, selectID(entry))

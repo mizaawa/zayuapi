@@ -388,9 +388,14 @@
               </button>
             </div>
 
+            <ModelRestrictionFilter
+              v-model="modelFilter"
+              :no-matches="!!modelFilter.trim() && modelRestrictionMode === 'mapping' && !visibleMappings.length"
+            />
+
             <!-- Whitelist Mode -->
             <div v-if="modelRestrictionMode === 'whitelist'">
-              <ModelWhitelistSelector v-model="allowedModels" :platform="form.platform" :sync-credentials="syncPreviewCredentials" />
+              <ModelWhitelistSelector :filter="modelFilter" v-model="allowedModels" :platform="form.platform" :sync-credentials="syncPreviewCredentials" />
               <p class="text-xs text-gray-500 dark:text-gray-400">
                 {{ t('admin.accounts.selectedModels', { count: allowedModels.length }) }}
                 <span v-if="allowedModels.length === 0">{{
@@ -423,7 +428,9 @@
             <!-- Model Mapping List -->
             <div v-if="modelMappings.length > 0" class="mb-3 space-y-2">
               <div
-                v-for="(mapping, index) in modelMappings"
+                v-for="{ mapping, index } in visibleMappings"
+                @focusin="editingMapping = mapping"
+                @focusout="onMappingBlur"
                 :key="getModelMappingKey(mapping)"
                 class="flex items-center gap-2"
               >
@@ -1484,6 +1491,8 @@ import Icon from '@/components/icons/Icon.vue'
 import ProxySelector from '@/components/common/ProxySelector.vue'
 import ProxyAdBanner from '@/components/common/ProxyAdBanner.vue'
 import GroupSelector from '@/components/common/GroupSelector.vue'
+import ModelRestrictionFilter from './ModelRestrictionFilter.vue'
+import { useModelRestrictionFilter } from './modelRestrictionFilter'
 import ModelWhitelistSelector from '@/components/account/ModelWhitelistSelector.vue'
 import QuotaLimitCard from '@/components/account/QuotaLimitCard.vue'
 import Toggle from '@/components/common/Toggle.vue'
@@ -1606,16 +1615,18 @@ let providerSuggestedName = ''
 const providerRateFill = ref<{ key: string; rate: number | null; groupName: string } | null>(null)
 
 const syncPreviewCredentials = computed((): SyncUpstreamPreviewParams | undefined => {
+  const proxy = form.proxy_id ? { proxy_id: form.proxy_id } : {}
   if (importSource.value === 'provider') {
     const selection = providerSelection.value
     return selection
-      ? { platform: form.platform, type: form.type, provider_id: selection.providerId, provider_key_id: selection.keyId }
+      ? { ...proxy, platform: form.platform, type: form.type, provider_id: selection.providerId, provider_key_id: selection.keyId }
       : undefined
   }
   if (!apiKeyValue.value) return undefined
   return {
     platform: form.platform,
     type: form.type,
+    ...proxy,
     base_url: apiKeyBaseUrl.value || undefined,
     api_key: apiKeyValue.value
   }
@@ -1631,6 +1642,7 @@ const editWeeklyResetDay = ref<number | null>(null)
 const editWeeklyResetHour = ref<number | null>(null)
 const editResetTimezone = ref<string | null>(null)
 const modelMappings = ref<ModelMapping[]>([])
+const { modelFilter, visibleMappings, editingMapping, onMappingBlur } = useModelRestrictionFilter(modelMappings)
 const openAICompactModelMappings = ref<ModelMapping[]>([])
 const modelRestrictionMode = ref<'whitelist' | 'mapping'>('whitelist')
 const allowedModels = ref<string[]>([])
@@ -1910,6 +1922,7 @@ watch(() => form.platform, (platform) => {
   modelMappings.value = []
   openAICompactModelMappings.value = []
   // Every platform, Grok and Custom included, opens on the whitelist tab.
+  modelFilter.value = ''
   modelRestrictionMode.value = 'whitelist'
   allowedModels.value = [...getModelsByPlatform(platform)]
   antigravityModelMappings.value = []
@@ -1997,6 +2010,7 @@ watch(
 
 // Model mapping helpers
 const addModelMapping = () => {
+  modelFilter.value = ''
   modelMappings.value.push({ from: '', to: '' })
 }
 
@@ -2315,6 +2329,7 @@ const resetForm = () => {
   editResetTimezone.value = null
   modelMappings.value = []
   openAICompactModelMappings.value = []
+  modelFilter.value = ''
   modelRestrictionMode.value = 'whitelist'
   allowedModels.value = [...claudeModels] // Default fill related models
 

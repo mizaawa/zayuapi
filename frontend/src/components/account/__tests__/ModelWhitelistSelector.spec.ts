@@ -94,6 +94,23 @@ describe('ModelWhitelistSelector', () => {
     expect(wrapper.emitted('update:modelValue')).toBeUndefined()
   })
 
+  it('filters selected models without changing the whitelist and clears only matching entries', async () => {
+    const wrapper = mountSelector({ modelValue: ['gpt-5.6-sol', 'DeepSeek-v4', 'deepseek-chat'] })
+    await wrapper.setProps({ filter: '  DEEPseek  ' })
+    const selected = wrapper.get('div.cursor-pointer')
+    expect(selected.text()).toContain('DeepSeek-v4')
+    expect(selected.text()).toContain('deepseek-chat')
+    expect(selected.text()).not.toContain('gpt-5.6-sol')
+    await wrapper.setProps({ filter: 'nothing matches' })
+    expect(selected.text()).toContain('admin.accounts.noMatchingModels')
+    await wrapper.setProps({ filter: '' })
+    expect(selected.text()).toContain('gpt-5.6-sol')
+    expect(wrapper.emitted('update:modelValue')).toBeUndefined()
+    await wrapper.setProps({ filter: 'deepseek' })
+    await wrapper.findAll('button').find(b => b.text() === 'admin.accounts.clearFilteredModels')!.trigger('click')
+    expect(wrapper.emitted('update:modelValue')).toEqual([[['gpt-5.6-sol']]])
+  })
+
   it('keeps the existing model selection behavior', async () => {
     const wrapper = mountSelector()
     await wrapper.get('div.cursor-pointer').trigger('click')
@@ -163,6 +180,30 @@ describe('ModelWhitelistSelector', () => {
     expect(wrapper.emitted('update:modelValue')).toEqual([[['preview-model']]])
   })
 
+  it('recovers from a transient Cloudflare response without retrying application failures', async () => {
+    syncUpstreamModelsPreview.mockRejectedValueOnce({ status: 520, message: 'invalid origin response' })
+    const credentials = { platform: 'gemini', type: 'apikey', provider_id: 'p', provider_key_id: 'k' }
+    const wrapper = mountSelector({ syncCredentials: credentials })
+    await wrapper.findAll('button').find(b => b.text() === 'admin.accounts.syncUpstreamModels')!.trigger('click')
+    await flushPromises()
+    expect(syncUpstreamModelsPreview.mock.calls).toEqual([[credentials], [credentials]])
+    expect(wrapper.emitted('update:modelValue')).toEqual([[['preview-model']]])
+    expect(showError).not.toHaveBeenCalled()
+  })
+
+  it('ignores a late response for a previously selected provider key', async () => {
+    let finish!: (result: { models: string[] }) => void
+    syncUpstreamModelsPreview.mockImplementationOnce(() => new Promise(resolve => { finish = resolve }))
+    const credentials = { platform: 'gemini', type: 'apikey', provider_id: 'p', provider_key_id: 'old' }
+    const wrapper = mountSelector({ syncCredentials: credentials })
+    await wrapper.findAll('button').find(b => b.text() === 'admin.accounts.syncUpstreamModels')!.trigger('click')
+    await wrapper.setProps({ syncCredentials: { ...credentials, provider_key_id: 'new' } })
+    finish({ models: ['wrong-key-model'] })
+    await flushPromises()
+    expect(wrapper.emitted('update:modelValue')).toBeUndefined()
+    expect(showError).not.toHaveBeenCalled()
+  })
+
   it('shows the server reason when an upstream model sync fails', async () => {
     // The API client rejects with a plain object, not an Error instance.
     syncUpstreamModels.mockRejectedValueOnce({
@@ -176,6 +217,7 @@ describe('ModelWhitelistSelector', () => {
     await syncButton.trigger('click')
     await flushPromises()
 
+    expect(syncUpstreamModels).toHaveBeenCalledTimes(1)
     expect(showError).toHaveBeenCalledWith(
       'admin.accounts.syncUpstreamModelsError:Upstream model list request failed with HTTP 400'
     )

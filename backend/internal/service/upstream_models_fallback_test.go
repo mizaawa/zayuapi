@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"errors"
 	"io"
 	"net/http"
 	"strings"
@@ -76,7 +75,7 @@ func TestFetchUpstreamSupportedModelsFallsBackOnUnusableSuccessBodies(t *testing
 
 	for name, body := range map[string]string{
 		"spa page":        `<!doctype html><html><body>index</body></html>`,
-		"failure payload": `{"success":false,"message":"无效的令牌"}`,
+		"failure payload": `{"success":false,"data":[{"id":"not-a-catalog"}]}`,
 	} {
 		upstream := &httpUpstreamRecorder{responses: []*http.Response{
 			upstreamModelsJSONResponse(http.StatusOK, body),
@@ -177,32 +176,81 @@ func TestFetchUpstreamSupportedModelsAnthropicRelayFallsBackToBearerList(t *test
 	require.Empty(t, upstream.requests[1].Header.Get("x-api-key"))
 }
 
-func TestFetchUpstreamSupportedModelsReportsNativeFailureWhenFallbackFails(t *testing.T) {
+func TestRelayModelListReportsAllFailures(t *testing.T) {
 	t.Parallel()
-
 	upstream := &httpUpstreamRecorder{responses: []*http.Response{
-		upstreamModelsJSONResponse(http.StatusForbidden, `{"error":"SECRET_TOKEN"}`),
-		upstreamModelsJSONResponse(http.StatusNotFound, `{"error":"SECRET_TOKEN"}`),
+		upstreamModelsJSONResponse(520, `<html>SECRET</html>`),
+		upstreamModelsJSONResponse(http.StatusOK, `{"data":[]}`),
+		upstreamModelsJSONResponse(http.StatusOK, `{"data":[`),
+		upstreamModelsJSONResponse(http.StatusForbidden, `{"error":"SECRET"}`),
 	}}
 	svc := &AccountTestService{httpUpstream: upstream, cfg: upstreamModelSyncTestConfig()}
-
-	_, err := svc.FetchUpstreamSupportedModels(context.Background(), upstreamModelsAPIKeyAccount(PlatformGemini, "https://relay.example", "relay-key"))
-	require.Error(t, err)
-	var syncErr *UpstreamModelSyncError
-	require.True(t, errors.As(err, &syncErr))
-	require.Equal(t, UpstreamModelSyncErrorUpstream, syncErr.Kind)
-	require.Contains(t, syncErr.SafeMessage(), "HTTP 403")
-	require.NotContains(t, syncErr.SafeMessage(), "SECRET_TOKEN")
-	require.Len(t, upstream.requests, 2)
+	_, err := svc.FetchUpstreamSupportedModels(context.Background(), upstreamModelsAPIKeyAccount(PlatformGemini, "https://relay.example", "SECRET"))
+	var failure *UpstreamModelSyncError
+	require.ErrorAs(t, err, &failure)
+	require.Equal(t, UpstreamModelSyncErrorUpstream, failure.Kind)
+	require.Regexp(t, `Gemini: .*520; Responses: .*no supported models; Chat: .*not valid JSON; Anthropic: .*403`, failure.SafeMessage())
+	require.NotContains(t, err.Error(), "SECRET")
+	require.Len(t, upstream.requests, 4)
 }
 
-func TestFetchUpstreamSupportedModelsSkipsFallbackForOfficialAndOpenAI(t *testing.T) {
+func TestRelayModelListProtocolOrderAndShortCircuit(t *testing.T) {
+	t.Parallel()
+	for platform, order := range map[string][]string{
+		PlatformGemini:    {"Gemini", "Responses", "Chat", "Anthropic"},
+		PlatformAnthropic: {"Anthropic", "Responses", "Chat", "Gemini"},
+		PlatformOpenAI:    {"Responses", "Chat", "Anthropic", "Gemini"},
+		PlatformCustom:    {"Responses", "Chat", "Anthropic", "Gemini"},
+		PlatformGrok:      {"Responses", "Chat", "Anthropic", "Gemini"},
+	} {
+		for success, name := range order {
+			t.Run(platform+"/"+name, func(t *testing.T) {
+				upstream := &httpUpstreamRecorder{}
+				for range success {
+					upstream.responses = append(upstream.responses, upstreamModelsJSONResponse(520, `<html>bad origin</html>`))
+				}
+				body := `{"data":[{"id":"relay-only"}]}`
+				if name == "Gemini" {
+					body = `{"models":[{"name":"models/relay-only"}]}`
+				}
+				upstream.responses = append(upstream.responses, upstreamModelsJSONResponse(200, body))
+				svc := &AccountTestService{httpUpstream: upstream, cfg: upstreamModelSyncTestConfig()}
+				account := upstreamModelsAPIKeyAccount(platform, "https://relay.example/tenant/v1/", "key")
+				_, protocols := relayModelProtocols(account)
+				require.Equal(t, order, protocols)
+				models, err := svc.FetchUpstreamSupportedModels(context.Background(), account)
+				require.NoError(t, err)
+				require.Equal(t, []string{"relay-only"}, models)
+				require.Len(t, upstream.requests, success+1)
+				for i, req := range upstream.requests {
+					path, bearer, anthropic, google, version := "/tenant/v1/models", "", "", "", ""
+					switch order[i] {
+					case "Gemini":
+						path, google = "/tenant/v1beta/models", "key"
+					case "Anthropic":
+						anthropic, version = "key", "2023-06-01"
+					default:
+						bearer = "Bearer key"
+					}
+					require.Equal(t, "GET", req.Method)
+					require.Equal(t, "https://relay.example"+path, req.URL.String())
+					require.Equal(t, bearer, req.Header.Get("Authorization"))
+					require.Equal(t, google, req.Header.Get("x-goog-api-key"))
+					require.Equal(t, anthropic, req.Header.Get("x-api-key"))
+					require.Equal(t, version, req.Header.Get("anthropic-version"))
+				}
+			})
+		}
+	}
+}
+
+func TestFetchUpstreamSupportedModelsSkipsFallbackForOfficialUpstreams(t *testing.T) {
 	t.Parallel()
 
 	for _, account := range []*Account{
 		upstreamModelsAPIKeyAccount(PlatformGemini, "https://generativelanguage.googleapis.com", "google-key"),
 		upstreamModelsAPIKeyAccount(PlatformAnthropic, "https://api.anthropic.com", "sk-ant"),
-		upstreamModelsAPIKeyAccount(PlatformOpenAI, "https://relay.example/v1", "sk-openai"),
+		upstreamModelsAPIKeyAccount(PlatformOpenAI, "https://api.openai.com/v1", "sk-openai"),
 	} {
 		upstream := &httpUpstreamRecorder{responses: []*http.Response{
 			upstreamModelsJSONResponse(http.StatusUnauthorized, `{"error":"bad key"}`),

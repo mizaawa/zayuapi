@@ -8,7 +8,7 @@
       >
         <div class="grid grid-cols-2 gap-1.5">
           <span
-            v-for="model in modelValue"
+            v-for="model in visibleModels"
             :key="model"
             class="inline-flex items-center justify-between gap-1 rounded bg-gray-100 px-2 py-1 text-xs text-gray-700 dark:bg-dark-600 dark:text-gray-300"
           >
@@ -25,8 +25,9 @@
             </button>
           </span>
         </div>
+        <p v-if="filterKeyword && !visibleModels.length" role="status" class="input-hint">{{ t('admin.accounts.noMatchingModels') }}</p>
         <div class="mt-2 flex items-center justify-between border-t border-gray-200 pt-2 dark:border-dark-600">
-          <span class="text-xs text-gray-400">{{ t('admin.accounts.modelCount', { count: modelValue.length }) }}</span>
+          <span class="text-xs text-gray-400">{{ filterKeyword ? t('admin.accounts.filteredModelCount', { visible: visibleModels.length, total: modelValue.length }) : t('admin.accounts.modelCount', { count: modelValue.length }) }}</span>
           <svg class="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
           </svg>
@@ -114,9 +115,10 @@
       <button
         type="button"
         @click="clearAll"
+        :disabled="!!filterKeyword && !visibleModels.length"
         class="rounded-lg border border-red-200 px-3 py-1.5 text-sm text-red-600 hover:bg-red-50 dark:border-red-800 dark:text-red-400 dark:hover:bg-red-900/30"
       >
-        {{ t('admin.accounts.clearAllModels') }}
+        {{ filterKeyword ? t('admin.accounts.clearFilteredModels') : t('admin.accounts.clearAllModels') }}
       </button>
     </div>
 
@@ -146,7 +148,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, watch, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAppStore } from '@/stores/app'
 import { accountsAPI } from '@/api/admin/accounts'
@@ -156,12 +158,13 @@ import ModelIcon from '@/components/common/ModelIcon.vue'
 import Icon from '@/components/icons/Icon.vue'
 import { allModels, getModelsByPlatform } from '@/composables/useModelWhitelist'
 import { extractApiErrorMessage } from '@/utils/apiError'
-import { providerImportErrorMessage } from '@/components/account/providerImport'
+import { providerErrorStatus, providerImportErrorMessage } from '@/components/account/providerImport'
 
 const { t } = useI18n()
 
 const props = defineProps<{
   modelValue: string[]
+  filter?: string
   platform?: string
   platforms?: string[]
   accountId?: number
@@ -183,6 +186,15 @@ const searchQuery = ref('')
 const customModel = ref('')
 const isComposing = ref(false)
 const isSyncingUpstream = ref(false)
+let syncGeneration = 0
+const invalidateSync = () => { syncGeneration++; isSyncingUpstream.value = false }
+watch([() => props.accountId, () => props.syncCredentials, () => props.syncOverrides], invalidateSync, { flush: 'sync' })
+onBeforeUnmount(invalidateSync)
+
+function edgeFailure(error: unknown) {
+  const status = providerErrorStatus(error)
+  return status >= 520 && status <= 524
+}
 const normalizedPlatforms = computed(() => {
   const rawPlatforms =
     props.platforms && props.platforms.length > 0
@@ -223,6 +235,9 @@ const canSyncUpstream = computed(() => {
   return false
 })
 
+const filterKeyword = computed(() => props.filter?.trim().toLowerCase() || '')
+const visibleModels = computed(() => props.modelValue.filter(model => model.toLowerCase().includes(filterKeyword.value)))
+
 const availableOptions = computed(() => {
   if (normalizedPlatforms.value.length === 0) {
     return allModels
@@ -240,10 +255,9 @@ const availableOptions = computed(() => {
 
 const filteredModels = computed(() => {
   const query = searchQuery.value.toLowerCase().trim()
-  if (!query) return availableOptions.value
-  return availableOptions.value.filter(
-    m => m.value.toLowerCase().includes(query) || m.label.toLowerCase().includes(query)
-  )
+  return availableOptions.value.filter(m =>
+    m.value.toLowerCase().includes(filterKeyword.value) &&
+    (!query || m.value.toLowerCase().includes(query) || m.label.toLowerCase().includes(query)))
 })
 
 const toggleDropdown = () => {
@@ -297,16 +311,24 @@ const fillRelated = () => {
 const syncUpstreamModels = async () => {
   if (isSyncingUpstream.value || !canSyncUpstream.value) return
 
+  const { accountId, syncOverrides, syncCredentials } = props
+  if (!accountId && !syncCredentials) return
+  const load = () => accountId
+    ? accountsAPI.syncUpstreamModels(accountId, syncOverrides)
+    : accountsAPI.syncUpstreamModelsPreview(syncCredentials!)
+  const generation = ++syncGeneration
   isSyncingUpstream.value = true
   try {
     let result
-    if (props.accountId) {
-      result = await accountsAPI.syncUpstreamModels(props.accountId, props.syncOverrides)
-    } else if (props.syncCredentials) {
-      result = await accountsAPI.syncUpstreamModelsPreview(props.syncCredentials as SyncUpstreamPreviewParams)
-    } else {
-      return
+    try {
+      result = await load()
+    } catch (error) {
+      // Only replay a read-only preview/list lost at the console's edge. An
+      // application 502 already contains the results of the protocol attempts.
+      if (generation !== syncGeneration || !edgeFailure(error)) throw error
+      result = await load()
     }
+    if (generation !== syncGeneration) return
 
     const upstreamModels = result.models.map(model => model.trim()).filter(Boolean)
     if (upstreamModels.length === 0) {
@@ -330,18 +352,25 @@ const syncUpstreamModels = async () => {
       appStore.showInfo(t('admin.accounts.syncUpstreamModelsNoChanges', { count: upstreamModels.length }))
     }
   } catch (error) {
+    if (generation !== syncGeneration) return
+    if (edgeFailure(error)) {
+      appStore.showError(t('admin.accounts.modelSyncEdgeError', { status: providerErrorStatus(error) }))
+      return
+    }
     // The API client rejects with plain {message, reason} objects, so show the
     // server's reason (provider errors localised) instead of a generic text.
     const message = providerImportErrorMessage(error, t) ||
       extractApiErrorMessage(error, t('admin.accounts.syncUpstreamModelsFailed'))
     appStore.showError(t('admin.accounts.syncUpstreamModelsError', { message }))
   } finally {
-    isSyncingUpstream.value = false
+    if (generation === syncGeneration) isSyncingUpstream.value = false
   }
 }
 
 const clearAll = () => {
-  emit('update:modelValue', [])
+  emit('update:modelValue', filterKeyword.value
+    ? props.modelValue.filter(model => !model.toLowerCase().includes(filterKeyword.value))
+    : [])
 }
 
 </script>
