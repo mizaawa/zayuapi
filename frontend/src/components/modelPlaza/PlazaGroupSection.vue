@@ -26,7 +26,7 @@
               Fast ×{{ group.fast_rate_multiplier ?? 2 }}
             </span>
             <span v-if="fastRateEnabled" class="plaza-badge plaza-badge-fast" :title="ultraRateNote">
-              UltraFast ×{{ group.ultrafast_rate_multiplier ?? 6 }}
+              UltraFast ×{{ group.ultrafast_rate_multiplier ?? 8 }}
             </span>
             <span
               v-if="group.is_exclusive"
@@ -145,7 +145,7 @@ const fastRateEnabled = computed(() => props.group.platform === 'openai' && prop
 const forcedSpeed = computed(() => props.group.platform !== 'openai' ? null :
   ({ fast: 'Fast', ultrafast: 'UltraFast', off: null })[props.group.forced_fast_mode ?? 'off'])
 const ultraRateNote = computed(() => t('modelPlaza.detail.ultraRateNote', {
-  multiplier: props.group.ultrafast_rate_multiplier ?? 6
+  multiplier: props.group.ultrafast_rate_multiplier ?? 8
 }))
 const fastRateNote = computed(() => t('modelPlaza.detail.fastRateNote', {
   multiplier: props.group.fast_rate_multiplier ?? 2

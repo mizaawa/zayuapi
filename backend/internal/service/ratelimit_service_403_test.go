@@ -95,6 +95,7 @@ func TestRateLimitService_HandleUpstreamError_APIKey403KeepsAccountActiveWhenTra
 	repo := &rateLimitAccountRepoStub{}
 	service := NewRateLimitService(repo, nil, &config.Config{}, nil, nil)
 	account := &Account{ID: 303, Platform: PlatformOpenAI, Type: AccountTypeAPIKey, Status: StatusActive, Schedulable: true}
+	account.Credentials = map[string]any{"custom_error_codes_enabled": true, "custom_error_codes": []any{float64(403)}}
 
 	shouldDisable := service.HandleUpstreamError(context.Background(), account, http.StatusForbidden, http.Header{}, []byte(`{"error":{"message":"temporary edge rejection"}}`))
 
@@ -114,6 +115,7 @@ func TestRateLimitService_HandleUpstreamError_APIKey403ThresholdKeepsAccountActi
 	service := NewRateLimitService(repo, nil, &config.Config{}, nil, nil)
 	service.SetOpenAI403CounterCache(counter)
 	account := &Account{ID: 304, Platform: PlatformOpenAI, Type: AccountTypeAPIKey, Status: StatusActive, Schedulable: true}
+	account.Credentials = map[string]any{"custom_error_codes_enabled": true, "custom_error_codes": []any{float64(403)}}
 
 	shouldDisable := service.HandleUpstreamError(context.Background(), account, http.StatusForbidden, http.Header{}, []byte(`{"error":{"message":"temporary edge rejection"}}`))
 
@@ -130,6 +132,7 @@ func TestRateLimitService_HandleUpstreamError_NonOpenAIAPIKey403KeepsAccountActi
 	repo := &rateLimitAccountRepoStub{}
 	service := NewRateLimitService(repo, nil, &config.Config{}, nil, nil)
 	account := &Account{ID: 305, Platform: PlatformGemini, Type: AccountTypeAPIKey, Status: StatusActive, Schedulable: true}
+	account.Credentials = map[string]any{"custom_error_codes_enabled": true, "custom_error_codes": []any{float64(403)}}
 
 	shouldDisable := service.HandleUpstreamError(context.Background(), account, http.StatusForbidden, http.Header{}, []byte(`{"error":{"message":"temporary permission edge"}}`))
 

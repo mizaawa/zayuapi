@@ -28,8 +28,8 @@ func TestOperationsDashboardDataQueriesAndScans(t *testing.T) {
 		WithArgs("2026-10-26", today, tomorrow, "2026-10-25", yesterday).
 		WillReturnRows(sqlmock.NewRows([]string{"today_user", "recharge", "today_monitor", "total_user", "user_balance", "total_monitor", "admin_balance", "today_upstream", "yesterday_user", "yesterday_recharge", "yesterday_monitor", "yesterday_upstream", "yesterday_balance_change", "yesterday_admin_consumption"}).
 			AddRow(8.25, 15.5, 0.75, 100.5, 75.25, 12.5, 200.0, 3.0, 7.0, 10.0, 0.5, 2.0, -4.0, 1.25))
-	mock.ExpectQuery(`FROM usage_logs ul JOIN users u.*GROUP BY date ORDER BY date ASC`).
-		WithArgs(trendStart, tomorrow, "Asia/Shanghai").
+	mock.ExpectQuery(`FROM usage_counters uc JOIN users u.*GROUP BY uc.bucket_date ORDER BY uc.bucket_date ASC`).
+		WithArgs(trendStart.Format("2006-01-02"), tomorrow.Format("2006-01-02")).
 		WillReturnRows(sqlmock.NewRows([]string{"date", "upstream", "user", "profit"}).AddRow("2026-10-26", 3.0, 8.0, 5.0))
 	mock.ExpectQuery(`WITH usage_by_group AS .*FROM groups g LEFT JOIN usage_by_group ug ON ug\.group_id = g\.id WHERE g\.deleted_at IS NULL UNION ALL .*UNION ALL SELECT -2, 'Deleted groups'.*g\.deleted_at IS NOT NULL.*ORDER BY 1 ASC`).
 		WithArgs(rangeStart, tomorrow).

@@ -52,6 +52,7 @@ type OpenAIGatewayHandler struct {
 type openAIWSTurnChannelMappingSnapshot struct {
 	turn    int
 	mapping service.ChannelMappingResult
+	prices  context.Context
 }
 
 var errOpenAIWSUnsupportedModelSwitch = errors.New("selected account does not support websocket model switch")
@@ -166,7 +167,7 @@ func usageRecordContext(parent context.Context, base context.Context) context.Co
 	if requestID, _ := parent.Value(ctxkey.RequestID).(string); strings.TrimSpace(requestID) != "" {
 		base = context.WithValue(base, ctxkey.RequestID, strings.TrimSpace(requestID))
 	}
-	return base
+	return service.WithUsagePriceSnapshot(base, parent)
 }
 
 func wrapUsageRecordTaskContext(parent context.Context, task service.UsageRecordTask) service.UsageRecordTask {
@@ -1994,7 +1995,7 @@ const (
 // goroutine 的读取安全。
 //
 // 零值语义（重要）：ws_v2 passthrough ingress 不调用 BeforeTurn，首轮沿用
-// 建连准入，本值保持零，RecordUsage 经 openAIUsagePricingAt 回退到记录时刻。
+// 建连准入，本值保持零，AfterTurn 只为首轮选用握手准入时刻。
 // 后续轮次通过 BeforeRequest 重取分组、冻结定价并执行利润复核。
 // 绝不能用建连时刻初始化：那会把透传连接的所有 turn 钉死在建连时的高峰因子，
 // 客户端只要峰前一分钟建连并保活，整条连接就能全程按谷价结算，正是利润控制
@@ -2633,6 +2634,10 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 				zap.Int("excluded_account_count", len(failedAccountIDs)),
 			)
 			if _, blocked := service.ModelPricingGateBlocked(ctx); blocked && len(failedAccountIDs) == 0 {
+				if service.ModelPricingTemporarilyUnavailable(ctx) {
+					closeOpenAIClientWS(wsConn, coderws.StatusTryAgainLater, "pricing temporarily unavailable")
+					return
+				}
 				closeOpenAIClientWS(wsConn, coderws.StatusPolicyViolation, openAIWSModelPricingCloseReason)
 				return
 			}
@@ -2753,7 +2758,7 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 		// Passthrough rejects overlapping response.create frames, so one immutable
 		// turn-tagged slot preserves the exact mapping used for the in-flight request.
 		var turnChannelMapping atomic.Pointer[openAIWSTurnChannelMappingSnapshot]
-		turnChannelMapping.Store(&openAIWSTurnChannelMappingSnapshot{turn: 1, mapping: channelMappingWS})
+		turnChannelMapping.Store(&openAIWSTurnChannelMappingSnapshot{turn: 1, mapping: channelMappingWS, prices: ctx})
 		// turn 级定价：BeforeRequest/BeforeTurn 重新冻结 pricingAt 并按最新门复核当前账号，
 		// AfterTurn 的计费读取所属 turn 的时刻。零值起步的语义见
 		// openAIWSTurnPricing 的注释——绝不能用建连时刻初始化。
@@ -2832,10 +2837,22 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 					return "", newOpenAIWSUnsupportedModelSwitchError(mapping.MappedModel)
 				}
 				// 连接内换模型不会重新选号，逐 turn 复核新模型能否定价，不能就断开而不是按 $0 转发。
-				if turn > 1 && !h.gatewayService.ModelPricingBillableForAccount(ctx, turnBillingAPIKeys.forTurn(turn, apiKey), model, mapping, account) {
-					return "", newOpenAIWSModelPricingUnavailableError(model)
+				prices := ctx
+				if turn > 1 {
+					turnKey, err := turnBillingAPIKeys.begin(ctx, h.apiKeyService, turn, apiKey)
+					if err != nil {
+						return "", err
+					}
+					var billable bool
+					prices, billable = h.gatewayService.PriceTurnForAccount(ctx, turnKey, model, mapping, account)
+					if !billable {
+						if service.ModelPricingTemporarilyUnavailable(prices) {
+							return "", service.NewOpenAIWSClientCloseError(coderws.StatusTryAgainLater, "pricing temporarily unavailable", nil)
+						}
+						return "", newOpenAIWSModelPricingUnavailableError(model)
+					}
 				}
-				turnChannelMapping.Store(&openAIWSTurnChannelMappingSnapshot{turn: turn, mapping: mapping})
+				turnChannelMapping.Store(&openAIWSTurnChannelMappingSnapshot{turn: turn, mapping: mapping, prices: prices})
 				return mapping.MappedModel, nil
 			},
 			BeforeTurn: func(turn int) error {
@@ -2903,8 +2920,10 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 					turnUpstreamModel = strings.TrimSpace(result.UpstreamModel)
 				}
 				var turnMapping service.ChannelMappingResult
+				turnPrices := ctx
 				if snapshot := turnChannelMapping.Load(); snapshot != nil && snapshot.turn == turn {
 					turnMapping = snapshot.mapping
+					turnPrices = snapshot.prices
 				} else {
 					turnMapping, _ = h.gatewayService.ResolveChannelMappingAndRestrict(ctx, apiKey.GroupID, turnRequestedModel)
 				}
@@ -2957,9 +2976,14 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 				quotaPlatform := service.QuotaPlatform(c.Request.Context(), apiKey)
 				sessionID := service.ExtractClientSessionID(c)
 				turnRecordPricingAt := turnPricing.current()
+				// Passthrough has no BeforeTurn hook for its first frame. Only that
+				// frame uses the handshake instant; later turns freeze their own time.
+				if turn == 1 && turnRecordPricingAt.IsZero() {
+					turnRecordPricingAt = service.OpenAIPricingAtFromContext(ctx)
+				}
 				turnBillingAPIKey := turnBillingAPIKeys.forTurn(turn, apiKey)
 				cyberBlocked := service.GetOpsCyberPolicy(c) != nil
-				h.submitOpenAIUsageRecordTask(ctx, result, func(taskCtx context.Context) {
+				h.submitOpenAIUsageRecordTask(turnPrices, result, func(taskCtx context.Context) {
 					if err := h.gatewayService.RecordUsage(taskCtx, &service.OpenAIRecordUsageInput{
 						Result:             result,
 						APIKey:             turnBillingAPIKey,

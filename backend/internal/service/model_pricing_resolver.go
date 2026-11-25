@@ -42,9 +42,6 @@ type ResolvedPricing struct {
 
 	// catalogBase 表示 BasePricing 来自 LiteLLM 或内置兜底价卡。
 	catalogBase bool
-	// flatTokenPriced 表示自定义条目显式填写了至少一个 token 价（含显式 0）。
-	// 没有价卡、条目也一个价都没填时，BasePricing 只是个全 0 的空壳，不能拿来计费。
-	flatTokenPriced bool
 }
 
 // ModelPricingResolver 统一模型定价解析器。
@@ -83,6 +80,7 @@ func (r *ModelPricingResolver) Resolve(ctx context.Context, input PricingInput) 
 	if chPricing == nil && input.GroupID != nil && r.channelService != nil {
 		chPricing = r.channelService.GetChannelModelPricing(ctx, *input.GroupID, input.Model)
 	}
+	chPricing = effectiveTokenCard(ctx, chPricing)
 	if chPricing != nil {
 		mode := chPricing.BillingMode
 		if mode == "" {
@@ -100,7 +98,7 @@ func (r *ModelPricingResolver) Resolve(ctx context.Context, input PricingInput) 
 	}
 
 	// 1. 获取基础定价
-	basePricing, source := r.resolveBasePricing(input.Model)
+	basePricing, source := r.resolveBasePricing(ctx, input.Model)
 
 	resolved := &ResolvedPricing{
 		Mode:                   BillingModeToken,
@@ -186,7 +184,12 @@ func (p *ResolvedPricing) Billable() bool {
 // basePriced reports whether BasePricing is a real price card rather than the
 // empty shell synthesized for a custom entry that only configured intervals.
 func (p *ResolvedPricing) basePriced() bool {
-	return p.catalogBase || p.flatTokenPriced || modelPricingHasTokenPrice(p.BasePricing)
+	// Reservation recovery restores channelPricing from the serialized admission card.
+	// An explicit zero must remain a configured price after that round trip.
+	c := p.channelPricing
+	return p.catalogBase || modelPricingHasTokenPrice(p.BasePricing) || (c != nil &&
+		(c.InputPrice != nil || c.OutputPrice != nil || c.CacheWritePrice != nil ||
+			c.CacheReadPrice != nil || c.ImageInputPrice != nil || c.ImageOutputPrice != nil))
 }
 
 func (p *ResolvedPricing) hasDefaultPerRequestPrice() bool {
@@ -204,8 +207,8 @@ func modelPricingHasTokenPrice(pricing *ModelPricing) bool {
 }
 
 // resolveBasePricing 从 LiteLLM 或 Fallback 获取基础定价
-func (r *ModelPricingResolver) resolveBasePricing(model string) (*ModelPricing, string) {
-	pricing, err := r.billingService.GetModelPricing(model)
+func (r *ModelPricingResolver) resolveBasePricing(ctx context.Context, model string) (*ModelPricing, string) {
+	pricing, err := r.billingService.forRequest(ctx).GetModelPricing(model)
 	if err != nil {
 		slog.Debug("failed to get model pricing from LiteLLM, using fallback",
 			"model", model, "error", err)
@@ -247,9 +250,6 @@ func (r *ModelPricingResolver) applyTokenOverrides(chPricing *ChannelModelPricin
 	}
 	applyChannelImageOutputPrice(chPricing, pricing)
 	applyChannelImageInputPrice(chPricing, pricing)
-	resolved.flatTokenPriced = chPricing.InputPrice != nil || chPricing.OutputPrice != nil ||
-		chPricing.CacheWritePrice != nil || chPricing.CacheReadPrice != nil ||
-		chPricing.ImageInputPrice != nil || chPricing.ImageOutputPrice != nil
 	if !resolved.catalogBase {
 		applyMissingCachePrices(pricing, chPricing.CacheReadPrice != nil, chPricing.CacheWritePrice != nil)
 	}
@@ -270,13 +270,10 @@ func applyChannelImageOutputPrice(chPricing *ChannelModelPricing, pricing *Model
 	pricing.ImageOutputPriceExplicit = false
 }
 
-// applyChannelImageInputPrice 应用渠道图片输入价：显式配置则用配置值；
-// 未配置时归零，使 computeTokenBreakdown 回退到文本输入价（向后兼容，
-// 避免 commit 引入的 LiteLLM 图片输入价泄漏进渠道自定义定价）。
-// 与 image_output 不同，此处不设 Explicit 标志——图片输入未配置应回退文本价，
-// 而非硬置 0。
+// applyChannelImageInputPrice distinguishes a deliberately free image input from an unset override.
 func applyChannelImageInputPrice(chPricing *ChannelModelPricing, pricing *ModelPricing) {
-	if chPricing != nil && chPricing.ImageInputPrice != nil {
+	pricing.ImageInputPriceExplicit = chPricing != nil && chPricing.ImageInputPrice != nil
+	if pricing.ImageInputPriceExplicit {
 		pricing.ImageInputPricePerToken = *chPricing.ImageInputPrice
 	} else {
 		pricing.ImageInputPricePerToken = 0

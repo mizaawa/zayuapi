@@ -14,6 +14,7 @@ type BillingMode = domain.BillingMode
 
 const (
 	BillingModeToken      = domain.BillingModeToken
+	BillingModeTokenPeak  = domain.BillingModeTokenPeak
 	BillingModePerRequest = domain.BillingModePerRequest
 	BillingModeImage      = domain.BillingModeImage
 	BillingModeVideo      = domain.BillingModeVideo
@@ -70,6 +71,7 @@ type ChannelModelPricing = domain.ModelPricing
 
 // PricingInterval 定价区间（token 区间 / 按次分层 / 图片分辨率分层）
 type PricingInterval = domain.PricingInterval
+type TokenPriceWindow = domain.TokenPriceWindow
 
 // IsActive 判断渠道是否启用
 func (c *Channel) IsActive() bool {

@@ -942,7 +942,7 @@ var (
 		{Name: "rate_multiplier", Type: field.TypeFloat64, Default: 1, SchemaType: map[string]string{"postgres": "decimal(10,4)"}},
 		{Name: "fast_rate_enabled", Type: field.TypeBool, Default: false},
 		{Name: "fast_rate_multiplier", Type: field.TypeFloat64, Default: 2, SchemaType: map[string]string{"postgres": "decimal(10,4)"}},
-		{Name: "ultrafast_rate_multiplier", Type: field.TypeFloat64, Default: 6, SchemaType: map[string]string{"postgres": "decimal(10,4)"}},
+		{Name: "ultrafast_rate_multiplier", Type: field.TypeFloat64, Default: 8, SchemaType: map[string]string{"postgres": "decimal(10,4)"}},
 		{Name: "forced_fast_mode", Type: field.TypeString, Size: 16, Default: "off"},
 		{Name: "peak_rate_enabled", Type: field.TypeBool, Default: false},
 		{Name: "peak_start", Type: field.TypeString, Size: 5, Default: ""},

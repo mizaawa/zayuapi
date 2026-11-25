@@ -159,18 +159,29 @@ func (s *RateLimitService) CheckErrorPolicy(ctx context.Context, account *Accoun
 		slog.Info("account_error_code_skipped", "account_id", account.ID, "status_code", statusCode)
 		return ErrorPolicySkipped
 	}
-	if account.IsPoolMode() {
-		// 池模式只跳过默认账号状态处理；管理员显式配置的临时不可调度规则仍应生效。
-		// 401 保留现有认证错误语义，避免改变重复 401 的升级行为。
-		if statusCode != http.StatusUnauthorized && s.tryTempUnschedulable(ctx, account, statusCode, responseBody) {
-			return ErrorPolicyTempUnscheduled
-		}
-		return ErrorPolicySkipped
+	if isRevokedOpenAICredential(account, statusCode, responseBody) {
+		return ErrorPolicyMatched
 	}
 	if s.tryTempUnschedulable(ctx, account, statusCode, responseBody, firstRequestedModel(requestedModel)) {
 		return ErrorPolicyTempUnscheduled
 	}
+	if account.IsPoolMode() && !hasExplicit401Rule(account, statusCode, responseBody) {
+		return ErrorPolicySkipped
+	}
 	return ErrorPolicyNone
+}
+
+func isRevokedOpenAICredential(account *Account, status int, body []byte) bool {
+	if status != http.StatusUnauthorized || account.Platform != PlatformOpenAI {
+		return false
+	}
+	code := extractUpstreamErrorCode(body)
+	return code == "token_revoked" || code == "token_invalidated"
+}
+
+func hasExplicit401Rule(account *Account, status int, body []byte) bool {
+	return status == http.StatusUnauthorized && ShouldApplyTransientUnschedulableBlock() &&
+		account.IsTempUnschedulableEnabled() && len(matchTempUnschedulableRules(account, status, body)) != 0
 }
 
 // HandleUpstreamError 处理上游错误响应，标记账号状态
@@ -178,16 +189,6 @@ func (s *RateLimitService) CheckErrorPolicy(ctx context.Context, account *Accoun
 func (s *RateLimitService) HandleUpstreamError(ctx context.Context, account *Account, statusCode int, headers http.Header, responseBody []byte, requestedModel ...string) (shouldDisable bool) {
 	ctx = withTempUnschedulableModel(ctx, requestedModel)
 	customErrorCodesEnabled := account.IsCustomErrorCodesEnabled()
-
-	// 池模式默认不标记本地账号状态；但管理员显式配置的临时不可调度规则优先。
-	// 401 保留现有认证错误语义，不在这里改变池模式的认证处理。
-	if account.IsPoolMode() && !customErrorCodesEnabled {
-		if statusCode != http.StatusUnauthorized && s.tryTempUnschedulable(ctx, account, statusCode, responseBody) {
-			return true
-		}
-		slog.Info("pool_mode_error_skipped", "account_id", account.ID, "status_code", statusCode)
-		return false
-	}
 
 	// apikey 类型账号：检查自定义错误码配置
 	// 如果启用且错误码不在列表中，则不处理（不停止调度、不标记限流/过载）
@@ -198,6 +199,18 @@ func (s *RateLimitService) HandleUpstreamError(ctx context.Context, account *Acc
 
 	if len(requestedModel) > 0 && s.HandleUpstreamModelNotFound(ctx, account, requestedModel[0], statusCode, responseBody) {
 		return true
+	}
+
+	// A transient error from one pool member is not evidence that the whole relay
+	// is unhealthy. Explicit policies and permanent credential revocation still apply.
+	if account.IsPoolMode() && !customErrorCodesEnabled && !isRevokedOpenAICredential(account, statusCode, responseBody) {
+		if s.tryTempUnschedulable(ctx, account, statusCode, responseBody) {
+			return true
+		}
+		if !hasExplicit401Rule(account, statusCode, responseBody) {
+			slog.Info("pool_mode_error_skipped", "account_id", account.ID, "status_code", statusCode)
+			return false
+		}
 	}
 
 	// Anthropic official 5h / 7d window exhaustion is a hard account limit.
@@ -259,8 +272,7 @@ func (s *RateLimitService) HandleUpstreamError(ctx context.Context, account *Acc
 			authAccount = resolved
 		}
 		// OpenAI: token_invalidated / token_revoked 表示 token 被永久作废（非过期），直接标记 error
-		openai401Code := extractUpstreamErrorCode(responseBody)
-		if authAccount.Platform == PlatformOpenAI && (openai401Code == "token_invalidated" || openai401Code == "token_revoked") {
+		if isRevokedOpenAICredential(authAccount, statusCode, responseBody) {
 			msg := "Token revoked (401): account authentication permanently revoked"
 			if upstreamMsg != "" {
 				msg = "Token revoked (401): " + upstreamMsg
@@ -1963,7 +1975,7 @@ func (s *RateLimitService) HandleTempUnschedulable(ctx context.Context, account 
 	if account == nil {
 		return false
 	}
-	if account.IsPoolMode() && !account.IsCustomErrorCodesEnabled() {
+	if isRevokedOpenAICredential(account, statusCode, responseBody) {
 		return false
 	}
 	if !account.ShouldHandleErrorCode(statusCode) {

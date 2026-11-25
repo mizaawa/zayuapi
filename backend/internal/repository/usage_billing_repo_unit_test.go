@@ -25,7 +25,10 @@ const (
 	usageBillingArchiveSQL      = `(?s)SELECT request_fingerprint\s+FROM usage_billing_dedup_archive\s+WHERE request_id = \$1 AND api_key_id = \$2`
 	apiKeyQuotaIncrementSQL     = `(?s)UPDATE api_keys\s+SET quota_used = quota_used \+ \$1,.*WHERE id = \$2 AND deleted_at IS NULL\s+RETURNING`
 	apiKeyRateLimitIncrementSQL = `(?s)UPDATE api_keys SET\s+usage_5h = .*WHERE id = \$2 AND deleted_at IS NULL`
-	subscriptionIncrementSQL    = `(?s)UPDATE user_subscriptions us\s+SET\s+daily_usage_usd = us.daily_usage_usd \+ \$1,.*WHERE us.id = \$2`
+	subscriptionIncrementSQL    = `(?s)UPDATE user_subscriptions us\s+SET\s+` +
+		`daily_usage_usd = CASE WHEN us.daily_window_start > \$3 THEN us.daily_usage_usd ELSE us.daily_usage_usd \+ \$1 END,\s+` +
+		`weekly_usage_usd = CASE WHEN us.weekly_window_start > \$3 THEN us.weekly_usage_usd ELSE us.weekly_usage_usd \+ \$1 END,\s+` +
+		`monthly_usage_usd = CASE WHEN us.monthly_window_start > \$3 THEN us.monthly_usage_usd ELSE us.monthly_usage_usd \+ \$1 END,.*WHERE us.id = \$2`
 )
 
 func TestUsageBillingRepositoryApply_DeletedAPIKeyStillSettles(t *testing.T) {
@@ -74,7 +77,7 @@ func TestUsageBillingRepositoryApply_DeletedAPIKeyStillSettles(t *testing.T) {
 						WillReturnRows(sqlmock.NewRows([]string{"balance"}).AddRow(90.0))
 				} else {
 					mock.ExpectExec(subscriptionIncrementSQL).
-						WithArgs(10.0, *cmd.SubscriptionID).
+						WithArgs(10.0, *cmd.SubscriptionID, cmd.ChargedAt).
 						WillReturnResult(sqlmock.NewResult(0, 1))
 				}
 				if counters.quota > 0 {

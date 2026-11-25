@@ -41,11 +41,11 @@ import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement
 import { Line } from 'vue-chartjs'
 import type { OperationsProfitTrendPoint } from '@/api/admin/dashboard'
 import Icon from '@/components/icons/Icon.vue'
-import { dateRange, formatMoney, shiftDate, zonedDate } from '@/views/admin/operationsUtils'
+import { formatMoney, shiftDate, zonedDate } from '@/views/admin/operationsUtils'
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Tooltip, Legend)
 // timeZone is the site zone the backend buckets days in; the browser's when omitted.
-const props = defineProps<{ points: OperationsProfitTrendPoint[]; days: number; timeZone?: string }>()
+const props = defineProps<{ points: OperationsProfitTrendPoint[]; days: number; timeZone?: string; today?: string }>()
 const { t } = useI18n()
 const profitOnly = ref(false)
 const dark = ref(document.documentElement.classList.contains('dark'))
@@ -56,10 +56,11 @@ const seriesDefinitions = [
   { key: 'user_cost', label: 'admin.operations.userCost', color: '#5c9865' },
   { key: 'profit', label: 'admin.operations.profit', color: '#d99a00' }
 ] as const
-const range = computed(() => dateRange(props.days, new Date(), props.timeZone))
+const lastDay = computed(() => props.today || zonedDate(new Date(), props.timeZone))
+const range = computed(() => ({ start: shiftDate(lastDay.value, 1 - props.days), end: lastDay.value }))
 const points = computed(() => {
   const byDate = new Map(props.points.map(point => [point.date, point]))
-  const today = zonedDate(new Date(), props.timeZone)
+  const today = lastDay.value
   return Array.from({ length: props.days }, (_, index) => {
     const key = shiftDate(today, index + 1 - props.days)
     return byDate.get(key) ?? { date: key, upstream_cost: 0, user_cost: 0, profit: 0 }

@@ -1134,7 +1134,7 @@ func (s *OpenAIGatewayService) updateGrokUsageSnapshot(ctx context.Context, acco
 	// API keys retain the snapshot for observability but leave account health to
 	// the upstream pool. Other accounts install the immediate runtime and durable
 	// rate-limit state when the observed window is exhausted.
-	if hasActiveLimit && !account.IsPoolMode() {
+	if hasActiveLimit && grokTracksAccountStatus(account, http.StatusTooManyRequests) {
 		s.rateLimitGrok(stateCtx, account, resetAt)
 	} else if recovery {
 		clearGrokRateLimitAfterRecovery(stateCtx, s.accountRepo, account)
@@ -1359,7 +1359,10 @@ func (s *OpenAIGatewayService) handleGrokAccountUpstreamError(ctx context.Contex
 	if statusCode == http.StatusForbidden && s.applyGrokForbiddenPolicy(ctx, account, responseBody) {
 		return
 	}
-	if account.IsPoolMode() {
+	if !grokTracksAccountStatus(account, statusCode) {
+		if s.rateLimitService != nil && s.rateLimitService.HandleTempUnschedulable(ctx, account, statusCode, responseBody) {
+			return
+		}
 		slog.Info("grok_pool_mode_error_state_skipped", "account_id", account.ID, "status_code", statusCode)
 		return
 	}
@@ -1378,6 +1381,12 @@ func (s *OpenAIGatewayService) handleGrokAccountUpstreamError(ctx context.Contex
 		}
 	}
 	_ = responseBody
+}
+
+// A relay normally owns its own cooldown; an explicit account policy opts it
+// into Grok's native Retry-After and temporary-error handling for that status.
+func grokTracksAccountStatus(account *Account, statusCode int) bool {
+	return !account.IsPoolMode() || (account.IsCustomErrorCodesEnabled() && account.ShouldHandleErrorCode(statusCode))
 }
 
 func (s *OpenAIGatewayService) tempUnscheduleGrok(ctx context.Context, account *Account, cooldown time.Duration, reason string) {

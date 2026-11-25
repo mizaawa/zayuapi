@@ -105,17 +105,17 @@ func (r *usageLogRepository) GetOperationsDashboardData(
 	data.Metrics.TodayRevenue["USD"] = data.Metrics.TodayUserConsumption - todayUserUpstreamCost - data.Metrics.TodayMonitorConsumption
 	data.Metrics.YesterdayRevenue["USD"] = data.Metrics.YesterdayUserConsumption - yesterdayUserUpstreamCost - data.Metrics.YesterdayMonitorConsumption
 
-	trendQuery := `
-		SELECT TO_CHAR(ul.created_at AT TIME ZONE $3, 'YYYY-MM-DD') AS date,
-			COALESCE(SUM(COALESCE(ul.account_stats_cost, ul.total_cost) * COALESCE(ul.account_rate_multiplier, 1)), 0)::double precision AS upstream_cost,
-			COALESCE(SUM(ul.actual_cost), 0)::double precision AS user_cost,
-			COALESCE(SUM(ul.actual_cost - COALESCE(ul.account_stats_cost, ul.total_cost) * COALESCE(ul.account_rate_multiplier, 1)), 0)::double precision AS profit
-		FROM usage_logs ul JOIN users u ON u.id = ul.user_id
-		WHERE u.role = 'user' AND ul.created_at >= $1 AND ul.created_at < $2
-		  AND NOT EXISTS (SELECT 1 FROM api_keys mk WHERE mk.id = ul.api_key_id AND mk.purpose = 'channel_monitor')
-		GROUP BY date ORDER BY date ASC
+	// Daily counters survive usage-log retention. Use the accounting calendar, as on the summary cards.
+	const trendQuery = `
+		SELECT to_char(uc.bucket_date, 'YYYY-MM-DD') AS date,
+			SUM(uc.account_cost)::double precision, SUM(uc.actual_cost)::double precision,
+			SUM(uc.actual_cost - uc.account_cost)::double precision
+		FROM usage_counters uc JOIN users u ON u.id = uc.user_id
+		WHERE u.role = 'user' AND uc.bucket_date >= $1::date AND uc.bucket_date < $2::date
+		  AND NOT EXISTS (SELECT 1 FROM api_keys mk WHERE mk.id = uc.api_key_id AND mk.purpose = 'channel_monitor')
+		GROUP BY uc.bucket_date ORDER BY uc.bucket_date ASC
 	`
-	rows, err := r.sql.QueryContext(ctx, trendQuery, trendStart, trendEnd, userTimezone)
+	rows, err := r.sql.QueryContext(ctx, trendQuery, trendStart.Format("2006-01-02"), trendEnd.Format("2006-01-02"))
 	if err != nil {
 		return nil, fmt.Errorf("query operations dashboard trend: %w", err)
 	}

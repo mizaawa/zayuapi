@@ -78,6 +78,26 @@ function longContextModel(): PlazaModel {
 }
 
 describe('PlazaModelPricingTable', () => {
+  it('labels both scheduled price sections per million and preserves zero on narrow layouts', () => {
+    const m = tokenModel()
+    const card = {
+      ...m.pricing!, billing_mode: 'token_peak' as const,
+      time_windows: [{ start: '23:30', end: '02:15', input_price: 0, output_price: null,
+        cache_write_price: null, cache_read_price: null, image_input_price: 0, image_output_price: null }]
+    }
+    const row = mountTable([{ ...m, pricing: card, official_pricing: card }], 2).get('tbody tr')
+    expect(row.attributes('data-paid-heading')).toContain('modelPlaza.table.unitPerMillion')
+    expect(row.attributes('data-original-heading')).toContain('modelPlaza.table.unitPerMillion')
+    const inputCells = row.findAll('[data-col="modelPlaza.table.input"]')
+    expect(inputCells).toHaveLength(2)
+    for (const cell of inputCells) {
+      expect(cell.text()).toContain('23:30–02:15 (UTC+8)')
+      expect(cell.text()).toContain('$0.00')
+    }
+    expect(inputCells[0].text()).toContain('$6.00')
+    expect(inputCells[1].text()).toContain('$3.00')
+  })
+
   it('倍率为 1 时展示渠道单价原值($/1M),价格保底 2 位小数', () => {
     const wrapper = mountTable([tokenModel()], 1)
     const text = wrapper.text()

@@ -1,3 +1,4 @@
+import type { TokenWindow } from '@/utils/tokenPriceWindows'
 import type { BillingMode, PricingInterval } from '@/api/admin/channels'
 
 type TranslateFn = (key: string, params?: Record<string, unknown>) => string
@@ -15,6 +16,7 @@ export interface IntervalFormEntry {
 }
 
 export interface PricingFormEntry {
+  time_windows?: TokenWindow<number | string | null>[]
   models: string[]
   billing_mode: BillingMode
   input_price: number | string | null

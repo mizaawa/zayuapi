@@ -40,7 +40,7 @@ func (r *BatchImageModelPricingResolver) BatchImageUnitPrice(ctx context.Context
 	}
 	switch resolved.Mode {
 	case BillingModeImage, BillingModePerRequest:
-		if resolved.DefaultPerRequestPrice > 0 {
+		if resolved.hasDefaultPerRequestPrice() {
 			return resolved.DefaultPerRequestPrice, nil
 		}
 		if len(resolved.RequestTiers) == 1 && resolved.RequestTiers[0].PerRequestPrice != nil && *resolved.RequestTiers[0].PerRequestPrice >= 0 {
@@ -302,7 +302,7 @@ func (s *BatchImageSettlementService) recordUsageLog(ctx context.Context, job *B
 	// the catalog's per-image rate with the upstream batch discount, so the
 	// panel's upstream cost does not apply the account multiplier twice.
 	if s.Pricing != nil && job.SuccessCount > 0 && validBillableRequestCount(job.SuccessCount) {
-		if unit, err := s.Pricing.BatchImageUnitPrice(ctx, &BatchImageJob{Provider: job.Provider, Model: job.Model}); err == nil && unit > 0 {
+		if unit, err := s.Pricing.BatchImageUnitPrice(ctx, &BatchImageJob{Provider: job.Provider, Model: job.Model}); err == nil && unit >= 0 {
 			statsCost := unit * float64(job.SuccessCount) * vertexBatchPredictionDiscount
 			usageLog.AccountStatsCost = &statsCost
 		}

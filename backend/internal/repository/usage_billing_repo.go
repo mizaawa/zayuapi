@@ -511,7 +511,7 @@ func batchImageHoldOperationAllowed(ctx context.Context, tx *sql.Tx, cmd *servic
 
 func (r *usageBillingRepository) applyUsageBillingEffects(ctx context.Context, tx *sql.Tx, cmd *service.UsageBillingCommand, result *service.UsageBillingApplyResult) error {
 	if cmd.SubscriptionCost > 0 && cmd.SubscriptionID != nil {
-		if err := incrementUsageBillingSubscription(ctx, tx, *cmd.SubscriptionID, cmd.SubscriptionCost); err != nil {
+		if err := incrementUsageBillingSubscription(ctx, tx, *cmd.SubscriptionID, cmd.SubscriptionCost, cmd.ChargedAt); err != nil {
 			return err
 		}
 	}
@@ -619,13 +619,16 @@ func incrementUsageBillingUserPlatformQuota(ctx context.Context, tx *sql.Tx, cmd
 	return err
 }
 
-func incrementUsageBillingSubscription(ctx context.Context, tx *sql.Tx, subscriptionID int64, costUSD float64) error {
+func incrementUsageBillingSubscription(ctx context.Context, tx *sql.Tx, subscriptionID int64, costUSD float64, chargedAt time.Time) error {
+	if chargedAt.IsZero() {
+		chargedAt = time.Now().UTC()
+	}
 	const updateSQL = `
 		UPDATE user_subscriptions us
 		SET
-			daily_usage_usd = us.daily_usage_usd + $1,
-			weekly_usage_usd = us.weekly_usage_usd + $1,
-			monthly_usage_usd = us.monthly_usage_usd + $1,
+			daily_usage_usd = CASE WHEN us.daily_window_start > $3 THEN us.daily_usage_usd ELSE us.daily_usage_usd + $1 END,
+			weekly_usage_usd = CASE WHEN us.weekly_window_start > $3 THEN us.weekly_usage_usd ELSE us.weekly_usage_usd + $1 END,
+			monthly_usage_usd = CASE WHEN us.monthly_window_start > $3 THEN us.monthly_usage_usd ELSE us.monthly_usage_usd + $1 END,
 			updated_at = NOW()
 		FROM groups g
 		WHERE us.id = $2
@@ -633,7 +636,7 @@ func incrementUsageBillingSubscription(ctx context.Context, tx *sql.Tx, subscrip
 			AND us.group_id = g.id
 			AND g.deleted_at IS NULL
 	`
-	res, err := tx.ExecContext(ctx, updateSQL, costUSD, subscriptionID)
+	res, err := tx.ExecContext(ctx, updateSQL, costUSD, subscriptionID, chargedAt)
 	if err != nil {
 		return err
 	}
@@ -852,9 +855,9 @@ func incrementUsageBillingAPIKeyRateLimit(ctx context.Context, tx *sql.Tx, apiKe
 	}
 	res, err := tx.ExecContext(ctx, `
 		UPDATE api_keys SET
-			usage_5h = CASE WHEN window_5h_start IS NOT NULL AND window_5h_start + INTERVAL '5 hours' <= $3 THEN $1 ELSE usage_5h + $1 END,
-			usage_1d = CASE WHEN window_1d_start IS NOT NULL AND window_1d_start + INTERVAL '24 hours' <= $3 THEN $1 ELSE usage_1d + $1 END,
-			usage_7d = CASE WHEN window_7d_start IS NOT NULL AND window_7d_start + INTERVAL '7 days' <= $3 THEN $1 ELSE usage_7d + $1 END,
+			usage_5h = CASE WHEN window_5h_start > $3 THEN usage_5h WHEN window_5h_start + INTERVAL '5 hours' <= $3 THEN $1 ELSE usage_5h + $1 END,
+			usage_1d = CASE WHEN window_1d_start > $3 THEN usage_1d WHEN window_1d_start + INTERVAL '24 hours' <= $3 THEN $1 ELSE usage_1d + $1 END,
+			usage_7d = CASE WHEN window_7d_start > $3 THEN usage_7d WHEN window_7d_start + INTERVAL '7 days' <= $3 THEN $1 ELSE usage_7d + $1 END,
 			window_5h_start = CASE WHEN window_5h_start IS NULL OR window_5h_start + INTERVAL '5 hours' <= $3 THEN $3 ELSE window_5h_start END,
 			window_1d_start = CASE WHEN window_1d_start IS NULL OR window_1d_start + INTERVAL '24 hours' <= $3 THEN date_trunc('day', $3::timestamptz) ELSE window_1d_start END,
 			window_7d_start = CASE WHEN window_7d_start IS NULL OR window_7d_start + INTERVAL '7 days' <= $3 THEN date_trunc('day', $3::timestamptz) ELSE window_7d_start END,
@@ -879,38 +882,40 @@ func incrementUsageBillingAccountQuota(ctx context.Context, tx *sql.Tx, accountI
 		chargedAt = time.Now().UTC()
 	}
 	chargedAtText := chargedAt.UTC().Format(time.RFC3339Nano)
+	// A recovered charge is evaluated against its original instant, not the replay clock.
+	asOf := func(expr string) string { return strings.ReplaceAll(expr, "NOW()", "($3::text)::timestamptz") }
 	rows, err := tx.QueryContext(ctx,
 		`UPDATE accounts SET extra = (
 			COALESCE(extra, '{}'::jsonb)
 			|| jsonb_build_object('quota_used', COALESCE((extra->>'quota_used')::numeric, 0) + $1)
-			|| CASE WHEN COALESCE((extra->>'quota_daily_limit')::numeric, 0) > 0 THEN
+			|| CASE WHEN COALESCE((extra->>'quota_daily_limit')::numeric, 0) > 0 AND COALESCE((extra->>'quota_daily_start')::timestamptz,'-infinity') <= ($3::text)::timestamptz THEN
 				jsonb_build_object(
 					'quota_daily_used',
-					CASE WHEN `+dailyExpiredExpr+`
+					CASE WHEN `+asOf(dailyExpiredExpr)+`
 					THEN $1
 					ELSE COALESCE((extra->>'quota_daily_used')::numeric, 0) + $1 END,
 					'quota_daily_start',
-					CASE WHEN `+dailyExpiredExpr+`
+					CASE WHEN `+asOf(dailyExpiredExpr)+`
 					THEN $3
 					ELSE COALESCE(extra->>'quota_daily_start', $3) END
 				)
-				|| CASE WHEN `+dailyExpiredExpr+` AND `+nextDailyResetAtExpr+` IS NOT NULL
-				   THEN jsonb_build_object('quota_daily_reset_at', `+nextDailyResetAtExpr+`)
+				|| CASE WHEN `+asOf(dailyExpiredExpr)+` AND `+asOf(nextDailyResetAtExpr)+` IS NOT NULL
+				   THEN jsonb_build_object('quota_daily_reset_at', `+asOf(nextDailyResetAtExpr)+`)
 				   ELSE '{}'::jsonb END
 			ELSE '{}'::jsonb END
-			|| CASE WHEN COALESCE((extra->>'quota_weekly_limit')::numeric, 0) > 0 THEN
+			|| CASE WHEN COALESCE((extra->>'quota_weekly_limit')::numeric, 0) > 0 AND COALESCE((extra->>'quota_weekly_start')::timestamptz,'-infinity') <= ($3::text)::timestamptz THEN
 				jsonb_build_object(
 					'quota_weekly_used',
-					CASE WHEN `+weeklyExpiredExpr+`
+					CASE WHEN `+asOf(weeklyExpiredExpr)+`
 					THEN $1
 					ELSE COALESCE((extra->>'quota_weekly_used')::numeric, 0) + $1 END,
 					'quota_weekly_start',
-					CASE WHEN `+weeklyExpiredExpr+`
+					CASE WHEN `+asOf(weeklyExpiredExpr)+`
 					THEN $3
 					ELSE COALESCE(extra->>'quota_weekly_start', $3) END
 				)
-				|| CASE WHEN `+weeklyExpiredExpr+` AND `+nextWeeklyResetAtExpr+` IS NOT NULL
-				   THEN jsonb_build_object('quota_weekly_reset_at', `+nextWeeklyResetAtExpr+`)
+				|| CASE WHEN `+asOf(weeklyExpiredExpr)+` AND `+asOf(nextWeeklyResetAtExpr)+` IS NOT NULL
+				   THEN jsonb_build_object('quota_weekly_reset_at', `+asOf(nextWeeklyResetAtExpr)+`)
 				   ELSE '{}'::jsonb END
 			ELSE '{}'::jsonb END
 		), updated_at = NOW()

@@ -347,6 +347,19 @@ func applyUsageBilling(ctx context.Context, requestID string, usageLog *UsageLog
 			return false, cmd, errors.New("media precharge repository is unavailable")
 		}
 		result, err = mediaRepo.SettleMedia(billingCtx, p.MediaReservationID, cmd)
+	} else if durable, ok := durableUsage(repo, usageLog, p.MediaReservationID); ok {
+		result, err = settleUsageReceipt(billingCtx, durable, cmd, usageLog)
+		// The storage operation may outlive the initial budget. Cache work needs a fresh context.
+		var release context.CancelFunc
+		billingCtx, release = detachedBillingContext(ctx)
+		defer release()
+		if err == nil && result != nil && !result.Applied {
+			key := &UsageBillingRecoveryKey{UserID: cmd.UserID, APIKeyID: cmd.APIKeyID, Platform: cmd.Platform}
+			if usageLog.GroupID != nil {
+				key.GroupID = *usageLog.GroupID
+			}
+			invalidateSettledUsage(billingCtx, deps.billingCacheService, key, p.APIKeyService)
+		}
 	} else {
 		result, err = repo.Apply(billingCtx, cmd)
 	}
@@ -832,8 +845,9 @@ func (s *GatewayService) recordUsageCore(ctx context.Context, input *recordUsage
 	// 不并入上面的 getUserGroupRateMultiplier，以免污染 user:group 倍率缓存。
 	pricingAt := input.PricingAt
 	if pricingAt.IsZero() {
-		pricingAt = timezone.Now()
+		pricingAt = tokenPriceTime(ctx)
 	}
+	ctx = context.WithValue(ctx, gatewayTokenRequestPricingAtCtxKey{}, pricingAt)
 	multiplier, imageMultiplier := computePeakAwareMultipliers(apiKey, multiplier, pricingAt)
 
 	// 确定计费模型
@@ -918,7 +932,7 @@ func (s *GatewayService) recordUsageCore(ctx context.Context, input *recordUsage
 		}
 	}
 	requestID := usageLog.RequestID
-	_, _, billingErr := applyUsageBilling(ctx, requestID, usageLog, &postUsageBillingParams{
+	_, receipt, billingErr := applyUsageBilling(ctx, requestID, usageLog, &postUsageBillingParams{
 		Cost:                  cost,
 		User:                  user,
 		APIKey:                apiKey,
@@ -931,6 +945,9 @@ func (s *GatewayService) recordUsageCore(ctx context.Context, input *recordUsage
 		Platform:              quotaPlatform,
 	}, s.billingDeps(), s.usageBillingRepo)
 
+	if _, ok := durableUsage(s.usageBillingRepo, usageLog, ""); receipt != nil && ok {
+		return billingErr
+	}
 	if billingErr != nil {
 		usageLog.ActualCost = 0
 		writeUsageLogBestEffort(ctx, s.usageLogRepo, usageLog, "service.gateway")
@@ -1037,7 +1054,7 @@ func (s *GatewayService) hasResolvableTokenPricing(ctx context.Context, model st
 	if s.billingService == nil {
 		return false
 	}
-	_, err := s.billingService.GetModelPricing(model)
+	_, err := s.billingService.forRequest(ctx).GetModelPricing(model)
 	return err == nil
 }
 
@@ -1117,11 +1134,12 @@ func (s *GatewayService) calculateTokenCost(
 
 	var cost *CostBreakdown
 	var err error
+	billing := s.billingService.forRequest(ctx)
 
 	// 优先尝试渠道定价 → CalculateCostUnified
 	if resolved := s.resolveChannelPricing(ctx, billingModel, apiKey); resolved != nil {
 		gid := apiKey.Group.ID
-		cost, err = s.billingService.CalculateCostUnified(CostInput{
+		cost, err = billing.CalculateCostUnified(CostInput{
 			Ctx:            ctx,
 			Model:          billingModel,
 			GroupID:        &gid,
@@ -1133,9 +1151,9 @@ func (s *GatewayService) calculateTokenCost(
 		})
 	} else if opts.LongContextThreshold > 0 {
 		// 长上下文双倍计费（如 Gemini 200K 阈值）
-		cost, err = s.billingService.CalculateCostWithLongContext(billingModel, tokens, multiplier, opts.LongContextThreshold, opts.LongContextMultiplier)
+		cost, err = billing.CalculateCostWithLongContext(billingModel, tokens, multiplier, opts.LongContextThreshold, opts.LongContextMultiplier)
 	} else {
-		cost, err = s.billingService.CalculateCost(billingModel, tokens, multiplier)
+		cost, err = billing.CalculateCost(billingModel, tokens, multiplier)
 	}
 	if err != nil {
 		// 准入门已拦下无价模型；走到这里说明用量已发生却查不到价，只能记 $0，必须让运维看见。

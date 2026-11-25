@@ -2,21 +2,22 @@
   <td v-if="!pricing" colspan="3" class="border-l border-gray-100 px-3 py-2.5 text-xs text-gray-400 dark:border-dark-700/60 dark:text-dark-500">
     -
   </td>
-  <template v-else-if="mode === 'token'">
-    <td v-for="field in tokenFields" :key="field" class="border-l border-gray-100 px-3 py-2.5 align-middle font-mono text-xs text-gray-500 dark:border-dark-700/60 dark:text-dark-400">
+  <template v-else-if="mode === 'token' || mode === 'token_peak'">
+    <td v-for="field in tokenFields" :key="field" :data-col="t(field === 'input_price' ? 'modelPlaza.table.input' : 'modelPlaza.table.output')" class="border-l border-gray-100 px-3 py-2.5 align-middle font-mono text-xs text-gray-500 dark:border-dark-700/60 dark:text-dark-400">
       <template v-if="intervals.length">
         <div v-for="(interval, index) in intervals" :key="index" class="pz-token-tier">
           <span class="font-sans text-gray-400 dark:text-dark-500">{{ pricingTierLabel(interval) }}</span>
           {{ amount(interval[field], 1_000_000) }}
+          <small v-if="interval[field === 'input_price' ? 'image_input_price' : 'image_output_price'] != null" class="block">{{ t('modelPlaza.table.imageTokens') }} {{ amount(interval[field === 'input_price' ? 'image_input_price' : 'image_output_price'], 1_000_000) }}</small>
         </div>
       </template>
       <template v-else>{{ amount(pricing[field], 1_000_000) }}</template>
-      <div v-if="imageTokenPrice(field) != null" class="mt-1">
+      <div v-if="mode !== 'token_peak' && imageTokenPrice(field) != null" class="mt-1">
         <span class="font-sans text-gray-400 dark:text-dark-500">{{ t('modelPlaza.table.imageTokens') }}</span>
         {{ amount(imageTokenPrice(field), 1_000_000) }}
       </div>
     </td>
-    <td class="px-3 py-2.5 align-middle font-mono text-xs text-gray-500 dark:text-dark-400">
+    <td :data-col="t('modelPlaza.table.cache')" class="pz-cache px-3 py-2.5 align-middle font-mono text-xs text-gray-500 dark:text-dark-400">
       <template v-if="hasCache">
         <div v-for="(interval, index) in cacheRows" :key="index" :class="{ 'pz-token-tier': intervals.length }">
           <span v-if="intervals.length" class="block font-sans text-gray-400 dark:text-dark-500">{{ pricingTierLabel(interval) }}</span>
@@ -54,7 +55,7 @@ const props = defineProps<{
 const { t } = useI18n()
 const tokenFields = ['input_price', 'output_price'] as const
 const mode = computed(() => props.pricing?.billing_mode || 'token')
-const intervals = computed(() => tokenPricingIntervals(props.pricing))
+const intervals = computed(() => tokenPricingIntervals(props.pricing, t('admin.channels.form.fallbackPrices')))
 const cacheRows = computed(() => intervals.value.length ? intervals.value : [{
   min_tokens: 0, max_tokens: null,
   cache_write_price: props.pricing?.cache_write_price,

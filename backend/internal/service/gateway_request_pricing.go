@@ -53,3 +53,23 @@ func gatewayTokenRequestBillingGroupFromContext(ctx context.Context) *Group {
 	}
 	return nil
 }
+
+// tokenPriceTime uses the frozen request time at admission, including WebSocket turns.
+// Settlement explicitly reattaches it when detached workers no longer have the request context.
+func tokenPriceTime(ctx context.Context) time.Time {
+	if at, ok := gatewayTokenRequestPricingAtFromContext(ctx); ok {
+		return at
+	}
+	if ctx != nil {
+		if at, ok := openAIPricingAtFromContext(ctx); ok {
+			return at
+		}
+	}
+	return timezone.Now()
+}
+func effectiveTokenCard(ctx context.Context, card *ChannelModelPricing) *ChannelModelPricing {
+	if card == nil || card.BillingMode != BillingModeTokenPeak {
+		return card
+	}
+	return card.AtTime(tokenPriceTime(ctx))
+}

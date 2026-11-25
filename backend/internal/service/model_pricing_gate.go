@@ -38,8 +38,9 @@ type modelPricingGate struct {
 	resolver *ModelPricingResolver
 	group    *Group
 	// model 是客户端请求的模型，用于错误提示；forwardModel 是渠道映射后真正交给账号映射的模型。
-	model        string
-	forwardModel string
+	model           string
+	forwardModel    string
+	priceReadFailed bool
 
 	mu   sync.Mutex
 	memo map[string]bool
@@ -64,16 +65,12 @@ func (s *OpenAIGatewayService) WithModelPricingGate(ctx context.Context, apiKey 
 	return withModelPricingGate(ctx, s.cfg, s.resolver, apiKey, requestedModel, mapping)
 }
 
-// ModelPricingBillableForAccount reports whether a request for requestedModel,
-// served by account, can be billed. Long-lived connections use it for turns
-// that switch models after the account was already selected.
-func (s *OpenAIGatewayService) ModelPricingBillableForAccount(ctx context.Context, apiKey *APIKey, requestedModel string, mapping ChannelMappingResult, account *Account) bool {
-	if s == nil {
-		return true
-	}
-	gateCtx := withModelPricingGate(ctx, s.cfg, s.resolver, apiKey, requestedModel, mapping)
+// PriceTurnForAccount checks a turn on an already selected account and returns
+// the same quote for settlement, even when the caller changes models.
+func (s *OpenAIGatewayService) PriceTurnForAccount(ctx context.Context, apiKey *APIKey, requestedModel string, mapping ChannelMappingResult, account *Account) (context.Context, bool) {
+	gateCtx := s.WithModelPricingGate(ctx, apiKey, requestedModel, mapping)
 	vetoed, _ := modelPricingGateVetoReason(gateCtx, account)
-	return !vetoed
+	return gateCtx, !vetoed
 }
 
 func withModelPricingGate(ctx context.Context, cfg *config.Config, resolver *ModelPricingResolver, apiKey *APIKey, requestedModel string, mapping ChannelMappingResult) context.Context {
@@ -94,6 +91,7 @@ func withModelPricingGate(ctx context.Context, cfg *config.Config, resolver *Mod
 	if requested == "" {
 		return ctx
 	}
+	ctx = freezeRequestPrices(ctx, resolver)
 	forward := requested
 	if mapped := strings.TrimSpace(mapping.MappedModel); mapping.Mapped && mapped != "" {
 		forward = mapped
@@ -104,6 +102,11 @@ func withModelPricingGate(ctx context.Context, cfg *config.Config, resolver *Mod
 		model:        requested,
 		forwardModel: forward,
 		memo:         make(map[string]bool, 4),
+	}
+	if resolver.channelService != nil && (apiKey.GroupID != nil || gate.groupID() != nil) && requestPrices(ctx).channels == nil {
+		// Without the authoritative channel table, even a known catalog price may be wrong.
+		gate.priceReadFailed = true
+		return context.WithValue(ctx, modelPricingGateCtxKey{}, gate)
 	}
 	if gate.billable(ctx, requested) || gate.billable(ctx, forward) {
 		return ctx
@@ -124,7 +127,7 @@ func (g *modelPricingGate) billable(ctx context.Context, model string) bool {
 	if ok {
 		return priced
 	}
-	priced = isMediaBilledModel(model) || g.resolver.billingService.hasCatalogImagePrice(model) ||
+	priced = isMediaBilledModel(model) || g.resolver.billingService.forRequest(ctx).hasCatalogImagePrice(model) ||
 		g.resolver.Resolve(billingPricingContext(ctx), PricingInput{
 			Model:   model,
 			GroupID: g.groupID(),
@@ -146,6 +149,9 @@ func (g *modelPricingGate) groupID() *int64 {
 
 // accountBillable 判断账号把请求映射后的上游模型能否定价（composite 路由出的具体模型同样算）。
 func (g *modelPricingGate) accountBillable(ctx context.Context, account *Account) bool {
+	if g.priceReadFailed {
+		return false
+	}
 	models := []string{g.forwardModel}
 	if routed, ok := ResolvedUpstreamModelFromContext(ctx); ok && !strings.EqualFold(routed, g.forwardModel) {
 		models = append(models, routed)
@@ -227,7 +233,16 @@ func ModelPricingGateBlocked(ctx context.Context) (string, bool) {
 	return gate.model, gate.vetoed.Load() > 0 && gate.admitted.Load() == 0
 }
 
-// ModelPricingUnavailableMessage 是定价门拒绝请求时返回给客户端的说明。
+// ModelPricingTemporarilyUnavailable distinguishes a failed read from an unpriced model.
+func ModelPricingTemporarilyUnavailable(ctx context.Context) bool {
+	if ctx == nil {
+		return false
+	}
+	gate, _ := ctx.Value(modelPricingGateCtxKey{}).(*modelPricingGate)
+	return gate != nil && gate.priceReadFailed
+}
+
+// ModelPricingUnavailableMessage reports a model for which no price is configured.
 func ModelPricingUnavailableMessage(model string) string {
 	return fmt.Sprintf("Model %q has no price configured in this group, so the request was not sent upstream. Ask the administrator to set a price for it.", strings.TrimSpace(model))
 }

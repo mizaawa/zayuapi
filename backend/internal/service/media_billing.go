@@ -74,7 +74,7 @@ func (s *OpenAIGatewayService) PrechargeMedia(ctx context.Context, input *OpenAI
 	}
 	copyInput := *input
 	copyInput.BillingRequestID = "media:" + uuid.NewString()
-	copyInput.PricingAt = time.Now()
+	copyInput.PricingAt = openAIUsagePricingAt(ctx, input)
 	var quote *MediaBillingQuote
 	var imagePricing *MediaImagePricing
 	copyInput.MediaQuote = &quote
@@ -386,7 +386,10 @@ func (s *OpenAIGatewayService) SetMediaBillingAPIKeyService(keys *APIKeyService)
 	// Refunds must invalidate the auth cache as well as the balance cache.
 	// Start only after the handler has supplied this dependency.
 	if keys != nil {
-		s.frozenBalanceStartOnce.Do(s.startFrozenBalanceRecovery)
+		s.frozenBalanceStartOnce.Do(func() {
+			s.startFrozenBalanceRecovery()
+			s.startUsageSettlementRecovery()
+		})
 	}
 }
 

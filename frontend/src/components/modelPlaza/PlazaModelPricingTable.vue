@@ -24,7 +24,7 @@
           <th colspan="3" class="pz-bg pt-2 text-center">
             <div class="pz-title border-b pb-2 font-semibold">
               {{ t('modelPlaza.table.paidPrice') }}
-              <span v-if="models.some((model) => billingMode(model) === BILLING_MODE_TOKEN)" class="pz-unit ml-1 normal-case font-normal">{{ t('modelPlaza.table.unitPerMillion') }}</span>
+              <span v-if="models.some((model) => isTokenMode(billingMode(model)))" class="pz-unit ml-1 normal-case font-normal">{{ t('modelPlaza.table.unitPerMillion') }}</span>
             </div>
           </th>
           <th
@@ -60,10 +60,12 @@
         <tr
           v-for="m in sortedModels"
           :key="`${m.platform}:${m.name}`"
+          :data-paid-heading="priceHeading('paidPrice', isTokenMode(billingMode(m)))"
+          :data-original-heading="priceHeading('officialPrice', originalIsToken(m))"
           class="border-b border-gray-100 transition-colors last:border-b-0 hover:bg-gray-50/70 dark:border-dark-800 dark:hover:bg-dark-800/50"
         >
           <!-- 模型名 + 非 token 计费模式徽章 -->
-          <td class="border-r border-gray-100 py-2.5 pl-5 pr-4 align-middle dark:border-dark-700/60">
+          <td class="pz-model border-r border-gray-100 py-2.5 pl-5 pr-4 align-middle dark:border-dark-700/60">
             <div class="flex flex-wrap items-center gap-1.5">
               <span class="font-medium text-gray-900 dark:text-white">{{ m.name }}</span>
               <span
@@ -86,34 +88,42 @@
           </td>
 
           <!-- token 计费:输入 / 输出(阶梯内联)/ 缓存(写/读) -->
-          <template v-if="billingMode(m) === BILLING_MODE_TOKEN">
-            <td class="pz-cell px-3 py-2.5 align-middle font-mono font-semibold text-gray-900 dark:text-gray-50">
+          <template v-if="isTokenMode(billingMode(m))">
+            <td :data-col="t('modelPlaza.table.input')" class="pz-cell px-3 py-2.5 align-middle font-mono font-semibold text-gray-900 dark:text-gray-50">
               <template v-if="tokenIntervals(m).length">
                 <div
                   v-for="(iv, idx) in tokenIntervals(m)"
                   :key="idx"
                   class="pz-token-tier flex flex-wrap content-start items-baseline gap-x-1 text-xs leading-5"
                 >
-                  <span class="whitespace-nowrap font-sans font-normal text-gray-400 dark:text-dark-500">{{ tierLabel(iv) }}</span>
+                  <span class="pz-tier-label font-sans font-normal text-gray-400 dark:text-dark-500">{{ tierLabel(iv) }}</span>
                   <span class="whitespace-nowrap">{{ paidPerMillion(m, iv.input_price) }}</span>
+                  <small v-if="iv.image_input_price != null" class="basis-full">{{ t('modelPlaza.table.imageTokens') }} {{ paidPerMillion(m, iv.image_input_price) }}</small>
                 </div>
               </template>
-              <template v-else>{{ paidPerMillion(m, m.pricing?.input_price) }}</template>
+              <template v-else>
+                {{ paidPerMillion(m, m.pricing?.input_price) }}
+                <small v-if="m.pricing?.image_input_price != null" class="block">{{ t('modelPlaza.table.imageTokens') }} {{ paidPerMillion(m, m.pricing.image_input_price) }}</small>
+              </template>
             </td>
-            <td class="pz-cell px-3 py-2.5 align-middle font-mono font-semibold text-gray-900 dark:text-gray-50">
+            <td :data-col="t('modelPlaza.table.output')" class="pz-cell px-3 py-2.5 align-middle font-mono font-semibold text-gray-900 dark:text-gray-50">
               <template v-if="tokenIntervals(m).length">
                 <div
                   v-for="(iv, idx) in tokenIntervals(m)"
                   :key="idx"
                   class="pz-token-tier flex flex-wrap content-start items-baseline gap-x-1 text-xs leading-5"
                 >
-                  <span class="whitespace-nowrap font-sans font-normal text-gray-400 dark:text-dark-500">{{ tierLabel(iv) }}</span>
+                  <span class="pz-tier-label font-sans font-normal text-gray-400 dark:text-dark-500">{{ tierLabel(iv) }}</span>
                   <span class="whitespace-nowrap">{{ paidPerMillion(m, iv.output_price) }}</span>
+                  <small v-if="iv.image_output_price != null" class="basis-full">{{ t('modelPlaza.table.imageTokens') }} {{ paidPerMillion(m, iv.image_output_price) }}</small>
                 </div>
               </template>
-              <template v-else>{{ paidPerMillion(m, m.pricing?.output_price) }}</template>
+              <template v-else>
+                {{ paidPerMillion(m, m.pricing?.output_price) }}
+                <small v-if="m.pricing?.image_output_price != null" class="block">{{ t('modelPlaza.table.imageTokens') }} {{ paidPerMillion(m, m.pricing.image_output_price) }}</small>
+              </template>
             </td>
-            <td class="pz-cell px-3 py-2.5 align-middle">
+            <td :data-col="t('modelPlaza.table.cache')" class="pz-cell pz-cache px-3 py-2.5 align-middle">
               <div
                 v-if="tokenIntervals(m).length && hasCachePricing(m)"
                 class="font-mono text-xs text-gray-800 dark:text-gray-200"
@@ -178,7 +188,8 @@
 
           <!-- Independent media rates override group and user rates. -->
           <td
-            class="border-l border-gray-100 py-2.5 pl-3 pr-5 text-right align-middle font-mono text-xs dark:border-dark-700/60"
+            :data-col="t('modelPlaza.table.rate')"
+            class="pz-rate border-l border-gray-100 py-2.5 pl-3 pr-5 text-right align-middle font-mono text-xs dark:border-dark-700/60"
           >
             <span
               v-if="usesIndependentMediaRate(m)"
@@ -203,6 +214,7 @@ import { useI18n } from 'vue-i18n'
 import { formatScaled } from '@/utils/pricing'
 import PlatformIcon from '@/components/common/PlatformIcon.vue'
 import PlazaOriginalPriceCells from './PlazaOriginalPriceCells.vue'
+import { isTokenMode } from '@/constants/channel'
 import { pricingTierLabel as tierLabel, tokenPricingIntervals } from './plazaPricing'
 import { platformLabel } from '@/utils/platformColors'
 import type { GroupPlatform } from '@/types'
@@ -242,8 +254,8 @@ const PER_MILLION = 1_000_000
  */
 const sortedModels = computed(() => {
   return [...props.models].sort((a, b) => {
-    const ta = billingMode(a) === BILLING_MODE_TOKEN
-    const tb = billingMode(b) === BILLING_MODE_TOKEN
+    const ta = isTokenMode(billingMode(a))
+    const tb = isTokenMode(billingMode(b))
     if (ta !== tb) return ta ? -1 : 1
     const pa = originalPricing(a)?.output_price ?? null
     const pb = originalPricing(b)?.output_price ?? null
@@ -268,12 +280,16 @@ function originalPricing(m: PlazaModel): PlazaOfficialPricing | null {
 }
 
 /** 原价区是否有 token 计价的模型,决定表头是否标「/百万 Token」。 */
-const hasTokenOriginal = computed(() =>
-  props.models.some((model) => {
-    const pricing = originalPricing(model)
-    return pricing != null && (!pricing.billing_mode || pricing.billing_mode === BILLING_MODE_TOKEN)
-  })
-)
+function originalIsToken(model: PlazaModel): boolean {
+  const pricing = originalPricing(model)
+  return pricing != null && isTokenMode(pricing.billing_mode || BILLING_MODE_TOKEN)
+}
+const hasTokenOriginal = computed(() => props.models.some(originalIsToken))
+
+function priceHeading(key: 'paidPrice' | 'officialPrice', token: boolean): string {
+  const heading = t(`modelPlaza.table.${key}`)
+  return token ? `${heading} ${t('modelPlaza.table.unitPerMillion')}` : heading
+}
 const hasCustomRate = computed(
   () => props.userRateMultiplier != null && props.userRateMultiplier !== props.rateMultiplier
 )
@@ -284,6 +300,7 @@ function billingMode(m: PlazaModel): BillingMode {
 
 function billingModeLabel(m: PlazaModel): string {
   switch (billingMode(m)) {
+    case 'token_peak': return t('admin.channels.billingMode.tokenPeak')
     case BILLING_MODE_IMAGE: return t('modelPlaza.table.perImage')
     case BILLING_MODE_VIDEO: return t('modelPlaza.table.perVideoSecond')
     default: return t('modelPlaza.table.perRequest')
@@ -348,7 +365,7 @@ function hasCachePricing(m: PlazaModel): boolean {
 }
 
 function tokenIntervals(m: PlazaModel): UserPricingInterval[] {
-  return tokenPricingIntervals(m.pricing)
+  return tokenPricingIntervals(m.pricing, t('admin.channels.form.fallbackPrices'))
 }
 
 /** 按次/按图模式的阶梯定价(仅保留配了按次价的档位)。 */
@@ -379,6 +396,11 @@ function requestIntervals(m: PlazaModel): UserPricingInterval[] {
   min-height: 3rem;
 }
 
+.pz-tier-label {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
 .pz-token-tier + .pz-token-tier {
   margin-top: 0.375rem;
 }
@@ -400,5 +422,39 @@ tbody tr:hover .pz-cell {
 .pz-platform {
   background: #faf6e8;
   color: #5b5238;
+}
+
+/* Keep the same prices and accessible table headers when rows stack on a phone. */
+@media (max-width: 639px) {
+  table, tbody { display: block; width: 100%; min-width: 0; }
+  colgroup { display: none; }
+  thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  tbody tr { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  tbody tr::before, tbody tr::after {
+    grid-column: 1 / -1;
+    padding: .625rem .875rem .25rem;
+    font-size: .75rem;
+    font-weight: 600;
+  }
+  tbody tr::before { order: 1; content: attr(data-paid-heading); background: var(--pz-bg); }
+  tbody tr::after { order: 3; content: attr(data-original-heading); }
+  tbody :deep(td) {
+    order: 4;
+    min-width: 0;
+    padding: .375rem .875rem .625rem;
+    border: 0;
+    overflow-wrap: anywhere;
+  }
+  tbody :deep(td[data-col])::before {
+    display: block;
+    margin-bottom: .25rem;
+    color: var(--md-sys-color-on-surface-variant);
+    font: 500 .75rem/1.25 ui-sans-serif, system-ui, sans-serif;
+    content: attr(data-col);
+  }
+  tbody td.pz-model { order: 0; grid-column: 1 / -1; padding-top: .875rem; }
+  tbody td.pz-cell { order: 2; }
+  tbody :deep(td[colspan]), tbody :deep(.pz-cache) { grid-column: 1 / -1; }
+  tbody td.pz-rate { order: 5; grid-column: 1 / -1; display: flex; justify-content: end; align-items: baseline; gap: .375rem; }
 }
 </style>

@@ -91,7 +91,7 @@ func TestCheckErrorPolicy_GeminiAccounts(t *testing.T) {
 			expected:   ErrorPolicySkipped,
 		},
 		{
-			name: "gemini_apikey_no_custom_codes_returns_none",
+			name: "gemini_apikey_no_custom_codes_leaves_pool_active",
 			account: &Account{
 				ID:       102,
 				Type:     AccountTypeAPIKey,
@@ -99,7 +99,7 @@ func TestCheckErrorPolicy_GeminiAccounts(t *testing.T) {
 			},
 			statusCode: 500,
 			body:       []byte(`{"error":"internal"}`),
-			expected:   ErrorPolicyNone,
+			expected:   ErrorPolicySkipped,
 		},
 		{
 			name: "gemini_apikey_temp_unschedulable_hit",
@@ -257,7 +257,7 @@ func TestGeminiErrorPolicyIntegration(t *testing.T) {
 			expectModelScope:  "gemini-2.5-pro",
 		},
 		{
-			name: "no_policy_429_failover_via_shouldFailover",
+			name: "pool_429_retries_without_blocking_account",
 			account: &Account{
 				ID:       203,
 				Type:     AccountTypeAPIKey,
@@ -266,7 +266,7 @@ func TestGeminiErrorPolicyIntegration(t *testing.T) {
 			statusCode:           429,
 			respBody:             []byte(`{"error":"rate limited"}`),
 			expectFailover:       true,
-			expectHandleError:    true,
+			expectHandleError:    false,
 			expectShouldFailover: true,
 		},
 		{
@@ -279,7 +279,7 @@ func TestGeminiErrorPolicyIntegration(t *testing.T) {
 			statusCode:        400,
 			respBody:          []byte(`{"error":"bad request"}`),
 			expectFailover:    false,
-			expectHandleError: true,
+			expectHandleError: false,
 		},
 	}
 
@@ -311,8 +311,7 @@ func TestGeminiErrorPolicyIntegration(t *testing.T) {
 				policy := svc.rateLimitService.CheckErrorPolicy(ctx, account, statusCode, respBody, "gemini-2.5-pro")
 				switch policy {
 				case ErrorPolicySkipped:
-					// Skipped → return error directly (no handleGeminiUpstreamError, no failover)
-					gotFailover = false
+					gotFailover = svc.poolModeSkippedFailoverError(c, account, statusCode, respBody, "") != nil
 					handleErrorCalled = false
 					goto verify
 				case ErrorPolicyMatched:
@@ -383,7 +382,8 @@ func TestPoolModeSkippedFailoverError(t *testing.T) {
 			"pool_mode_retry_status_codes": []any{float64(500)},
 		}), 500, true, true},
 		{"pool_400_not_failover_worthy", poolAccount(nil), 400, false, false},
-		{"non_pool_account_keeps_passthrough", &Account{
+		{"oauth_account_keeps_passthrough", &Account{Type: AccountTypeOAuth, Platform: PlatformGemini}, 500, false, false},
+		{"explicitly_excluded_status_keeps_passthrough", &Account{
 			ID: 301, Type: AccountTypeAPIKey, Platform: PlatformGemini,
 			Credentials: map[string]any{
 				"custom_error_codes_enabled": true,

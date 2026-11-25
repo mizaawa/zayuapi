@@ -62,8 +62,10 @@
     <div class="ops-table-head hidden px-4 py-2.5 sm:grid sm:grid-cols-[minmax(0,1.5fr)_minmax(0,.9fr)_minmax(0,.8fr)_minmax(0,.85fr)_minmax(0,1fr)] sm:gap-3 sm:px-5">
       <span>{{ t('admin.operations.recharge.email') }}</span><span>{{ t('admin.operations.recharge.amount') }}</span><span>{{ t('admin.operations.recharge.status') }}</span><span>{{ t('admin.operations.recharge.channel') }}</span><span class="text-right">{{ t('admin.operations.recharge.time') }}</span>
     </div>
-    <div class="relative min-h-0 flex-1 overflow-y-auto overscroll-contain" :aria-busy="loading" data-testid="recharge-orders-scroll-region">
-      <div v-if="loading" class="absolute inset-0 z-10 flex items-center justify-center bg-white/75 dark:bg-dark-800/75" role="status"><LoadingSpinner size="md" /><span class="sr-only">{{ t('admin.operations.loading') }}</span></div>
+    <div class="relative flex min-h-0 flex-1 flex-col" :aria-busy="loading">
+      <div v-if="loading" class="absolute inset-0 touch-none overscroll-contain z-10 flex items-center justify-center bg-white/75 dark:bg-dark-800/75" role="status"><LoadingSpinner size="md" /><span class="sr-only">{{ t('admin.operations.loading') }}</span></div>
+      <div class="min-h-0 flex-1 overscroll-contain" :class="loading ? 'overflow-hidden' : 'overflow-y-auto'" :inert="loading" data-testid="recharge-orders-scroll-region">
+
       <div v-for="order in orders" :key="order.id" class="ops-row ops-row-hover px-4 py-3 sm:grid sm:grid-cols-[minmax(0,1.5fr)_minmax(0,.9fr)_minmax(0,.8fr)_minmax(0,.85fr)_minmax(0,1fr)] sm:items-center sm:gap-3 sm:px-5" :data-recharge-order="order.id">
         <div class="flex min-w-0 items-start justify-between gap-3 sm:block">
           <span class="min-w-0 break-all text-sm font-medium text-gray-900 dark:text-white" :title="order.user_email">{{ order.user_email || '—' }}</span>
@@ -85,6 +87,7 @@
       <div v-else-if="!orders.length && !loading" class="ops-empty">
         <Icon name="inbox" size="lg" class="text-primary-300" />
         <p>{{ t('admin.operations.recharge.empty') }}</p>
+      </div>
       </div>
     </div>
     <div class="recharge-pager flex items-center justify-between gap-3 px-4 py-3 text-xs text-gray-500 dark:text-gray-400 sm:px-5">

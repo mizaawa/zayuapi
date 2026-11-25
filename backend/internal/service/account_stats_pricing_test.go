@@ -45,7 +45,7 @@ func tryCustomRules(
 	platform, model string, tokens UsageTokens, requestCount int,
 ) *float64 {
 	return tryCustomRulesWithUnits(
-		channel, accountID, groupID, platform, model, tokens,
+		context.Background(), channel, accountID, groupID, platform, model, tokens,
 		accountStatsRequestUnits{requestCount: requestCount},
 	)
 }
@@ -353,8 +353,9 @@ func TestCalculateStatsCost_PerRequestBilling_PriceZero(t *testing.T) {
 		PerRequestPrice: testPtrFloat64(0),
 	}
 	result := calculateStatsCost(pricing, UsageTokens{}, 1)
-	// price == 0 → condition *pricing.PerRequestPrice > 0 is false → returns nil
-	require.Nil(t, result)
+	// An explicitly free unit must not fall through to the paid catalog price.
+	require.NotNil(t, result)
+	require.Zero(t, *result)
 }
 
 func TestCalculateStatsCost_ImageBilling(t *testing.T) {

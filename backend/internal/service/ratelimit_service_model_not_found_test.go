@@ -153,23 +153,36 @@ func TestRateLimitService_HandleUpstreamError_ModelTempWriteFailureNeverWidensTo
 	require.Len(t, repo.modelRateLimitCalls, 1)
 }
 
-func TestRateLimitService_HandleTempUnschedulable_PoolModeWithoutCustomPolicySkipsState(t *testing.T) {
-	repo := &modelNotFoundAccountRepoStub{}
-	svc := &RateLimitService{accountRepo: repo}
-	account := openAIModelNotFoundTempAccount()
-	account.Credentials["pool_mode"] = true
-
-	handled := svc.HandleTempUnschedulable(
-		context.Background(),
-		account,
-		http.StatusNotFound,
-		[]byte(`{"error":{"message":"endpoint not found"}}`),
-		"gpt-5.4",
-	)
-
-	require.False(t, handled)
-	require.Zero(t, repo.tempCalls)
-	require.Empty(t, repo.modelRateLimitCalls)
+func TestRateLimitService_HandleTempUnschedulable_DefaultPoolRules(t *testing.T) {
+	for _, tc := range []struct {
+		name, model      string
+		withRule         bool
+		wantAccountCalls int
+		wantModel        string
+	}{
+		{name: "no rules", model: "gpt-5.4"},
+		{name: "explicit rule with model", model: "gpt-5.4", withRule: true, wantModel: "gpt-5.4"},
+		{name: "explicit rule without model", withRule: true, wantAccountCalls: 1},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			repo := &modelNotFoundAccountRepoStub{}
+			svc := &RateLimitService{accountRepo: repo}
+			account := openAIModelNotFoundTempAccount()
+			if !tc.withRule {
+				delete(account.Credentials, "temp_unschedulable_rules")
+			}
+			handled := svc.HandleTempUnschedulable(context.Background(), account, http.StatusNotFound,
+				[]byte(`{"error":{"message":"endpoint not found"}}`), tc.model)
+			require.Equal(t, tc.withRule, handled)
+			require.Equal(t, tc.wantAccountCalls, repo.tempCalls)
+			if tc.wantModel == "" {
+				require.Empty(t, repo.modelRateLimitCalls)
+			} else {
+				require.Len(t, repo.modelRateLimitCalls, 1)
+				require.Equal(t, tc.wantModel, repo.modelRateLimitCalls[0].scope)
+			}
+		})
+	}
 }
 
 func TestRateLimitService_HandleTempUnschedulable_PoolModeCustomPolicyUsesModelScope(t *testing.T) {

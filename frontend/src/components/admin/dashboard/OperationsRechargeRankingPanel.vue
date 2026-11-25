@@ -23,8 +23,10 @@
     <div class="ops-table-head mt-3 flex items-center justify-between gap-3 px-4 py-2.5 sm:px-5">
       <span>{{ t('admin.operations.rechargeRanking.user') }}</span><span>{{ t('admin.operations.rechargeRanking.amount') }}</span>
     </div>
-    <div class="relative max-h-[420px] min-h-40 flex-1 overflow-y-auto overscroll-contain xl:max-h-none" data-testid="recharge-ranking-scroll">
-      <div v-if="loading" class="absolute inset-0 z-10 flex items-center justify-center bg-white/75 dark:bg-dark-800/75" role="status"><LoadingSpinner size="md" /><span class="sr-only">{{ t('admin.operations.loading') }}</span></div>
+    <div class="relative flex min-h-0 flex-1 flex-col" :aria-busy="loading">
+              <div v-if="loading" class="absolute inset-0 touch-none overscroll-contain z-10 flex items-center justify-center bg-white/75 dark:bg-dark-800/75" role="status"><LoadingSpinner size="md" /><span class="sr-only">{{ t('admin.operations.loading') }}</span></div>
+              <div class="max-h-[420px] min-h-40 flex-1  overscroll-contain xl:max-h-none" :class="loading ? 'overflow-hidden' : 'overflow-y-auto'" :inert="loading" data-testid="recharge-ranking-scroll">
+
       <!-- A failed refresh keeps the last ranking below the notice. -->
       <div v-if="error && !loading" class="ops-row px-4 py-4 text-center text-sm text-gray-500 dark:text-gray-400" role="alert">
         <p>{{ t('admin.operations.rechargeRanking.loadFailed') }}</p>
@@ -45,7 +47,8 @@
         <Icon name="trophy" size="lg" class="text-primary-300" />
         <p>{{ t('admin.operations.rechargeRanking.empty') }}</p>
       </div>
-    </div>
+              </div>
+            </div>
   </section>
 </template>
 

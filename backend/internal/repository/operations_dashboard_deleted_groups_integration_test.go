@@ -62,3 +62,32 @@ func TestOperationsDashboardFoldsDeletedGroups(t *testing.T) {
 	require.Equal(t, "operations-deleted-model", data.Models[0].Model)
 	require.InDelta(t, 2.25, data.Models[0].UserCost, 1e-9)
 }
+
+// Retention may remove usage detail, but not whole-day revenue or upstream costs.
+func TestOperationsTrendSurvivesDetailRetention(t *testing.T) {
+	ctx := context.Background()
+	tx := testEntTx(t)
+	client := tx.Client()
+	repo := newUsageLogRepositoryWithSQL(client, tx)
+	user := mustCreateUser(t, client, &service.User{Email: "operations-trend-retention@test.com"})
+	key := mustCreateApiKey(t, client, &service.APIKey{UserID: user.ID, Key: "sk-operations-trend-retention", Name: "k"})
+	account := mustCreateAccount(t, client, &service.Account{Name: "operations-trend-retention"})
+	start := time.Date(2002, 4, 1, 0, 0, 0, 0, time.UTC)
+	end := start.AddDate(0, 0, 15)
+	up := 2.0
+	for i := range 15 {
+		_, err := repo.Create(ctx, &service.UsageLog{UserID: user.ID, APIKeyID: key.ID, AccountID: account.ID, Model: "trend-test", TotalCost: 4, ActualCost: 5, AccountStatsCost: &up, CreatedAt: start.AddDate(0, 0, i).Add(time.Hour)})
+		require.NoError(t, err)
+	}
+	_, err := tx.ExecContext(ctx, "DELETE FROM usage_logs WHERE user_id = $1 AND created_at < $2", user.ID, end.AddDate(0, 0, -7))
+	require.NoError(t, err)
+	data, err := repo.GetOperationsDashboardData(ctx, end.AddDate(0, 0, -1), end, start, end, start, end, "UTC", 0)
+	require.NoError(t, err)
+	require.Len(t, data.Trend, 15)
+	for i, point := range data.Trend {
+		require.Equal(t, start.AddDate(0, 0, i).Format("2006-01-02"), point.Date)
+		require.Equal(t, 5.0, point.UserCost)
+		require.Equal(t, 2.0, point.UpstreamCost)
+		require.Equal(t, 3.0, point.Profit)
+	}
+}

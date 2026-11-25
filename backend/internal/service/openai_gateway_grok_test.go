@@ -1460,7 +1460,7 @@ func TestGrokMediaVideoRequestBindingIsScopedToUserAndAPIKey(t *testing.T) {
 	require.Zero(t, accountID)
 }
 
-func TestForwardGrokMedia429ReconcilesRateLimitBeforeCustomErrorBypass(t *testing.T) {
+func TestForwardGrokMedia429RecordsQuotaWithoutBlockingRelayOnExcludedStatus(t *testing.T) {
 	t.Setenv(xai.EnvAllowUnsafeURLOverrides, "true")
 	gin.SetMode(gin.TestMode)
 
@@ -1501,9 +1501,10 @@ func TestForwardGrokMedia429ReconcilesRateLimitBeforeCustomErrorBypass(t *testin
 	require.Equal(t, http.StatusInternalServerError, recorder.Code)
 	require.Contains(t, recorder.Body.String(), "Upstream gateway error")
 	require.NotContains(t, recorder.Body.String(), "do not expose")
-	require.Equal(t, 1, repo.rateLimitedCalls)
+	require.NotNil(t, repo.updates[account.ID][grokQuotaSnapshotExtraKey])
+	require.Zero(t, repo.rateLimitedCalls)
 	require.Zero(t, repo.tempUnschedCalls)
-	require.True(t, svc.isOpenAIAccountRuntimeBlocked(account))
+	require.False(t, svc.isOpenAIAccountRuntimeBlocked(account))
 }
 
 func TestGrokMedia429FailoverPreservesRetryAfter(t *testing.T) {
@@ -2621,7 +2622,7 @@ func TestHandleGrokAccountUpstreamError5xxRespectsPoolMode(t *testing.T) {
 	})
 
 	t.Run("non-pool mode keeps two minute cooldown", func(t *testing.T) {
-		account := &Account{ID: 612, Platform: PlatformGrok, Type: AccountTypeAPIKey}
+		account := &Account{ID: 612, Platform: PlatformGrok, Type: AccountTypeOAuth}
 		repo := &grokQuotaAccountRepo{}
 		svc := &OpenAIGatewayService{accountRepo: repo}
 		before := time.Now()
@@ -2673,6 +2674,14 @@ func TestHandleGrokAccountUpstreamError429PoolModeKeepsSchedulingState(t *testin
 	require.Zero(t, repo.tempUnschedCalls)
 	require.False(t, svc.isOpenAIAccountRuntimeBlocked(account))
 	require.Nil(t, account.RateLimitResetAt)
+
+	account.Credentials["custom_error_codes_enabled"] = true
+	account.Credentials["custom_error_codes"] = []any{float64(429)}
+	before := time.Now()
+	svc.handleGrokAccountUpstreamError(context.Background(), account, http.StatusTooManyRequests, http.Header{"Retry-After": []string{"45"}}, nil)
+	require.Equal(t, 1, repo.rateLimitedCalls)
+	require.WithinDuration(t, before.Add(45*time.Second), repo.lastRateLimitResetAt, time.Second)
+	require.True(t, svc.isOpenAIAccountRuntimeBlocked(account))
 }
 
 func TestHandleGrokAccountUpstreamError402RecoversAfterCooldownExpiry(t *testing.T) {

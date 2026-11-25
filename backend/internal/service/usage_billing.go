@@ -321,6 +321,18 @@ type UsageBillingRepository interface {
 	ReleaseBatchImageBalance(ctx context.Context, cmd *BatchImageBalanceHoldCommand) (*BatchImageBalanceHoldResult, error)
 }
 
+// DurableUsageBilling commits ordinary usage and its charge together; media has its own recovery protocol.
+type DurableUsageBilling interface {
+	StageUsage(context.Context, *UsageBillingCommand, *UsageLog) error
+	SettleUsage(context.Context, string, int64, string) (*UsageBillingApplyResult, error)
+	ClaimPendingUsage(context.Context) (*UsageBillingRecoveryKey, error)
+}
+
+type UsageBillingRecoveryKey struct {
+	RequestID, Fingerprint, Platform string
+	APIKeyID, UserID, GroupID        int64
+}
+
 // ExpiredBalanceHoldRecovery is implemented by the SQL repository. It is
 // optional so lightweight deployments and existing test doubles remain valid.
 type ExpiredBalanceHoldRecovery interface {

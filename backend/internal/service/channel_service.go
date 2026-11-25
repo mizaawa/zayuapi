@@ -99,8 +99,9 @@ type channelCache struct {
 	groupPlatform           map[int64]string                                    // groupID → platform
 
 	// 冷路径（CRUD 操作）
-	byID     map[int64]*Channel
-	loadedAt time.Time
+	byID       map[int64]*Channel
+	loadedAt   time.Time
+	loadFailed bool // negative cache: unknown channel prices are not an empty price list
 }
 
 // ChannelMappingResult 渠道映射查找结果
@@ -278,6 +279,7 @@ func expandMappingToCache(cache *channelCache, ch *Channel, gid int64, platform 
 // 通过回退 loadedAt 使剩余 TTL = channelErrorTTL。
 func (s *ChannelService) storeErrorCache() {
 	errorCache := newEmptyChannelCache()
+	errorCache.loadFailed = true
 	errorCache.loadedAt = time.Now().Add(-(channelCacheTTL - channelErrorTTL))
 	s.cache.Store(errorCache)
 }
@@ -500,21 +502,25 @@ func (s *ChannelService) lookupGroupChannel(ctx context.Context, groupID int64) 
 	if err != nil {
 		return nil, err
 	}
+	return lookupCachedGroupChannel(ctx, cache, groupID), nil
+}
+
+func lookupCachedGroupChannel(ctx context.Context, cache *channelCache, groupID int64) *channelLookup {
 	ch, ok := cache.channelByGroupID[groupID]
 	if !ok || !ch.IsActive() {
-		return nil, nil
+		return nil
 	}
 	return &channelLookup{
 		cache:    cache,
 		channel:  ch,
 		platform: channelLookupPlatform(ctx, cache.groupPlatform[groupID]),
-	}, nil
+	}
 }
 
 // GetChannelModelPricing 获取指定分组+模型的渠道定价（热路径 O(1)）。
 // 各平台严格独立，只在本平台内查找定价。
 func (s *ChannelService) GetChannelModelPricing(ctx context.Context, groupID int64, model string) *ChannelModelPricing {
-	lk, err := s.lookupGroupChannel(ctx, groupID)
+	lk, err := s.billingChannel(ctx, groupID)
 	if err != nil {
 		slog.Warn("failed to load channel cache", "group_id", groupID, "error", err)
 		return nil
@@ -662,6 +668,9 @@ func validatePricingEntries(pricing []ChannelModelPricing) error {
 // validatePricingBillingMode 校验计费模式配置：按次/图片模式必须配价格或区间，所有价格字段不能为负，区间至少有一个价格字段。
 func validatePricingBillingMode(pricing []ChannelModelPricing) error {
 	for _, p := range pricing {
+		if err := p.ValidateTimeWindows(); err != nil {
+			return infraerrors.BadRequest("INVALID_TOKEN_TIME_WINDOW", err.Error())
+		}
 		if err := checkBillingModeRequirements(p); err != nil {
 			return err
 		}

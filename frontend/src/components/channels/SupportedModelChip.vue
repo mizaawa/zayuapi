@@ -65,7 +65,7 @@
               <span>{{ billingModeLabel }}</span>
             </div>
 
-            <template v-if="model.pricing.billing_mode === BILLING_MODE_TOKEN">
+            <template v-if="isTokenMode(model.pricing.billing_mode)">
               <PricingRow
                 :currency-symbol="priceSymbol"
                 :label="t(prefixKey('inputPrice'))"
@@ -136,6 +136,14 @@
               :scale="1"
             />
 
+            <div v-if="model.pricing.billing_mode === 'token_peak'" class="mt-2 max-h-56 space-y-2 overflow-y-auto overscroll-contain border-t pt-2">
+              <div v-for="w in model.pricing.time_windows" :key="w.start" class="space-y-0.5">
+                <strong>{{ w.start }}–{{ w.end }} (UTC+8)</strong>
+                <template v-for="(label, key) in tokenFields" :key="key">
+                  <PricingRow v-if="w[key] != null" :label="t('admin.channels.form.' + label)" :value="displayValue(w[key])" :unit="t(prefixKey('unitPerMillion'))" :scale="perMillionScale" :currency-symbol="priceSymbol" />
+                </template>
+              </div>
+            </div>
             <div
               v-if="model.pricing.intervals && model.pricing.intervals.length > 0"
               class="mt-2 border-t pt-2"
@@ -168,11 +176,12 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { tokenFields } from '@/utils/tokenPriceWindows'
 import PricingRow from './PricingRow.vue'
 import { formatScaled } from '@/utils/pricing'
 import type { PlatformPricingCurrency } from '@/utils/channelPricingCurrency'
 import {
-  BILLING_MODE_TOKEN,
+  BILLING_MODE_TOKEN, isTokenMode,
   BILLING_MODE_PER_REQUEST,
   BILLING_MODE_IMAGE,
   BILLING_MODE_VIDEO,
@@ -238,6 +247,7 @@ function prefixKey(k: string): string {
 const billingModeLabel = computed(() => {
   const mode = props.model.pricing?.billing_mode
   switch (mode) {
+    case 'token_peak': return t('admin.channels.billingMode.tokenPeak')
     case BILLING_MODE_TOKEN:
       return t(prefixKey('billingModeToken'))
     case BILLING_MODE_PER_REQUEST:

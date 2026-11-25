@@ -79,13 +79,14 @@ func resolveAccountStatsCostWithUnits(
 		return &zero
 	}
 	upstreamModel = strings.TrimSpace(upstreamModel)
+	billingService = billingService.forRequest(ctx)
 
 	if channelService != nil && upstreamModel != "" && groupID > 0 {
-		if channel, err := channelService.GetChannelForGroup(ctx, groupID); err == nil && channel != nil {
-			platform := channelService.GetGroupPlatform(ctx, groupID)
+		if lk, err := channelService.billingChannel(ctx, groupID); err == nil && lk != nil {
+			channel, platform := lk.channel, lk.cache.groupPlatform[groupID]
 
 			// 优先级 1：自定义规则（始终尝试）
-			if cost := tryCustomRulesWithUnits(channel, accountID, groupID, platform, upstreamModel, tokens, units); cost != nil {
+			if cost := tryCustomRulesWithUnits(ctx, channel, accountID, groupID, platform, upstreamModel, tokens, units); cost != nil {
 				return cost
 			}
 
@@ -124,7 +125,7 @@ func channelOwnStatsCost(
 		if entry == nil {
 			return nil
 		}
-		return calculateStatsCostWithUnits(entry, tokens, units)
+		return calculateStatsCostWithUnits(effectiveTokenCard(ctx, entry), tokens, units)
 	}
 	resolver := NewModelPricingResolver(channelService, billingService)
 	gid := groupID
@@ -147,6 +148,11 @@ func channelOwnStatsCost(
 		Resolved:                  resolved,
 		LongContextBillingEnabled: &longContextBilling,
 	})
+	// A known free channel price is not a missing price. Falling through would
+	// replace the administrator's zero with the catalog cost on the profit chart.
+	if err == nil && cost != nil && cost.TotalCost == 0 && resolved.Billable() && (tokens != (UsageTokens{}) || resolved.Mode != BillingModeToken) {
+		return &cost.TotalCost
+	}
 	return positiveStatsCost(cost, err)
 }
 
@@ -377,6 +383,7 @@ func catalogMediaStatsCost(billingService *BillingService, model string, units a
 
 // tryCustomRulesWithUnits 遍历自定义规则，按数组顺序先命中为准。
 func tryCustomRulesWithUnits(
+	ctx context.Context,
 	channel *Channel, accountID, groupID int64,
 	platform, model string, tokens UsageTokens, units accountStatsRequestUnits,
 ) *float64 {
@@ -389,7 +396,7 @@ func tryCustomRulesWithUnits(
 		if pricing == nil {
 			continue // 规则匹配但模型不在规则定价中，继续下一条
 		}
-		return calculateStatsCostWithUnits(pricing, tokens, units)
+		return calculateStatsCostWithUnits(effectiveTokenCard(ctx, pricing), tokens, units)
 	}
 	return nil
 }
@@ -511,7 +518,7 @@ func calculateTieredPerRequestStatsCost(pricing *ChannelModelPricing, tierLabel 
 
 // calculatePerRequestStatsCost 按次/图片计费。
 func calculatePerRequestStatsCost(pricing *ChannelModelPricing, requestCount int) *float64 {
-	if pricing == nil || pricing.PerRequestPrice == nil || *pricing.PerRequestPrice <= 0 {
+	if pricing == nil || pricing.PerRequestPrice == nil || *pricing.PerRequestPrice < 0 {
 		return nil
 	}
 	if requestCount <= 0 {
@@ -597,8 +604,15 @@ func calculateTokenStatsCost(pricing *ChannelModelPricing, tokens UsageTokens) *
 		float64(tokens.ImageOutputTokens)*orFallback(p.ImageOutputPrice, p.OutputPrice) +
 		float64(tokens.CacheCreationTokens)*deref(p.CacheWritePrice) +
 		float64(tokens.CacheReadTokens)*deref(p.CacheReadPrice)
-	if cost <= 0 {
-		return nil
+	if cost == 0 {
+		// A missing rule falls through; explicit zero on every used dimension does not.
+		priced := func(count int, price *float64) bool { return count == 0 || price != nil }
+		if tokens == (UsageTokens{}) || !priced(textInputTokens, p.InputPrice) || !priced(textOutputTokens, p.OutputPrice) ||
+			(imageInputTokens > 0 && p.ImageInputPrice == nil && p.InputPrice == nil) ||
+			(tokens.ImageOutputTokens > 0 && p.ImageOutputPrice == nil && p.OutputPrice == nil) ||
+			!priced(tokens.CacheCreationTokens, p.CacheWritePrice) || !priced(tokens.CacheReadTokens, p.CacheReadPrice) {
+			return nil
+		}
 	}
 	return &cost
 }

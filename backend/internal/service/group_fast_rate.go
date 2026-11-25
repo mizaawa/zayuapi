@@ -8,7 +8,7 @@ import (
 
 const (
 	DefaultOpenAIFastRateMultiplier      = 2.0
-	DefaultOpenAIUltraFastRateMultiplier = 6.0
+	DefaultOpenAIUltraFastRateMultiplier = 8.0
 	OpenAIFastTierUltraFast              = "ultrafast"
 )
 

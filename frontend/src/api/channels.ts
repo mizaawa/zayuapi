@@ -1,3 +1,4 @@
+import type { TokenWindow } from '@/utils/tokenPriceWindows'
 /**
  * User Channels API endpoints (non-admin)
  * 用户侧「可用渠道」聚合查询：渠道 + 用户可访问的分组 + 支持模型（含定价）。
@@ -24,6 +25,8 @@ export interface UserAvailableGroup {
 }
 
 export interface UserPricingInterval {
+  image_input_price?: number | null
+  image_output_price?: number | null
   min_tokens: number
   max_tokens: number | null
   tier_label?: string
@@ -35,6 +38,7 @@ export interface UserPricingInterval {
 }
 
 export interface UserSupportedModelPricing {
+  time_windows?: TokenWindow[]
   billing_mode: BillingMode
   input_price: number | null
   output_price: number | null

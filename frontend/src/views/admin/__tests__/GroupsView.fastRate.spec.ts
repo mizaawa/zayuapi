@@ -190,7 +190,7 @@ describe('GroupsView Fast billing multiplier', () => {
     expect(wrapper.get('[data-testid="edit-fast-rate"]').classes()).toContain('border-primary-300')
     await wrapper.get('[data-testid="edit-fast-rate-multiplier"]').setValue('3')
     const ultra = wrapper.get<HTMLInputElement>('[data-testid="edit-ultrafast-rate-multiplier"]')
-    expect(ultra.element.value).toBe('6')
+    expect(ultra.element.value).toBe('8')
     await ultra.setValue('')
     await wrapper.get('form#edit-group-form').trigger('submit.prevent')
     expect(updateGroup).not.toHaveBeenCalled()

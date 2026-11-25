@@ -189,6 +189,7 @@ type PricingService struct {
 	remoteClient PricingRemoteClient
 	mu           sync.RWMutex
 	pricingData  map[string]*LiteLLMModelPricing
+	revision     uint64 // incremented when a complete new price table is published
 	lastUpdated  time.Time
 	localHash    string
 
@@ -430,6 +431,7 @@ func (s *PricingService) downloadPricingData() error {
 	// 更新内存数据
 	s.mu.Lock()
 	s.pricingData = data
+	s.revision++
 	s.lastUpdated = time.Now()
 	s.localHash = syncHash
 	s.mu.Unlock()
@@ -567,6 +569,7 @@ func (s *PricingService) loadPricingData(filePath string) error {
 
 	s.mu.Lock()
 	s.pricingData = pricingData
+	s.revision++
 	s.localHash = hashStr
 
 	info, _ := os.Stat(filePath)

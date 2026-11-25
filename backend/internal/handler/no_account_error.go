@@ -77,6 +77,10 @@ func classifyNoAccountError(
 	// The model pricing gate rejected every account it evaluated: the model
 	// has no price, so forwarding would have billed the request at $0.
 	if model, blocked := service.ModelPricingGateBlocked(ctx); blocked {
+		if service.ModelPricingTemporarilyUnavailable(ctx) {
+			fallback.Message = "Pricing is temporarily unavailable; please retry later"
+			return fallback
+		}
 		return noAccountErrorClassification{
 			Status:        http.StatusForbidden,
 			ErrType:       "permission_error",

@@ -1,3 +1,4 @@
+import type { TokenWindow } from '@/utils/tokenPriceWindows'
 /**
  * Admin Channels API endpoints
  * Handles channel management for administrators
@@ -22,6 +23,7 @@ export interface PricingInterval {
 }
 
 export interface ChannelModelPricing {
+  time_windows?: TokenWindow[]
   id?: number
   platform: string
   models: string[]

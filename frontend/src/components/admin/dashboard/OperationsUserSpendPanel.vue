@@ -31,8 +31,10 @@
     <div class="ops-table-head flex items-center justify-between px-4 py-2.5 sm:px-5">
       <span>{{ t('admin.operations.users') }}</span><span class="pr-6">{{ t('admin.operations.userCost') }}</span>
     </div>
-    <div class="relative max-h-[440px] min-h-40 overflow-y-auto overscroll-contain" data-testid="users-scroll-region" :aria-busy="loading">
-      <div v-if="loading" class="absolute inset-0 z-10 flex items-center justify-center bg-white/75 dark:bg-dark-800/75" role="status" data-testid="users-loading"><LoadingSpinner size="md" /><span class="sr-only">{{ t('admin.operations.loading') }}</span></div>
+    <div class="relative flex min-h-0 flex-1 flex-col" :aria-busy="loading">
+              <div v-if="loading" class="absolute inset-0 touch-none overscroll-contain z-10 flex items-center justify-center bg-white/75 dark:bg-dark-800/75" role="status" data-testid="users-loading"><LoadingSpinner size="md" /><span class="sr-only">{{ t('admin.operations.loading') }}</span></div>
+              <div class="max-h-[440px] min-h-40  overscroll-contain" :class="loading ? 'overflow-hidden' : 'overflow-y-auto'" :inert="loading" data-testid="users-scroll-region">
+
       <button v-for="(user, index) in users" :key="user.user_id" type="button" class="ops-row flex w-full items-center gap-3 px-4 py-2.5 text-left sm:px-5" :class="[selectedUserId === user.user_id ? 'ops-row-active' : 'ops-row-hover', loading && selectedUserId === user.user_id ? 'relative z-20' : '']" :aria-pressed="selectedUserId === user.user_id" :data-user="user.user_id" @click="$emit('select-user', user.user_id)">
         <span class="ops-rank" :class="search.trim() ? '' : rankClass(index)">{{ index + 1 }}</span>
         <span class="min-w-0 flex-1 truncate text-sm font-medium text-gray-800 dark:text-gray-200" :title="user.email">{{ user.email }}</span>
@@ -48,7 +50,8 @@
         <Icon name="users" size="lg" class="text-primary-300" />
         <p>{{ t(search.trim() ? 'admin.operations.noMatchingUsers' : 'admin.operations.noUsers') }}</p>
       </div>
-    </div>
+              </div>
+            </div>
   </div>
 </template>
 

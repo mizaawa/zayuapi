@@ -175,9 +175,6 @@ func (h *DashboardHandler) GetOperationsDashboard(c *gin.Context) {
 			userTimezone = "UTC"
 		}
 	}
-	now := timezone.NowInUserLocation(userTimezone)
-	todayStart := timezone.StartOfDayInUserLocation(now, userTimezone)
-	todayEnd := todayStart.AddDate(0, 0, 1)
 	trendDays := 15
 	if raw := strings.TrimSpace(c.Query("trend_days")); raw != "" {
 		parsed, err := strconv.Atoi(raw)
@@ -197,10 +194,10 @@ func (h *DashboardHandler) GetOperationsDashboard(c *gin.Context) {
 		}
 		groupID = parsed
 	}
-	trendStart := todayStart.AddDate(0, 0, -(trendDays - 1))
 	accountingTodayStart, accountingTodayEnd := operationsAccountingDay()
+	trendStart := accountingTodayStart.AddDate(0, 0, -(trendDays - 1))
 
-	data, err := h.dashboardService.GetOperationsDashboardData(c.Request.Context(), accountingTodayStart, accountingTodayEnd, startTime, endTime, trendStart, todayEnd, userTimezone, groupID)
+	data, err := h.dashboardService.GetOperationsDashboardData(c.Request.Context(), accountingTodayStart, accountingTodayEnd, startTime, endTime, trendStart, accountingTodayEnd, userTimezone, groupID)
 	if err != nil {
 		slog.Error("operations dashboard query failed", "error", err)
 		response.Error(c, 500, "Failed to get operations dashboard data")

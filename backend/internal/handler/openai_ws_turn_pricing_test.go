@@ -8,15 +8,14 @@ import (
 )
 
 // TestOpenAIWSTurnPricingZeroValue 钉死 WS turn 定价的零值语义：
-// 没有 turn 起始回调的 ingress 模式（ws_v2 passthrough 只实现 AfterTurn）
-// 必须让 pricingAt 保持零，由 RecordUsage 回退到记录时刻。
+// 没有 BeforeTurn 的透传首轮由调用方选用握手价格，不能污染后续轮次。
 //
 // 反例（本 PR 引入的回归）：用建连时刻初始化，会把透传连接的所有 turn 钉死在
 // 建连时的高峰因子——客户端峰前一分钟建连并保活，整条连接就按谷价结算。
 func TestOpenAIWSTurnPricingZeroValue(t *testing.T) {
 	var p openAIWSTurnPricing
 	require.True(t, p.current().IsZero(),
-		"未经 turn 起始回调冻结时必须保持零值，交由 RecordUsage 回退记录时刻")
+		"未经 turn 起始回调冻结时必须保持零值")
 }
 
 // TestOpenAIWSTurnPricingFreezePerTurn 钉死每个 turn 的 BeforeTurn 都会覆盖

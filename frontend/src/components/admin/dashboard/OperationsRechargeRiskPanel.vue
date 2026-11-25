@@ -10,8 +10,10 @@
       </div>
       <span class="ops-count shrink-0">{{ t('admin.operations.rechargeRisk.latest25') }}</span>
     </div>
-    <div class="relative min-h-0 flex-1 overflow-y-auto overscroll-contain" data-testid="recharge-risk-scroll">
-      <div v-if="loading" class="absolute inset-0 z-10 flex items-center justify-center bg-white/75 dark:bg-dark-800/75" role="status"><LoadingSpinner size="md" /><span class="sr-only">{{ t('admin.operations.loading') }}</span></div>
+    <div class="relative flex min-h-0 flex-1 flex-col" :aria-busy="loading">
+      <div v-if="loading" class="absolute inset-0 touch-none overscroll-contain z-10 flex items-center justify-center bg-white/75 dark:bg-dark-800/75" role="status"><LoadingSpinner size="md" /><span class="sr-only">{{ t('admin.operations.loading') }}</span></div>
+      <div class="min-h-0 flex-1 overscroll-contain" :class="loading ? 'overflow-hidden' : 'overflow-y-auto'" :inert="loading" data-testid="recharge-risk-scroll">
+
       <button v-for="event in events" :key="event.id" type="button" class="ops-row ops-row-hover flex w-full items-center justify-between gap-3 px-4 py-3 text-left focus-visible:bg-primary-50 focus-visible:outline-none dark:focus-visible:bg-primary-900/20" :data-risk-id="event.id" @click="selected = event">
         <span class="flex min-w-0 items-center gap-2.5"><span class="h-2 w-2 shrink-0 rounded-full" :class="event.result === 'success' ? 'bg-amber-500' : 'bg-red-500'" aria-hidden="true" /><span class="min-w-0"><span class="block truncate text-xs font-semibold text-gray-800 dark:text-gray-100" :title="riskTitle(event.type)">{{ riskTitle(event.type) }}</span><span class="block truncate text-[11px] text-gray-500 dark:text-gray-400" :title="event.user_email">{{ event.user_email || '—' }}</span></span></span>
         <span class="shrink-0 text-[11px] tabular-nums text-gray-400">{{ formatTime(event.last_at) }}</span>
@@ -23,6 +25,7 @@
       <div v-else-if="!events.length && !loading" class="ops-empty text-xs">
         <Icon name="shield" size="lg" class="text-emerald-400" />
         <p>{{ t('admin.operations.rechargeRisk.empty') }}</p>
+      </div>
       </div>
     </div>
     <BaseDialog :show="selected !== null" :title="t('admin.operations.rechargeRisk.details')" width="normal" @close="selected = null">

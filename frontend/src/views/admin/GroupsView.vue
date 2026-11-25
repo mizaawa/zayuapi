@@ -5082,7 +5082,7 @@ const createForm = reactive({
   rate_multiplier: 1.0,
   fast_rate_enabled: false,
   fast_rate_multiplier: 2 as number | "",
-  ultrafast_rate_multiplier: 6 as number | "",
+  ultrafast_rate_multiplier: 8 as number | "",
   forced_fast_mode: "off" as ForcedFastMode,
   is_exclusive: false,
   subscription_type: "standard" as SubscriptionType,
@@ -5444,7 +5444,7 @@ const editForm = reactive({
   rate_multiplier: 1.0,
   fast_rate_enabled: false,
   fast_rate_multiplier: 2 as number | "",
-  ultrafast_rate_multiplier: 6 as number | "",
+  ultrafast_rate_multiplier: 8 as number | "",
   forced_fast_mode: "off" as ForcedFastMode,
   is_exclusive: false,
   status: "active" as "active" | "inactive",
@@ -5970,7 +5970,7 @@ const closeCreateModal = () => {
   createForm.rate_multiplier = 1.0;
   createForm.fast_rate_enabled = false;
   createForm.fast_rate_multiplier = 2.0;
-  createForm.ultrafast_rate_multiplier = 6;
+  createForm.ultrafast_rate_multiplier = 8;
   createForm.forced_fast_mode = "off";
   createForm.is_exclusive = false;
   createForm.subscription_type = "standard";
@@ -6112,7 +6112,7 @@ const handleCreateGroup = async () => {
     const requestData = {
       ...createForm,
       fast_rate_multiplier: normalizedFastRateMultiplier(createForm.fast_rate_multiplier),
-      ultrafast_rate_multiplier: normalizedFastRateMultiplier(createForm.ultrafast_rate_multiplier, 6),
+      ultrafast_rate_multiplier: normalizedFastRateMultiplier(createForm.ultrafast_rate_multiplier, 8),
       model_pricing: groupPricingToAPI(
         createForm.model_pricing,
         createForm.platform,
@@ -6220,7 +6220,7 @@ const handleEdit = async (group: AdminGroup) => {
   editForm.rate_multiplier = group.rate_multiplier;
   editForm.fast_rate_enabled = group.fast_rate_enabled ?? false;
   editForm.fast_rate_multiplier = group.fast_rate_multiplier ?? 2.0;
-  editForm.ultrafast_rate_multiplier = group.ultrafast_rate_multiplier ?? 6;
+  editForm.ultrafast_rate_multiplier = group.ultrafast_rate_multiplier ?? 8;
   editForm.forced_fast_mode = group.forced_fast_mode ?? "off";
   editForm.is_exclusive = group.is_exclusive;
   editForm.status = group.status;
@@ -6314,7 +6314,7 @@ const closeEditModal = () => {
   editForm.peak_rate_multiplier = 1.0;
   editForm.fast_rate_enabled = false;
   editForm.fast_rate_multiplier = 2.0;
-  editForm.ultrafast_rate_multiplier = 6;
+  editForm.ultrafast_rate_multiplier = 8;
   editForm.forced_fast_mode = "off";
   editForm.profit_control_enabled = false;
   editForm.profit_min_margin_percent = 0;
@@ -6357,7 +6357,7 @@ const handleUpdateGroup = async () => {
     const payload = {
       ...editForm,
       fast_rate_multiplier: normalizedFastRateMultiplier(editForm.fast_rate_multiplier),
-      ultrafast_rate_multiplier: normalizedFastRateMultiplier(editForm.ultrafast_rate_multiplier, 6),
+      ultrafast_rate_multiplier: normalizedFastRateMultiplier(editForm.ultrafast_rate_multiplier, 8),
       model_pricing: groupPricingToAPI(
         editForm.model_pricing,
         editForm.platform,

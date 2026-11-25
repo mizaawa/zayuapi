@@ -140,7 +140,7 @@ func TestOpenAIGatewayService_Forward_WSv2ErrorEventUsageLimitPersistsRateLimit(
 		Concurrency: 1,
 		Credentials: map[string]any{
 			"api_key":  "sk-test",
-			"base_url": wsServer.URL,
+			"base_url": wsServer.URL, "custom_error_codes_enabled": true, "custom_error_codes": []any{float64(429)},
 		},
 		Extra: map[string]any{
 			"responses_websockets_v2_enabled": true,
@@ -210,7 +210,7 @@ func TestOpenAIGatewayService_Forward_WSv2Handshake429PersistsRateLimit(t *testi
 		Concurrency: 1,
 		Credentials: map[string]any{
 			"api_key":  "sk-test",
-			"base_url": server.URL,
+			"base_url": server.URL, "custom_error_codes_enabled": true, "custom_error_codes": []any{float64(429)},
 		},
 		Extra: map[string]any{
 			"responses_websockets_v2_enabled": true,
@@ -319,7 +319,7 @@ func TestOpenAIGatewayService_ProxyResponsesWebSocketFromClient_ErrorEventUsageL
 		Schedulable: true,
 		Concurrency: 1,
 		Credentials: map[string]any{
-			"api_key": "sk-test",
+			"api_key": "sk-test", "custom_error_codes_enabled": true, "custom_error_codes": []any{float64(429)},
 		},
 		Extra: map[string]any{
 			"responses_websockets_v2_enabled": true,

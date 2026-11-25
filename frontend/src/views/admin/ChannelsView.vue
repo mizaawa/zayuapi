@@ -638,6 +638,7 @@
 </template>
 
 <script setup lang="ts">
+import { mapTokenPrices, validateTokenWindows } from '@/utils/tokenPriceWindows'
 import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAppStore } from '@/stores/app'
@@ -1140,6 +1141,7 @@ function accountStatsRulesToAPI(): AccountStatsPricingRule[] {
             image_input_price: toAPIPrice(p.image_input_price, true),
             image_output_price: toAPIPrice(p.image_output_price, true),
             per_request_price: toAPIPrice(p.per_request_price, false),
+            time_windows: (p.time_windows || []).map(w => ({ start: w.start, end: w.end, ...mapTokenPrices(w, mTokToPerToken) })),
             intervals: toAPIIntervals(p.intervals || [])
           }))
       })
@@ -1183,6 +1185,7 @@ function formToAPI(): { group_ids: number[], model_pricing: ChannelModelPricing[
         image_input_price: toAPIPrice(entry.image_input_price, true),
         image_output_price: toAPIPrice(entry.image_output_price, true),
         per_request_price: toAPIPrice(entry.per_request_price, false),
+        time_windows: (entry.time_windows || []).map(w => ({ start: w.start, end: w.end, ...mapTokenPrices(w, mTokToPerToken) })),
         intervals: toAPIIntervals(entry.intervals || [])
       })
     }
@@ -1317,6 +1320,7 @@ function apiToForm(channel: Channel): PlatformSection[] {
         image_input_price: fromAPIPrice(p.image_input_price, true),
         image_output_price: fromAPIPrice(p.image_output_price, true),
         per_request_price: fromAPIPrice(p.per_request_price, false),
+        time_windows: (p.time_windows || []).map(w => ({ start: w.start, end: w.end, ...mapTokenPrices(w, perTokenToMTok) })),
         intervals: fromAPIIntervals(p.intervals || [])
       } as ModelPricingFormEntry))
 
@@ -1508,6 +1512,7 @@ function distributeRulesToPlatforms(apiRules: AccountStatsPricingRule[]) {
         image_input_price: fromAPIPrice(p.image_input_price, true),
         image_output_price: fromAPIPrice(p.image_output_price, true),
         per_request_price: fromAPIPrice(p.per_request_price, false),
+        time_windows: (p.time_windows || []).map(w => ({ start: w.start, end: w.end, ...mapTokenPrices(w, perTokenToMTok) })),
         intervals: fromAPIIntervals(p.intervals || [])
       } as PricingFormEntry))
     }
@@ -1556,6 +1561,10 @@ async function handleSubmit() {
 
   for (const section of form.platforms.filter(s => s.enabled)) {
     for (const entry of [...section.model_pricing, ...section.account_stats_pricing_rules.flatMap(rule => rule.pricing)]) {
+      if (entry.billing_mode === 'token_peak') {
+        const error = validateTokenWindows(entry)
+        if (error) { activeTab.value = section.platform; appStore.showError(t(`admin.channels.form.${error}`)); return }
+      }
       const values = [...pricingFields.map(field => [field, entry[field]] as const),
         ...entry.intervals.flatMap((iv, index) => intervalPriceFields.map(field => [`intervals[${index}].${field}`, iv[field]] as const))]
       for (const [field, value] of values) {

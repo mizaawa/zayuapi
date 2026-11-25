@@ -251,7 +251,7 @@ describe('EmailVerifyView', () => {
           AuthLayout: { template: '<div><slot /><slot name="footer" /></div>' },
           Icon: true,
           TurnstileWidget: {
-            template: '<button data-testid="resend-captcha" @click="$emit(\'verify\', \'fresh-proof\')">verify</button>',
+            template: '<button type="button" data-testid="resend-captcha" @click="$emit(\'verify\', \'fresh-proof\')">verify</button>',
           },
           transition: false,
         },
@@ -263,7 +263,7 @@ describe('EmailVerifyView', () => {
     expect(sendVerifyCodeMock).toHaveBeenCalledWith(expect.objectContaining({
       turnstile_token: 'initial-proof',
     }))
-    expect(wrapper.find('[data-testid="resend-captcha"]').exists()).toBe(true)
+    expect(wrapper.findAll('[data-testid="resend-captcha"]')).toHaveLength(1)
   })
 
   it('skips the registration email suffix whitelist for pending oauth verification', async () => {

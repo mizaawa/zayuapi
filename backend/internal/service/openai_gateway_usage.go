@@ -14,7 +14,6 @@ import (
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
-	"github.com/Wei-Shaw/sub2api/internal/pkg/timezone"
 	"go.uber.org/zap"
 )
 
@@ -129,11 +128,11 @@ func (s *OpenAIGatewayService) ResolveUserGroupRateMultiplier(ctx context.Contex
 
 // openAIUsagePricingAt 返回本次用量记录使用的定价时刻：优先请求级 PricingAt
 // （与利润门 D 同源同刻），未装配时回退记录时刻（既有行为）。
-func openAIUsagePricingAt(input *OpenAIRecordUsageInput) time.Time {
+func openAIUsagePricingAt(ctx context.Context, input *OpenAIRecordUsageInput) time.Time {
 	if input != nil && !input.PricingAt.IsZero() {
 		return input.PricingAt
 	}
-	return timezone.Now()
+	return tokenPriceTime(ctx)
 }
 
 // RecordUsage records usage and deducts balance
@@ -200,7 +199,9 @@ func (s *OpenAIGatewayService) RecordUsage(ctx context.Context, input *OpenAIRec
 	// 变价）；未装配 PricingAt 的路径回退记录时刻，保持既有行为。不并入上面的
 	// Resolve，以免污染 user:group 倍率缓存。
 	baseMultiplier := multiplier
-	multiplier, imageMultiplier := computePeakAwareMultipliers(apiKey, baseMultiplier, openAIUsagePricingAt(input))
+	pricingAt := openAIUsagePricingAt(ctx, input)
+	ctx = context.WithValue(ctx, gatewayTokenRequestPricingAtCtxKey{}, pricingAt)
+	multiplier, imageMultiplier := computePeakAwareMultipliers(apiKey, baseMultiplier, pricingAt)
 	videoMultiplier := resolveVideoRateMultiplier(apiKey, baseMultiplier)
 	if isVideoUsageResult(result) && result.VideoPriceMultiplier > 0 {
 		videoMultiplier *= result.VideoPriceMultiplier
@@ -544,13 +545,13 @@ func (s *OpenAIGatewayService) RecordUsage(ctx context.Context, input *OpenAIRec
 			return err
 		}
 	}
-	billingErr := func() error {
-		_, receipt, err := applyUsageBilling(ctx, requestID, usageLog, params, s.billingDeps(), s.usageBillingRepo)
-		if input.BillingReceipt != nil {
-			*input.BillingReceipt = receipt
-		}
-		return err
-	}()
+	_, receipt, billingErr := applyUsageBilling(ctx, requestID, usageLog, params, s.billingDeps(), s.usageBillingRepo)
+	if input.BillingReceipt != nil {
+		*input.BillingReceipt = receipt
+	}
+	if _, ok := durableUsage(s.usageBillingRepo, usageLog, input.MediaReservationID); receipt != nil && ok {
+		return billingErr
+	}
 
 	if billingErr != nil {
 		if input.MediaReservationID != "" {
@@ -667,7 +668,7 @@ func (s *OpenAIGatewayService) calculateOpenAIRecordUsageTokenCost(
 	if apiKey.Group != nil {
 		input.GroupID, input.Resolver = &apiKey.Group.ID, s.resolver
 	}
-	return s.billingService.CalculateCostUnified(input)
+	return s.billingService.forRequest(ctx).CalculateCostUnified(input)
 }
 
 func (s *OpenAIGatewayService) calculateOpenAIImageCost(

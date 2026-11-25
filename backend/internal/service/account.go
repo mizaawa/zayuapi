@@ -1065,19 +1065,9 @@ func (a *Account) IsCustomErrorCodesEnabled() bool {
 	return false
 }
 
-// IsPoolMode 检查 API Key 账号是否启用池模式。
-// 池模式下，上游错误不标记本地账号状态，而是在同一账号上重试。
-func (a *Account) IsPoolMode() bool {
-	if !a.IsAPIKeyOrBedrock() || a.Credentials == nil {
-		return false
-	}
-	if v, ok := a.Credentials["pool_mode"]; ok {
-		if enabled, ok := v.(bool); ok {
-			return enabled
-		}
-	}
-	return false
-}
+// IsPoolMode identifies relay account types that retry within the upstream pool.
+// Legacy pool_mode booleans are ignored; OAuth accounts keep their own policy.
+func (a *Account) IsPoolMode() bool { return a != nil && a.IsAPIKeyOrBedrock() }
 
 const (
 	defaultPoolModeRetryCount = 3

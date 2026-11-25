@@ -1794,7 +1794,7 @@ func (s *GeminiMessagesCompatService) shouldFailoverGeminiUpstreamError(statusCo
 // 可 failover 的状态码返回 UpstreamFailoverError，交给 handler 层按 pool_mode_retry_count
 // 同账号重试后换号；返回 nil 表示不适用（非池模式或状态码不可 failover），由调用方透传。
 func (s *GeminiMessagesCompatService) poolModeSkippedFailoverError(c *gin.Context, account *Account, statusCode int, respBody []byte, upstreamRequestID string) *UpstreamFailoverError {
-	if !account.IsPoolMode() || !s.shouldFailoverGeminiUpstreamError(statusCode) {
+	if !account.IsPoolMode() || !account.ShouldHandleErrorCode(statusCode) || !s.shouldFailoverGeminiUpstreamError(statusCode) {
 		return nil
 	}
 	upstreamMsg := sanitizeUpstreamErrorMessage(strings.TrimSpace(extractUpstreamErrorMessage(respBody)))

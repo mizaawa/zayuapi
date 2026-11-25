@@ -89,7 +89,7 @@
             </label>
             <Select
               :modelValue="entry.billing_mode"
-              @update:modelValue="emit('update', { ...entry, billing_mode: $event as BillingMode, intervals: [] })"
+              @update:modelValue="emit('update', { ...entry, billing_mode: $event as BillingMode, intervals: [], time_windows: [] })"
               :options="billingModeOptions"
               class="mt-1"
             />
@@ -97,47 +97,17 @@
         </div>
 
         <!-- Token mode -->
-        <div v-if="entry.billing_mode === 'token'">
+        <div v-if="entry.billing_mode === 'token' || entry.billing_mode === 'token_peak'">
           <!-- Default prices (fallback when no interval matches) -->
           <label class="mt-3 block text-xs font-medium text-gray-500 dark:text-gray-400">
-            {{ t('admin.channels.form.defaultPrices') }}
+            {{ t(entry.billing_mode === 'token_peak' ? 'admin.channels.form.fallbackPrices' : 'admin.channels.form.defaultPrices') }}
             <span class="ml-1 font-normal text-gray-400">{{ priceSymbol }}{{ t('admin.channels.form.perMillionTokenUnit') }}</span>
           </label>
-          <div class="pricing-price-grid mt-1">
-            <div>
-              <label class="text-xs text-gray-400">{{ t('admin.channels.form.inputPrice') }}</label>
-              <input :value="entry.input_price" @input="emitField('input_price', ($event.target as HTMLInputElement).value)"
-                type="number" step="any" min="0" class="input mt-0.5 text-sm" :placeholder="t('admin.channels.form.pricePlaceholder')" />
-            </div>
-            <div>
-              <label class="text-xs text-gray-400">{{ t('admin.channels.form.outputPrice') }}</label>
-              <input :value="entry.output_price" @input="emitField('output_price', ($event.target as HTMLInputElement).value)"
-                type="number" step="any" min="0" class="input mt-0.5 text-sm" :placeholder="t('admin.channels.form.pricePlaceholder')" />
-            </div>
-            <div>
-              <label class="text-xs text-gray-400">{{ t('admin.channels.form.cacheWritePrice') }}</label>
-              <input :value="entry.cache_write_price" @input="emitField('cache_write_price', ($event.target as HTMLInputElement).value)"
-                type="number" step="any" min="0" class="input mt-0.5 text-sm" :placeholder="t('admin.channels.form.pricePlaceholder')" />
-            </div>
-            <div>
-              <label class="text-xs text-gray-400">{{ t('admin.channels.form.cacheReadPrice') }}</label>
-              <input :value="entry.cache_read_price" @input="emitField('cache_read_price', ($event.target as HTMLInputElement).value)"
-                type="number" step="any" min="0" class="input mt-0.5 text-sm" :placeholder="t('admin.channels.form.pricePlaceholder')" />
-            </div>
-            <div>
-              <label class="text-xs text-gray-400">{{ t('admin.channels.form.imageInputPrice') }}</label>
-              <input :value="entry.image_input_price" @input="emitField('image_input_price', ($event.target as HTMLInputElement).value)"
-                type="number" step="any" min="0" class="input mt-0.5 text-sm" :placeholder="t('admin.channels.form.pricePlaceholder')" />
-            </div>
-            <div>
-              <label class="text-xs text-gray-400">{{ t('admin.channels.form.imageTokenPrice') }}</label>
-              <input :value="entry.image_output_price" @input="emitField('image_output_price', ($event.target as HTMLInputElement).value)"
-                type="number" step="any" min="0" class="input mt-0.5 text-sm" :placeholder="t('admin.channels.form.pricePlaceholder')" />
-            </div>
-          </div>
-
+          <TokenPriceFields :value="entry" class="mt-1" @change="(field, value) => emit('update', { ...entry, [field]: value })" />
+          <TokenWindowsEditor v-if="entry.billing_mode === 'token_peak'" :windows="entry.time_windows || []"
+            @update="windows => emit('update', { ...entry, time_windows: windows })" />
           <!-- Token intervals (channel-only; group long-context uses official presets) -->
-          <div v-if="!hideTokenIntervals" class="mt-3">
+          <div v-if="entry.billing_mode === 'token' && !hideTokenIntervals" class="mt-3">
             <div class="pricing-section-head">
               <label class="min-w-0 text-xs font-medium text-gray-500 dark:text-gray-400">
                 {{ t('admin.channels.form.intervals') }}
@@ -237,6 +207,8 @@
 </template>
 
 <script setup lang="ts">
+import TokenPriceFields from './TokenPriceFields.vue'
+import TokenWindowsEditor from './TokenWindowsEditor.vue'
 import { ref, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Select from '@/components/common/Select.vue'
@@ -271,6 +243,7 @@ const priceSymbol = computed(() => props.currency?.discounted_cny ? '¥' : '$')
 
 const billingModeOptions = computed(() => [
   { value: 'token', label: t('admin.channels.billingMode.token') },
+  ...(!props.hideTokenIntervals ? [{ value: 'token_peak', label: t('admin.channels.billingMode.tokenPeak') }] : []),
   { value: 'per_request', label: t('admin.channels.billingMode.perRequest') },
   { value: 'image', label: t('admin.channels.billingMode.image') },
   { value: 'video', label: t('admin.channels.billingMode.video') }
@@ -372,18 +345,6 @@ async function onModelsUpdate(newModels: string[]) {
 
 .collapsible-inner {
   overflow: hidden;
-}
-
-/* As many price columns as fit: two on phones, all six in wide dialogs. */
-.pricing-price-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(7rem, 1fr));
-  gap: 0.5rem;
-}
-
-/* Keep inputs on one line when a neighbouring label wraps. */
-.pricing-price-grid > div {
-  @apply flex min-w-0 flex-col justify-end;
 }
 
 .pricing-section-head {

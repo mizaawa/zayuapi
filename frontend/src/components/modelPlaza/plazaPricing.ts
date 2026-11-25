@@ -2,7 +2,16 @@ import type { UserPricingInterval, UserSupportedModelPricing } from '@/api/chann
 
 // A partial interval overrides only the fields configured on it. Never borrow
 // prices from another card (channel original and group/paid cards are separate).
-export function tokenPricingIntervals(pricing: (Pick<UserSupportedModelPricing, 'input_price' | 'output_price' | 'cache_write_price' | 'cache_read_price'> & Partial<UserSupportedModelPricing>) | null): UserPricingInterval[] {
+export function tokenPricingIntervals(pricing: (Pick<UserSupportedModelPricing, 'input_price' | 'output_price' | 'cache_write_price' | 'cache_read_price'> & Partial<UserSupportedModelPricing>) | null, fallbackLabel = 'Default'): UserPricingInterval[] {
+  if (pricing?.billing_mode === 'token_peak') {
+    const row = (label: string, w?: NonNullable<typeof pricing.time_windows>[number]): UserPricingInterval => ({
+      min_tokens: 0, max_tokens: null, tier_label: label, per_request_price: null,
+      input_price: w?.input_price ?? pricing.input_price, output_price: w?.output_price ?? pricing.output_price,
+      cache_read_price: w?.cache_read_price ?? pricing.cache_read_price, cache_write_price: w?.cache_write_price ?? pricing.cache_write_price,
+      image_input_price: w?.image_input_price ?? pricing.image_input_price, image_output_price: w?.image_output_price ?? pricing.image_output_price
+    })
+    return [row(fallbackLabel), ...(pricing.time_windows || []).map(w => row(`${w.start}–${w.end} (UTC+8)`, w))]
+  }
   if (!pricing?.intervals?.length) return []
   const intervals = [...pricing.intervals].sort((a, b) => a.min_tokens - b.min_tokens).map((iv) => ({
     ...iv,

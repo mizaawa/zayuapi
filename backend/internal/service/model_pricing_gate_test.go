@@ -193,14 +193,17 @@ func TestModelPricingGate_IgnoresForcePlatformLikeBilling(t *testing.T) {
 	require.False(t, vetoed)
 }
 
-func TestOpenAIGatewayService_ModelPricingBillableForAccount(t *testing.T) {
+func TestOpenAIGatewayService_PriceTurnForAccount(t *testing.T) {
 	svc := &OpenAIGatewayService{cfg: &config.Config{}, resolver: newModelPricingGateTestResolver(t, PlatformOpenAI, nil)}
 	apiKey := modelPricingGateTestAPIKey(PlatformOpenAI)
 	account := modelPricingGateTestAccount(1, PlatformOpenAI, map[string]any{"cheap-alias": "grok-4.7"})
 
-	require.True(t, svc.ModelPricingBillableForAccount(context.Background(), apiKey, "grok-4.7", ChannelMappingResult{MappedModel: "grok-4.7"}, account))
-	require.True(t, svc.ModelPricingBillableForAccount(context.Background(), apiKey, "cheap-alias", ChannelMappingResult{MappedModel: "cheap-alias"}, account))
-	require.False(t, svc.ModelPricingBillableForAccount(context.Background(), apiKey, "grok-4.7-fast", ChannelMappingResult{MappedModel: "grok-4.7-fast"}, account))
+	_, billable := svc.PriceTurnForAccount(context.Background(), apiKey, "grok-4.7", ChannelMappingResult{MappedModel: "grok-4.7"}, account)
+	require.True(t, billable)
+	_, billable = svc.PriceTurnForAccount(context.Background(), apiKey, "cheap-alias", ChannelMappingResult{MappedModel: "cheap-alias"}, account)
+	require.True(t, billable)
+	_, billable = svc.PriceTurnForAccount(context.Background(), apiKey, "grok-4.7-fast", ChannelMappingResult{MappedModel: "grok-4.7-fast"}, account)
+	require.False(t, billable)
 }
 
 // The terminal post-slot check must apply the pricing gate even when the group

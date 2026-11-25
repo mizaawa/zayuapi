@@ -368,6 +368,11 @@ describe('OperationsView', () => {
     let resolveFirst!: (value: OperationsDashboardResponse) => void
     getOperationsDashboard.mockImplementationOnce(() => new Promise(resolve => { resolveFirst = resolve }))
     await wrapper.get('[data-group="1"]').trigger('click')
+    for (const name of ['groups', 'models']) {
+      const region = wrapper.get(`[data-testid="${name}-scroll-region"]`)
+      expect(region.attributes('inert')).toBeDefined()
+      expect(region.classes()).toContain('overflow-hidden')
+    }
     expect(wrapper.get('[data-testid="groups-loading"]').attributes('role')).toBe('status')
     expect(wrapper.get('[data-testid="models-loading"]').attributes('role')).toBe('status')
     getOperationsDashboard.mockResolvedValueOnce({ ...fixture(), models: [{ model: 'latest', user_cost: 1, upstream_cost: 0 }] })

@@ -2542,6 +2542,15 @@ func TestOpenAIResponses_APIKeyPassthroughSSERateLimitUsesConfiguredPoolRetry(t 
 }
 
 func TestOpenAIResponsesWebSocket_FailoverOnUpstreamUsageLimitEvent(t *testing.T) {
+	t.Run("default pool fails over without cooling every upstream", func(t *testing.T) {
+		testWSUsageLimitFailover(t, false)
+	})
+	t.Run("explicit account status policy persists the rate limit", func(t *testing.T) {
+		testWSUsageLimitFailover(t, true)
+	})
+}
+
+func testWSUsageLimitFailover(t *testing.T, persist429 bool) {
 	gin.SetMode(gin.TestMode)
 
 	firstHitCh := make(chan []byte, 1)
@@ -2626,6 +2635,11 @@ func TestOpenAIResponsesWebSocket_FailoverOnUpstreamUsageLimitEvent(t *testing.T
 				"openai_apikey_responses_websockets_v2_mode":    service.OpenAIWSIngressModePassthrough,
 			},
 		},
+	}
+
+	if persist429 {
+		accounts[0].Credentials["custom_error_codes_enabled"] = true
+		accounts[0].Credentials["custom_error_codes"] = []any{float64(http.StatusTooManyRequests)}
 	}
 
 	cfg := &config.Config{}
@@ -2734,7 +2748,11 @@ func TestOpenAIResponsesWebSocket_FailoverOnUpstreamUsageLimitEvent(t *testing.T
 	case <-time.After(3 * time.Second):
 		t.Fatal("等待第二个上游收到重放首帧超时")
 	}
-	require.Equal(t, []int64{int64(9902)}, accountRepo.rateLimitedIDs)
+	if persist429 {
+		require.Equal(t, []int64{9902}, accountRepo.rateLimitedIDs)
+	} else {
+		require.Empty(t, accountRepo.rateLimitedIDs)
+	}
 }
 
 func TestOpenAIResponsesWebSocket_FirstOutputTimeoutWithoutDownstreamReusesClientForOneFailover(t *testing.T) {

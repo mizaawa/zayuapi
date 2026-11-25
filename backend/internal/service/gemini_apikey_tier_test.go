@@ -97,7 +97,12 @@ func TestHandleGeminiUpstreamError_APIKey429UsesShortFallbackCooldown(t *testing
 	svc := &GeminiMessagesCompatService{accountRepo: repo, rateLimitService: rlSvc}
 
 	before := time.Now()
-	svc.handleGeminiUpstreamError(context.Background(), geminiRelayAPIKeyAccount(512, GeminiTierAIStudioFree), http.StatusTooManyRequests, http.Header{},
+	account := geminiRelayAPIKeyAccount(512, GeminiTierAIStudioFree)
+	svc.handleGeminiUpstreamError(context.Background(), account, http.StatusTooManyRequests, nil, nil)
+	require.Zero(t, repo.rateLimitCalls, "a transient 429 should not block a default pool")
+	account.Credentials["custom_error_codes_enabled"] = true
+	account.Credentials["custom_error_codes"] = []any{float64(429)}
+	svc.handleGeminiUpstreamError(context.Background(), account, http.StatusTooManyRequests, http.Header{},
 		[]byte(`{"error":{"code":429,"message":"concurrency limit reached for this token","status":"RESOURCE_EXHAUSTED"}}`))
 
 	require.Equal(t, 1, repo.rateLimitCalls)
@@ -110,7 +115,10 @@ func TestHandleGeminiUpstreamError_APIKeyDailyQuota429StillWaitsForReset(t *test
 	rlSvc := NewRateLimitService(repo, nil, &config.Config{}, NewGeminiQuotaService(&config.Config{}, nil), nil)
 	svc := &GeminiMessagesCompatService{accountRepo: repo, rateLimitService: rlSvc}
 
-	svc.handleGeminiUpstreamError(context.Background(), geminiRelayAPIKeyAccount(513, ""), http.StatusTooManyRequests, http.Header{},
+	account := geminiRelayAPIKeyAccount(513, "")
+	account.Credentials["custom_error_codes_enabled"] = true
+	account.Credentials["custom_error_codes"] = []any{float64(429)}
+	svc.handleGeminiUpstreamError(context.Background(), account, http.StatusTooManyRequests, http.Header{},
 		[]byte(`{"error":{"code":429,"message":"You exceeded your current quota: requests per day limit","status":"RESOURCE_EXHAUSTED"}}`))
 
 	require.Equal(t, 1, repo.rateLimitCalls)

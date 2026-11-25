@@ -173,10 +173,10 @@ func TestProfitControl_AccountRateSemantics(t *testing.T) {
 // 用量记录定价时刻：优先请求级 PricingAt，未装配回退记录时刻。
 func TestOpenAIUsagePricingAt(t *testing.T) {
 	fixed := time.Now().Add(-2 * time.Hour)
-	require.Equal(t, fixed, openAIUsagePricingAt(&OpenAIRecordUsageInput{PricingAt: fixed}))
-	fallback := openAIUsagePricingAt(&OpenAIRecordUsageInput{})
+	require.Equal(t, fixed, openAIUsagePricingAt(context.Background(), &OpenAIRecordUsageInput{PricingAt: fixed}))
+	fallback := openAIUsagePricingAt(context.Background(), &OpenAIRecordUsageInput{})
 	require.WithinDuration(t, timezone.Now(), fallback, 5*time.Second)
-	require.WithinDuration(t, timezone.Now(), openAIUsagePricingAt(nil), 5*time.Second)
+	require.WithinDuration(t, timezone.Now(), openAIUsagePricingAt(context.Background(), nil), 5*time.Second)
 }
 
 func TestOpenAIProfitControlStickyBindingOccursOnlyAfterTerminalAdmission(t *testing.T) {

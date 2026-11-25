@@ -58,7 +58,7 @@
         </section>
 
         <div class="grid grid-cols-1 items-stretch gap-6 xl:h-[560px] xl:grid-cols-12" data-testid="overview-grid">
-          <OperationsTrendChart class="xl:col-span-7" :points="data.trend" :days="trendDays" :time-zone="siteTimeZone" />
+          <OperationsTrendChart class="xl:col-span-7" :points="data.trend" :days="trendDays" :time-zone="data.site_timezone || siteTimeZone" :today="data.today_date" />
           <OperationsRechargeRankingPanel class="xl:col-span-5" :ranking="rechargeRanking" :loading="rankingLoading" :error="rankingError" @retry="loadRechargeRanking" />
         </div>
 
@@ -98,10 +98,12 @@
                 <span class="money-cell text-gray-700 dark:text-gray-300">{{ formatMoney(totals.user_cost) }}</span>
                 <span class="money-cell text-gray-700 dark:text-gray-300">{{ formatMoney(totals.upstream_cost) }}</span>
               </button>
-              <div class="relative min-h-40 max-h-[360px] flex-1 overflow-y-auto overscroll-contain" data-testid="groups-scroll-region" :aria-busy="loading">
-                <div v-if="loading" class="absolute inset-0 z-10 flex min-h-40 items-center justify-center bg-white/75 dark:bg-dark-800/75" data-testid="groups-loading" role="status">
+              <div class="relative flex min-h-0 flex-1 flex-col" :aria-busy="loading">
+              <div v-if="loading" class="absolute inset-0 touch-none overscroll-contain z-10 flex min-h-40 items-center justify-center bg-white/75 dark:bg-dark-800/75" data-testid="groups-loading" role="status">
                   <LoadingSpinner size="md" /><span class="sr-only">{{ t('admin.operations.loading') }}</span>
                 </div>
+              <div class="min-h-40 max-h-[360px] flex-1  overscroll-contain" :class="loading ? 'overflow-hidden' : 'overflow-y-auto'" :inert="loading" data-testid="groups-scroll-region">
+
                 <button v-for="group in groups" :key="group.group_id" type="button" class="operations-grid ops-row w-full px-4 py-3 text-left sm:px-5"
                   :data-group="group.group_id" :aria-pressed="selectedGroup === group.group_id" :title="group.group_id === DELETED_GROUPS_ID ? t('admin.operations.deletedGroupsHint') : undefined" :class="[selectedGroup === group.group_id ? 'ops-row-active' : 'ops-row-hover', loading && selectedGroup === group.group_id ? 'relative z-20' : '']" @click="selectedGroup = group.group_id">
                   <span class="flex min-w-0 items-center gap-2.5"><span class="ops-tile" :data-platform="group.platform"><Icon v-if="group.group_id === DELETED_GROUPS_ID" name="trash" size="sm" class="text-gray-400" /><PlatformIcon v-else :platform="group.platform" size="md" :class="platformTextClass(group.platform)" /></span><span class="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1"><span class="break-words text-sm font-semibold" :class="group.group_id === DELETED_GROUPS_ID ? 'text-gray-500 dark:text-gray-400' : 'text-gray-900 dark:text-white'">{{ groupName(group) }}</span><span v-if="group.group_id !== DELETED_GROUPS_ID" class="inline-flex shrink-0 rounded-full bg-primary-50 px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-primary-700 dark:bg-dark-700 dark:text-gray-400">{{ group.rate_multiplier }}×</span><LoadingSpinner v-if="loading && selectedGroup === group.group_id" size="sm" data-testid="group-selection-loading" /></span></span>
@@ -111,6 +113,7 @@
                 </button>
                 <div v-if="!groups.length" class="ops-empty"><Icon name="grid" size="lg" class="text-primary-300" /><p>{{ t('admin.operations.noGroups') }}</p></div>
               </div>
+            </div>
             </div>
             <div class="card flex min-w-0 flex-col overflow-hidden p-0">
               <div class="ops-panel-head flex-nowrap">
@@ -126,8 +129,10 @@
               <div class="operations-grid ops-table-head px-4 py-2.5 sm:px-5">
                 <span>Model ID</span><span class="text-right">{{ t('admin.operations.profit') }}</span><span class="text-right">{{ t('admin.operations.userCost') }}</span><span class="text-right">{{ t('admin.operations.upstreamCost') }}</span>
               </div>
-              <div class="relative min-h-40 max-h-[412px] flex-1 overflow-y-auto overscroll-contain" data-testid="models-scroll-region" :aria-busy="loading">
-                <div v-if="loading" class="absolute inset-0 z-10 flex min-h-40 items-center justify-center bg-white/75 dark:bg-dark-800/75" data-testid="models-loading" role="status"><LoadingSpinner size="md" /><span class="sr-only">{{ t('admin.operations.loading') }}</span></div>
+              <div class="relative flex min-h-0 flex-1 flex-col" :aria-busy="loading">
+              <div v-if="loading" class="absolute inset-0 touch-none overscroll-contain z-10 flex min-h-40 items-center justify-center bg-white/75 dark:bg-dark-800/75" data-testid="models-loading" role="status"><LoadingSpinner size="md" /><span class="sr-only">{{ t('admin.operations.loading') }}</span></div>
+              <div class="min-h-40 max-h-[412px] flex-1  overscroll-contain" :class="loading ? 'overflow-hidden' : 'overflow-y-auto'" :inert="loading" data-testid="models-scroll-region">
+
                 <div v-for="model in models" :key="model.model" :data-model="model.model" class="operations-grid ops-row ops-row-hover px-4 py-3 sm:px-5">
                   <span class="flex min-w-0 items-center gap-2.5"><span v-for="platform in modelPlatforms(model)" :key="platform" class="ops-tile" :class="platformTextClass(platform)" :title="platform"><PlatformIcon :platform="platform" size="sm" /></span><span class="min-w-0 break-words text-sm font-medium leading-5 text-gray-800 dark:text-gray-200">{{ model.model }}</span></span>
                   <span class="money-cell font-semibold" :class="profitClass(profitOf(model))">{{ formatMoney(profitOf(model)) }}</span>
@@ -136,6 +141,7 @@
                 </div>
                 <div v-if="!models.length" class="ops-empty"><Icon name="cube" size="lg" class="text-primary-300" /><p>{{ t('admin.operations.noModels') }}</p></div>
               </div>
+            </div>
             </div>
           </div>
           <div class="grid grid-cols-1 items-stretch gap-6 xl:grid-cols-2" data-testid="user-spend-grid">

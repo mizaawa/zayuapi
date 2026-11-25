@@ -19,9 +19,10 @@ func TestAdminGroupFastRateDefaultsAndUpdates(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, group.FastRateEnabled)
 	require.Equal(t, 2.0, group.FastRateMultiplier)
-	require.Equal(t, 6.0, group.UltraFastRateMultiplier)
+	require.Equal(t, 8.0, group.UltraFastRateMultiplier)
 	require.Equal(t, "off", group.ForcedFastMode)
 
+	group.UltraFastRateMultiplier = 6 // An existing group keeps its configured price on unrelated edits.
 	repo.getByID = group
 	enabled, factor := true, 3.5
 	updated, err := svc.UpdateGroup(context.Background(), group.ID, &UpdateGroupInput{
@@ -30,6 +31,7 @@ func TestAdminGroupFastRateDefaultsAndUpdates(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, updated.FastRateEnabled)
 	require.Equal(t, 3.5, updated.FastRateMultiplier)
+	require.Equal(t, 6.0, updated.UltraFastRateMultiplier)
 	require.Equal(t, updated, repo.updated)
 
 	enabled = false
