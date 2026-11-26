@@ -11,6 +11,7 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
+	"net/textproto"
 	"strings"
 	"testing"
 
@@ -164,6 +165,35 @@ func TestEightYesVideoUploadBounds(t *testing.T) {
 	require.Equal(t, 3, reader.Len(), "stop after one byte over the limit")
 	_, err = readEightYesVideoUpload(base64.NewDecoder(base64.StdEncoding, strings.NewReader("invalid!")), 5)
 	require.Error(t, err)
+}
+
+func TestEightYesReferenceAudioURLsAliasAndMultipartUpload(t *testing.T) {
+	body := []byte(`{"model":"seedance-2-5-720p","reference_audio_urls":["https://cdn.example.test/music.mp3"]}`)
+	normalized, err := normalizeEightYesVideoJSON(body)
+	require.NoError(t, err)
+	require.Equal(t, "https://cdn.example.test/music.mp3", gjson.GetBytes(normalized, "referenceAudios.0").String())
+	require.False(t, gjson.GetBytes(normalized, "reference_audio_urls").Exists())
+
+	var multipartBody bytes.Buffer
+	writer := multipart.NewWriter(&multipartBody)
+	require.NoError(t, writer.WriteField("model", "seedance-2-5-720p"))
+	partHeader := make(textproto.MIMEHeader)
+	partHeader.Set("Content-Disposition", `form-data; name="reference_audio_urls"; filename="music.mp3"`)
+	partHeader.Set("Content-Type", "audio/mpeg")
+	part, err := writer.CreatePart(partHeader)
+	require.NoError(t, err)
+	_, err = part.Write([]byte("audio-fixture"))
+	require.NoError(t, err)
+	require.NoError(t, writer.Close())
+
+	adapted, contentType, err := normalizeEightYesVideoRequest(multipartBody.Bytes(), writer.FormDataContentType())
+	require.NoError(t, err)
+	require.Equal(t, "multipart/form-data", strings.Split(contentType, ";")[0])
+	info := ParseGrokMediaRequest(contentType, adapted)
+	require.True(t, info.HasReferenceAudio)
+	require.Contains(t, string(adapted), "name=referenceAudios")
+	require.Contains(t, string(adapted), "Content-Type: audio/mpeg")
+	require.Contains(t, string(adapted), "audio-fixture")
 }
 
 func TestEightYesGrokReferenceModes(t *testing.T) {

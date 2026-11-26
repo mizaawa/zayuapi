@@ -27,6 +27,7 @@ func TestSoraBridgePrechargeRetainsAcceptedTasksAndRejectsInvalidInput(t *testin
 		{name: "failed without id", response: `{"status":"failed"}`, upstreamStatus: 200, calls: 1, refunded: 1},
 		{name: "upstream rejected", response: `{"error":{"message":"invalid input"}}`, upstreamStatus: 400, calls: 1, refunded: 1},
 		{name: "invalid input", request: `{"model":"grok-imagine-video","prompt":"waves","seconds":0,"size":"854x480"}`, calls: 0},
+		{name: "audio input is unsupported", request: `{"model":"grok-imagine-video","prompt":"waves","seconds":4,"size":"854x480","reference_audio_urls":["https://cdn.example.test/music.mp3"]}`, calls: 0},
 	} {
 		t.Run(scenario.name, func(t *testing.T) {
 			upstream := &workbenchBillingUpstream{statuses: []int{scenario.upstreamStatus}, body: scenario.response}

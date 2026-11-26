@@ -18,6 +18,8 @@ import (
 	"go.uber.org/zap"
 )
 
+const customVideoAudioAPIContextKey = "custom_video_audio_api"
+
 // GrokImages handles xAI image generation/editing through Grok groups.
 func (h *OpenAIGatewayHandler) GrokImages(c *gin.Context) {
 	endpoint := service.GrokMediaEndpointImagesGenerations
@@ -35,6 +37,11 @@ func (h *OpenAIGatewayHandler) GrokVideoGeneration(c *gin.Context) {
 // CustomVideoGeneration handles the standard asynchronous OpenAI-compatible
 // video creation endpoint through Custom API-key accounts.
 func (h *OpenAIGatewayHandler) CustomVideoGeneration(c *gin.Context) {
+	h.handleGrokMedia(c, service.GrokMediaEndpointVideosGenerations, "", service.PlatformCustom)
+}
+
+func (h *OpenAIGatewayHandler) CustomVideoAudioGeneration(c *gin.Context) {
+	c.Set(customVideoAudioAPIContextKey, true)
 	h.handleGrokMedia(c, service.GrokMediaEndpointVideosGenerations, "", service.PlatformCustom)
 }
 
@@ -141,6 +148,10 @@ func (h *OpenAIGatewayHandler) handleGrokMedia(c *gin.Context, endpoint service.
 		}
 	} else {
 		requestInfo = service.ParseGrokMediaRequest(contentType, body)
+	}
+	if c.GetBool(customVideoAudioAPIContextKey) && !requestInfo.HasReferenceAudio {
+		h.errorResponse(c, http.StatusBadRequest, "invalid_request_error", "reference_audio_urls must contain at least one audio reference")
+		return
 	}
 	requestModel := requestInfo.Model
 	routingModel := requestModel
@@ -452,7 +463,7 @@ func (h *OpenAIGatewayHandler) handleGrokMedia(c *gin.Context, endpoint service.
 				if accountReleaseFunc != nil {
 					accountReleaseFunc()
 				}
-				var validationErr *service.SoraVideoBridgeValidationError
+				var validationErr *service.MediaRequestValidationError
 				if errors.As(err, &validationErr) {
 					h.errorResponse(c, http.StatusBadRequest, "invalid_request_error", validationErr.Error())
 					return

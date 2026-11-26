@@ -33,7 +33,7 @@ func TestForwardCustomVideoGenerationUsesStandardAsyncEndpoint(t *testing.T) {
 		"ratio":"16:9",
 		"referenceImages":["https://assets.example.test/input.jpg"],
 		"referenceVideos":["https://assets.example.test/guide.mp4"],
-		"referenceAudios":["https://assets.example.test/music.mp3"]
+		"reference_audio_urls":["https://assets.example.test/music.mp3"]
 	}`)
 	c.Request = httptest.NewRequest(http.MethodPost, "/v1/videos", bytes.NewReader(body))
 	c.Request.Header.Set("Content-Type", "application/json")
@@ -87,6 +87,22 @@ func TestForwardCustomVideoGenerationUsesStandardAsyncEndpoint(t *testing.T) {
 	require.GreaterOrEqual(t, cache.lastTTL, 7*24*time.Hour)
 	require.True(t, svc.WriteBufferedGrokMediaResponse(c, result))
 	require.JSONEq(t, `{"id":"task-standard-id","request_id":"legacy-request-id","task_id":"legacy-task-id","status":"queued"}`, recorder.Body.String())
+}
+
+func TestParseCustomVideoAudioReferenceURLs(t *testing.T) {
+	body := []byte(`{"model":"video-model","prompt":"music video","reference_audio_urls":["https://cdn.example.test/music.mp3"]}`)
+	info := ParseGrokMediaRequest("application/json", body)
+	require.True(t, info.HasReferenceAudio)
+	require.Equal(t, []string{"https://cdn.example.test/music.mp3"}, info.ReferenceAudioURLs)
+
+	var multipartBody bytes.Buffer
+	writer := multipart.NewWriter(&multipartBody)
+	require.NoError(t, writer.WriteField("model", "video-model"))
+	require.NoError(t, writer.WriteField("reference_audio_urls", "https://cdn.example.test/music.mp3"))
+	require.NoError(t, writer.Close())
+	info = ParseGrokMediaRequest(writer.FormDataContentType(), multipartBody.Bytes())
+	require.True(t, info.HasReferenceAudio)
+	require.Equal(t, []string{"https://cdn.example.test/music.mp3"}, info.ReferenceAudioURLs)
 }
 
 func TestForwardCustomVideoGenerationPreservesRequestedClipCount(t *testing.T) {

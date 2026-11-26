@@ -64,7 +64,7 @@ func (u *workbenchBillingUpstream) Do(*http.Request, string, int64, int) (*http.
 	}, nil
 }
 
-func newWorkbenchBillingHandler(t *testing.T, platform string, upstream *workbenchBillingUpstream) (*OpenAIGatewayHandler, *partialUsageBillingRepo, *service.APIKey) {
+func newWorkbenchBillingHandler(t *testing.T, platform string, upstream *workbenchBillingUpstream, mediaProtocol ...string) (*OpenAIGatewayHandler, *partialUsageBillingRepo, *service.APIKey) {
 	t.Helper()
 	cfg := &config.Config{RunMode: config.RunModeSimple}
 	cfg.Default.RateMultiplier = 1
@@ -72,10 +72,14 @@ func newWorkbenchBillingHandler(t *testing.T, platform string, upstream *workben
 	billingCfg.RunMode = config.RunModeStandard
 	accounts := make([]service.Account, 2)
 	for i := range accounts {
+		credentials := map[string]any{"api_key": "test-only-key", "base_url": "https://api.example.com"}
+		if len(mediaProtocol) > 0 && mediaProtocol[0] != "" {
+			credentials["media_protocol"] = mediaProtocol[0]
+		}
 		accounts[i] = service.Account{
 			ID: int64(i + 1), Name: "billing-test", Platform: platform, Type: service.AccountTypeAPIKey,
 			Status: service.StatusActive, Schedulable: true, Priority: i, GroupIDs: []int64{2},
-			Credentials: map[string]any{"api_key": "test-only-key", "base_url": "https://api.example.com"},
+			Credentials: credentials,
 		}
 	}
 	usage := &openAIWSUsageHandlerUsageLogRepoStub{created: make(chan *service.UsageLog, 16)}

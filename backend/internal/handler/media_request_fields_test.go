@@ -8,6 +8,7 @@ import (
 	"io"
 	"mime/multipart"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
@@ -20,6 +21,7 @@ func TestMediaRequestFieldsRejectParserAmbiguity(t *testing.T) {
 		`{"model":"cheap","model":"expensive"}`,
 		`{"model":"cheap","\u006dodel":"expensive"}`,
 		`{"model":"cheap","Model":"expensive"}`,
+		`{"reference_audio_urls":["https://cdn.example/one"],"reference_audio_urls":["https://cdn.example/two"]}`,
 		`{"n":1,"n":10}`,
 		`{"duration":1,"duration":10}`,
 		`{"seconds":"1","seconds":"10"}`,
@@ -46,6 +48,43 @@ func TestMediaRequestFieldsRejectParserAmbiguity(t *testing.T) {
 		require.NoError(t, writer.Close())
 		require.Equal(t, !duplicate, mediaRequestFieldsUnambiguous(writer.FormDataContentType(), body.Bytes()))
 	}
+}
+
+func TestCustomVideoAudioEndpointRequiresAudioBeforeCharging(t *testing.T) {
+	upstream := &workbenchBillingUpstream{statuses: []int{http.StatusOK}, body: `{"id":"unexpected-task","status":"queued"}`}
+	h, ledger, key := newWorkbenchBillingHandler(t, service.PlatformCustom, upstream)
+	c, rec := workbenchBillingContext(key, service.PlatformCustom, "")
+	ctx := service.WithCompositeRouteDecision(c.Request.Context(), service.CompositeRouteDecision{
+		Matched: true, GroupID: key.Group.ID, PublicModel: "video-model",
+		TargetPlatform: service.PlatformCustom, UpstreamModel: "video-model",
+	})
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/videos/audio", strings.NewReader(`{"model":"video-model","prompt":"waves","duration":5,"resolution":"480p","aspect_ratio":"16:9"}`)).WithContext(ctx)
+	c.Request.Header.Set("Content-Type", "application/json")
+	h.CustomVideoAudioGeneration(c)
+	require.Equal(t, http.StatusBadRequest, rec.Code, rec.Body.String())
+	require.Contains(t, rec.Body.String(), "reference_audio_urls")
+	require.Zero(t, upstream.calls)
+	require.Empty(t, ledger.reservations)
+	require.Empty(t, ledger.commands)
+}
+
+func TestCustomVideoAudioEndpointRejectsSoraProtocolBeforeCharging(t *testing.T) {
+	upstream := &workbenchBillingUpstream{statuses: []int{http.StatusOK}, body: `{"id":"unexpected-task","status":"queued"}`}
+	h, ledger, key := newWorkbenchBillingHandler(t, service.PlatformCustom, upstream, "sora")
+	c, rec := workbenchBillingContext(key, service.PlatformCustom, "")
+	ctx := service.WithCompositeRouteDecision(c.Request.Context(), service.CompositeRouteDecision{
+		Matched: true, GroupID: key.Group.ID, PublicModel: "video-model",
+		TargetPlatform: service.PlatformCustom, UpstreamModel: "video-model",
+	})
+	body := `{"model":"video-model","prompt":"waves","duration":5,"resolution":"480p","aspect_ratio":"16:9","reference_audio_urls":["https://cdn.example.test/music.mp3"]}`
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/videos/audio", strings.NewReader(body)).WithContext(ctx)
+	c.Request.Header.Set("Content-Type", "application/json")
+	h.CustomVideoAudioGeneration(c)
+	require.Equal(t, http.StatusBadRequest, rec.Code, rec.Body.String())
+	require.Contains(t, rec.Body.String(), "does not support reference audio")
+	require.Zero(t, upstream.calls)
+	require.Empty(t, ledger.reservations)
+	require.Empty(t, ledger.commands)
 }
 
 func TestMediaRequestsRejectAmbiguousFieldsBeforeCharging(t *testing.T) {
@@ -80,7 +119,7 @@ func TestMediaRequestsRejectAmbiguousFieldsBeforeCharging(t *testing.T) {
 }
 
 func TestMediaMultipartReferenceListsAndScalarBoundaries(t *testing.T) {
-	for _, name := range []string{"referenceImages", "reference_images[]", "image_refs", "referenceVideos", "reference_videos[]", "video_refs", "referenceAudios", "reference_audios[]", "audio_refs"} {
+	for _, name := range []string{"referenceImages", "reference_images[]", "image_refs", "referenceVideos", "reference_videos[]", "video_refs", "referenceAudios", "reference_audios[]", "audio_refs", "reference_audio_urls[]"} {
 		t.Run(name, func(t *testing.T) {
 			var body bytes.Buffer
 			writer := multipart.NewWriter(&body)

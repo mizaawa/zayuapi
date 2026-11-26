@@ -105,6 +105,8 @@ type GrokMediaRequestInfo struct {
 	InputImageURLs     []string
 	ReferenceVideoURLs []string
 	HasReferenceVideo  bool
+	ReferenceAudioURLs []string
+	HasReferenceAudio  bool
 	MaskImageURL       string
 	Uploads            []OpenAIImagesUpload
 	MaskUpload         *OpenAIImagesUpload
@@ -292,6 +294,22 @@ func parseGrokMediaJSONRequest(body []byte, info *GrokMediaRequestInfo) {
 		}
 	}
 	info.HasReferenceVideo = len(info.ReferenceVideoURLs) > 0
+	for _, field := range []string{"referenceAudios", "reference_audios", "audio_refs", "reference_audio_urls", "referenceAudioURLs"} {
+		value := gjson.GetBytes(body, field)
+		if !value.Exists() {
+			continue
+		}
+		if value.IsArray() {
+			for _, item := range value.Array() {
+				if audioURL := grokMediaReferenceURL(item); audioURL != "" {
+					info.ReferenceAudioURLs = append(info.ReferenceAudioURLs, audioURL)
+				}
+			}
+		} else if audioURL := grokMediaReferenceURL(value); audioURL != "" {
+			info.ReferenceAudioURLs = append(info.ReferenceAudioURLs, audioURL)
+		}
+	}
+	info.HasReferenceAudio = len(info.ReferenceAudioURLs) > 0
 	info.MaskImageURL = grokMediaJSONImageURL(gjson.GetBytes(body, "mask"))
 }
 
@@ -300,6 +318,9 @@ func grokMediaReferenceURL(value gjson.Result) string {
 		return strings.TrimSpace(value.String())
 	}
 	if rawURL := strings.TrimSpace(value.Get("url").String()); rawURL != "" {
+		return rawURL
+	}
+	if rawURL := strings.TrimSpace(value.Get("audio_url").String()); rawURL != "" {
 		return rawURL
 	}
 	return strings.TrimSpace(value.Get("video_url").String())
@@ -341,7 +362,7 @@ func parseGrokMediaMultipartRequest(contentType string, body []byte, info *GrokM
 		}
 		name := strings.TrimSpace(part.FormName())
 		switch referenceName := strings.TrimSuffix(name, "[]"); referenceName {
-		case "referenceImages", "reference_images", "image_refs", "referenceVideos", "reference_videos", "video_refs", "referenceAudios", "reference_audios", "audio_refs":
+		case "referenceImages", "reference_images", "image_refs", "referenceVideos", "reference_videos", "video_refs", "referenceAudios", "reference_audios", "audio_refs", "reference_audio_urls", "referenceAudioURLs":
 			name = referenceName
 		}
 		if name == "" {
@@ -367,6 +388,10 @@ func parseGrokMediaMultipartRequest(contentType string, body []byte, info *GrokM
 			}
 			if name == "mask" {
 				info.MaskUpload = &upload
+				continue
+			}
+			if name == "referenceAudios" || name == "reference_audios" || name == "audio_refs" || name == "reference_audio_urls" || name == "referenceAudioURLs" {
+				info.HasReferenceAudio = true
 				continue
 			}
 			if name == "image" || name == "input_reference" || name == "referenceImages" || name == "reference_images" || strings.HasPrefix(name, "image[") || strings.HasPrefix(name, "referenceImages[") {
@@ -410,6 +435,9 @@ func parseGrokMediaMultipartRequest(contentType string, body []byte, info *GrokM
 		case "referenceVideos", "reference_videos", "video_refs":
 			info.ReferenceVideoURLs = append(info.ReferenceVideoURLs, grokMediaMultipartReferenceURLs(value)...)
 			info.HasReferenceVideo = info.HasReferenceVideo || len(info.ReferenceVideoURLs) > 0
+		case "referenceAudios", "reference_audios", "audio_refs", "reference_audio_urls", "referenceAudioURLs":
+			info.ReferenceAudioURLs = append(info.ReferenceAudioURLs, grokMediaMultipartReferenceURLs(value)...)
+			info.HasReferenceAudio = info.HasReferenceAudio || len(info.ReferenceAudioURLs) > 0
 		case "mask", "mask_image_url":
 			info.MaskImageURL = value
 		}
@@ -777,6 +805,11 @@ func (s *OpenAIGatewayService) ForwardGrokMedia(
 	if endpoint.IsVideoGenerationRequest() {
 		if err := validateVideoBillingFields(body, contentType); err != nil {
 			return nil, err
+		}
+		if account.Platform == PlatformCustom && account.MediaProtocol() == "sora" {
+			if err := rejectSoraVideoAudioReferences(body, contentType); err != nil {
+				return nil, err
+			}
 		}
 	}
 	var err error

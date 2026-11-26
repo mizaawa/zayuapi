@@ -251,6 +251,17 @@ func TestGatewayRoutesCustomVideoCreationUsesStandardEndpoint(t *testing.T) {
 	}
 }
 
+func TestGatewayRoutesCustomAudioVideoCreationIsRegistered(t *testing.T) {
+	router := newGatewayRoutesTestRouter(service.PlatformCustom)
+	registered := make(map[string]bool)
+	for _, route := range router.Routes() {
+		registered[route.Method+" "+route.Path] = true
+	}
+	for _, prefix := range []string{"/v1", ""} {
+		require.True(t, registered["POST "+prefix+"/videos/audio"])
+	}
+}
+
 func TestGatewayRoutesSoraBridgeUsesVideoMethodsAndCustomBoundary(t *testing.T) {
 	custom := newGatewayRoutesTestRouter(service.PlatformCustom)
 	registered := make(map[string]bool)

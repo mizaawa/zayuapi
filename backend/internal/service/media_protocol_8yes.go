@@ -159,11 +159,12 @@ func normalizeEightYesVideoJSON(body []byte) ([]byte, error) {
 					var object struct {
 						URL      string `json:"url"`
 						ImageURL string `json:"image_url"`
+						AudioURL string `json:"audio_url"`
 					}
 					if json.Unmarshal(value, &object) != nil {
 						return nil, fmt.Errorf("invalid 8yes %s reference", key)
 					}
-					ref = firstNonEmpty(object.URL, object.ImageURL)
+					ref = firstNonEmpty(object.URL, object.ImageURL, object.AudioURL)
 				}
 				ref = strings.TrimSpace(ref)
 				if ref == "" {
@@ -229,7 +230,7 @@ func normalizeEightYesVideoJSON(body []byte) ([]byte, error) {
 		aliases []string
 	}{
 		{"referenceVideos", []string{"referenceVideos", "reference_videos", "video_refs"}},
-		{"referenceAudios", []string{"referenceAudios", "reference_audios", "audio_refs"}},
+		{"referenceAudios", []string{"referenceAudios", "reference_audios", "audio_refs", "reference_audio_urls", "referenceAudioURLs"}},
 	} {
 		refs, err := readReferences(reference.aliases...)
 		if err != nil {
@@ -270,7 +271,7 @@ func normalizeEightYesVideoRequest(body []byte, contentType string) ([]byte, str
 			}
 			name := strings.TrimSuffix(part.FormName(), "[]")
 			switch name {
-			case "referenceImages", "reference_images", "image_refs", "image", "input_reference", "referenceVideos", "reference_videos", "video_refs", "referenceAudios", "reference_audios", "audio_refs":
+			case "referenceImages", "reference_images", "image_refs", "image", "input_reference", "referenceVideos", "reference_videos", "video_refs", "referenceAudios", "reference_audios", "audio_refs", "reference_audio_urls", "referenceAudioURLs":
 				var refs []json.RawMessage
 				if part.FileName() != "" {
 					value := "data:" + part.Header.Get("Content-Type") + ";base64," + base64.StdEncoding.EncodeToString(data)

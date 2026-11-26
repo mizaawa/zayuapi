@@ -57,7 +57,7 @@ func mediaRequestFieldsUnambiguous(contentType string, body []byte) bool {
 			}
 			repeatedReference := false
 			switch strings.TrimSuffix(name, "[]") {
-			case "referenceImages", "reference_images", "image_refs", "referenceVideos", "reference_videos", "video_refs", "referenceAudios", "reference_audios", "audio_refs":
+			case "referenceImages", "reference_images", "image_refs", "referenceVideos", "reference_videos", "video_refs", "referenceAudios", "reference_audios", "audio_refs", "reference_audio_urls", "referenceAudioURLs":
 				repeatedReference = true
 			}
 			if part.FileName() == "" && !repeatedReference && !remember(name) {

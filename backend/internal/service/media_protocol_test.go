@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"io"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -117,6 +118,42 @@ func TestMediaProtocolEightYesVideo(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, "https://provider.example"+test.path, url)
 	}
+}
+
+func TestSoraMediaProtocolRejectsAudioReferencesBeforeForward(t *testing.T) {
+	account := customVideoTestAccount()
+	account.Credentials["media_protocol"] = "sora"
+	for _, body := range []string{
+		`{"model":"video-model","prompt":"music video","reference_audio_urls":["https://cdn.example.test/music.mp3"]}`,
+		`{"model":"video-model","prompt":"music video","referenceAudios":["https://cdn.example.test/music.mp3"]}`,
+	} {
+		_, err := VideoPrechargeRequestInfo(context.Background(), account, []byte(body), "application/json")
+		require.ErrorContains(t, err, "does not support reference audio")
+		var validationErr *MediaRequestValidationError
+		require.ErrorAs(t, err, &validationErr)
+
+		upstream := &httpUpstreamRecorder{resp: &http.Response{StatusCode: http.StatusAccepted, Body: io.NopCloser(strings.NewReader(`{"id":"should-not-exist","status":"queued"}`))}}
+		c, _ := gin.CreateTestContext(httptest.NewRecorder())
+		c.Request = httptest.NewRequest(http.MethodPost, "/v1/videos/audio", strings.NewReader(body))
+		_, err = (&OpenAIGatewayService{cfg: customVideoTestConfig(), httpUpstream: upstream}).ForwardGrokMedia(
+			context.Background(), c, account, GrokMediaEndpointVideosGenerations, "", []byte(body), "application/json",
+		)
+		require.ErrorContains(t, err, "does not support reference audio")
+		require.Empty(t, upstream.requests)
+	}
+
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+	require.NoError(t, writer.WriteField("model", "video-model"))
+	part, err := writer.CreateFormFile("reference_audio_urls", "music.mp3")
+	require.NoError(t, err)
+	_, err = part.Write([]byte("audio-fixture"))
+	require.NoError(t, err)
+	require.NoError(t, writer.Close())
+	_, err = VideoPrechargeRequestInfo(context.Background(), account, body.Bytes(), writer.FormDataContentType())
+	require.ErrorContains(t, err, "does not support reference audio")
+	var validationErr *MediaRequestValidationError
+	require.ErrorAs(t, err, &validationErr)
 }
 
 func TestRetiredOpenAIMediaProtocolReadsAsDefault(t *testing.T) {

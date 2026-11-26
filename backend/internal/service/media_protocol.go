@@ -1,10 +1,14 @@
 package service
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"math"
+	"mime"
+	"mime/multipart"
 	"strconv"
 	"strings"
 )
@@ -45,8 +49,8 @@ func mediaProtocolValidationMessage() string {
 
 func VideoPrechargeRequestInfo(ctx context.Context, account *Account, body []byte, contentType string) (_ GrokMediaRequestInfo, err error) {
 	defer func() {
-		if err != nil && IsSoraVideoBridge(ctx) {
-			err = &SoraVideoBridgeValidationError{Err: err}
+		if err != nil && (IsSoraVideoBridge(ctx) || (account.Platform == PlatformCustom && account.MediaProtocol() == "sora")) {
+			err = &MediaRequestValidationError{Err: err}
 		}
 	}()
 	if err := validateVideoBillingFields(body, contentType); err != nil {
@@ -54,6 +58,11 @@ func VideoPrechargeRequestInfo(ctx context.Context, account *Account, body []byt
 	}
 	if !validMediaProtocol(account.MediaProtocol()) {
 		return GrokMediaRequestInfo{}, fmt.Errorf("%s", mediaProtocolValidationMessage())
+	}
+	if account.Platform == PlatformCustom && account.MediaProtocol() == "sora" {
+		if err := rejectSoraVideoAudioReferences(body, contentType); err != nil {
+			return GrokMediaRequestInfo{}, err
+		}
 	}
 	if IsSoraVideoBridge(ctx) {
 		var err error
@@ -228,7 +237,7 @@ func normalizeVideoProtocolBody(ctx context.Context, account *Account, body []by
 		}
 		set("input_reference", map[string]string{"image_url": images[0]})
 	}
-	for _, field := range []string{"referenceVideos", "reference_videos", "video_refs", "referenceAudios", "reference_audios", "audio_refs"} {
+	for _, field := range []string{"referenceVideos", "reference_videos", "video_refs", "referenceAudios", "reference_audios", "audio_refs", "reference_audio_urls", "referenceAudioURLs"} {
 		if raw := values[field]; len(raw) > 0 && string(raw) != "[]" && string(raw) != "null" {
 			return nil, fmt.Errorf("sora creation does not support reference video or audio")
 		}
@@ -263,6 +272,66 @@ func normalizeVideoProtocolBody(ctx context.Context, account *Account, body []by
 	}
 	delete(values, "ratio")
 	return json.Marshal(values)
+}
+
+func rejectSoraVideoAudioReferences(body []byte, contentType string) error {
+	mediaType, params, err := mime.ParseMediaType(contentType)
+	if err == nil && strings.EqualFold(mediaType, "multipart/form-data") {
+		if params["boundary"] == "" {
+			return fmt.Errorf("invalid video multipart request")
+		}
+		reader := multipart.NewReader(bytes.NewReader(body), params["boundary"])
+		for {
+			part, nextErr := reader.NextPart()
+			if nextErr == io.EOF {
+				return nil
+			}
+			if nextErr != nil {
+				return fmt.Errorf("invalid video multipart request")
+			}
+			if !isSoraVideoAudioReferenceField(part.FormName()) {
+				_ = part.Close()
+				continue
+			}
+			if part.FileName() != "" {
+				_ = part.Close()
+				return fmt.Errorf("selected video format does not support reference audio")
+			}
+			value, readErr := io.ReadAll(io.LimitReader(part, 2))
+			_ = part.Close()
+			if readErr != nil {
+				return fmt.Errorf("invalid video multipart request")
+			}
+			if len(bytes.TrimSpace(value)) > 0 {
+				return fmt.Errorf("selected video format does not support reference audio")
+			}
+		}
+	}
+	var fields map[string]json.RawMessage
+	if json.Unmarshal(body, &fields) != nil || fields == nil {
+		return nil
+	}
+	for name, raw := range fields {
+		if !isSoraVideoAudioReferenceField(name) {
+			continue
+		}
+		value := strings.TrimSpace(string(raw))
+		if value == "" || value == "null" || value == "[]" || value == `""` {
+			continue
+		}
+		return fmt.Errorf("selected video format does not support reference audio")
+	}
+	return nil
+}
+
+func isSoraVideoAudioReferenceField(name string) bool {
+	name = strings.ToLower(strings.TrimSuffix(strings.TrimSpace(name), "[]"))
+	switch name {
+	case "referenceaudios", "reference_audios", "audio_refs", "reference_audio_urls", "referenceaudiourls":
+		return true
+	default:
+		return false
+	}
 }
 
 func videoProtocolPixelSize(ratio, resolution string) (string, error) {

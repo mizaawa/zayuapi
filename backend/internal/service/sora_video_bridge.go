@@ -30,12 +30,14 @@ type soraBridgeVideoRequest struct {
 	Seconds                                       int
 }
 
-// SoraVideoBridgeValidationError distinguishes local parameter rejection from
-// billing admission failures without changing the native protocol's errors.
-type SoraVideoBridgeValidationError struct{ Err error }
+// MediaRequestValidationError distinguishes local parameter rejection from
+// billing admission failures.
+type MediaRequestValidationError struct{ Err error }
 
-func (e *SoraVideoBridgeValidationError) Error() string { return e.Err.Error() }
-func (e *SoraVideoBridgeValidationError) Unwrap() error { return e.Err }
+func (e *MediaRequestValidationError) Error() string { return e.Err.Error() }
+func (e *MediaRequestValidationError) Unwrap() error { return e.Err }
+
+type SoraVideoBridgeValidationError = MediaRequestValidationError
 
 func ParseSoraVideoBridgeRequestInfo(body []byte, contentType string) (GrokMediaRequestInfo, error) {
 	input, err := parseSoraBridgeVideoRequest(body, contentType)
